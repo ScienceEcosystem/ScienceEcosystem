@@ -35,9 +35,42 @@
   </ul>
 
   <h2>ORCID Login (Prototype)</h2>
-  <p><button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px;">Login with ORCID</button></p>
+  <p><button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
+    <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+    Login with ORCID
+  </button>
+  </p>
   <p>This is a placeholder. Later, this will redirect to the ORCID authorization system.</p>
+  <h2>Search Research (Mock)</h2>
+  <div style="margin-top: 1rem;">
+    <input id="searchInput" type="text" placeholder="Search papers, datasets, code..." style="padding: 0.5rem; width: 70%; max-width: 400px; border-radius: 5px; border: 1px solid #ccc;" />
+    <button onclick="mockSearch()" style="padding: 0.5rem 1rem; margin-left: 0.5rem; background: #2563eb; color: white; border: none; border-radius: 5px;">Search</button>
+  </div>
+  <div id="searchResults" style="margin-top: 1rem;"></div>
 </section>
+
+<script>
+  function mockSearch() {
+    const input = document.getElementById("searchInput").value.trim();
+    const results = document.getElementById("searchResults");
+    if (!input) {
+      results.innerHTML = "<p>Please enter a search term.</p>";
+      return;
+    }
+
+    // Fake results
+    results.innerHTML = `
+      <p>Showing results for <strong>"${input}"</strong>:</p>
+      <ul>
+        <li><strong>Paper:</strong> The Impact of Open Science on Collaboration</li>
+        <li><strong>Dataset:</strong> Global Research Access Patterns (CSV)</li>
+        <li><strong>Code:</strong> Semantic Search Demo in Python</li>
+      </ul>
+      <p style="font-size: 0.9rem; color: gray;">[This is a simulation. In the future, results will be pulled from sources like OpenAlex, arXiv, and PubMed.]</p>
+    `;
+  }
+</script>
+
 
 <footer>
   &copy; 2025 ScienceEcosystem. All rights reserved.
