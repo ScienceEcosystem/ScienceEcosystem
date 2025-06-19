@@ -6,6 +6,37 @@
   <title>ScienceEcosystem | Open Science Platform</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    .integrations-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 2rem;
+      padding: 2rem;
+      max-width: 1200px;
+      margin: auto;
+    }
+    .integration-card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 1rem;
+      text-align: center;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .integration-card img {
+      max-width: 100px;
+      height: auto;
+      margin-bottom: 1rem;
+    }
+    .integration-card h3 {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .integration-card p {
+      font-size: 0.85rem;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
   <nav>
@@ -53,7 +84,66 @@
   <h3>Funding & Impact Tools</h3>
   <p>Tools to connect projects with funders, track grants, and transparently measure research outcomes and societal impact.</p>
 </section>
-
+<section>
+  <h2 style="text-align:center">Core Integrated Platforms</h2>
+  <div class="integrations-grid">
+    <div class="integration-card">
+      <img src="assets/logos/orcid.png" alt="ORCID">
+      <h3>ORCID</h3>
+      <p>Researcher authentication and profile linking</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/openalex.png" alt="OpenAlex">
+      <h3>OpenAlex</h3>
+      <p>Scholarly graph for papers, authors, institutions</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/arxiv.jpg" alt="arXiv">
+      <h3>arXiv</h3>
+      <p>Preprint access across scientific disciplines</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/pubmed.jpg" alt="PubMed">
+      <h3>PubMed</h3>
+      <p>Biomedical and life sciences research metadata</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/core.png" alt="CORE">
+      <h3>CORE</h3>
+      <p>Aggregated open access research content</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/crossref.png" alt="Crossref">
+      <h3>Crossref</h3>
+      <p>DOIs and citation metadata for scholarly content</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/unpaywall.png" alt="Unpaywall">
+      <h3>Unpaywall</h3>
+      <p>Find open-access versions of paywalled articles</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/github.svg" alt="GitHub">
+      <h3>GitHub</h3>
+      <p>Code sharing, versioning, and open-source integration</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/zenodo.png" alt="Zenodo">
+      <h3>Zenodo</h3>
+      <p>Upload and link datasets, code, and supplemental files</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/figshare.png" alt="Figshare">
+      <h3>Figshare</h3>
+      <p>Data and multimedia sharing with persistent identifiers</p>
+    </div>
+    <div class="integration-card">
+      <img src="assets/logos/hypothesis.svg" alt="Hypothes.is">
+      <h3>Hypothes.is</h3>
+      <p>Web-based annotation and inline peer review</p>
+    </div>
+  </div>
+</section>
 
   <section class="integration-table">
     <h2>Platform Integrations Overview</h2>
