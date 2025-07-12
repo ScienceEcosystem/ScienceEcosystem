@@ -15,6 +15,7 @@ nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -40,8 +41,10 @@ nav a {
   font-weight: 600;
   transition: color 0.2s;
 }
-nav a:hover {
-  color: #93c5fd; /* light blue */
+nav a:hover,
+nav a:focus {
+  color: #93c5fd;
+  outline: none;
 }
 
 /* Header */
@@ -60,7 +63,10 @@ header p {
   max-width: 700px;
   margin: 0 auto 2rem;
 }
-.cta-button {
+
+/* Buttons */
+.button {
+  display: inline-block;
   padding: 0.75rem 1.5rem;
   background: #16a34a;
   color: white;
@@ -68,21 +74,33 @@ header p {
   border-radius: 6px;
   font-size: 1rem;
   font-weight: 600;
+  text-align: center;
   cursor: pointer;
   transition: background 0.2s ease;
 }
-.cta-button:hover {
+.button:hover,
+.button:focus {
   background: #15803d;
+  outline: none;
+}
+.button.alt {
+  background: white;
+  color: #065ef5;
+  border: 2px solid #065ef5;
+}
+.button.alt:hover,
+.button.alt:focus {
+  background: #eff6ff;
+  outline: none;
 }
 
 /* Sections */
 section {
   padding: 3rem 1.5rem;
   max-width: 960px;
-  margin: auto;
+  margin: 2rem auto;
   background: white;
   border-radius: 8px;
-  margin-bottom: 2rem;
   box-shadow: 0 2px 6px rgba(0,0,0,0.04);
 }
 
@@ -109,7 +127,7 @@ footer {
   background: #1e293b;
   color: white;
   text-align: center;
-  padding: 1rem 2rem;
+  padding: 1.5rem 2rem;
   font-size: 0.9rem;
 }
 
@@ -118,8 +136,23 @@ a {
   color: #2563eb;
   text-decoration: none;
 }
-a:hover {
+a:hover,
+a:focus {
   text-decoration: underline;
+  outline: none;
+}
+
+/* Inputs */
+input[type="text"],
+input[type="email"],
+textarea {
+  width: 100%;
+  max-width: 500px;
+  padding: 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 1rem;
+  margin-bottom: 1rem;
 }
 
 /* Responsive layout */

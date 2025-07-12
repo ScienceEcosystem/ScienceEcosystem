@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ScienceEcosystem | Open Science Platform</title>
+  <title>ScienceEcosystem | Reimagining Science</title>
   <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <nav>
@@ -24,56 +24,90 @@
   </nav>
 
 
-<header><h1>Platform Demo</h1></header>
-<section>
-  <h2>Try a Mock Upload</h2>
-  <p>This simulation shows what the upload and summary process might look like:</p>
-  <ul>
-    <li><strong>Upload:</strong> Select a PDF, dataset, or code file</li>
-    <li><strong>AI Summary:</strong> Preview a generated summary with highlights</li>
-    <li><strong>Annotation:</strong> Add comments and tags</li>
-  </ul>
+  <header><h1>Platform Demo</h1></header>
 
-  <h2>ORCID Login</h2>
-  <p><button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
-    <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
-    Login with ORCID
-  </button>
-  </p>
-
-  <h2>Search Research</h2>
-  <div style="margin-top: 1rem;">
-    <input id="searchInput" type="text" placeholder="Search papers, datasets, code..." style="padding: 0.5rem; width: 70%; max-width: 400px; border-radius: 5px; border: 1px solid #ccc;" />
-    <button onclick="mockSearch()" style="padding: 0.5rem 1rem; margin-left: 0.5rem; background: #2563eb; color: white; border: none; border-radius: 5px;">Search</button>
-  </div>
-  <div id="searchResults" style="margin-top: 1rem;"></div>
-</section>
-
-<script>
-  function mockSearch() {
-    const input = document.getElementById("searchInput").value.trim();
-    const results = document.getElementById("searchResults");
-    if (!input) {
-      results.innerHTML = "<p>Please enter a search term.</p>";
-      return;
+  <section>
+    <h2>Explore a Prototype</h2>
+    <p>
+      This page gives you a simple simulation of how the ScienceEcosystem platform will work. 
+      You can try uploading content, view example summaries, search mock data, and see what a basic research workflow might look like in the future.
+    </p>
+  </section>
+  
+  <section>
+    <h2>1. Upload & Summarize</h2>
+    <p>
+      In the final version, researchers will be able to upload papers, datasets, or code, with automatic AI summaries and keyword tagging generated in the background.
+    </p>
+    <ul>
+      <li><strong>Upload:</strong> Choose a file (PDF, CSV, code)</li>
+      <li><strong>Summary:</strong> View a generated abstract or outline</li>
+      <li><strong>Annotations:</strong> Add tags and notes for others</li>
+    </ul>
+  </section>
+  
+  <section>
+    <h2>2. ORCID Login</h2>
+    <p>
+      User identity will be linked with verified research credentials. This prototype simulates a basic login with ORCID:
+    </p>
+    <p>
+      <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
+        <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+        Login with ORCID
+      </button>
+    </p>
+  </section>
+  
+  <section>
+    <h2>3. Search Across Research</h2>
+    <p>
+      Try a sample query to see how semantic search might work, combining results across papers, datasets, and code.
+    </p>
+    <div style="margin-top: 1rem;">
+      <input id="searchInput" type="text" placeholder="Search papers, datasets, code..." style="padding: 0.5rem; width: 70%; max-width: 400px; border-radius: 5px; border: 1px solid #ccc;" />
+      <button onclick="mockSearch()" style="padding: 0.5rem 1rem; margin-left: 0.5rem; background: #2563eb; color: white; border: none; border-radius: 5px;">Search</button>
+    </div>
+    <div id="searchResults" style="margin-top: 1rem;"></div>
+  </section>
+  
+  <section>
+    <h2>Note</h2>
+    <p style="font-size: 0.95rem; color: #555;">
+      This demo is for illustration only. In the full platform, search results will be pulled live from sources like OpenAlex, arXiv, PubMed, GitHub, and others. 
+      Summaries, annotations, and peer reviews will be part of the research graph, all transparent and linked.
+    </p>
+  </section>
+  
+  <script>
+    function mockSearch() {
+      const input = document.getElementById("searchInput").value.trim();
+      const results = document.getElementById("searchResults");
+      if (!input) {
+        results.innerHTML = "<p>Please enter a search term.</p>";
+        return;
+      }
+  
+      results.innerHTML = `
+        <p>Showing results for <strong>"${input}"</strong>:</p>
+        <ul>
+          <li><strong>Paper:</strong> The Impact of Open Science on Collaboration</li>
+          <li><strong>Dataset:</strong> Global Research Access Patterns (CSV)</li>
+          <li><strong>Code:</strong> Semantic Search Demo in Python</li>
+        </ul>
+        <p style="font-size: 0.9rem; color: gray;">
+          [This is a simulation. In the future, results will be pulled from real-time open infrastructure.]
+        </p>
+      `;
     }
-
-    // Fake results
-    results.innerHTML = `
-      <p>Showing results for <strong>"${input}"</strong>:</p>
-      <ul>
-        <li><strong>Paper:</strong> The Impact of Open Science on Collaboration</li>
-        <li><strong>Dataset:</strong> Global Research Access Patterns (CSV)</li>
-        <li><strong>Code:</strong> Semantic Search Demo in Python</li>
-      </ul>
-      <p style="font-size: 0.9rem; color: gray;">[This is a simulation. In the future, results will be pulled from sources like OpenAlex, arXiv, and PubMed.]</p>
-    `;
-  }
-</script>
+  </script>
+  
 
 
 <footer>
-  &copy; 2025 ScienceEcosystem. All rights reserved.
+  <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+  <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+  <p class="footer-tagline">Open science, reimagined — for researchers, by researchers.</p>
 </footer>
 </body>
 </html>
