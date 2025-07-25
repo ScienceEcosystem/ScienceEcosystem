@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -6,6 +6,20 @@
   <title>ScienceEcosystem | Reimagining Science</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    #searchSection input, #searchSection button {
+      padding: 0.5rem;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    #searchResults {
+      margin-top: 1rem;
+      background: #f9fafb;
+      padding: 1rem;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+    }
+  </style>
 </head>
 <body>
   <nav>
@@ -22,7 +36,6 @@
       <a href="demo.html">Demo</a>
     </div>
   </nav>
-
 
   <header><h1>Platform Demo</h1></header>
 
@@ -59,16 +72,16 @@
     </p>
   </section>
   
-  <section>
+  <section id="searchSection">
     <h2>3. Search Across Research</h2>
     <p>
-      Try a sample query to see how semantic search might work, combining results across papers, datasets, and code.
+      Try searching for a researcher by name to see results from ORCID, GitHub, and OpenAlex (papers and datasets).
     </p>
     <div style="margin-top: 1rem;">
-      <input id="searchInput" type="text" placeholder="Search papers, datasets, code..." style="padding: 0.5rem; width: 70%; max-width: 400px; border-radius: 5px; border: 1px solid #ccc;" />
-      <button onclick="mockSearch()" style="padding: 0.5rem 1rem; margin-left: 0.5rem; background: #2563eb; color: white; border: none; border-radius: 5px;">Search</button>
+      <input id="researcherInput" type="text" placeholder="Enter researcher name..." style="width: 70%; max-width: 400px;" />
+      <button onclick="searchResearcher()">Search</button>
     </div>
-    <div id="searchResults" style="margin-top: 1rem;"></div>
+    <div id="searchResults"></div>
   </section>
   
   <section>
@@ -80,34 +93,58 @@
   </section>
   
   <script>
-    function mockSearch() {
-      const input = document.getElementById("searchInput").value.trim();
-      const results = document.getElementById("searchResults");
-      if (!input) {
-        results.innerHTML = "<p>Please enter a search term.</p>";
+    async function searchResearcher() {
+      const query = document.getElementById("researcherInput").value.trim();
+      const resultsDiv = document.getElementById("searchResults");
+      if (!query) {
+        resultsDiv.innerHTML = "<p>Please enter a name.</p>";
         return;
       }
-  
-      results.innerHTML = `
-        <p>Showing results for <strong>"${input}"</strong>:</p>
-        <ul>
-          <li><strong>Paper:</strong> The Impact of Open Science on Collaboration</li>
-          <li><strong>Dataset:</strong> Global Research Access Patterns (CSV)</li>
-          <li><strong>Code:</strong> Semantic Search Demo in Python</li>
-        </ul>
-        <p style="font-size: 0.9rem; color: gray;">
-          [This is a simulation. In the future, results will be pulled from real-time open infrastructure.]
-        </p>
-      `;
+      resultsDiv.innerHTML = "<p>Searching...</p>";
+
+      try {
+        // ORCID search (name)
+        const orcidResp = await fetch(`https://pub.orcid.org/v3.0/search?q=${encodeURIComponent(query)}`, {
+          headers: { "Accept": "application/json" }
+        });
+        const orcidData = await orcidResp.json();
+        const firstOrcid = orcidData["result"] && orcidData["result"][0] 
+          ? orcidData["result"][0]["orcid-identifier"]["path"] 
+          : "No ORCID found";
+
+        // GitHub user search
+        const githubResp = await fetch(`https://api.github.com/search/users?q=${encodeURIComponent(query)}`);
+        const githubData = await githubResp.json();
+        const firstGitHub = githubData.items && githubData.items[0] 
+          ? githubData.items[0].html_url 
+          : "No GitHub profile found";
+
+        // OpenAlex author search
+        const openAlexResp = await fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(query)}`);
+        const openAlexData = await openAlexResp.json();
+        const firstOpenAlex = openAlexData.results && openAlexData.results[0]
+          ? openAlexData.results[0].display_name + " (" + openAlexData.results[0].works_count + " works)"
+          : "No author record found in OpenAlex";
+
+        resultsDiv.innerHTML = `
+          <h3>Results for "${query}"</h3>
+          <ul>
+            <li><strong>ORCID:</strong> ${firstOrcid !== "No ORCID found" ? `<a href="https://orcid.org/${firstOrcid}" target="_blank">${firstOrcid}</a>` : firstOrcid}</li>
+            <li><strong>GitHub:</strong> ${firstGitHub !== "No GitHub profile found" ? `<a href="${firstGitHub}" target="_blank">${firstGitHub}</a>` : firstGitHub}</li>
+            <li><strong>OpenAlex:</strong> ${firstOpenAlex}</li>
+          </ul>
+        `;
+      } catch (e) {
+        resultsDiv.innerHTML = "<p>Error fetching data. Try again later.</p>";
+        console.error(e);
+      }
     }
   </script>
   
-
-
-<footer>
-  <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-  <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
-  <p class="footer-tagline">Open science, reimagined — for researchers, by researchers.</p>
-</footer>
+  <footer>
+    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+    <p class="footer-tagline">Open science, reimagined — for researchers, by researchers.</p>
+  </footer>
 </body>
 </html>
