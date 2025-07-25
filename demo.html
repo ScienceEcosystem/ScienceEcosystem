@@ -1,4 +1,4 @@
-<<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -7,17 +7,71 @@
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
   <style>
+    /* Light local styling just for the demo parts below */
     #searchSection input, #searchSection button {
       padding: 0.5rem;
       border-radius: 5px;
       border: 1px solid #ccc;
+      font-size: 1rem;
+    }
+    #searchSection button {
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+      border: none;
+      margin-left: 0.5rem;
+    }
+    #searchSection button:hover {
+      background: #1e40af;
     }
     #searchResults {
       margin-top: 1rem;
-      background: #f9fafb;
-      padding: 1rem;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
       border-radius: 6px;
-      border: 1px solid #ddd;
+      padding: 1rem;
+      margin: 1rem 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+    .stat {
+      display: inline-block;
+      background: #eff6ff;
+      color: #1e40af;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      margin-right: 0.25rem;
+      margin-bottom: 0.25rem;
+    }
+    .muted {
+      color: #64748b;
+      font-size: 0.9rem;
+    }
+    .small {
+      font-size: 0.9rem;
+    }
+    ul.paper-list {
+      padding-left: 1.2rem;
+    }
+    ul.paper-list li {
+      margin-bottom: 0.5rem;
+    }
+    code.inline {
+      background: #e2e8f0;
+      padding: 0 0.25rem;
+      border-radius: 3px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.85rem;
+    }
+    .error {
+      color: #dc2626;
+      margin-top: 0.75rem;
+    }
+    .loading {
+      opacity: 0.6;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -43,7 +97,7 @@
     <h2>Explore a Prototype</h2>
     <p>
       This page gives you a simple simulation of how the ScienceEcosystem platform will work. 
-      You can try uploading content, view example summaries, search mock data, and see what a basic research workflow might look like in the future.
+      You can try uploading content, view example summaries, search real researcher data, and see how integrated research profiles might work in the future.
     </p>
   </section>
   
@@ -75,76 +129,314 @@
   <section id="searchSection">
     <h2>3. Search Across Research</h2>
     <p>
-      Try searching for a researcher by name to see results from ORCID, GitHub, and OpenAlex (papers and datasets).
+      Enter a researcher name or an ORCID iD like <code class="inline">0000-0002-1825-0097</code>.
+      This prototype will try to assemble a profile from OpenAlex, ORCID, and GitHub.
     </p>
+
     <div style="margin-top: 1rem;">
-      <input id="researcherInput" type="text" placeholder="Enter researcher name..." style="width: 70%; max-width: 400px;" />
-      <button onclick="searchResearcher()">Search</button>
+      <input id="query" type="text" placeholder="Researcher name or ORCID iD..." style="width: 70%; max-width: 420px;" />
+      <button id="go">Search</button>
     </div>
+    <div id="error" class="error"></div>
     <div id="searchResults"></div>
   </section>
   
   <section>
     <h2>Note</h2>
     <p style="font-size: 0.95rem; color: #555;">
-      This demo is for illustration only. In the full platform, search results will be pulled live from sources like OpenAlex, arXiv, PubMed, GitHub, and others. 
-      Summaries, annotations, and peer reviews will be part of the research graph, all transparent and linked.
+      This demo is for illustration only. In the full platform, results will be pulled live from sources like OpenAlex, arXiv, PubMed, GitHub, ORCID, and others. 
+      Summaries, annotations, and peer reviews will be part of an open research graph, fully linked and transparent.
     </p>
   </section>
-  
-  <script>
-    async function searchResearcher() {
-      const query = document.getElementById("researcherInput").value.trim();
-      const resultsDiv = document.getElementById("searchResults");
-      if (!query) {
-        resultsDiv.innerHTML = "<p>Please enter a name.</p>";
-        return;
-      }
-      resultsDiv.innerHTML = "<p>Searching...</p>";
 
-      try {
-        // ORCID search (name)
-        const orcidResp = await fetch(`https://pub.orcid.org/v3.0/search?q=${encodeURIComponent(query)}`, {
-          headers: { "Accept": "application/json" }
-        });
-        const orcidData = await orcidResp.json();
-        const firstOrcid = orcidData["result"] && orcidData["result"][0] 
-          ? orcidData["result"][0]["orcid-identifier"]["path"] 
-          : "No ORCID found";
-
-        // GitHub user search
-        const githubResp = await fetch(`https://api.github.com/search/users?q=${encodeURIComponent(query)}`);
-        const githubData = await githubResp.json();
-        const firstGitHub = githubData.items && githubData.items[0] 
-          ? githubData.items[0].html_url 
-          : "No GitHub profile found";
-
-        // OpenAlex author search
-        const openAlexResp = await fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(query)}`);
-        const openAlexData = await openAlexResp.json();
-        const firstOpenAlex = openAlexData.results && openAlexData.results[0]
-          ? openAlexData.results[0].display_name + " (" + openAlexData.results[0].works_count + " works)"
-          : "No author record found in OpenAlex";
-
-        resultsDiv.innerHTML = `
-          <h3>Results for "${query}"</h3>
-          <ul>
-            <li><strong>ORCID:</strong> ${firstOrcid !== "No ORCID found" ? `<a href="https://orcid.org/${firstOrcid}" target="_blank">${firstOrcid}</a>` : firstOrcid}</li>
-            <li><strong>GitHub:</strong> ${firstGitHub !== "No GitHub profile found" ? `<a href="${firstGitHub}" target="_blank">${firstGitHub}</a>` : firstGitHub}</li>
-            <li><strong>OpenAlex:</strong> ${firstOpenAlex}</li>
-          </ul>
-        `;
-      } catch (e) {
-        resultsDiv.innerHTML = "<p>Error fetching data. Try again later.</p>";
-        console.error(e);
-      }
-    }
-  </script>
-  
   <footer>
     <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
     <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
-    <p class="footer-tagline">Open science, reimagined — for researchers, by researchers.</p>
+    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
   </footer>
+
+<script>
+/* ---------- Simple utilities ---------- */
+const $ = (id) => document.getElementById(id);
+const ORCID_REGEX = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
+
+$("go").addEventListener("click", handleSearch);
+$("query").addEventListener("keydown", e => { if (e.key === "Enter") handleSearch(); });
+
+function setLoading(isLoading) {
+  document.body.classList.toggle("loading", isLoading);
+  $("go").textContent = isLoading ? "Searching..." : "Search";
+}
+
+function escapeHtml(str = "") {
+  return str.replace(/[&<>'"]/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+  }[c]));
+}
+
+/* ---------- Main flow ---------- */
+
+async function handleSearch() {
+  const q = $("query").value.trim();
+  $("error").textContent = "";
+  $("searchResults").innerHTML = "";
+
+  if (!q) {
+    $("error").textContent = "Please enter a name or an ORCID iD.";
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const profile = ORCID_REGEX.test(q)
+      ? await buildProfileFromOrcid(q)
+      : await buildProfileFromName(q);
+
+    if (!profile) {
+      $("error").textContent = "No researcher found.";
+      setLoading(false);
+      return;
+    }
+
+    renderProfile(profile);
+  } catch (err) {
+    console.error(err);
+    $("error").textContent = "Something went wrong. See console for details.";
+  } finally {
+    setLoading(false);
+  }
+}
+
+/* ---------- Profile builders ---------- */
+
+async function buildProfileFromOrcid(orcid) {
+  const openAlexAuthor = await fetchOpenAlexAuthorByOrcid(orcid);
+  const orcidPerson = await fetchOrcidPerson(orcid); // may return null due to CORS
+  if (!openAlexAuthor && !orcidPerson) return null;
+
+  const profile = {
+    name: openAlexAuthor?.display_name || orcidPerson?.name || "Unknown",
+    orcid,
+    openalex_id: openAlexAuthor?.id || null,
+    affiliation: openAlexAuthor?.last_known_institution?.display_name || null,
+    positions: orcidPerson?.positions || [],
+    works_count: openAlexAuthor?.works_count || 0,
+    cited_by_count: openAlexAuthor?.cited_by_count || 0,
+    fields: openAlexAuthor?.x_concepts?.slice(0, 5).map(c => c.display_name) || [],
+    works: [],
+    urls: {
+      orcid: `https://orcid.org/${orcid}`,
+      openalex: openAlexAuthor ? `https://openalex.org/${openAlexAuthor.id}` : null,
+      github: extractGithubFromOrcid(orcidPerson),
+      researchgate: null,
+      scholar: null
+    }
+  };
+
+  if (openAlexAuthor) {
+    profile.works = await fetchOpenAlexWorks(openAlexAuthor.id);
+  }
+
+  if (!profile.urls.github && profile.name) {
+    const gh = await guessGithub(profile.name);
+    if (gh) profile.urls.github = gh.html_url;
+  }
+
+  return profile;
+}
+
+async function buildProfileFromName(name) {
+  const openAlexAuthor = await fetchOpenAlexAuthorByName(name);
+  if (!openAlexAuthor) return null;
+
+  const possibleOrcid = openAlexAuthor?.ids?.orcid ? openAlexAuthor.ids.orcid.replace("https://orcid.org/", "") : null;
+  const orcidPerson = possibleOrcid ? await fetchOrcidPerson(possibleOrcid).catch(() => null) : null;
+
+  const profile = {
+    name: openAlexAuthor.display_name,
+    orcid: possibleOrcid,
+    openalex_id: openAlexAuthor.id,
+    affiliation: openAlexAuthor.last_known_institution?.display_name || null,
+    positions: orcidPerson?.positions || [],
+    works_count: openAlexAuthor.works_count || 0,
+    cited_by_count: openAlexAuthor.cited_by_count || 0,
+    fields: openAlexAuthor?.x_concepts?.slice(0, 5).map(c => c.display_name) || [],
+    works: [],
+    urls: {
+      orcid: possibleOrcid ? `https://orcid.org/${possibleOrcid}` : null,
+      openalex: `https://openalex.org/${openAlexAuthor.id}`,
+      github: extractGithubFromOrcid(orcidPerson),
+      researchgate: null,
+      scholar: null
+    }
+  };
+
+  profile.works = await fetchOpenAlexWorks(openAlexAuthor.id);
+
+  if (!profile.urls.github) {
+    const gh = await guessGithub(profile.name);
+    if (gh) profile.urls.github = gh.html_url;
+  }
+
+  return profile;
+}
+
+/* ---------- Fetch helpers ---------- */
+
+async function fetchOpenAlexAuthorByOrcid(orcid) {
+  const url = `https://api.openalex.org/authors?filter=orcid:${orcid}`;
+  const r = await fetch(url);
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data?.results?.[0] || null;
+}
+
+async function fetchOpenAlexAuthorByName(name) {
+  const url = `https://api.openalex.org/authors?search=${encodeURIComponent(name)}&per_page=1`;
+  const r = await fetch(url);
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data?.results?.[0] || null;
+}
+
+async function fetchOpenAlexWorks(authorId) {
+  const url = `https://api.openalex.org/works?filter=author.id:${authorId}&per_page=5&sort=publication_year:desc`;
+  const r = await fetch(url);
+  if (!r.ok) return [];
+  const data = await r.json();
+  return (data?.results || []).map(w => ({
+    id: w.id,
+    title: w.title,
+    doi: w.doi,
+    cited_by_count: w.cited_by_count,
+    publication_year: w.publication_year,
+    host_venue: w.host_venue?.display_name || null
+  }));
+}
+
+/**
+ * ORCID public API often blocks browser calls because of CORS.
+ * In production, call it from your backend or a small proxy.
+ */
+async function fetchOrcidPerson(orcid) {
+  const url = `https://pub.orcid.org/v3.0/${orcid}/person`;
+  try {
+    const r = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return parseOrcidPerson(data);
+  } catch (e) {
+    console.warn("ORCID fetch failed, likely CORS. Add a backend proxy.", e);
+    return null;
+  }
+}
+
+function parseOrcidPerson(data) {
+  if (!data) return null;
+
+  const name = [
+    data?.name?.["given-names"]?.value || "",
+    data?.name?.["family-name"]?.value || ""
+  ].join(" ").trim() || null;
+
+  const websites = (data?.["researcher-urls"]?.["researcher-url"] || [])
+    .map(x => x?.url?.value)
+    .filter(Boolean);
+
+  let positions = [];
+  // positions are not in the /person endpoint, but we keep this struct for future extension (record endpoint)
+  // you can later fetch /v3.0/{orcid}/record and parse "activities-summary" -> "employments"
+  // here we just return empty to keep the data model consistent
+
+  return { name, websites, positions };
+}
+
+function extractGithubFromOrcid(person) {
+  if (!person || !person.websites) return null;
+  const gh = person.websites.find(u => /github\.com/i.test(u));
+  return gh || null;
+}
+
+/**
+ * Very naive GitHub guesser by full name.
+ * Rate limited without a token. For production, move to backend.
+ */
+async function guessGithub(fullName) {
+  const parts = fullName.split(" ");
+  if (parts.length < 2) return null;
+  const q = encodeURIComponent(`${fullName} in:fullname`);
+  const url = `https://api.github.com/search/users?q=${q}&per_page=1`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data?.items?.[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/* ---------- Render ---------- */
+
+function renderProfile(p) {
+  const el = $("searchResults");
+
+  const links = [];
+  if (p.urls.orcid) links.push(`<a href="${p.urls.orcid}" target="_blank" rel="noopener noreferrer">ORCID</a>`);
+  if (p.urls.openalex) links.push(`<a href="${p.urls.openalex}" target="_blank" rel="noopener noreferrer">OpenAlex</a>`);
+  if (p.urls.github) links.push(`<a href="${p.urls.github}" target="_blank" rel="noopener noreferrer">GitHub</a>`);
+  links.push(`<span class="muted">ResearchGate: add manually</span>`);
+  links.push(`<span class="muted">Google Scholar: add manually</span>`);
+
+  const fields = p.fields?.length
+    ? p.fields.map(f => `<span class="stat">${escapeHtml(f)}</span>`).join(" ")
+    : `<span class="muted">No dominant fields detected</span>`;
+
+  const positions = p.positions?.length
+    ? `<ul>${p.positions.map(pos => `<li>${escapeHtml(pos)}</li>`).join("")}</ul>`
+    : `<p class="muted">No positions found from ORCID (browser CORS likely blocked that endpoint). Add a backend proxy later.</p>`;
+
+  const worksHtml = p.works?.length
+    ? `<ul class="paper-list">
+         ${p.works.map(w => `
+           <li>
+             <strong>${escapeHtml(w.title || "Untitled")}</strong>
+             ${w.publication_year ? ` (${w.publication_year})` : ""}
+             ${w.host_venue ? `, <em>${escapeHtml(w.host_venue)}</em>` : ""}
+             ${w.cited_by_count ? `, cited by ${w.cited_by_count}` : ""}
+             ${w.doi ? `, <a href="https://doi.org/${w.doi}" target="_blank" rel="noopener noreferrer">DOI</a>` : ""}
+             , <a href="https://openalex.org/${w.id}" target="_blank" rel="noopener noreferrer">OpenAlex</a>
+           </li>
+         `).join("")}
+       </ul>`
+    : `<p class="muted">No works found.</p>`;
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>${escapeHtml(p.name || "Unknown researcher")}</h2>
+      <div class="small">
+        ${p.orcid ? `<span class="stat">ORCID: ${p.orcid}</span>` : ""}
+        ${p.affiliation ? `<span class="stat">${escapeHtml(p.affiliation)}</span>` : ""}
+        <span class="stat">Works: ${p.works_count}</span>
+        <span class="stat">Citations: ${p.cited_by_count}</span>
+      </div>
+      <p class="small"><strong>Links:</strong> ${links.join(" | ")}</p>
+      <p><strong>Primary fields:</strong></p>
+      <div>${fields}</div>
+    </div>
+
+    <div class="card">
+      <h3>Recent papers</h3>
+      ${worksHtml}
+    </div>
+
+    <div class="card">
+      <h3>Positions and affiliations (from ORCID)</h3>
+      ${positions}
+    </div>
+  `;
+}
+</script>
 </body>
 </html>
