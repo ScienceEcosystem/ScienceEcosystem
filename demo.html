@@ -127,20 +127,41 @@
   </section>
   
   <section id="searchSection">
-    <h2>3. Search Across Research</h2>
-    <p>
-      Enter a researcher name or an ORCID iD like <code class="inline">0000-0002-1825-0097</code>.
-      This prototype will try to assemble a profile from OpenAlex, ORCID, and GitHub.
-    </p>
-
-    <div style="margin-top: 1rem;">
-      <input id="query" type="text" placeholder="Researcher name or ORCID iD..." style="width: 70%; max-width: 420px;" />
-      <button id="go">Search</button>
-    </div>
-    <div id="error" class="error"></div>
-    <div id="searchResults"></div>
-  </section>
+  <h2>3. Search the Ecosystem</h2>
+  <div style="margin-top: 1rem;">
+    <input id="unifiedSearchInput" type="text" placeholder="Search publications, researchers, papers..." style="padding: 0.5rem; width: 70%; max-width: 400px; border-radius: 5px; border: 1px solid #ccc;" />
+    <button onclick="handleUnifiedSearch()" style="padding: 0.5rem 1rem; margin-left: 0.5rem; background: #2563eb; color: white; border: none; border-radius: 5px;">Search</button>
+  </div>
+  <div id="unifiedSearchResults" style="margin-top: 1rem;"></div>
+</section>
   
+<section id="contactSection" style="display:none;">
+  <h2>Contact this researcher</h2>
+  <form id="contactForm">
+    <input type="hidden" id="authorId" name="authorId" />
+    <div style="margin-bottom:0.5rem;">
+      <label for="senderName">Your name</label><br>
+      <input type="text" id="senderName" name="senderName" required style="width:100%;max-width:420px;">
+    </div>
+    <div style="margin-bottom:0.5rem;">
+      <label for="senderEmail">Your email</label><br>
+      <input type="email" id="senderEmail" name="senderEmail" required style="width:100%;max-width:420px;">
+    </div>
+    <div style="margin-bottom:0.5rem;">
+      <label for="message">Message</label><br>
+      <textarea id="message" name="message" rows="6" required style="width:100%;max-width:620px;"></textarea>
+    </div>
+    <button type="submit">Send</button>
+    <p id="contactStatus" class="muted"></p>
+  </form>
+</section>
+
+<section id="collaboratorsSection" style="display:none;">
+  <h2>Top collaborators</h2>
+  <div id="collaboratorsList"></div>
+</section>
+
+
   <section>
     <h2>Note</h2>
     <p style="font-size: 0.95rem; color: #555;">
@@ -427,7 +448,7 @@ function renderProfile(p) {
     </div>
 
     <div class="card">
-      <h3>Recent papers</h3>
+      <h3>Recent publications</h3>
       ${worksHtml}
     </div>
 
@@ -437,6 +458,131 @@ function renderProfile(p) {
     </div>
   `;
 }
+
+  async function handleUnifiedSearch() {
+    const input = document.getElementById("unifiedSearchInput").value.trim();
+    const results = document.getElementById("unifiedSearchResults");
+    results.innerHTML = "Searching...";
+
+    if (!input) {
+      results.innerHTML = "<p>Please enter a search term.</p>";
+      return;
+    }
+
+    // Heuristic: if input contains a comma or at least 2 capitalized words, assume it's a person
+    const isProbablyPerson = /^[A-Z][a-z]+(\s+[A-Z][a-z]+)+$/.test(input);
+
+    if (isProbablyPerson) {
+      results.innerHTML = `<p>Searching for researcher: <strong>${input}</strong></p>`;
+      // Use OpenAlex API
+      const res = await fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}`);
+      const data = await res.json();
+
+      if (data.results && data.results.length > 0) {
+        results.innerHTML = "<h3>Researcher Results</h3><ul>" + data.results.map(person => `
+          <li>
+            <strong>${person.display_name}</strong> (${person.orcid ? `ORCID: ${person.orcid}` : "No ORCID"})<br/>
+            ${person.last_known_institution?.display_name || "No affiliation"}<br/>
+            <a href="${person.id}" target="_blank">OpenAlex Profile</a>
+          </li>
+        `).join("") + "</ul>";
+      } else {
+        results.innerHTML = "<p>No researchers found.</p>";
+      }
+    } else {
+      results.innerHTML = `<p>Searching for paper: <strong>${input}</strong></p>`;
+      // Use OpenAlex API
+      const res = await fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}`);
+      const data = await res.json();
+
+      if (data.results && data.results.length > 0) {
+        results.innerHTML = "<h3>Paper Results</h3><ul>" + data.results.map(paper => `
+          <li>
+            <strong>${paper.display_name}</strong><br/>
+            Authors: ${paper.authorships?.map(a => a.author.display_name).join(", ") || "Unknown"}<br/>
+            Published: ${paper.publication_year || "N/A"}<br/>
+            <a href="${paper.id}" target="_blank">OpenAlex Link</a>
+          </li>
+        `).join("") + "</ul>";
+      } else {
+        results.innerHTML = "<p>No papers found.</p>";
+      }
+    }
+  }
+
+
+
+
+// server.js
+import express from "express";
+import rateLimit from "express-rate-limit";
+import nodemailer from "nodemailer";
+
+const app = express();
+app.use(express.json());
+
+// Replace with your own author to email map, or fetch from DB
+// Example key: "https://openalex.org/A123456789"
+const AUTHOR_EMAIL_MAP = {
+  "https://openalex.org/A123456789": "researcher@example.org"
+};
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20
+});
+app.use("/api/contact", limiter);
+
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
+
+app.post("/api/contact", async (req, res) => {
+  try {
+    const { authorId, senderName, senderEmail, message } = req.body || {};
+    if (!authorId || !senderName || !senderEmail || !message) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const toEmail = AUTHOR_EMAIL_MAP[authorId];
+    if (!toEmail) {
+      return res.status(404).json({ error: "No contact email for this author" });
+    }
+
+    const mailOptions = {
+      from: `"ScienceEcosystem Relay" <no-reply@scienceecosystem.org>`,
+      to: toEmail,
+      subject: `Message via SE from ${senderName}`,
+      text: `
+Sender name: ${senderName}
+Sender email: ${senderEmail}
+
+Message:
+${message}
+
+You can reply directly to the sender's email, which they provided above.
+      `.trim()
+    };
+
+    await transporter.sendMail(mailOptions);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to send" });
+  }
+});
+
+const port = process.env.PORT || 3001;
+app.listen(port, () => {
+  console.log("Server running on port", port);
+});
+
 </script>
 </body>
 </html>
