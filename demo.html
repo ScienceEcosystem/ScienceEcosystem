@@ -182,8 +182,18 @@ const $ = (id) => document.getElementById(id);
 const ORCID_REGEX = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
 
 function setLoading(isLoading) {
-  document.body.classList.toggle("loading", isLoading);
-  $("go").textContent = isLoading ? "Searching..." : "Search";
+  // Optionally disable inputs and buttons during loading
+  const input = document.getElementById("unifiedSearchInput");
+  const button = input.nextElementSibling; // The search button
+  if (isLoading) {
+    input.disabled = true;
+    button.disabled = true;
+    button.textContent = "Searching...";
+  } else {
+    input.disabled = false;
+    button.disabled = false;
+    button.textContent = "Search";
+  }
 }
 
 function escapeHtml(str = "") {
