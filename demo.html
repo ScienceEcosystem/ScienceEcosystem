@@ -181,9 +181,6 @@
 const $ = (id) => document.getElementById(id);
 const ORCID_REGEX = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
 
-$("go").addEventListener("click", handleSearch);
-$("query").addEventListener("keydown", e => { if (e.key === "Enter") handleSearch(); });
-
 function setLoading(isLoading) {
   document.body.classList.toggle("loading", isLoading);
   $("go").textContent = isLoading ? "Searching..." : "Search";
