@@ -19,15 +19,19 @@ nav {
   position: sticky;
   top: 0;
   z-index: 1000;
+  overflow: visible;
 }
+
+
 
 .logo {
   display: flex;
   align-items: center;
 }
 .logo img {
-  height: 120px;
+  height: 140px; /* Bigger logo */
   width: auto;
+  margin-top: -20px; /* Pull up to not push nav bar down */
   transition: transform 0.2s ease;
 }
 .logo img:hover {

@@ -9,7 +9,8 @@ async function loadProfile() {
   }
 
   try {
-    const res = await fetch(openAlexId);
+    const id = openAlexId.split("/").pop(); // Get just the short ID like "A123456789"
+    const res = await fetch(`https://api.openalex.org/authors/${id}`);
     const data = await res.json();
 
     profileContainer.innerHTML = `
