@@ -62,10 +62,23 @@ async function loadProfile() {
     const trendHtml = renderTrend(author.counts_by_year || []);
 
     // Publications html (all works)
-    const pubHtml = works.map(w => `
-    <li>
-    <strong>${w.title}</strong> (${w.publication_year}) — cited by ${w.cited_by_count || 0}
-    </li>`).join("");
+    const pubHtml = works.map(w => {
+  const authors = w.authorships?.map(a => a.author.display_name).join(", ") || "Unknown authors";
+  const journal = w.host_venue?.display_name || "Unknown journal";
+  const year = w.publication_year || "N/A";
+  const link = w.id || "#";
+
+  return `
+    <li style="margin-bottom: 1rem;">
+      <p style="font-weight: bold; margin-bottom: 0.2rem;">
+        <a href="${link}" target="_blank" rel="noopener" style="color: #2563eb;">${w.title}</a>
+      </p>
+      <p style="margin: 0.2rem 0;"><strong>Authors:</strong> ${authors}</p>
+      <p style="margin: 0.2rem 0;"><strong>Journal:</strong> ${journal}</p>
+      <p style="margin: 0.2rem 0;"><strong>Year:</strong> ${year}</p>
+    </li>
+  `;
+}).join("");
 
     // Co-authors html
     const coHtml = topCo.map(([name,c])=>`<li>${name} (${c} shared papers)</li>`).join("");
@@ -75,26 +88,45 @@ async function loadProfile() {
       <li>${a.institution.display_name} (${a.years.join(", ")})</li>`).join("");
 
     profileContainer.innerHTML = `
-      <h1>${author.display_name}</h1>
-      <p><strong>Affiliation:</strong> ${author.last_known_institutions?.map(i=>i.display_name).join(", ") || "N/A"}</p>
-      <p><strong>Works:</strong> ${author.works_count} | <strong>Citations:</strong> ${author.cited_by_count}</p>
-      <p><strong>H‑index:</strong> ${author.summary_stats?.h_index || "N/A"}</p>
-      <p><strong>Topics:</strong> ${author.x_concepts?.slice(0,5).map(c=>c.display_name).join(", ") || "None"}</p>
+  <section style="margin-bottom: 2rem;">
+    <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">${data.display_name}</h1>
+    <p><strong>ORCID:</strong> ${data.orcid || "N/A"}</p>
+    <p><strong>Affiliation:</strong> ${data.last_known_institution?.display_name || "N/A"}</p>
+    <p><strong>Works count:</strong> ${data.works_count}</p>
+    <p><strong>Citation count:</strong> ${data.cited_by_count}</p>
+    <p><strong>Topics:</strong> ${data.x_concepts?.slice(0, 5).map(c => c.display_name).join(", ") || "None listed"}</p>
+    <p><a href="${data.id}" target="_blank" rel="noopener">View on OpenAlex</a></p>
+  </section>
 
-      <h2>Citation & Publication Trend (last ~10 years)</h2>
-      ${trendHtml}
+  <section style="margin-bottom: 2rem;">
+    <h2 style="font-size: 1.5rem;">Top Co-authors</h2>
+    <ul style="padding-left: 1rem; list-style: disc;">
+      ${topCoauthors.map(c => `<li>${c.name} (${c.count} collaborations)</li>`).join("")}
+    </ul>
+  </section>
 
-      <h2>Recent Publications</h2>
-      <ul>${pubHtml}</ul>
+  <section style="margin-bottom: 2rem;">
+    <h2 style="font-size: 1.5rem;">Past Affiliations</h2>
+    <ul style="padding-left: 1rem; list-style: disc;">
+      ${affiliations.map(a => `<li>${a}</li>`).join("")}
+    </ul>
+  </section>
 
-      <h2>Top Co‑authors</h2>
-      <ul>${coHtml}</ul>
+  <section style="margin-bottom: 2rem;">
+    <h2 style="font-size: 1.5rem;">Citation Trend</h2>
+    <div style="max-width: 600px;">
+      <canvas id="citationChart"></canvas>
+    </div>
+  </section>
 
-      <h2>Affiliations Over Time</h2>
-      <ul>${affHtml}</ul>
+  <section style="margin-bottom: 2rem;">
+    <h2 style="font-size: 1.5rem;">Publications (${works.length})</h2>
+    <ul style="padding-left: 1rem; list-style: disc;">
+      ${pubHtml}
+    </ul>
+  </section>
+`;
 
-      <p><a href="${author.id}" target="_blank">View full profile on OpenAlex</a></p>
-    `;
   } catch (err) {
     console.error(err);
     profileContainer.innerHTML = "<p>Error loading detailed profile.</p>";
