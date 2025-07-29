@@ -64,6 +64,15 @@ header p {
   margin: 0 auto 2rem;
 }
 
+.hero .tagline {
+  max-width: 100%; 
+  width: auto;          
+  margin: 0 auto;  
+  padding: 0 1rem; 
+  font-weight: normal; 
+}
+
+
 /* Buttons */
 .button {
   display: inline-block;
