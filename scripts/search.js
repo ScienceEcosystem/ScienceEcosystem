@@ -35,15 +35,19 @@ async function handleUnifiedSearch() {
     // Render researcher list
     let html = "<h3>Researchers Found</h3><ul>";
     data.results.forEach(person => {
-      html += `
-        <li style="margin-bottom:1rem;">
-          <strong>${escapeHtml(person.display_name)}</strong><br/>
-          ORCID: ${person.orcid ? escapeHtml(person.orcid) : "N/A"}<br/>
-          Affiliation: ${person.last_known_institution?.display_name ? escapeHtml(person.last_known_institution.display_name) : "N/A"}<br/>
-          <a href="${person.id}" target="_blank" rel="noopener">OpenAlex Profile</a>
-        </li>
-      `;
-    });
+  const openAlexId = person.id; // e.g., https://openalex.org/A123456789
+  const encodedId = encodeURIComponent(openAlexId);
+  html += `
+    <li style="margin-bottom:1rem;">
+      <a href="profile.html?id=${encodedId}" style="font-weight: bold; font-size: 1.1rem;">
+        ${escapeHtml(person.display_name)}
+      </a><br/>
+      ORCID: ${person.orcid ? escapeHtml(person.orcid) : "N/A"}<br/>
+      Affiliation: ${person.last_known_institution?.display_name ? escapeHtml(person.last_known_institution.display_name) : "N/A"}<br/>
+      <a href="${person.id}" target="_blank" rel="noopener" style="font-size: 0.9rem;">OpenAlex Profile ↗</a>
+    </li>
+  `;
+});
     html += "</ul>";
 
     results.innerHTML = html;
