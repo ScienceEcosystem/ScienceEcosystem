@@ -11,7 +11,7 @@
  <nav>
   <div class="logo">
     <a href="index.html">
-      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 70px;" />
+      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 100px;" />
     </a>
   </div>
   <div style="display: flex; gap: 1rem; align-items: center;">
@@ -40,13 +40,10 @@
   <p>Find open research, author profiles, datasets, code, and funding. A single search across all scientific content.</p>
   <div style="margin-top: 1rem;">
     <input id="unifiedSearchInput" type="text" placeholder="Search..." style="padding: 0.5rem; width: 70%; max-width: 400px; border-radius: 5px; border: 1px solid #ccc;" />
-    <button onclick="Search()" style="padding: 0.5rem 1rem; margin-left: 0.5rem; background: #2563eb; color: white; border: none; border-radius: 5px;">Search</button>
+    <button onclick="handleUnifiedSearch()" style="padding: 0.5rem 1rem; margin-left: 0.5rem; background: #2563eb; color: white; border: none; border-radius: 5px;">Search</button>
   </div>
   <div id="unifiedSearchResults" style="margin-top: 1rem;"></div>
 </section>
-
-<script src="scripts/search.js"></script>
-
 
   <section class="intro">
     <h2>ScienceEcosystem</h2>
@@ -79,5 +76,8 @@
     <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
     <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
   </footer>
+
+<script src="scripts/search.js"></script>
+
 </body>
 </html>
