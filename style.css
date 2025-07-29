@@ -5,7 +5,7 @@ body {
   padding: 0;
   background: #f4f6fa;
   color: #1e293b;
-  line-height: 1.6;
+  line-height: 1;
 }
 
 /* Navigation */
@@ -22,16 +22,14 @@ nav {
   overflow: visible;
 }
 
-
-
 .logo {
   display: flex;
   align-items: center;
 }
 .logo img {
-  height: 140px; /* Bigger logo */
+  height: 100px; /* Bigger logo */
   width: auto;
-  margin-top: -20px; /* Pull up to not push nav bar down */
+  /*margin-top: -20px; /* Pull up to not push nav bar down */
   transition: transform 0.2s ease;
 }
 .logo img:hover {
@@ -69,7 +67,7 @@ header p {
 }
 
 .hero .tagline {
-  max-width: 100%; 
+  max-width: 80%; 
   width: auto;          
   margin: 0 auto;  
   padding: 0 1rem; 
