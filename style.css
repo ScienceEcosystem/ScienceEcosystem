@@ -200,3 +200,15 @@ nav a:hover {
   flex: 3;
   min-width: 0;
 }
+
+/* Search button hover */
+header .hero button:hover {
+  background-color: #1d4ed8; /* Slightly darker blue */
+}
+
+/* CTA link hover */
+header .hero .cta-buttons a:hover {
+  background-color: #e5e7eb; /* Slightly darker gray */
+  color: #1f2937; /* Darker text */
+}
+

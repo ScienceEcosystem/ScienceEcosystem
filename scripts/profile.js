@@ -6,27 +6,56 @@ function renderBarChart(counts) {
   const years = counts.map(c => c.year);
   const works = counts.map(c => c.works_count);
   const cites = counts.map(c => c.cited_by_count);
-  const max = Math.max(...works, ...cites);
+  const maxWorks = Math.max(...works);
+  const maxCites = Math.max(...cites);
+  const height = 180;
+  const width = counts.length * 40 + 40;
+
+  const yTicks = (max) => {
+    const step = Math.ceil(max / 5);
+    return Array.from({ length: 6 }, (_, i) => i * step);
+  };
+
+  const renderYAxis = (max) =>
+    yTicks(max).map(t => {
+      const y = height - (t / max) * height + 20;
+      return `<text x="0" y="${y}" font-size="10" fill="#999">${t}</text>`;
+    }).join("");
+
+  const renderBars = (data, color, max) =>
+    data.map((val, i) => {
+      const barHeight = (val / max) * height;
+      const x = i * 40 + 30;
+      return `<rect x="${x}" y="${height - barHeight + 20}" width="20" height="${barHeight}" fill="${color}" />`;
+    }).join("");
+
+  const renderLabels = () =>
+    years.map((year, i) => {
+      const x = i * 40 + 40;
+      return `<text x="${x}" y="${height + 35}" font-size="10" text-anchor="middle">${year}</text>`;
+    }).join("");
 
   return `
-    <svg width="100%" height="220">
-      ${counts.map((c, i) => {
-        const barWidth = 20;
-        const spacing = 30;
-        const x = i * spacing;
-        const workHeight = (c.works_count / max) * 150;
-        const citeHeight = (c.cited_by_count / max) * 150;
-        return `
-          <rect x="${x}" y="${170 - workHeight}" width="8" height="${workHeight}" fill="#2563eb" />
-          <rect x="${x + 10}" y="${170 - citeHeight}" width="8" height="${citeHeight}" fill="#e11d48" />
-          <text x="${x + 10}" y="200" font-size="10" text-anchor="middle">${c.year}</text>
-        `;
-      }).join("")}
-      <text x="10" y="15" fill="#2563eb" font-size="12">Works</text>
-      <text x="100" y="15" fill="#e11d48" font-size="12">Citations</text>
-    </svg>
+    <div style="margin-bottom: 2rem;">
+      <h4 style="margin-bottom: 0.5rem;">Works per Year</h4>
+      <svg width="${width}" height="${height + 50}">
+        ${renderYAxis(maxWorks)}
+        ${renderBars(works, "#2563eb", maxWorks)}
+        ${renderLabels()}
+      </svg>
+    </div>
+
+    <div>
+      <h4 style="margin-bottom: 0.5rem;">Citations per Year</h4>
+      <svg width="${width}" height="${height + 50}">
+        ${renderYAxis(maxCites)}
+        ${renderBars(cites, "#e11d48", maxCites)}
+        ${renderLabels()}
+      </svg>
+    </div>
   `;
 }
+
 
 function sortWorks(works, criteria) {
   if (criteria === "year") {
@@ -49,12 +78,15 @@ function renderPublications(works, authorId) {
 
     const journal = w.host_venue?.display_name || "Unknown journal";
     const year = w.publication_year || "N/A";
-    const link = w.id || "#";
+
+    // ✅ Updated link to go to your paper page
+    const openalexId = w.id?.split("/").pop(); // get just the paper ID, e.g., "W123456"
+    const link = `paper.html?id=${openalexId}`;
 
     return `
       <li style="margin-bottom: 1rem;">
         <p style="font-weight: bold;">
-          <a href="${link}" target="_blank" rel="noopener" style="color: #2563eb;">${w.title}</a>
+          <a href="${link}" style="color: #2563eb;">${w.title}</a>
         </p>
         <p><strong>Authors:</strong> ${authors}</p>
         <p><strong>Journal:</strong> ${journal} | <strong>Year:</strong> ${year} | <strong>Citations:</strong> ${w.cited_by_count || 0}</p>
