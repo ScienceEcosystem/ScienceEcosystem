@@ -3,59 +3,63 @@ const main = document.getElementById("profileMain");
 const sidebar = document.getElementById("profileSidebar");
 
 function renderBarChart(counts) {
-  const years = counts.map(c => c.year);
-  const works = counts.map(c => c.works_count);
-  const cites = counts.map(c => c.cited_by_count);
+  if (!counts || counts.length === 0) return "";
+
+  // Ensure data is sorted oldest to newest
+  const sorted = [...counts].sort((a, b) => a.year - b.year);
+  const years = sorted.map(c => c.year);
+  const works = sorted.map(c => c.works_count);
+  const cites = sorted.map(c => c.cited_by_count);
+
   const maxWorks = Math.max(...works);
   const maxCites = Math.max(...cites);
-  const height = 180;
-  const width = counts.length * 40 + 40;
+  const height = 120;
+  const barWidth = 20;
+  const barSpacing = 10;
+  const chartWidth = years.length * (barWidth + barSpacing) + 50;
 
-  const yTicks = (max) => {
-    const step = Math.ceil(max / 5);
-    return Array.from({ length: 6 }, (_, i) => i * step);
-  };
-
-  const renderYAxis = (max) =>
-    yTicks(max).map(t => {
-      const y = height - (t / max) * height + 20;
-      return `<text x="0" y="${y}" font-size="10" fill="#999">${t}</text>`;
+  const renderYAxis = (max) => {
+    const step = Math.ceil(max / 4);
+    return Array.from({ length: 5 }, (_, i) => {
+      const val = i * step;
+      const y = height - (val / max) * height + 20;
+      return `<text x="0" y="${y}" font-size="10" fill="#999">${val}</text>`;
     }).join("");
+  };
 
   const renderBars = (data, color, max) =>
     data.map((val, i) => {
-      const barHeight = (val / max) * height;
-      const x = i * 40 + 30;
-      return `<rect x="${x}" y="${height - barHeight + 20}" width="20" height="${barHeight}" fill="${color}" />`;
+      const x = i * (barWidth + barSpacing) + 30;
+      const h = (val / max) * height;
+      return `<rect x="${x}" y="${height - h + 20}" width="${barWidth}" height="${h}" fill="${color}" />`;
     }).join("");
 
   const renderLabels = () =>
     years.map((year, i) => {
-      const x = i * 40 + 40;
+      const x = i * (barWidth + barSpacing) + 40;
       return `<text x="${x}" y="${height + 35}" font-size="10" text-anchor="middle">${year}</text>`;
     }).join("");
 
   return `
-    <div style="margin-bottom: 2rem;">
+    <div style="max-width: 100%; overflow-x: auto; margin-bottom: 2rem;">
       <h4 style="margin-bottom: 0.5rem;">Works per Year</h4>
-      <svg width="${width}" height="${height + 50}">
+      <svg width="${chartWidth}" height="${height + 50}">
         ${renderYAxis(maxWorks)}
         ${renderBars(works, "#2563eb", maxWorks)}
         ${renderLabels()}
       </svg>
     </div>
 
-    <div>
+    <div style="max-width: 100%; overflow-x: auto; margin-bottom: 2rem;">
       <h4 style="margin-bottom: 0.5rem;">Citations per Year</h4>
-      <svg width="${width}" height="${height + 50}">
+      <svg width="${chartWidth}" height="${height + 50}">
         ${renderYAxis(maxCites)}
-        ${renderBars(cites, "#e11d48", maxCites)}
+        ${renderBars(cites, "#16a34a", maxCites)}
         ${renderLabels()}
       </svg>
     </div>
   `;
 }
-
 
 function sortWorks(works, criteria) {
   if (criteria === "year") {
@@ -78,9 +82,7 @@ function renderPublications(works, authorId) {
 
     const journal = w.host_venue?.display_name || "Unknown journal";
     const year = w.publication_year || "N/A";
-
-    // ✅ Updated link to go to your paper page
-    const openalexId = w.id?.split("/").pop(); // get just the paper ID, e.g., "W123456"
+    const openalexId = w.id?.split("/").pop();
     const link = `paper.html?id=${openalexId}`;
 
     return `
@@ -115,16 +117,23 @@ async function loadProfile() {
     works.forEach(w => {
       w.authorships.forEach(a => {
         if (a.author.id && a.author.id !== author.id) {
-          coAuthorMap[a.author] = coAuthorMap[a.author] || { count: 0, id: a.author.id };
-          coAuthorMap[a.author].count += 1;
+          const key = a.author.id;
+          if (!coAuthorMap[key]) {
+            coAuthorMap[key] = {
+              count: 0,
+              name: a.author.display_name,
+              id: a.author.id
+            };
+          }
+          coAuthorMap[key].count += 1;
         }
       });
     });
 
-    const topCoauthors = Object.entries(coAuthorMap)
-      .sort((a, b) => b[1].count - a[1].count)
+    const topCoauthors = Object.values(coAuthorMap)
+      .sort((a, b) => b.count - a.count)
       .slice(0, 10)
-      .map(([author, info]) => `<li><a href="profile.html?id=${info.id}">${author.display_name}</a> (${info.count})</li>`)
+      .map(info => `<li><a href="profile.html?id=${info.id}">${info.name}</a> (${info.count})</li>`)
       .join("");
 
     const affiliations = (author.affiliations || [])

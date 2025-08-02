@@ -2,7 +2,11 @@ const $ = (id) => document.getElementById(id);
 
 function escapeHtml(str = "") {
   return str.replace(/[&<>'"]/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;"
   }[c]));
 }
 
@@ -15,7 +19,7 @@ async function handleSearch() {
   const isDOI = input.startsWith("10.");
 
   try {
-    // Researcher
+    // Try redirecting to researcher profile
     if (isLikelyName) {
       const authorRes = await fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=1`);
       const authorData = await authorRes.json();
@@ -26,11 +30,14 @@ async function handleSearch() {
       }
     }
 
-    // Paper by DOI or title
+    // Try redirecting to paper page
     const paperRes = await fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}&per_page=1`);
     const paperData = await paperRes.json();
     if (paperData.results.length > 0) {
-      const paperId = paperData.results[0].id.split("/").pop();
+      const paper = paperData.results[0];
+      const paperId = paper.doi
+        ? `doi:${encodeURIComponent(paper.doi)}`
+        : paper.id.replace("https://openalex.org/", "");
       window.location.href = `paper.html?id=${paperId}`;
       return;
     }
@@ -89,7 +96,10 @@ async function handleUnifiedSearch() {
     if (papers.length > 0) {
       html += "<h3>Papers</h3><ul>";
       for (const paper of papers) {
-        const paperId = paper.id.split("/").pop();
+        const paperId = paper.doi
+          ? `doi:${encodeURIComponent(paper.doi)}`
+          : paper.id.replace("https://openalex.org/", "");
+
         html += `
           <li style="margin-bottom:1rem;">
             <a href="paper.html?id=${paperId}" style="font-weight: bold;">${escapeHtml(paper.title)}</a><br/>
