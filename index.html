@@ -8,16 +8,23 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
- <nav>
-  <div class="logo">
-  <a href="index.html">
-    <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" />
-  </a>
-</div>
-  <div style="display: flex; gap: 1rem; align-items: center;">
+ <nav style="display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; height: 80px; background: white;">
+  <!-- Logo -->
+  <div class="logo" style="flex: 1;">
+    <a href="index.html">
+      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 40px;" />
+    </a>
+  </div>
+
+  <!-- Navigation links -->
+  <div style="flex: 2; display: flex; justify-content: center;">
+    <!-- Empty center on homepage to keep hero search -->
+  </div>
+
+  <!-- Right-side links -->
+  <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;">
     <a href="index.html">Home</a>
     <a href="about.html">About</a>
-    <!-- ORCID Login Button -->
     <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
       <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
       Login with ORCID
@@ -25,25 +32,26 @@
   </div>
 </nav>
 
-  <header class="hero">
-    <h1>ScienceEcosystem</h1>
-<p class="tagline">
-  One <strong>Science</strong> platform for research papers, data, code, peer review, and funding all together in an open, connected, and built for collaboration <strong>Ecosystem</strong>.
-</p>
-<div class="cta-buttons">
-  <a href="about.html" class="button alt">Why We’re Building This</a>
-</div>
-  </header>
+ <header class="hero">
+  <h1>ScienceEcosystem</h1>
+  <p class="tagline">
+    One <strong>Science</strong> platform for research papers, data, code, peer review, and funding all together in an open, connected, and built for collaboration <strong>Ecosystem</strong>.
+  </p>
 
- <section>
-  <h2>Explore the Ecosystem</h2>
-  <p>Find open research, author profiles, datasets, code, and funding. A single search across all scientific content.</p>
-  <div style="margin-top: 1rem;">
-    <input id="unifiedSearchInput" type="text" placeholder="Search..." style="padding: 0.5rem; width: 70%; max-width: 400px; border-radius: 5px; border: 1px solid #ccc;" />
-    <button onclick="handleUnifiedSearch()" style="padding: 0.5rem 1rem; margin-left: 0.5rem; background: #2563eb; color: white; border: none; border-radius: 5px;">Search</button>
+  <!-- 🎯 Search Bar inside Hero -->
+  <div style="margin-top: 1.5rem;">
+    <input id="searchInput" type="text" placeholder="Search papers, researchers, or DOIs..." aria-label="Search input"
+           style="padding: 0.6rem; width: 80%; max-width: 500px; border-radius: 5px; border: 1px solid #ccc;" />
+    <button onclick="handleSearch()" 
+            style="padding: 0.6rem 1.2rem; margin-left: 0.5rem; background: #2563eb; color: white; border: none; border-radius: 5px;">
+      Search
+    </button>
   </div>
-  <div id="unifiedSearchResults" style="margin-top: 1rem;"></div>
-</section>
+
+  <div class="cta-buttons" style="margin-top: 2rem;">
+    <a href="about.html" class="button alt">Why We’re Building This</a>
+  </div>
+</header>
 
 
   <section class="intro">

@@ -3,21 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ScienceEcosystem | Reimagining Science</title>
+ <title>About | ScienceEcosystem</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
- <nav>
-  <div class="logo">
-  <a href="index.html">
-    <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" />
-  </a>
-</div>
-  <div style="display: flex; gap: 1rem; align-items: center;">
+  <nav style="display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; height: 80px; background: white;">
+  <!-- Logo on the left -->
+  <div class="logo" style="flex: 1;">
+    <a href="index.html">
+      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 40px;" />
+    </a>
+  </div>
+
+  <!-- Centered search bar -->
+  <div style="flex: 2; display: flex; justify-content: center;">
+    <input
+      id="searchInput"
+      type="text"
+      placeholder="Search papers, researchers, DOIs..."
+      style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
+      onkeydown="if(event.key==='Enter') handleSearch()"
+    />
+  </div>
+
+  <!-- Right links and ORCID login -->
+  <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;">
     <a href="index.html">Home</a>
     <a href="about.html">About</a>
-    <!-- ORCID Login Button -->
     <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
       <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
       Login with ORCID
@@ -25,7 +38,7 @@
   </div>
 </nav>
 
-
+<main>
   <header><h1>About ScienceEcosystem</h1></header>
 
   <section>
@@ -134,7 +147,7 @@
     <p>
       We are focused on steady, thoughtful development, working closely with early users and institutions to guide each step.
     </p>
-    <p>We envision that in the future science is not longer captured in papers but in </p>
+    <p>We envision that in the future, science is no longer captured in static papers, but in dynamic, modular research objects that evolve over time.</p>
   </section>
   
   <section>
@@ -174,11 +187,16 @@
       <a href="https://www.overleaf.com/read/xyzyqvjmpdjh#75b02a" target="_blank">Read the Business Plan</a>
     </p>
   </section>
+</main>
 
   <footer>
     <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
     <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
     <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
   </footer>
+<script src="scripts/search.js"></script>
+
+
+
 </body>
 </html>

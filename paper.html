@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>document.title = `${name} | Researcher Profile | ScienceEcosystem`;</title>
+  <title>Research Paper | ScienceEcosystem</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
-<body><nav style="display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; height: 80px; background: white;">
+<body>
+    <nav style="display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; height: 80px; background: white;">
   <!-- Logo on the left -->
   <div class="logo" style="flex: 1;">
     <a href="index.html">
@@ -36,13 +37,49 @@
     </button>
   </div>
 </nav>
+  <main>
+    <div id="paperContent">
+      <h1>Loading paper...</h1>
+    </div>
+    <div id="graphContainer" style="margin-top: 2rem;"></div>
+  </main>
 
-<main>
-  <div id="profileLayout" style="display: flex; flex-wrap: wrap; gap: 2rem; padding: 2rem 1rem;">
-    <div style="flex: 3; min-width: 0;" id="profileMain">Loading profile...</div>
-    <aside style="flex: 1; min-width: 300px;" id="profileSidebar"></aside>
-  </div>
-</main>
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const paperId = urlParams.get('id');
+
+    async function fetchPaperDetails() {
+      const display = document.getElementById("paperContent");
+      if (!paperId) {
+        display.innerHTML = "<p>No paper ID provided.</p>";
+        return;
+      }
+
+      try {
+        const apiUrl = paperId.startsWith("10.")
+          ? `https://api.openalex.org/works/doi:${encodeURIComponent(paperId)}`
+          : `https://api.openalex.org/works/${paperId}`;
+
+        const res = await fetch(apiUrl);
+        const paper = await res.json();
+
+        display.innerHTML = `
+          <h1>${paper.title}</h1>
+          <p><strong>Authors:</strong> ${paper.authorships.map(a => a.author.display_name).join(", ")}</p>
+          <p><strong>Published in:</strong> ${paper.host_venue.display_name} (${paper.publication_year})</p>
+          <p><strong>Abstract:</strong> ${paper.abstract_inverted_index ? Object.keys(paper.abstract_inverted_index).join(" ") : "N/A"}</p>
+          <p><a href="${paper.id}" target="_blank">View on OpenAlex ↗</a></p>
+        `;
+
+        // Load simple citation graph (next step)
+
+      } catch (error) {
+        display.innerHTML = "<p>Error loading paper details.</p>";
+      }
+    }
+
+    fetchPaperDetails();
+  </script>
 
   <footer>
     <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
@@ -50,7 +87,8 @@
     <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
   </footer>
 
-  <script src="scripts/search.js"></script>
-  <script src="scripts/profile.js"></script>
+<script src="scripts/search.js"></script>
+
 </body>
 </html>
+
