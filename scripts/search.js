@@ -10,43 +10,12 @@ function escapeHtml(str = "") {
   }[c]));
 }
 
-// 🔍 Quick redirect search from homepage or nav bar
-async function handleSearch() {
+function handleSearch() {
   const input = $("searchInput").value.trim();
   if (!input) return;
 
-  const isLikelyName = /^[a-zA-Z]+( [a-zA-Z]+)+$/.test(input);
-  const isDOI = input.startsWith("10.");
-
-  try {
-    // Try redirecting to researcher profile
-    if (isLikelyName) {
-      const authorRes = await fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=1`);
-      const authorData = await authorRes.json();
-      if (authorData.results.length > 0) {
-        const authorId = authorData.results[0].id.split("/").pop();
-        window.location.href = `profile.html?id=${authorId}`;
-        return;
-      }
-    }
-
-    // Try redirecting to paper page
-    const paperRes = await fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}&per_page=1`);
-    const paperData = await paperRes.json();
-    if (paperData.results.length > 0) {
-      const paper = paperData.results[0];
-      const paperId = paper.doi
-        ? `doi:${encodeURIComponent(paper.doi)}`
-        : paper.id.replace("https://openalex.org/", "");
-      window.location.href = `paper.html?id=${paperId}`;
-      return;
-    }
-
-    alert("No matching researchers or papers found.");
-  } catch (err) {
-    console.error("Search error:", err);
-    alert("Search failed.");
-  }
+  // Always redirect to search results page, no immediate profile or paper redirect
+  window.location.href = `search.html?q=${encodeURIComponent(input)}`;
 }
 
 // 🧠 Results on a full search page (e.g. search.html)
