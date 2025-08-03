@@ -81,42 +81,51 @@ async function loadProfile() {
 
   try {
     const author = await (await fetch(`https://api.openalex.org/authors/${authorId}`)).json();
-    const works = (await (await fetch(author.works_api_url + "&per_page=100")).json()).results || [];
+    const works = (await (await fetch(author.works_api_url + "&per_page=500")).json()).results || [];
 
-    // affiliation
-    const affiliation = (author.last_known_institutions?.[0]?.display_name) || "Unknown";
+    const affiliation = author.last_known_institutions?.[0]?.display_name || "Unknown";
 
-    // indices
     const h = author.summary_stats?.h_index || "N/A";
     const i10 = author.summary_stats?.i10_index || "N/A";
 
-    // topics
     const topics = (author.x_concepts || [])
       .sort((a,b)=>b.score-a.score)
       .slice(0,5)
       .map(c=>c.display_name);
     const topicTags = topics.map(t=>`<span class="topic-tag">${t}</span>`).join(" ");
 
-    const bio = `Focus areas include: ${topics.join(", ")}. Has published ${works.length} works, with an h‑index of ${h}.`;
+    // Improved AI bio
+    const bio = `
+      ${author.display_name} is a researcher working on topics such as ${topics.join(", ")}.
+      They have published ${works.length} works, reflecting a sustained contribution to their field.
+      Their current h-index is ${h}, and they are affiliated with ${affiliation}.
+    `;
 
-    // co-authors
+    // Co-authors with proper links
     const coMap = {};
     works.forEach(w=>{
       w.authorships.forEach(a=>{
-        if (a.author.id && a.author.id!==author.id) {
-          coMap[a.author.id] = coMap[a.author.id]||{count:0,name:a.author.display_name};
+        if (a.author.id && a.author.id !== author.id) {
+          if (!coMap[a.author.id]) {
+            coMap[a.author.id] = { count: 0, name: a.author.display_name, id: a.author.id };
+          }
           coMap[a.author.id].count++;
         }
       });
     });
-    const topCo = Object.values(coMap).sort((a,b)=>b.count-a.count).slice(0,10)
-      .map(c=>`<li><a href="profile.html?id=${encodeURIComponent(c.id)}">${c.name}</a> (${c.count})</li>`).join("");
 
-    const affiliationsHtml = (author.affiliations||[])
-      .map(a=>`<li>${a.institution.display_name} (${a.years.join(", ")})</li>`).join("");
+    const topCo = Object.values(coMap)
+      .sort((a,b)=>b.count-a.count)
+      .slice(0,10)
+      .map(c=>`<li><a href="profile.html?id=${encodeURIComponent(c.id)}">${c.name}</a> (${c.count})</li>`)
+      .join("");
+
+    const affiliationsHtml = (author.affiliations || []).length
+      ? author.affiliations.map(a=>`<li>${a.institution.display_name} (${a.years?.join(", ") || "N/A"})</li>`).join("")
+      : "<li>None listed</li>";
 
     const updatePubs = (by) => {
-      document.getElementById("pubList").innerHTML = renderPublications(sortWorks(works,by), author.id);
+      document.getElementById("pubList").innerHTML = renderPublications(sortWorks(works, by), author.id);
     };
 
     main.innerHTML = `

@@ -37,52 +37,14 @@
     </button>
   </div>
 </nav>
+
+
   <main>
     <div id="paperContent">
       <h1>Loading paper...</h1>
     </div>
     <div id="graphContainer" style="margin-top: 2rem;"></div>
   </main>
-
-  <script>
-  const urlParams = new URLSearchParams(window.location.search);
-  const paperId = urlParams.get('id');
-
-  async function fetchPaperDetails() {
-    const display = document.getElementById("paperContent");
-    if (!paperId) {
-      display.innerHTML = "<p>No paper ID provided.</p>";
-      return;
-    }
-
-    try {
-      let apiUrl;
-      if (paperId.startsWith("doi:")) {
-        apiUrl = `https://api.openalex.org/works/${paperId}`;
-      } else if (paperId.startsWith("10.")) {
-        apiUrl = `https://api.openalex.org/works/doi:${encodeURIComponent(paperId)}`;
-      } else {
-        apiUrl = `https://api.openalex.org/works/${paperId}`;
-      }
-
-      const res = await fetch(apiUrl);
-      const paper = await res.json();
-
-      display.innerHTML = `
-        <h1>${paper.title}</h1>
-        <p><strong>Authors:</strong> ${paper.authorships.map(a => a.author.display_name).join(", ")}</p>
-        <p><strong>Published in:</strong> ${paper.host_venue.display_name} (${paper.publication_year})</p>
-        <p><strong>Abstract:</strong> ${paper.abstract_inverted_index ? Object.keys(paper.abstract_inverted_index).join(" ") : "N/A"}</p>
-        <p><a href="${paper.id}" target="_blank">View on OpenAlex ↗</a></p>
-      `;
-    } catch (error) {
-      console.error("Error fetching paper:", error);
-      display.innerHTML = `<p>Error loading paper details. Check the ID or try again later.</p>`;
-    }
-  }
-
-  fetchPaperDetails();
-</script>
 
 
   <footer>
@@ -92,6 +54,8 @@
   </footer>
 
 <script src="scripts/search.js"></script>
+<script src="scripts/paper.js"></script>
+
 
 </body>
 </html>
