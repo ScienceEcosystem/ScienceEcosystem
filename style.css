@@ -237,11 +237,20 @@ header .hero .cta-buttons a:hover {
   border: 1px solid #ccc;
   border-radius: 9999px;
 }
-
 .text-science {
   color: #0284c7;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000;
 }
 
 .text-ecosystem {
   color: #22c55e;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000;
 }
