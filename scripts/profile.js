@@ -81,7 +81,7 @@ async function loadProfile() {
 
   try {
     const author = await (await fetch(`https://api.openalex.org/authors/${authorId}`)).json();
-    const works = (await (await fetch(author.works_api_url + "&per_page=200")).json()).results || [];
+    const works = (await (await fetch(author.works_api_url + "&per_page=300")).json()).results || [];
 
     const affiliation = author.last_known_institutions?.[0]?.display_name || "Unknown";
 

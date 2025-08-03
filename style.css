@@ -84,13 +84,14 @@ header p {
   background: #16a34a;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 5px;
   font-size: 1rem;
   font-weight: 600;
   text-align: center;
   cursor: pointer;
   transition: background 0.2s ease;
 }
+
 .button:hover,
 .button:focus {
   background: #15803d;
@@ -235,4 +236,12 @@ header .hero .cta-buttons a:hover {
   font-size: 1rem;
   border: 1px solid #ccc;
   border-radius: 9999px;
+}
+
+.text-science {
+  color: #0284c7;
+}
+
+.text-ecosystem {
+  color: #22c55e;
 }

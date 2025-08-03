@@ -29,23 +29,12 @@
     <div class="nav-right" style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;">
       <a href="index.html">Home</a>
       <a href="about.html">About</a>
-      <button class="button" style="display: flex; align-items: center; gap: 0.5rem;">
-        <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
-        Login with ORCID
-      </button>
+      <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
+      <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+      Login with ORCID
+    </button>
     </div>
   </nav>
-
-  <!-- Search Results Section -->
-  <section>
-    <form id="searchForm" onsubmit="event.preventDefault(); doSearch();">
-      <label for="searchInput">Search researchers, papers, DOIs:</label><br />
-      <input id="searchInput" type="search" autocomplete="off" />
-      <button type="submit" class="button">Search</button>
-    </form>
-
-    <div id="results" style="margin-top: 2rem;"></div>
-  </section>
 
   <!-- Footer -->
   <footer>
@@ -75,7 +64,7 @@
       try {
         const [authorsRes, papersRes] = await Promise.all([
           fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(q)}&per_page=10`),
-          fetch(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per_page=10`)
+          fetch(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per_page=100`)
         ]);
         const authors = (await authorsRes.json()).results || [];
         const papers = (await papersRes.json()).results || [];
