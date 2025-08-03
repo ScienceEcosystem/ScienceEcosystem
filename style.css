@@ -52,7 +52,7 @@ nav a:focus {
 /* Header */
 header {
   background: #065ef5;
-  color: white;
+  color: rgb(0, 0, 0);
   text-align: center;
   padding: 4rem 1rem;
 }
@@ -212,3 +212,16 @@ header .hero .cta-buttons a:hover {
   color: #1f2937; /* Darker text */
 }
 
+.topic-tag {
+  display: inline-block;
+  background: #e0f2fe;
+  padding: 2px 6px;
+  margin: 0 4px 4px 0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: #0369a1;
+}
+.ai‑bio {
+  font-style: italic;
+  color: #4b5563;
+}
