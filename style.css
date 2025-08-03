@@ -16,6 +16,8 @@ nav {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
+  padding: 0 2rem; 
+  height: 80px;
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -224,4 +226,13 @@ header .hero .cta-buttons a:hover {
 .ai‑bio {
   font-style: italic;
   color: #4b5563;
+}
+
+.search-bar {
+  width: 100%;
+  max-width: 500px;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 9999px;
 }

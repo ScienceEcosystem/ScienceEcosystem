@@ -3,54 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
- <title>Search | ScienceEcosystem</title>
+  <title>Search | ScienceEcosystem</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <nav style="display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; height: 80px; background: white;">
-  <!-- Logo on the left -->
-  <div class="logo" style="flex: 1;">
-    <a href="index.html">
-      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
-    </a>
-  </div>
+  <!-- Navigation Bar -->
+  <nav>
+    <div class="logo" style="flex: 1;">
+      <a href="index.html">
+        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" />
+      </a>
+    </div>
 
-  <!-- Centered search bar -->
-  <div style="flex: 2; display: flex; justify-content: center;">
-    <input
-      id="searchInput"
-      type="text"
-      placeholder="Search papers, researchers, DOIs..."
-      style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
-      onkeydown="if(event.key==='Enter') handleSearch()"
-    />
-  </div>
+    <div class="nav-center" style="flex: 2; display: flex; justify-content: center;">
+      <input
+        id="searchInput"
+        type="text"
+        class="search-bar"
+        placeholder="Search papers, researchers, DOIs..."
+        onkeydown="if(event.key==='Enter') handleSearch()"
+      />
+    </div>
 
-  <!-- Right links and ORCID login -->
-  <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;">
-    <a href="index.html">Home</a>
-    <a href="about.html">About</a>
-    <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
-      <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
-      Login with ORCID
-    </button>
-  </div>
-</nav>
-<body>
+    <div class="nav-right" style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <button class="button" style="display: flex; align-items: center; gap: 0.5rem;">
+        <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+        Login with ORCID
+      </button>
+    </div>
+  </nav>
 
-  <form id="searchForm" onsubmit="event.preventDefault(); doSearch();">
-    <label for="searchInput">Search researchers, papers, DOIs:</label><br />
-    <input id="searchInput" type="search" autocomplete="off" />
-    <button type="submit">Search</button>
-  </form>
+  <!-- Search Results Section -->
+  <section>
+    <form id="searchForm" onsubmit="event.preventDefault(); doSearch();">
+      <label for="searchInput">Search researchers, papers, DOIs:</label><br />
+      <input id="searchInput" type="search" autocomplete="off" />
+      <button type="submit" class="button">Search</button>
+    </form>
 
-  <div id="results" style="margin-top: 2rem;"></div>
+    <div id="results" style="margin-top: 2rem;"></div>
+  </section>
 
+  <!-- Footer -->
+  <footer>
+    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+  </footer>
+
+  <!-- Scripts -->
   <script>
     const params = new URLSearchParams(window.location.search);
     const query = params.get("q") || "";
-
     const searchInput = document.getElementById("searchInput");
     const resultsDiv = document.getElementById("results");
 
@@ -106,7 +113,6 @@
         }
 
         if (!html) html = "<p>No results found.</p>";
-
         resultsDiv.innerHTML = html;
       } catch (error) {
         console.error(error);
@@ -116,14 +122,6 @@
 
     if (query) doSearch();
   </script>
-
-  <footer>
-    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
-    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
-  </footer>
-<script src="scripts/search.js"></script>
-
-
+  <script src="scripts/search.js"></script>
 </body>
 </html>
