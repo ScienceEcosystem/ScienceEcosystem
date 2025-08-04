@@ -81,7 +81,7 @@ async function loadProfile() {
 
   try {
     const author = await (await fetch(`https://api.openalex.org/authors/${authorId}`)).json();
-    const works = (await (await fetch(author.works_api_url + "&per_page=300")).json()).results || [];
+    const works = (await (await fetch(author.works_api_url + "&per_page=100")).json()).results || [];
 
     const affiliation = author.last_known_institutions?.[0]?.display_name || "Unknown";
 
@@ -92,7 +92,14 @@ async function loadProfile() {
       .sort((a,b)=>b.score-a.score)
       .slice(0,5)
       .map(c=>c.display_name);
-    const topicTags = topics.map(t=>`<span class="topic-tag">${t}</span>`).join(" ");
+    const topicTags = (author.x_concepts || [])
+  .sort((a,b)=>b.score-a.score)
+  .slice(0,5)
+  .map(c=>{
+    const tid = c.id.split("/").pop(); // Get topic ID from OpenAlex URL
+    return `<a class="topic-tag" href="topic.html?id=${tid}" title="Go to topic page">${c.display_name}</a>`;
+  }).join(" ");
+
 
     // Improved AI bio
     const bio = `
@@ -132,7 +139,12 @@ async function loadProfile() {
       <section style="margin-bottom:2rem;">
         <h1>${author.display_name}</h1>
         <p><strong>Affiliation:</strong> ${affiliation}</p>
-        <p><strong>H‑index:</strong> ${h}, <strong>i10‑index:</strong> ${i10}</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0;">
+  <div style="flex: 1 0 200px;"><strong>Publications:</strong> ${works.length}</div>
+  <div style="flex: 1 0 200px;"><strong>h-index:</strong> ${h}</div>
+  <div style="flex: 1 0 200px;"><strong>Citations:</strong> ${author.cited_by_count.toLocaleString()}</div>
+  <div style="flex: 1 0 200px;"><strong>Highly Influential Citations:</strong> N/A</div>
+</div>
         <p><strong>Topics:</strong> ${topicTags}</p>
         <p class="ai‑bio">${bio}</p>
         <p><a href="${author.id}" target="_blank">View on OpenAlex</a></p>

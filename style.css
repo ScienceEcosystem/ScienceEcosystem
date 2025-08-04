@@ -254,3 +254,20 @@ header .hero .cta-buttons a:hover {
     -1px  1px 0 #000,
      1px  1px 0 #000;
 }
+
+
+.topic-tag {
+  display: inline-block;
+  margin: 0 0.3rem 0.5rem 0;
+  padding: 0.3rem 0.6rem;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.topic-tag:hover {
+  background: #bae6fd;
+  text-decoration: underline;
+}

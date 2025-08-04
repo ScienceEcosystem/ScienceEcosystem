@@ -34,13 +34,13 @@ async function loadPaper() {
       : allAuthors.length === 2
         ? `${allAuthors[0]} & ${allAuthors[1]}`
         : `${allAuthors[0]} et al.`;
-    const venue = paper.host_venue?.display_name || "Unknown Journal";
+    const source = paper.host_venue?.display_name || "Unknown Journal";
     const year = paper.publication_year || "n.d.";
     const doi = paper.doi || "";
 
-    const fullCitation = `${allAuthors.join(", ")} (${year}). ${title}. <i>${venue}</i>. https://doi.org/${doi}`;
+    const fullCitation = `${allAuthors.join(", ")} (${year}). ${title}. <i>${source}</i>. https://doi.org/${doi}`;
     const inTextCitation = `(${formattedAuthors}, ${year})`;
-    const presentationCitation = `${formattedAuthors}, ${venue}, ${year}`;
+    const presentationCitation = `${formattedAuthors}, ${source}, ${year}`;
 
     const citations = paper.cited_by_count ?? "N/A";
     const abstract = paper.abstract_inverted_index
@@ -65,7 +65,7 @@ async function loadPaper() {
       <section style="max-width: 800px; margin: auto;">
         <h1 style="font-size: 1.8rem;">${paper.title}</h1>
         <p><strong>Authors:</strong> ${authors}</p>
-        <p><strong>Venue:</strong> ${venue}</p>
+        <p><strong>Source:</strong> ${source}</p>
         <p><strong>Year:</strong> ${year}</p>
         <p><strong>Citations:</strong> ${citations}</p>
         <div style="margin-top: 1rem; margin-bottom: 1rem;">
