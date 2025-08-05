@@ -9,20 +9,45 @@ async function loadTopic() {
     return;
   }
 
+const getWikipediaExtractHTML = async (title) => {
+  try {
+    const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
+    if (!response.ok) throw new Error("Wikipedia fetch failed");
+    const data = await response.json();
+    return {
+      html: data.extract_html,
+      url: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`
+    };
+  } catch (error) {
+    console.warn("Wikipedia summary not available:", error);
+    return { html: null, url: null };
+  }
+};
+
   try {
     const topic = await (await fetch(`https://api.openalex.org/concepts/${id}`)).json();
+    const { html: wikiHTML, url: wikiURL } = await getWikipediaExtractHTML(topic.display_name);
 
-    main.innerHTML = `
-      <section style="margin-bottom:2rem;">
-        <h1>${topic.display_name}</h1>
-        <p><strong>Description:</strong> ${topic.description || "No description available."}</p>
-        <p><a href="${topic.id}" target="_blank">View on OpenAlex</a></p>
-      </section>
-      <section>
-        <h2>Top Works in this Topic</h2>
-        <ul id="workList">Loading...</ul>
-      </section>
-    `;
+ main.innerHTML = `
+  <section style="margin-bottom:2rem;">
+    <h1>${topic.display_name}</h1>
+    <div class="wiki-extract" style="margin-bottom:1rem;">
+      ${wikiHTML || `<p><strong>Description:</strong> ${topic.description || "No description available."}</p>`}
+    </div>
+    ${wikiURL ? `<p style="font-size: 0.9em;">Source: <a href="${wikiURL}" target="_blank" rel="noopener noreferrer">Wikipedia</a></p>` : ""}
+    <p><a href="${topic.id}" target="_blank">View on OpenAlex</a></p>
+  </section>
+`;
+
+// Fix internal Wikipedia links
+document.querySelectorAll(".wiki-extract a").forEach(link => {
+  const href = link.getAttribute("href");
+  if (href?.startsWith("/wiki/")) {
+    link.href = "https://en.wikipedia.org" + href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+  }
+});
 
     const worksResp = await fetch(`https://api.openalex.org/works?filter=concepts.id:${id}&sort=cited_by_count:desc&per_page=10`);
     const works = (await worksResp.json()).results || [];

@@ -142,6 +142,7 @@ async function loadProfile() {
         <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0;">
   <div style="flex: 1 0 200px;"><strong>Publications:</strong> ${works.length}</div>
   <div style="flex: 1 0 200px;"><strong>h-index:</strong> ${h}</div>
+  <div style="flex: 1 0 200px;"><strong>i10-index:</strong> ${i10}</div>
   <div style="flex: 1 0 200px;"><strong>Citations:</strong> ${author.cited_by_count.toLocaleString()}</div>
   <div style="flex: 1 0 200px;"><strong>Highly Influential Citations:</strong> N/A</div>
 </div>
