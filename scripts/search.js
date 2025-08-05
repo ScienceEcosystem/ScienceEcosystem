@@ -37,13 +37,15 @@ async function handleUnifiedSearch() {
   results.innerHTML = `<p>Searching: <strong>${escapeHtml(input)}</strong></p>`;
 
   try {
-    const [authorRes, paperRes] = await Promise.all([
-      fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=5`),
-      fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}&per_page=5`)
-    ]);
+    const [authorRes, paperRes, topicRes] = await Promise.all([
+  fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=5`),
+  fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}&per_page=5`),
+  fetch(`https://api.openalex.org/concepts?search=${encodeURIComponent(input)}&per_page=5`)
+]);
 
-    const authors = (await authorRes.json()).results || [];
-    const papers = (await paperRes.json()).results || [];
+const authors = (await authorRes.json()).results || [];
+const papers = (await paperRes.json()).results || [];
+const topics = (await topicRes.json()).results || [];
 
     let html = "";
 
@@ -61,7 +63,7 @@ async function handleUnifiedSearch() {
       }
       html += "</ul>";
     }
-
+    
     if (papers.length > 0) {
       html += "<h3>Papers</h3><ul>";
       for (const paper of papers) {
@@ -79,6 +81,23 @@ async function handleUnifiedSearch() {
       }
       html += "</ul>";
     }
+
+
+const sidebar = $("suggestedTopics");
+sidebar.innerHTML = "";  // clear sidebar
+
+if (topics.length > 0) {
+  for (const topic of topics) {
+    const tid = topic.id.split("/").pop();
+    sidebar.innerHTML += `
+      <li style="margin-bottom: 0.5rem;">
+        <a href="topic.html?id=${tid}" title="${escapeHtml(topic.description || '')}">
+          ${escapeHtml(topic.display_name)}
+        </a>
+      </li>`;
+  }
+}
+
 
     if (!html) html = "<p>No results found.</p>";
     results.innerHTML = html;

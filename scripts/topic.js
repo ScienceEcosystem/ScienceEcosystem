@@ -2,13 +2,6 @@ const getParam = (name) => new URLSearchParams(location.search).get(name);
 const main = document.getElementById("topicMain");
 const sidebar = document.getElementById("topicSidebar");
 
-async function loadTopic() {
-  const id = getParam("id");
-  if (!id) {
-    main.innerHTML = "<p>Missing topic ID.</p>";
-    return;
-  }
-
 const getWikipediaExtractHTML = async (title) => {
   try {
     const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
@@ -23,6 +16,13 @@ const getWikipediaExtractHTML = async (title) => {
     return { html: null, url: null };
   }
 };
+
+async function loadTopic() {
+  const id = getParam("id");
+  if (!id) {
+    main.innerHTML = "<p>Missing topic ID.</p>";
+    return;
+  }
 
   try {
     const topic = await (await fetch(`https://api.openalex.org/concepts/${id}`)).json();
