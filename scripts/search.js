@@ -10,130 +10,109 @@ function escapeHtml(str = "") {
   }[c]));
 }
 
-async function handleUnifiedSearch() {
+// Triggered when user presses Enter in search bar
+function handleSearch() {
   const input = $("unifiedSearchInput").value.trim();
+  if (!input) return;
+  // Update URL and reload results
+  window.history.replaceState(null, "", `?q=${encodeURIComponent(input)}`);
+  handleUnifiedSearch();
+}
+
+// Load results on page load and when search is triggered
+async function handleUnifiedSearch() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const input = urlParams.get("q")?.trim() || "";
   const results = $("unifiedSearchResults");
   const sidebar = $("suggestedTopics");
-  results.innerHTML = "";
-  sidebar.innerHTML = "";
+
+  $("unifiedSearchInput").value = input;
 
   if (!input) {
     results.innerHTML = "<p>Please enter a search term.</p>";
+    sidebar.innerHTML = "";
     return;
   }
 
   results.innerHTML = `<p>Searching: <strong>${escapeHtml(input)}</strong></p>`;
+  sidebar.innerHTML = "";
 
   try {
-    // Step 1: Search for author, topic, and works
-    const [authorRes, topicRes, workRes] = await Promise.all([
-      fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=1`),
-      fetch(`https://api.openalex.org/concepts?search=${encodeURIComponent(input)}&per_page=1`),
-      fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}&per_page=10`)
+    if (input.startsWith("10.")) {
+      // Just display a note; links below will be clickable
+      results.innerHTML += `<p>Detected DOI. Please click on paper titles to view details.</p>`;
+    }
+
+    const [authorRes, paperRes, topicRes] = await Promise.all([
+      fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=5`),
+      fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}&per_page=5`),
+      fetch(`https://api.openalex.org/concepts?search=${encodeURIComponent(input)}&per_page=5`)
     ]);
 
-    const authorMatch = (await authorRes.json()).results[0] || null;
-    const topicMatch = (await topicRes.json()).results[0] || null;
-    const worksGeneral = (await workRes.json()).results || [];
+    const authors = (await authorRes.json()).results || [];
+    const papers = (await paperRes.json()).results || [];
+    const topics = (await topicRes.json()).results || [];
 
     let html = "";
 
-    // Step 2: If author match, fetch their papers
-    if (authorMatch) {
-      html += `<h3>Researcher: ${escapeHtml(authorMatch.display_name)}</h3>
-        <p>Affiliation: ${authorMatch.last_known_institution?.display_name || "N/A"}</p>
-        <p>ORCID: ${authorMatch.orcid || "N/A"}</p>`;
-
-      const authorWorksRes = await fetch(
-        `https://api.openalex.org/works?filter=author.id:${authorMatch.id.split("/").pop()}&per_page=10`
-      );
-      const authorWorks = (await authorWorksRes.json()).results || [];
-
-      html += "<h4>Papers by this researcher</h4><ul>";
-      for (const paper of authorWorks) {
-        html += `<li>
-          <a href="paper.html?id=${paper.id.replace('https://openalex.org/', '')}">${escapeHtml(paper.title)}</a>
-          <br/>Venue: ${paper.host_venue?.display_name || "N/A"} (${paper.publication_year || "N/A"})
-        </li>`;
+    if (authors.length > 0) {
+      html += "<h2>Researchers</h2><ul>";
+      for (const person of authors) {
+        const id = person.id.split("/").pop();
+        html += `
+          <li style="margin-bottom:1rem;">
+            <a href="profile.html?id=${id}">${escapeHtml(person.display_name)}</a><br/>
+            Affiliation: ${person.last_known_institution?.display_name || "N/A"}<br/>
+            ORCID: ${person.orcid || "N/A"}
+          </li>`;
       }
       html += "</ul>";
-
-      // Sidebar: suggested topics from author's papers
-      const topicCounts = {};
-      authorWorks.forEach(work => {
-        work.concepts.forEach(c => {
-          topicCounts[c.display_name] = (topicCounts[c.display_name] || 0) + c.score;
-        });
-      });
-      const sortedTopics = Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
-      sortedTopics.forEach(([name]) => {
-        sidebar.innerHTML += `<li><a href="topic.html?q=${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`;
-      });
-
-    } 
-    // Step 3: If topic match, fetch topic papers
-    else if (topicMatch) {
-      html += `<h3>Topic: ${escapeHtml(topicMatch.display_name)}</h3>
-        <p>${escapeHtml(topicMatch.description || "")}</p>`;
-
-      const topicWorksRes = await fetch(
-        `https://api.openalex.org/works?filter=concepts.id:${topicMatch.id.split("/").pop()}&per_page=10`
-      );
-      const topicWorks = (await topicWorksRes.json()).results || [];
-
-      html += "<h4>Papers in this topic</h4><ul>";
-      for (const paper of topicWorks) {
-        html += `<li>
-          <a href="paper.html?id=${paper.id.replace('https://openalex.org/', '')}">${escapeHtml(paper.title)}</a>
-          <br/>Authors: ${escapeHtml(paper.authorships.map(a => a.author.display_name).join(", "))}
-        </li>`;
-      }
-      html += "</ul>";
-
-      // Sidebar: related topics from topic's works
-      const topicCounts = {};
-      topicWorks.forEach(work => {
-        work.concepts.forEach(c => {
-          if (c.display_name !== topicMatch.display_name) {
-            topicCounts[c.display_name] = (topicCounts[c.display_name] || 0) + c.score;
-          }
-        });
-      });
-      const sortedTopics = Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
-      sortedTopics.forEach(([name]) => {
-        sidebar.innerHTML += `<li><a href="topic.html?q=${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`;
-      });
-
-    } 
-    // Step 4: General search mode
-    else {
-      html += "<h3>Matching Papers</h3><ul>";
-      for (const paper of worksGeneral) {
-        html += `<li>
-          <a href="paper.html?id=${paper.id.replace('https://openalex.org/', '')}">${escapeHtml(paper.title)}</a>
-          <br/>Authors: ${escapeHtml(paper.authorships.map(a => a.author.display_name).join(", "))}
-        </li>`;
-      }
-      html += "</ul>";
-
-      // Sidebar: topics from these papers
-      const topicCounts = {};
-      worksGeneral.forEach(work => {
-        work.concepts.forEach(c => {
-          topicCounts[c.display_name] = (topicCounts[c.display_name] || 0) + c.score;
-        });
-      });
-      const sortedTopics = Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
-      sortedTopics.forEach(([name]) => {
-        sidebar.innerHTML += `<li><a href="topic.html?q=${encodeURIComponent(name)}">${escapeHtml(name)}</a></li>`;
-      });
     }
 
-    results.innerHTML = html || "<p>No results found.</p>";
+    if (papers.length > 0) {
+      html += "<h2>Papers</h2><ul>";
+      for (const paper of papers) {
+        const paperId = paper.doi
+          ? `doi:${encodeURIComponent(paper.doi)}`
+          : paper.id.split("/").pop();
+
+        html += `
+          <li style="margin-bottom:1rem;">
+            <a href="paper.html?id=${paperId}">${escapeHtml(paper.title)}</a><br/>
+            Authors: ${escapeHtml(paper.authorships.map(a => a.author.display_name).join(", "))}<br/>
+            Venue: ${paper.host_venue?.display_name || "N/A"} (${paper.publication_year || "N/A"})
+          </li>`;
+      }
+      html += "</ul>";
+    }
+
+    if (topics.length > 0) {
+      sidebar.innerHTML = "<ul>";
+      for (const topic of topics) {
+        const tid = topic.id.split("/").pop();
+        sidebar.innerHTML += `
+          <li style="margin-bottom: 0.5rem;">
+            <a href="topic.html?id=${tid}" title="${escapeHtml(topic.description || '')}">
+              ${escapeHtml(topic.display_name)}
+            </a>
+          </li>`;
+      }
+      sidebar.innerHTML += "</ul>";
+    } else {
+      sidebar.innerHTML = "<p>No suggested topics found.</p>";
+    }
+
+    if (!html) html = "<p>No results found.</p>";
+    results.innerHTML = html;
 
   } catch (error) {
     console.error(error);
-    results.innerHTML = "<p>Error fetching results.</p>";
+    results.innerHTML = "<p>Error loading results.</p>";
+    sidebar.innerHTML = "";
   }
 }
 
+// Run search if query param present on page load
+if (window.location.pathname.endsWith("search.html")) {
+  handleUnifiedSearch();
+}

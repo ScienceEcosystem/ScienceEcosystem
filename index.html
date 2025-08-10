@@ -44,9 +44,11 @@
       id="searchInput"
       type="text"
       placeholder="Search..."
+      onkeydown="if(event.key==='Enter') handleSearch()"
       aria-label="Search input"
       style="padding: 0.75rem 1rem; width: 100%; max-width: 480px; border: 1px solid #000000; border-radius: 8px; font-size: 1rem;"
     />
+
     <button
       onclick="handleSearch()"
       style="padding: 0.75rem 1rem; background-color: #0284c7; color: #ffffff; border: #000000; border-radius: 8px; font-size: 1rem; cursor: pointer;">

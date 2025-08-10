@@ -2,13 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Search | ScienceEcosystem</title>
   <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <!-- Navigation Bar -->
   <nav>
     <div class="logo" style="flex: 1;">
       <a href="index.html">
@@ -18,7 +17,7 @@
 
     <div class="nav-center" style="flex: 2; display: flex; justify-content: center;">
       <input
-        id="searchInput"
+        id="unifiedSearchInput"
         type="text"
         class="search-bar"
         placeholder="Search..."
@@ -30,147 +29,27 @@
       <a href="index.html">Home</a>
       <a href="about.html">About</a>
       <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
-      <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
-      Login with ORCID
-    </button>
+        <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+        Login with ORCID
+      </button>
     </div>
   </nav>
 
-<section>
-  <div id="results"></div>
-</section>
+  <main style="display: flex; gap: 2rem; padding: 1rem;">
+    <section style="flex: 3;">
+      <div id="unifiedSearchResults">Loading...</div>
+    </section>
+    <aside style="flex: 1;">
+      <h3>Suggested Topics</h3>
+      <ul id="suggestedTopics" style="list-style-type: none; padding-left: 0;"></ul>
+    </aside>
+  </main>
 
-<div id="searchPageLayout" style="display: flex; gap: 2rem;">
-  <div style="flex: 3;">
-    <!-- Unified search results -->
-    <div id="unifiedSearchResults"></div>
-  </div>
-  <div style="flex: 1;">
-    <ul id="suggestedTopics" style="list-style-type: none; padding-left: 0;"></ul>
-  </div>
-</div>
-
-
-  <!-- Footer -->
   <footer>
     <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
     <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
     <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
   </footer>
-
-  <!-- Scripts -->
-  <script>
-  const params = new URLSearchParams(window.location.search);
-  const query = params.get("q") || "";
-  const searchInput = document.getElementById("searchInput");
-  const resultsDiv = document.getElementById("results");
-
-  searchInput.value = query;
-
-  async function fetchWithPagination(baseUrl, maxPages = 3) {
-    let results = [];
-    let cursor = "*";
-    let page = 1;
-
-    while (cursor && page <= maxPages) {
-      const url = `${baseUrl}&cursor=${cursor}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      results.push(...(data.results || []));
-      cursor = data.meta?.next_cursor;
-      page++;
-    }
-
-    return results;
-  }
-
- async function doSearch() {
-  const q = searchInput.value.trim();
-  if (!q) {
-    resultsDiv.innerHTML = "<p>Please enter a search term.</p>";
-    return;
-  }
-
-  window.history.replaceState(null, "", `?q=${encodeURIComponent(q)}`);
-  resultsDiv.innerHTML = "<p>Loading results...</p>";
-
-  try {
-    const [authorsRes, papersRes] = await Promise.all([
-      fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(q)}&per_page=10`),
-      fetch(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per_page=100`)
-    ]);
-
-    const authors = (await authorsRes.json()).results || [];
-    const papers = (await papersRes.json()).results || [];
-
-    let html = "";
-
-    if (authors.length) {
-      html += `<h2>Researchers (${authors.length})</h2><ul>`;
-      authors.forEach(author => {
-        const id = author.id.split("/").pop();
-        html += `
-          <li>
-            <a href="profile.html?id=${id}">${author.display_name}</a><br />
-            Affiliation: ${author.last_known_institution?.display_name || "N/A"}<br />
-            ORCID: ${author.orcid || "N/A"}
-          </li>`;
-      });
-      html += "</ul>";
-    }
-
-    if (papers.length) {
-      html += `<h2>Papers (${papers.length})</h2><ul>`;
-
-      // Fetch Unpaywall PDFs in parallel
-      const paperWithPDFs = await Promise.all(
-        papers.map(async paper => {
-          let pdfLink = null;
-          if (paper.doi) {
-            try {
-              const resp = await fetch(`https://api.unpaywall.org/v2/${paper.doi}?email=scienceecosystem@icloud.com`);
-              if (resp.ok) {
-                const data = await resp.json();
-                if (data?.best_oa_location?.url_for_pdf) {
-                  pdfLink = data.best_oa_location.url_for_pdf;
-                }
-              }
-            } catch (err) {
-              console.warn("Unpaywall error:", err);
-            }
-          }
-          return { paper, pdfLink };
-        })
-      );
-
-      paperWithPDFs.forEach(({ paper, pdfLink }) => {
-        const paperId = paper.doi
-          ? `doi:${encodeURIComponent(paper.doi)}`
-          : paper.id.split("/").pop();
-
-        html += `
-          <li>
-            <a href="paper.html?id=${paperId}">${paper.title}</a><br />
-            Authors: ${paper.authorships.map(a => a.author.display_name).join(", ")}<br />
-            Venue: ${paper.host_venue?.display_name || "N/A"} (${paper.publication_year || "N/A"})<br />
-            ${pdfLink ? `<a href="${pdfLink}" target="_blank">📄 Open Access PDF</a>` : `<span style="color: gray;">No PDF</span>`}
-          </li>`;
-      });
-
-      html += "</ul>";
-    }
-
-    if (!html) html = "<p>No results found.</p>";
-    resultsDiv.innerHTML = html;
-  } catch (error) {
-    console.error(error);
-    resultsDiv.innerHTML = "<p>Error loading results.</p>";
-  }
-}
-
-
-  if (query) doSearch();
-</script>
 
   <script src="scripts/search.js"></script>
 </body>
