@@ -1,91 +1,116 @@
-const getParam = (name) => new URLSearchParams(location.search).get(name);
-const main = document.getElementById("paperContent");
+// paper.js
+// Fetch and display detailed paper information from OpenAlex
 
-async function loadPaper() {
-  const id = getParam("id");
-  if (!id) {
-    main.innerHTML = "<p>No paper ID provided.</p>";
-    return;
-  }
-
-  let apiUrl;
-  if (id.startsWith("doi:")) {
-    apiUrl = `https://api.openalex.org/works/${id}`;
-  } else if (id.startsWith("10.")) {
-    apiUrl = `https://api.openalex.org/works/doi:${encodeURIComponent(id)}`;
-  } else {
-    apiUrl = `https://api.openalex.org/works/${id}`;
-  }
-
-  try {
-    const res = await fetch(apiUrl);
-    if (!res.ok) throw new Error("Failed to fetch paper");
-    const paper = await res.json();
-
-    const authors = paper.authorships.map(a =>
-      `<a href="profile.html?id=${a.author.id.split('/').pop()}" style="color:#2563eb;">${a.author.display_name}</a>`
-    ).join(", ");
-
-    const title = paper.title;
-    const firstAuthor = paper.authorships?.[0]?.author?.display_name || "Unknown";
-    const allAuthors = paper.authorships.map(a => a.author.display_name);
-    const formattedAuthors = allAuthors.length === 1
-      ? allAuthors[0]
-      : allAuthors.length === 2
-        ? `${allAuthors[0]} & ${allAuthors[1]}`
-        : `${allAuthors[0]} et al.`;
-    const source = paper.host_venue?.display_name || "Unknown Journal";
-    const year = paper.publication_year || "n.d.";
-    const doi = paper.doi || "";
-
-    const fullCitation = `${allAuthors.join(", ")} (${year}). ${title}. <i>${source}</i>. https://doi.org/${doi}`;
-    const inTextCitation = `(${formattedAuthors}, ${year})`;
-    const presentationCitation = `${formattedAuthors}, ${source}, ${year}`;
-
-    const citations = paper.cited_by_count ?? "N/A";
-    const abstract = paper.abstract_inverted_index
-      ? Object.keys(paper.abstract_inverted_index).join(" ")
-      : "No abstract available.";
-
-    // 🔍 Check for PDF using Unpaywall if DOI is available
-    let pdfLink = null;
-    if (paper.doi) {
-      try {
-        const upwRes = await fetch(`https://api.unpaywall.org/v2/${paper.doi}?email=scienceecosystem@icloud.com`);
-        if (upwRes.ok) {
-          const upwData = await upwRes.json();
-          pdfLink = upwData?.best_oa_location?.url_for_pdf || null;
-        }
-      } catch (e) {
-        console.warn("Unpaywall fetch failed:", e);
-      }
+document.addEventListener("DOMContentLoaded", async () => {
+    const paperId = getPaperIdFromURL();
+    if (!paperId) {
+        document.getElementById("paper-container").innerHTML =
+            "<p>No paper specified.</p>";
+        return;
     }
 
-    main.innerHTML = `
-      <section style="max-width: 800px; margin: auto;">
-        <h1 style="font-size: 1.8rem;">${paper.title}</h1>
-        <p><strong>Authors:</strong> ${authors}</p>
-        <p><strong>Source:</strong> ${source}</p>
-        <p><strong>Year:</strong> ${year}</p>
-        <p><strong>Citations:</strong> ${citations}</p>
-        <div style="margin-top: 1rem; margin-bottom: 1rem;">
-      <h3 style="margin-bottom: 0.3rem;">📚 How to cite</h3>
-      <p><strong>Full citation:</strong><br><code style="user-select: all;">${fullCitation}</code></p>
-      <p><strong>In-text citation:</strong><br><code style="user-select: all;">${inTextCitation}</code></p>
-      <p><strong>For presentations:</strong><br><code style="user-select: all;">${presentationCitation}</code></p>
-    </div>
-        <p><strong>Abstract:</strong><br>${abstract}</p>
-        ${pdfLink
-          ? `<p><a href="${pdfLink}" target="_blank" style="color: #0ea5e9;">📄 Download PDF (Open Access)</a></p>`
-          : `<p style="color: gray;">No PDF available from Unpaywall.</p>`
-        }
-        <p><a href="${paper.id}" target="_blank" style="color: #16a34a;">View on OpenAlex ↗</a></p>
-      </section>
-    `;
-  } catch (err) {
-    console.error("Paper fetch error:", err);
-    main.innerHTML = "<p>Error loading paper details. Check the ID or try again later.</p>";
-  }
+    try {
+        const paperData = await fetchPaperData(paperId);
+        renderPaperDetails(paperData);
+        const relatedPapers = await fetchRelatedPapers(paperData);
+        renderRelatedPapers(relatedPapers);
+    } catch (error) {
+        console.error(error);
+        document.getElementById("paper-container").innerHTML =
+            "<p>Error loading paper details.</p>";
+    }
+});
+
+// Extracts paper ID (DOI or OpenAlex ID) from URL query parameter
+function getPaperIdFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("id");
 }
 
-loadPaper();
+// Fetch paper data from OpenAlex
+async function fetchPaperData(paperId) {
+    let url;
+    if (paperId.startsWith("10.")) {
+        // It's a DOI
+        url = `https://api.openalex.org/works/doi:${encodeURIComponent(paperId)}`;
+    } else {
+        // It's an OpenAlex ID
+        url = `https://api.openalex.org/works/${encodeURIComponent(paperId)}`;
+    }
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to fetch paper data");
+    return await res.json();
+}
+
+// Render main paper details
+function renderPaperDetails(paper) {
+    const container = document.getElementById("paper-container");
+    container.innerHTML = `
+        <h1>${paper.title}</h1>
+        <p><strong>Published:</strong> ${paper.publication_year}</p>
+        <p><strong>Authors:</strong> ${formatAuthors(paper.authorships)}</p>
+        <p><strong>Affiliations:</strong> ${formatAffiliations(paper.authorships)}</p>
+        ${paper.abstract_inverted_index ? `<p>${formatAbstract(paper.abstract_inverted_index)}</p>` : "<p><em>No abstract available.</em></p>"}
+        <p><a href="${paper.id}" target="_blank">View on OpenAlex</a></p>
+    `;
+}
+
+// Format authors list
+function formatAuthors(authorships) {
+    return authorships.map(a => a.author.display_name).join(", ");
+}
+
+// Format affiliations
+function formatAffiliations(authorships) {
+    const affiliations = authorships.flatMap(a => a.institutions.map(i => i.display_name));
+    return [...new Set(affiliations)].join(", ");
+}
+
+// Convert OpenAlex's abstract_inverted_index to readable text
+function formatAbstract(invertedIndex) {
+    const words = [];
+    for (const [word, positions] of Object.entries(invertedIndex)) {
+        positions.forEach(pos => {
+            words[pos] = word;
+        });
+    }
+    return words.join(" ");
+}
+
+// Fetch related papers based on concepts
+async function fetchRelatedPapers(paper) {
+    if (!paper.concepts || paper.concepts.length === 0) return [];
+    const topConcept = paper.concepts[0].id;
+    const url = `https://api.openalex.org/works?filter=concepts.id:${topConcept}&per-page=5&sort=cited_by_count:desc`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to fetch related papers");
+    const data = await res.json();
+    return data.results.filter(p => p.id !== paper.id);
+}
+
+// Render related papers list
+function renderRelatedPapers(papers) {
+    const container = document.getElementById("related-papers");
+    if (papers.length === 0) {
+        container.innerHTML = "<p>No related papers found.</p>";
+        return;
+    }
+
+    container.innerHTML = `
+        <h2>Related Papers</h2>
+        <ul>
+            ${papers
+                .map(
+                    p => `
+                <li>
+                    <a href="paper.html?id=${encodeURIComponent(p.id.replace('https://openalex.org/', ''))}">
+                        ${p.title}
+                    </a> (${p.publication_year})
+                </li>
+            `
+                )
+                .join("")}
+        </ul>
+    `;
+}
