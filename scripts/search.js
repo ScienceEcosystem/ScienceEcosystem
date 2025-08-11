@@ -1,3 +1,4 @@
+// Utility to get element by ID
 const $ = (id) => document.getElementById(id);
 
 function escapeHtml(str = "") {
@@ -10,21 +11,40 @@ function escapeHtml(str = "") {
   }[c]));
 }
 
-// Triggered when user presses Enter in search bar
-function handleSearch() {
-  const input = $("unifiedSearchInput").value.trim();
-  if (!input) return;
-  // Update URL and reload results
-  window.history.replaceState(null, "", `?q=${encodeURIComponent(input)}`);
-  handleUnifiedSearch();
+/**
+ * Runs when user presses Enter or clicks search.
+ * On homepage: redirects to search.html?q=query
+ * On search page: reloads results
+ */
+function handleSearch(inputId) {
+  const inputEl = $(inputId);
+  if (!inputEl) return;
+
+  const query = inputEl.value.trim();
+  if (!query) return;
+
+  // If on homepage, redirect to search page
+  if (inputId === "searchInput") {
+    window.location.href = `search.html?q=${encodeURIComponent(query)}`;
+  } else {
+    // On search page, update URL and load results
+    window.history.replaceState(null, "", `?q=${encodeURIComponent(query)}`);
+    handleUnifiedSearch();
+  }
 }
 
-// Load results on page load and when search is triggered
+/**
+ * Fetches results from OpenAlex and updates DOM.
+ * Only runs on search.html
+ */
 async function handleUnifiedSearch() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const input = urlParams.get("q")?.trim() || "";
   const results = $("unifiedSearchResults");
   const sidebar = $("suggestedTopics");
+
+  if (!results || !sidebar) return; // not on search page
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const input = urlParams.get("q")?.trim() || "";
 
   $("unifiedSearchInput").value = input;
 
@@ -39,7 +59,6 @@ async function handleUnifiedSearch() {
 
   try {
     if (input.startsWith("10.")) {
-      // Just display a note; links below will be clickable
       results.innerHTML += `<p>Detected DOI. Please click on paper titles to view details.</p>`;
     }
 
@@ -112,31 +131,30 @@ async function handleUnifiedSearch() {
   }
 }
 
-// Detect homepage or search page input
-const homepageInput = document.getElementById("searchInput");
-const searchPageInput = document.getElementById("unifiedSearchInput");
+/**
+ * Attach event listeners for homepage and search page
+ */
+function initSearchBar() {
+  const homepageInput = $("searchInput");
+  const searchPageInput = $("unifiedSearchInput");
 
-// Homepage search → redirect to search.html?q=...
-if (homepageInput) {
-  homepageInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      const input = homepageInput.value.trim();
-      if (input) {
-        window.location.href = `search.html?q=${encodeURIComponent(input)}`;
-      }
-    }
-  });
+  if (homepageInput) {
+    homepageInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleSearch("searchInput");
+    });
+  }
+
+  if (searchPageInput) {
+    searchPageInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleSearch("unifiedSearchInput");
+    });
+    handleUnifiedSearch(); // initial load
+  }
 }
 
-// Search page search → run in place
-if (searchPageInput) {
-  searchPageInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      handleSearch();
-    }
-  });
-  handleUnifiedSearch(); // run initial search on search.html
-}
+// Run setup
+initSearchBar();
+
 
 
 
