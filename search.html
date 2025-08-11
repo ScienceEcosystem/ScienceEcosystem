@@ -15,15 +15,16 @@
       </a>
     </div>
 
-    <div class="nav-center" style="flex: 2; display: flex; justify-content: center;">
-      <input
-        id="unifiedSearchInput"
-        type="text"
-        class="search-bar"
-        placeholder="Search..."
-        
-      />
-    </div>
+   <!-- Centered search bar -->
+  <div style="flex: 2; display: flex; justify-content: center;">
+    <input
+      id="searchInput"
+      type="text"
+      placeholder="Search..."
+      style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
+      onkeydown="if(event.key==='Enter') handleSearch()"
+    />
+  </div>
 
     <div class="nav-right" style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;color: white;">
       <a href="index.html">Home</a>
