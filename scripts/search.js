@@ -112,23 +112,18 @@ async function handleUnifiedSearch() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const searchInput = document.getElementById("unifiedSearchInput");
-  if (searchInput) {
-    searchInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        handleSearch();
-      }
-    });
-  }
-
-  // Run initial search if query present in URL
-  handleUnifiedSearch();
-});
-
-
-
-// Run search if query param present on page load
-if (window.location.pathname.endsWith("search.html")) {
-  handleUnifiedSearch();
+// Attach Enter key search trigger
+const searchInput = document.getElementById("unifiedSearchInput");
+if (searchInput) {
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      handleSearch();
+    }
+  });
 }
+
+// Run initial search if query present in URL
+handleUnifiedSearch();
+
+
+
