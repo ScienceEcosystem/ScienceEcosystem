@@ -14,7 +14,7 @@ function escapeHtml(str = "") {
 /**
  * Runs when user presses Enter or clicks search.
  * On homepage: redirects to search.html?q=query
- * On search page: reloads results
+ * On search page: updates URL and loads results
  */
 function handleSearch(inputId) {
   const inputEl = $(inputId);
@@ -23,25 +23,24 @@ function handleSearch(inputId) {
   const query = inputEl.value.trim();
   if (!query) return;
 
-  // If on homepage, redirect to search page
   if (inputId === "searchInput") {
+    // Homepage → redirect to search.html
     window.location.href = `search.html?q=${encodeURIComponent(query)}`;
   } else {
-    // On search page, update URL and load results
+    // Search page → update URL and load results
     window.history.replaceState(null, "", `?q=${encodeURIComponent(query)}`);
     handleUnifiedSearch();
   }
 }
 
 /**
- * Fetches results from OpenAlex and updates DOM.
- * Only runs on search.html
+ * Fetch results from OpenAlex and update DOM
  */
 async function handleUnifiedSearch() {
   const results = $("unifiedSearchResults");
   const sidebar = $("suggestedTopics");
 
-  if (!results || !sidebar) return; // not on search page
+  if (!results || !sidebar) return; // Not on search page
 
   const urlParams = new URLSearchParams(window.location.search);
   const input = urlParams.get("q")?.trim() || "";
@@ -59,7 +58,9 @@ async function handleUnifiedSearch() {
 
   try {
     if (input.startsWith("10.")) {
-      results.innerHTML += `<p>Detected DOI. Please click on paper titles to view details.</p>`;
+      // DOI detected
+      window.location.href = `paper.html?id=${encodeURIComponent(input)}`;
+      return;
     }
 
     const [authorRes, paperRes, topicRes] = await Promise.all([
@@ -74,6 +75,7 @@ async function handleUnifiedSearch() {
 
     let html = "";
 
+    // Researchers
     if (authors.length > 0) {
       html += "<h2>Researchers</h2><ul>";
       for (const person of authors) {
@@ -88,6 +90,7 @@ async function handleUnifiedSearch() {
       html += "</ul>";
     }
 
+    // Papers
     if (papers.length > 0) {
       html += "<h2>Papers</h2><ul>";
       for (const paper of papers) {
@@ -105,6 +108,7 @@ async function handleUnifiedSearch() {
       html += "</ul>";
     }
 
+    // Suggested topics
     if (topics.length > 0) {
       sidebar.innerHTML = "<ul>";
       for (const topic of topics) {
@@ -132,7 +136,7 @@ async function handleUnifiedSearch() {
 }
 
 /**
- * Attach event listeners for homepage and search page
+ * Initialize search bar events for homepage and search page
  */
 function initSearchBar() {
   const homepageInput = $("searchInput");
@@ -148,12 +152,16 @@ function initSearchBar() {
     searchPageInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") handleSearch("unifiedSearchInput");
     });
-    handleUnifiedSearch(); // initial load
+
+    // Auto-load results if ?q= exists
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) handleUnifiedSearch();
   }
 }
 
 // Run setup
 initSearchBar();
+
 
 
 

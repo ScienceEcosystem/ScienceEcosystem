@@ -15,18 +15,18 @@
       </a>
     </div>
 
-   <!-- Centered search bar -->
-  <div style="flex: 2; display: flex; justify-content: center;">
-    <input
-      id="searchInput"
-      type="text"
-      placeholder="Search..."
-      style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
-      onkeydown="if(event.key==='Enter') handleSearch()"
-    />
-  </div>
+    <!-- Centered search bar -->
+    <div style="flex: 2; display: flex; justify-content: center;">
+      <!-- On search page, use unifiedSearchInput -->
+      <input
+        id="unifiedSearchInput"
+        type="text"
+        placeholder="Search..."
+        style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
+      />
+    </div>
 
-    <div class="nav-right" style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;color: white;">
+    <div class="nav-right" style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center; color: white;">
       <a href="index.html">Home</a>
       <a href="about.html">About</a>
       <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
@@ -55,3 +55,4 @@
   <script src="scripts/search.js"></script>
 </body>
 </html>
+
