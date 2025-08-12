@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title> Topic | ScienceEcosystem`;</title>
+  <title> document.title = `${topic.display_name} | ScienceEcosystem`;</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
@@ -40,7 +40,12 @@
 <main>
 <div id="topicContent" style="display: flex; flex-wrap: wrap; gap: 2rem; padding: 2rem 1rem;">
     <div style="flex: 3; min-width: 0;" id="topicMain">Loading topic...</div>
-    <aside style="flex: 1; min-width: 300px;" id="topicSidebar"></aside>
+    <aside style="flex: 1; min-width: 300px;" id="topicSidebar">
+  <section>
+    <h3>Top Papers</h3>
+    <ul id="workList" style="list-style-type:none; padding-left:0;"></ul>
+  </section>
+</aside>
   </div>
 </main>
 
