@@ -82,7 +82,7 @@ function formatAbstract(invertedIndex) {
 async function fetchRelatedPapers(paper) {
     if (!paper.concepts || paper.concepts.length === 0) return [];
     const topConcept = paper.concepts[0].id;
-    const url = `https://api.openalex.org/works?filter=concepts.id:${topConcept}&per-page=5&sort=cited_by_count:desc`;
+    const url = `https://api.openalex.org/works?filter=concepts.id:${topConcept}&per_page=5&sort=cited_by_count:desc`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("Failed to fetch related papers");
     const data = await res.json();

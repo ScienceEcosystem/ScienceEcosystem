@@ -64,8 +64,8 @@ async function handleUnifiedSearch() {
     }
 
     const [authorRes, paperRes, topicRes] = await Promise.all([
-      fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=5`),
-      fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}&per_page=5`),
+      fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=10`),
+      fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}&per_page=100`),
       fetch(`https://api.openalex.org/concepts?search=${encodeURIComponent(input)}&per_page=5`)
     ]);
 
