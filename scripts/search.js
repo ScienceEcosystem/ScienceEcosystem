@@ -11,11 +11,6 @@ function escapeHtml(str = "") {
   }[c]));
 }
 
-/**
- * Runs when user presses Enter or clicks search.
- * On homepage: redirects to search.html?q=query
- * On search page: updates URL and loads results
- */
 function handleSearch(inputId) {
   const inputEl = $(inputId);
   if (!inputEl) return;
@@ -24,23 +19,18 @@ function handleSearch(inputId) {
   if (!query) return;
 
   if (inputId === "searchInput") {
-    // Homepage → redirect to search.html
     window.location.href = `search.html?q=${encodeURIComponent(query)}`;
   } else {
-    // Search page → update URL and load results
     window.history.replaceState(null, "", `?q=${encodeURIComponent(query)}`);
     handleUnifiedSearch();
   }
 }
 
-/**
- * Fetch results from OpenAlex and update DOM
- */
 async function handleUnifiedSearch() {
   const results = $("unifiedSearchResults");
-  const sidebar = $("suggestedTopics");
+  const sidebar = $("topicSidebar"); // FIXED ID to match HTML
 
-  if (!results || !sidebar) return; // Not on search page
+  if (!results || !sidebar) return;
 
   const urlParams = new URLSearchParams(window.location.search);
   const input = urlParams.get("q")?.trim() || "";
@@ -58,7 +48,6 @@ async function handleUnifiedSearch() {
 
   try {
     if (input.startsWith("10.")) {
-      // DOI detected
       window.location.href = `paper.html?id=${encodeURIComponent(input)}`;
       return;
     }
@@ -108,7 +97,7 @@ async function handleUnifiedSearch() {
       html += "</ul>";
     }
 
-    // Suggested topics
+    // Suggested topics in sidebar
     if (topics.length > 0) {
       sidebar.innerHTML = "<ul>";
       for (const topic of topics) {
@@ -135,9 +124,6 @@ async function handleUnifiedSearch() {
   }
 }
 
-/**
- * Initialize search bar events for homepage and search page
- */
 function initSearchBar() {
   const homepageInput = $("searchInput");
   const searchPageInput = $("unifiedSearchInput");
@@ -153,16 +139,9 @@ function initSearchBar() {
       if (e.key === "Enter") handleSearch("unifiedSearchInput");
     });
 
-    // Auto-load results if ?q= exists
     const q = new URLSearchParams(window.location.search).get("q");
     if (q) handleUnifiedSearch();
   }
 }
 
-// Run setup
 initSearchBar();
-
-
-
-
-
