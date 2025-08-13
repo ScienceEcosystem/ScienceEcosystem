@@ -1,7 +1,6 @@
 // scripts/search.js
 
 const $ = (id) => document.getElementById(id);
-
 const API_BASE = "https://api.openalex.org";
 
 function escapeHtml(str = "") {
@@ -16,6 +15,7 @@ function escapeHtml(str = "") {
   );
 }
 
+// Fetch authors matching the query
 async function fetchAuthors(query) {
   try {
     const res = await fetch(`${API_BASE}/authors?search=${encodeURIComponent(query)}&per-page=5`);
@@ -27,43 +27,46 @@ async function fetchAuthors(query) {
   }
 }
 
-async function renderAuthors(authors) {
-  const resultsContainer = $("unifiedSearchResults");
-  if (!authors.length) return;
+// Render authors in sidebar
+function renderAuthors(authors) {
+  const sidebar = $("topicSidebar");
+  if (!sidebar) return;
 
-  const html = authors
-    .map(
-      (a) => `
-      <div class="result-card" onclick="location.href='profile.html?id=${a.id}'">
-        <h3>${escapeHtml(a.display_name)}</h3>
-        <p>${escapeHtml(a.last_known_institution?.display_name || "No affiliation")}</p>
-      </div>
-    `
-    )
-    .join("");
-
-  resultsContainer.innerHTML += `<h2>Authors</h2>${html}`;
+  let html = "";
+  if (authors.length > 0) {
+    html += "<h3>Authors</h3><ul style='list-style:none; padding-left:0;'>";
+    for (const a of authors) {
+      const id = a.id.split("/").pop();
+      html += `<li style="background:#fff; padding:0.5rem; border-radius:8px; margin-bottom:0.5rem; cursor:pointer;"
+                   onclick="location.href='profile.html?id=${id}'">
+                ${escapeHtml(a.display_name)}<br/>
+                ${escapeHtml(a.last_known_institution?.display_name || "No affiliation")}
+               </li>`;
+    }
+    html += "</ul>";
+  }
+  sidebar.innerHTML = html; // initialize with authors only, topics added later
 }
 
+// Fetch papers, prioritizing author IDs
 async function fetchPapers(query, authorIds = []) {
+  let works = [];
   try {
-    let works = [];
-
-    // If we have author IDs, fetch papers by those authors
+    // Fetch papers by authors
     for (const authorId of authorIds) {
       const res = await fetch(`${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}&per-page=5`);
       const data = await res.json();
       works = works.concat(data.results || []);
     }
 
-    // Fetch normal works search
+    // Fetch general papers matching query
     const res = await fetch(`${API_BASE}/works?search=${encodeURIComponent(query)}&per-page=10`);
     const data = await res.json();
     const generalWorks = data.results || [];
 
     // Merge and remove duplicates
     const seen = new Set();
-    const merged = [...works, ...generalWorks].filter((w) => {
+    const merged = [...works, ...generalWorks].filter(w => {
       if (seen.has(w.id)) return false;
       seen.add(w.id);
       return true;
@@ -71,90 +74,97 @@ async function fetchPapers(query, authorIds = []) {
 
     return merged;
   } catch (err) {
-    console.error("Work fetch failed", err);
+    console.error("Paper fetch failed", err);
     return [];
   }
 }
 
-async function renderPapers(works) {
-  const resultsContainer = $("unifiedSearchResults");
-  if (!works.length) return;
+// Render papers in main area
+function renderPapers(works) {
+  const results = $("unifiedSearchResults");
+  if (!results) return;
 
-  const html = works
-    .map(
-      (w) => `
-      <div class="result-card" onclick="location.href='paper.html?id=${w.id}'">
-        <h3>${escapeHtml(w.display_name)}</h3>
-        <p>${escapeHtml(w.authorships?.map(a => a.author.display_name).join(", ") || "Unknown authors")}</p>
-      </div>
-    `
-    )
-    .join("");
+  if (works.length === 0) {
+    results.innerHTML = "<p>No papers found.</p>";
+    return;
+  }
 
-  resultsContainer.innerHTML += `<h2>Papers</h2>${html}`;
+  let html = "<h2>Papers</h2>";
+  for (const w of works) {
+    const paperId = w.doi ? `doi:${encodeURIComponent(w.doi)}` : w.id.split("/").pop();
+    html += `<div class="result-card" onclick="location.href='paper.html?id=${paperId}'">
+               <h3>${escapeHtml(w.display_name)}</h3>
+               <p>${escapeHtml(w.authorships?.map(a => a.author.display_name).join(", ") || "Unknown authors")}</p>
+             </div>`;
+  }
+  results.innerHTML = html;
 }
 
+// Fetch suggested topics
 async function fetchAndRenderTopics(query) {
-  const sidebar = $("suggestedTopics");
+  const sidebar = $("topicSidebar");
+  if (!sidebar) return;
 
   try {
     const res = await fetch(`${API_BASE}/concepts?search=${encodeURIComponent(query)}&per-page=5`);
     const data = await res.json();
+    const topics = data.results || [];
 
-    if (data.results?.length) {
-      sidebar.innerHTML = data.results
-        .map(
-          (t) => `
-          <li style="background:#fff; padding:0.5rem; border-radius:8px; margin-bottom:0.5rem; cursor:pointer;"
-              onclick="location.href='topic.html?id=${t.id}'">
-            ${escapeHtml(t.display_name)}
-          </li>
-        `
-        )
-        .join("");
-    } else {
-      sidebar.innerHTML = "<li>No suggested topics found</li>";
+    if (topics.length > 0) {
+      let html = sidebar.innerHTML; // keep existing authors content
+      html += "<h3>Suggested Topics</h3><ul style='list-style:none; padding-left:0;'>";
+      for (const t of topics) {
+        const tid = t.id.split("/").pop();
+        html += `<li style="background:#fff; padding:0.5rem; border-radius:8px; margin-bottom:0.5rem; cursor:pointer;"
+                    onclick="location.href='topic.html?id=${tid}'">
+                  ${escapeHtml(t.display_name)}
+                 </li>`;
+      }
+      html += "</ul>";
+      sidebar.innerHTML = html;
     }
   } catch (err) {
     console.error("Topic fetch failed", err);
-    sidebar.innerHTML = "<li>Error loading topics</li>";
   }
 }
 
+// Handle unified search
 async function handleUnifiedSearch() {
-  const query = $("unifiedSearchInput").value.trim();
+  const input = $("unifiedSearchInput");
+  if (!input) return;
+  const query = input.value.trim();
   if (!query) return;
 
-  $("unifiedSearchResults").innerHTML = "";
-  $("suggestedTopics").innerHTML = "<li>Loading topics...</li>";
+  $("unifiedSearchResults").innerHTML = "<p>Loading papers...</p>";
+  $("topicSidebar").innerHTML = "<p>Loading authors and topics...</p>";
 
-  // 1. Fetch authors first
+  // Step 1: fetch authors
   const authors = await fetchAuthors(query);
   renderAuthors(authors);
 
-  // 2. Fetch papers, prioritizing those by found authors
-  const authorIds = authors.map((a) => a.id);
-  const works = await fetchPapers(query, authorIds);
-  renderPapers(works);
+  // Step 2: fetch papers, prioritize by authors
+  const authorIds = authors.map(a => a.id);
+  const papers = await fetchPapers(query, authorIds);
+  renderPapers(papers);
 
-  // 3. Fetch suggested topics
+  // Step 3: fetch suggested topics
   fetchAndRenderTopics(query);
 }
 
-// Event listener
+// Initialize search bar
 document.addEventListener("DOMContentLoaded", () => {
   const input = $("unifiedSearchInput");
+  if (!input) return;
 
-  input.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
-      handleUnifiedSearch();
-    }
+  input.addEventListener("keypress", e => {
+    if (e.key === "Enter") handleUnifiedSearch();
   });
 
-  // Optional: load results if query in URL
+  // Auto-load if ?q= in URL
   const params = new URLSearchParams(window.location.search);
   if (params.has("q")) {
     input.value = params.get("q");
     handleUnifiedSearch();
   }
 });
+
