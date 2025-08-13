@@ -9,16 +9,13 @@
 </head>
 <body>
   <nav>
-    <!-- Logo -->
-  <div class="logo" style="flex: 1;">
-    <a href="index.html">
-      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
-    </a>
-  </div>
+    <div class="logo" style="flex: 1;">
+      <a href="index.html">
+        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
+      </a>
+    </div>
 
-    <!-- Centered search bar -->
     <div style="flex: 2; display: flex; justify-content: center;">
-      <!-- On search page, use unifiedSearchInput -->
       <input
         id="unifiedSearchInput"
         type="text"
@@ -38,18 +35,26 @@
   </nav>
 
   <main style="display: flex; gap: 2rem; padding: 1rem;">
+    <!-- Papers list -->
     <section style="flex: 3;">
       <div id="unifiedSearchResults">Loading...</div>
     </section>
 
-<aside style="flex: 1; min-width: 300px; background: transparent;" id="topicSidebar">
-  <div class="card">
-    section>
-      <h3>Suggested topics</h3>
-      <ul id="workList" style="list-style-type:none; padding-left:0; margin: 0;"></ul>
-    </section>
-  </div>
-</aside>
+    <!-- Sidebar -->
+    <aside style="flex: 1; min-width: 300px; background: transparent;">
+      <div class="card">
+        <section>
+          <h3>Researchers</h3>
+          <ul id="researcherList" style="list-style-type:none; padding-left:0; margin: 0;"></ul>
+        </section>
+      </div>
+      <div class="card" style="margin-top: 1rem;">
+        <section>
+          <h3>Suggested topics</h3>
+          <ul id="topicList" style="list-style-type:none; padding-left:0; margin: 0;"></ul>
+        </section>
+      </div>
+    </aside>
   </main>
 
   <footer>
@@ -59,10 +64,7 @@
   </footer>
 
   <script src="scripts/search.js"></script>
-  <script src="scripts/profile.js"></script>
-  <script src="scripts/paper.js"></script>
-  <script src="scripts/topic.js"></script>
-
 </body>
 </html>
+
 

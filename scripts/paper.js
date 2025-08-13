@@ -42,6 +42,9 @@ async function fetchPaperData(paperId) {
     if (!res.ok) throw new Error("Failed to fetch paper data");
     return await res.json();
 }
+const sidebar = $("paperSidebar");
+
+
 
 // Render main paper details
 function renderPaperDetails(paper) {

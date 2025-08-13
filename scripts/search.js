@@ -1,4 +1,3 @@
-// Utility to get element by ID
 const $ = (id) => document.getElementById(id);
 
 function escapeHtml(str = "") {
@@ -14,10 +13,8 @@ function escapeHtml(str = "") {
 function handleSearch(inputId) {
   const inputEl = $(inputId);
   if (!inputEl) return;
-
   const query = inputEl.value.trim();
   if (!query) return;
-
   if (inputId === "searchInput") {
     window.location.href = `search.html?q=${encodeURIComponent(query)}`;
   } else {
@@ -28,9 +25,10 @@ function handleSearch(inputId) {
 
 async function handleUnifiedSearch() {
   const results = $("unifiedSearchResults");
-  const sidebar = $("topicSidebar"); // FIXED ID to match HTML
+  const researcherList = $("researcherList");
+  const topicList = $("topicList");
 
-  if (!results || !sidebar) return;
+  if (!results || !researcherList || !topicList) return;
 
   const urlParams = new URLSearchParams(window.location.search);
   const input = urlParams.get("q")?.trim() || "";
@@ -39,12 +37,14 @@ async function handleUnifiedSearch() {
 
   if (!input) {
     results.innerHTML = "<p>Please enter a search term.</p>";
-    sidebar.innerHTML = "";
+    researcherList.innerHTML = "";
+    topicList.innerHTML = "";
     return;
   }
 
   results.innerHTML = `<p>Searching: <strong>${escapeHtml(input)}</strong></p>`;
-  sidebar.innerHTML = "";
+  researcherList.innerHTML = "";
+  topicList.innerHTML = "";
 
   try {
     if (input.startsWith("10.")) {
@@ -52,75 +52,71 @@ async function handleUnifiedSearch() {
       return;
     }
 
-    const [authorRes, paperRes, topicRes] = await Promise.all([
-      fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=10`),
+    const [paperRes, authorRes, topicRes] = await Promise.all([
       fetch(`https://api.openalex.org/works?search=${encodeURIComponent(input)}&per_page=100`),
+      fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(input)}&per_page=10`),
       fetch(`https://api.openalex.org/concepts?search=${encodeURIComponent(input)}&per_page=5`)
     ]);
 
-    const authors = (await authorRes.json()).results || [];
     const papers = (await paperRes.json()).results || [];
+    const authors = (await authorRes.json()).results || [];
     const topics = (await topicRes.json()).results || [];
 
-    let html = "";
-
-    // Researchers
-    if (authors.length > 0) {
-      html += "<h2>Researchers</h2><ul>";
-      for (const person of authors) {
-        const id = person.id.split("/").pop();
-        html += `
-          <li style="margin-bottom:1rem;">
-            <a href="profile.html?id=${id}">${escapeHtml(person.display_name)}</a><br/>
-            Affiliation: ${person.last_known_institution?.display_name || "N/A"}<br/>
-            ORCID: ${person.orcid || "N/A"}
-          </li>`;
-      }
-      html += "</ul>";
-    }
-
-    // Papers
+    // Papers in main column
+    let paperHtml = "";
     if (papers.length > 0) {
-      html += "<h2>Papers</h2><ul>";
+      paperHtml += "<h2>Papers</h2><ul>";
       for (const paper of papers) {
         const paperId = paper.doi
           ? `doi:${encodeURIComponent(paper.doi)}`
           : paper.id.split("/").pop();
-
-        html += `
+        paperHtml += `
           <li style="margin-bottom:1rem;">
             <a href="paper.html?id=${paperId}">${escapeHtml(paper.title)}</a><br/>
             Authors: ${escapeHtml(paper.authorships.map(a => a.author.display_name).join(", "))}<br/>
             Venue: ${paper.host_venue?.display_name || "N/A"} (${paper.publication_year || "N/A"})
           </li>`;
       }
-      html += "</ul>";
+      paperHtml += "</ul>";
+    } else {
+      paperHtml = "<p>No papers found.</p>";
+    }
+    results.innerHTML = paperHtml;
+
+    // Researchers in sidebar
+    if (authors.length > 0) {
+      for (const person of authors) {
+        const id = person.id.split("/").pop();
+        researcherList.innerHTML += `
+          <li style="margin-bottom:0.75rem;">
+            <a href="profile.html?id=${id}">${escapeHtml(person.display_name)}</a><br/>
+            ${person.last_known_institution?.display_name || "N/A"}
+          </li>`;
+      }
+    } else {
+      researcherList.innerHTML = "<li>No researchers found.</li>";
     }
 
-    // Suggested topics in sidebar
+    // Topics in sidebar
     if (topics.length > 0) {
-      sidebar.innerHTML = "<ul>";
       for (const topic of topics) {
         const tid = topic.id.split("/").pop();
-        sidebar.innerHTML += `
-          <li style="margin-bottom: 0.5rem;">
+        topicList.innerHTML += `
+          <li style="margin-bottom:0.5rem;">
             <a href="topic.html?id=${tid}" title="${escapeHtml(topic.description || '')}">
               ${escapeHtml(topic.display_name)}
             </a>
           </li>`;
       }
-      sidebar.innerHTML += "</ul>";
     } else {
-      sidebar.innerHTML = "<p>No suggested topics found.</p>";
+      topicList.innerHTML = "<li>No suggested topics found.</li>";
     }
-
-    if (!html) html = "<p>No results found.</p>";
-    results.innerHTML = html;
 
   } catch (error) {
     console.error(error);
     results.innerHTML = "<p>Error loading results.</p>";
-    sidebar.innerHTML = "";
+    researcherList.innerHTML = "";
+    topicList.innerHTML = "";
   }
 }
 
@@ -133,12 +129,10 @@ function initSearchBar() {
       if (e.key === "Enter") handleSearch("searchInput");
     });
   }
-
   if (searchPageInput) {
     searchPageInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") handleSearch("unifiedSearchInput");
     });
-
     const q = new URLSearchParams(window.location.search).get("q");
     if (q) handleUnifiedSearch();
   }
