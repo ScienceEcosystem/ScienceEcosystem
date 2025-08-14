@@ -17,13 +17,13 @@
 
   <!-- Centered search bar -->
   <div style="flex: 2; display: flex; justify-content: center;">
-    <input
-      id="searchInput"
-      type="text"
-      placeholder="Search..."
-      style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
-      onkeydown="if(event.key==='Enter') handleSearch()"
-    />
+    <input 
+  type="text" 
+  id="searchInput" 
+  placeholder="Search for papers, researchers, or topics..." 
+  style="width:100%; padding:0.5rem;" 
+  onkeydown="if(event.key==='Enter') handleUnifiedSearch()" 
+/>
   </div>
 
   <!-- Right links and ORCID login -->
