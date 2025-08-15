@@ -7,68 +7,48 @@
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
   <link href="https://unpkg.com/vis-network/styles/vis-network.min.css" rel="stylesheet" />
-<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 </head>
 <body>
-  <!-- Navigation -->
   <nav>
-    <!-- Logo -->
-    <div class="logo" style="flex: 1;">
-      <a href="index.html">
-        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
-      </a>
+    <div class="logo" style="flex:1;"><a href="index.html"><img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height:90px;" /></a></div>
+    <div style="flex:2; display:flex; justify-content:center;">
+      <input id="searchInput" type="text" placeholder="Search..." style="width:100%; max-width:500px; padding:0.5rem 1rem; font-size:1rem; border:1px solid #ccc; border-radius:9999px;" onkeydown="if(event.key==='Enter') handleSearch()"/>
     </div>
-
-    <!-- Search bar -->
-    <div style="flex: 2; display: flex; justify-content: center;">
-      <input
-        id="searchInput"
-        type="text"
-        placeholder="Search..."
-        style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
-        onkeydown="if(event.key==='Enter') handleSearch()"
-      />
-    </div>
-
-    <!-- Links + ORCID -->
-    <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center; color: white;">
+    <div style="flex:1; display:flex; justify-content:flex-end; gap:1rem; align-items:center; color:white;">
       <a href="index.html">Home</a>
       <a href="about.html">About</a>
-      <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
-        <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+      <button style="padding:0.5rem 1rem; background:#16a34a; color:white; border:none; border-radius:5px; display:flex; align-items:center; gap:0.5rem;">
+        <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height:20px;" />
         Login with ORCID
       </button>
     </div>
   </nav>
 
-  <!-- Main Content -->
-  <main style="padding: 2rem 1rem;">
-    <div id="paperContent" style="display: flex; flex-wrap: wrap; gap: 2rem;">
-      <!-- Main paper content -->
-      <div style="flex: 3; min-width: 0;" id="paper-container">Loading paper...</div>
-      <!-- Sidebar -->
-      <aside style="flex: 1; min-width: 300px;" id="paperSidebar">
-  <div id="related-papers"></div>
-</aside>
+  <main style="background:#f8f9fa; padding:2rem 1rem;">
+    <div id="paperContent" style="display:flex; flex-wrap:wrap; gap:2rem;">
+      <div style="flex:3; min-width:0;" id="paper-container">Loading paper...</div>
+      <aside style="flex:1; min-width:300px; background:#fff; padding:1rem; border-radius:10px;" id="paperSidebar">
+        <div id="pdf-link"></div>
+        <div id="keywords"></div>
+        <div id="citations"></div>
+        <div id="related-papers"></div>
+      </aside>
     </div>
-
-    <!-- Graph -->
-    <div id="graphContainer" style="margin-top: 2rem;"></div>
+    <div id="graphContainer" style="margin-top:2rem;"></div>
   </main>
 
-  <!-- Footer -->
   <footer>
     <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
     <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
     <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
   </footer>
 
-  <!-- Scripts -->
   <script src="scripts/search.js"></script>
   <script src="scripts/profile.js"></script>
   <script src="scripts/paper.js"></script>
   <script src="scripts/topic.js"></script>
-  
 </body>
 </html>
+
 

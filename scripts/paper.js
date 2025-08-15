@@ -1,38 +1,31 @@
 document.addEventListener("DOMContentLoaded", async () => {
     const paperId = getPaperIdFromURL();
-    if (!paperId) {
-        document.getElementById("paper-container").innerHTML = "<p>No paper specified.</p>";
-        return;
-    }
+    if (!paperId) return document.getElementById("paper-container").innerHTML = "<p>No paper specified.</p>";
 
     try {
         const paperData = await fetchPaperData(paperId);
         renderPaperDetails(paperData);
+        renderSidebarExtras(paperData);
 
         const [citedPapers, citingPapers] = await Promise.all([
             fetchCitedPapers(paperData.referenced_works || []),
             fetchCitingPapers(paperId)
         ]);
-
         renderClusterGraph(paperData, citedPapers, citingPapers);
-    } catch (error) {
-        console.error(error);
+    } catch (e) {
+        console.error(e);
         document.getElementById("paper-container").innerHTML = "<p>Error loading paper details.</p>";
     }
 });
 
 function getPaperIdFromURL() {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("id");
+    return new URLSearchParams(window.location.search).get("id");
 }
 
 async function fetchPaperData(paperId) {
-    let url;
-    if (paperId.startsWith("10.")) {
-        url = `https://api.openalex.org/works/doi:${encodeURIComponent(paperId)}`;
-    } else {
-        url = `https://api.openalex.org/works/${encodeURIComponent(paperId)}`;
-    }
+    const url = paperId.startsWith("10.") 
+        ? `https://api.openalex.org/works/doi:${encodeURIComponent(paperId)}`
+        : `https://api.openalex.org/works/${encodeURIComponent(paperId)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("Failed to fetch paper data");
     return await res.json();
@@ -55,57 +48,74 @@ function formatAuthors(authorships) {
 }
 
 function formatAffiliations(authorships) {
-    const affiliations = authorships.flatMap(a => a.institutions.map(i => i.display_name));
-    return [...new Set(affiliations)].join(", ");
+    const affs = authorships.flatMap(a => a.institutions.map(i => i.display_name));
+    return [...new Set(affs)].join(", ");
 }
 
-function formatAbstract(invertedIndex) {
+function formatAbstract(idx) {
     const words = [];
-    for (const [word, positions] of Object.entries(invertedIndex)) {
-        positions.forEach(pos => {
-            words[pos] = word;
-        });
-    }
+    for (const [word, positions] of Object.entries(idx)) positions.forEach(pos => words[pos]=word);
     return words.join(" ");
 }
 
-async function fetchCitedPapers(referencedWorks) {
-    if (!referencedWorks.length) return [];
-    const ids = referencedWorks.slice(0, 20).map(id => id.split('/').pop()).join('|');
+async function fetchCitedPapers(refs) {
+    if (!refs.length) return [];
+    const ids = refs.slice(0,20).map(id=>id.split('/').pop()).join('|');
     const res = await fetch(`https://api.openalex.org/works?filter=ids.openalex:${ids}`);
     if (!res.ok) return [];
-    const data = await res.json();
-    return data.results || [];
+    return (await res.json()).results || [];
 }
 
 async function fetchCitingPapers(paperId) {
     const res = await fetch(`https://api.openalex.org/works?filter=cites:${paperId}&per-page=20`);
     if (!res.ok) return [];
-    const data = await res.json();
-    return data.results || [];
+    return (await res.json()).results || [];
 }
 
-function renderClusterGraph(mainPaper, cited, citing) {
+// Cluster Graph
+function renderClusterGraph(main, cited, citing) {
     const container = document.getElementById("graphContainer");
     container.innerHTML = "<h2>Connected Papers</h2><div id='paperGraph' style='height:600px;'></div>";
 
-    const nodes = [
-        { id: mainPaper.id, label: mainPaper.display_name, group: 'main' },
-        ...cited.map(p => ({ id: p.id, label: p.display_name, group: 'cited' })),
-        ...citing.map(p => ({ id: p.id, label: p.display_name, group: 'citing' }))
-    ];
+    const nodes = [{id:main.id,label:main.display_name,group:'main'},
+                   ...cited.map(p=>({id:p.id,label:p.display_name,group:'cited'})),
+                   ...citing.map(p=>({id:p.id,label:p.display_name,group:'citing'}))];
 
-    const edges = [
-        ...cited.map(p => ({ from: mainPaper.id, to: p.id })),
-        ...citing.map(p => ({ from: p.id, to: mainPaper.id }))
-    ];
+    const edges = [...cited.map(p=>({from:main.id,to:p.id})), ...citing.map(p=>({from:p.id,to:main.id}))];
+    new vis.Network(document.getElementById('paperGraph'), {nodes:new vis.DataSet(nodes), edges:new vis.DataSet(edges)}, {nodes:{shape:'dot',size:15,font:{size:14}}, edges:{arrows:'to'}, physics:{stabilization:true}});
+}
 
-    const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
-    const options = {
-        nodes: { shape: 'dot', size: 15, font: { size: 14 }, borderWidth: 2 },
-        edges: { arrows: 'to' },
-        physics: { stabilization: true }
-    };
+// Sidebar: PDF, keywords, citations
+function renderSidebarExtras(paper) {
+    // Unpaywall PDF
+    const doi = paper.doi;
+    const pdfUrl = doi ? `https://api.unpaywall.org/v2/${doi}?email=info@scienceecosystem.com` : null;
+    document.getElementById("pdf-link").innerHTML = pdfUrl ? `<p><strong>PDF:</strong> <a href="https://doi.org/${doi}" target="_blank">Open PDF</a></p>` : "";
 
-    new vis.Network(document.getElementById('paperGraph'), data, options);
+    // Keywords/topics
+    const topics = paper.concepts || [];
+    document.getElementById("keywords").innerHTML = topics.length ? `<p><strong>Topics:</strong> ${topics.map(t=>`<a href="topic.html?id=${t.id.split('/').pop()}">${t.display_name}</a>`).join(", ")}</p>` : "";
+
+    // APA citation
+    const apaFull = formatAPA(paper);
+    const apaText = formatAPAInText(paper);
+    document.getElementById("citations").innerHTML = `
+        <p><strong>APA Citation:</strong> <span id="apaFull">${apaFull}</span> <button onclick="copyText('apaFull')">Copy</button></p>
+        <p><strong>In-text Citation:</strong> <span id="apaIn">${apaText}</span> <button onclick="copyText('apaIn')">Copy</button></p>
+    `;
+}
+
+function formatAPA(p) {
+    const authors = p.authorships.map(a=>a.author.display_name).join(", ");
+    return `${authors} (${p.publication_year}). ${p.display_name}. ${p.primary_location?.source?.display_name || ''}. https://doi.org/${p.doi || ''}`;
+}
+
+function formatAPAInText(p) {
+    const firstAuthor = p.authorships[0]?.author.display_name.split(" ").slice(-1)[0] || '';
+    return `(${firstAuthor}, ${p.publication_year})`;
+}
+
+function copyText(id) {
+    const text = document.getElementById(id).innerText;
+    navigator.clipboard.writeText(text);
 }
