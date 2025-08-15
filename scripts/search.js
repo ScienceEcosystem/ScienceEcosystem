@@ -2,6 +2,11 @@
 const $ = (id) => document.getElementById(id);
 const API_BASE = "https://api.openalex.org";
 
+let currentPage = 1;
+let currentQuery = "";
+let currentAuthorIds = [];
+let totalResults = 0;
+
 function escapeHtml(str = "") {
   return str.replace(/[&<>'"]/g, (c) =>
     ({
@@ -41,18 +46,22 @@ function renderAuthors(authors) {
     : "<li>No authors found.</li>";
 }
 
-// Fetch papers
-async function fetchPapers(query, authorIds = []) {
+// Fetch papers (with pagination)
+async function fetchPapers(query, authorIds = [], page = 1) {
   let works = [];
   try {
     for (const authorId of authorIds) {
-      const res = await fetch(`${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}&per-page=5`);
+      const res = await fetch(`${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}&per-page=5&page=${page}`);
       const data = await res.json();
       works = works.concat(data.results || []);
     }
-    const res = await fetch(`${API_BASE}/works?search=${encodeURIComponent(query)}&per-page=10`);
+
+    const res = await fetch(`${API_BASE}/works?search=${encodeURIComponent(query)}&per-page=100&page=${page}`);
     const data = await res.json();
     const generalWorks = data.results || [];
+    if (page === 1) {
+      totalResults = data.meta?.count || generalWorks.length;
+    }
 
     const seen = new Set();
     return [...works, ...generalWorks].filter(w => {
@@ -67,22 +76,59 @@ async function fetchPapers(query, authorIds = []) {
 }
 
 // Render papers
-function renderPapers(works) {
+function renderPapers(works, append = false) {
   const results = $("unifiedSearchResults");
   if (!results) return;
-  if (works.length === 0) {
-    results.innerHTML = "<p>No papers found.</p>";
-    return;
+
+  if (!append) {
+    results.innerHTML = `
+      <h2>Papers (${totalResults.toLocaleString()} results)</h2>
+      <div id="papersList"></div>
+      <div id="pagination"></div>
+    `;
   }
-  results.innerHTML = "<h2>Papers</h2>" + works.map(w => {
+
+  const papersList = $("papersList");
+  if (!papersList) return;
+
+  works.forEach((w, index) => {
     const paperId = w.doi ? `doi:${encodeURIComponent(w.doi)}` : w.id.split("/").pop();
-    return `
-      <div class="result-card" onclick="location.href='paper.html?id=${paperId}'">
-        <h3>${escapeHtml(w.display_name)}</h3>
-        <p>${escapeHtml(w.authorships?.map(a => a.author.display_name).join(", ") || "Unknown authors")}</p>
+    const authorsHtml = (w.authorships || [])
+      .map(a => `<a href="profile.html?id=${a.author.id.split('/').pop()}">${escapeHtml(a.author.display_name)}</a>`)
+      .join(", ");
+
+    const venue = w.host_venue?.display_name || "Unknown venue";
+    const citations = w.cited_by_count || 0;
+
+    const number = ((currentPage - 1) * 100) + index + 1;
+
+    papersList.innerHTML += `
+      <div class="result-card">
+        <h3>${number}. <a href="paper.html?id=${paperId}">${escapeHtml(w.display_name)}</a></h3>
+        <p><strong>Authors:</strong> ${authorsHtml || "Unknown authors"}</p>
+        <p><strong>Published in:</strong> ${escapeHtml(venue)}</p>
+        <p><strong>Citations:</strong> ${citations}</p>
       </div>
     `;
-  }).join("");
+  });
+
+  // Show "Load More" if more results remain
+  const pagination = $("pagination");
+  const resultsShown = currentPage * 100;
+  if (resultsShown < totalResults) {
+    pagination.innerHTML = `
+      <button id="loadMoreBtn" style="margin-top:1rem; padding:0.5rem 1rem;">
+        Load More
+      </button>
+    `;
+    $("loadMoreBtn").onclick = async () => {
+      currentPage++;
+      const moreWorks = await fetchPapers(currentQuery, currentAuthorIds, currentPage);
+      renderPapers(moreWorks, true);
+    };
+  } else {
+    pagination.innerHTML = `<p>All results loaded.</p>`;
+  }
 }
 
 // Fetch topics
@@ -113,6 +159,9 @@ async function handleUnifiedSearch() {
   const query = input.value.trim();
   if (!query) return;
 
+  currentQuery = query;
+  currentPage = 1;
+
   $("unifiedSearchResults").innerHTML = "<p>Loading papers...</p>";
   $("researcherList").innerHTML = "<li>Loading authors...</li>";
   $("topicList").innerHTML = "<li>Loading topics...</li>";
@@ -120,8 +169,8 @@ async function handleUnifiedSearch() {
   const authors = await fetchAuthors(query);
   renderAuthors(authors);
 
-  const authorIds = authors.map(a => a.id);
-  const papers = await fetchPapers(query, authorIds);
+  currentAuthorIds = authors.map(a => a.id);
+  const papers = await fetchPapers(query, currentAuthorIds, currentPage);
   renderPapers(papers);
 
   fetchAndRenderTopics(query);
