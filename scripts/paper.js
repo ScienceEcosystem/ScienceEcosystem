@@ -72,25 +72,60 @@ async function fetchCitingPapers(paperId) {
     return (await res.json()).results || [];
 }
 
-// Cluster Graph
+// Cluster Graph with short citation, clickable nodes, and tooltip
 function renderClusterGraph(main, cited, citing) {
     const container = document.getElementById("graphContainer");
     container.innerHTML = "<h2>Connected Papers</h2><div id='paperGraph' style='height:600px;'></div>";
 
-    const nodes = [{id:main.id,label:main.display_name,group:'main'},
-                   ...cited.map(p=>({id:p.id,label:p.display_name,group:'cited'})),
-                   ...citing.map(p=>({id:p.id,label:p.display_name,group:'citing'}))];
+    // Function to create short citation: First author last name et al., Year
+    const shortCitation = (p) => {
+        const firstAuthor = p.authorships?.[0]?.author.display_name.split(" ").slice(-1)[0] || "Unknown";
+        return `${firstAuthor} et al., ${p.publication_year || "n.d."}`;
+    };
 
-    const edges = [...cited.map(p=>({from:main.id,to:p.id})), ...citing.map(p=>({from:p.id,to:main.id}))];
-    new vis.Network(document.getElementById('paperGraph'), {nodes:new vis.DataSet(nodes), edges:new vis.DataSet(edges)}, {nodes:{shape:'dot',size:15,font:{size:14}}, edges:{arrows:'to'}, physics:{stabilization:true}});
+    // Create nodes with short citation labels and full title as tooltip
+    const nodes = [
+        { id: main.id, label: shortCitation(main), title: main.display_name, group: 'main', paperId: main.id },
+        ...cited.map(p => ({ id: p.id, label: shortCitation(p), title: p.display_name, group: 'cited', paperId: p.id })),
+        ...citing.map(p => ({ id: p.id, label: shortCitation(p), title: p.display_name, group: 'citing', paperId: p.id }))
+    ];
+
+    const edges = [
+        ...cited.map(p => ({ from: main.id, to: p.id })),
+        ...citing.map(p => ({ from: p.id, to: main.id }))
+    ];
+
+    const network = new vis.Network(
+        document.getElementById('paperGraph'),
+        { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) },
+        { 
+            nodes: { shape: 'dot', size: 15, font: { size: 14 } },
+            edges: { arrows: 'to' },
+            physics: { stabilization: true },
+            interaction: { hover: true }  // enable hover for tooltip
+        }
+    );
+
+    // Click event to open paper page
+    network.on("click", function (params) {
+        if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0];
+            const node = nodes.find(n => n.id === nodeId);
+            if (node?.paperId) {
+                const shortId = node.paperId.replace("https://openalex.org/", "");
+                window.location.href = `paper.html?id=${encodeURIComponent(shortId)}`;
+            }
+        }
+    });
 }
+
 
 // Sidebar: PDF, keywords, citations
 function renderSidebarExtras(paper) {
     // Unpaywall PDF
     const doi = paper.doi;
     const pdfUrl = doi ? `https://api.unpaywall.org/v2/${doi}?email=info@scienceecosystem.com` : null;
-    document.getElementById("pdf-link").innerHTML = pdfUrl ? `<p><strong>PDF:</strong> <a href="https://doi.org/${doi}" target="_blank">Open PDF</a></p>` : "";
+    document.getElementById("pdf-link").innerHTML = pdfUrl ? `<p><strong>PDF:</strong> <a href="${doi}" target="_blank">Open PDF</a></p>` : "";
 
     // Keywords/topics
     const topics = paper.concepts || [];
@@ -107,7 +142,7 @@ function renderSidebarExtras(paper) {
 
 function formatAPA(p) {
     const authors = p.authorships.map(a=>a.author.display_name).join(", ");
-    return `${authors} (${p.publication_year}). ${p.display_name}. ${p.primary_location?.source?.display_name || ''}. https://doi.org/${p.doi || ''}`;
+    return `${authors} (${p.publication_year}). ${p.display_name}. ${p.primary_location?.source?.display_name || ''}. ${p.doi || ''}`;
 }
 
 function formatAPAInText(p) {
