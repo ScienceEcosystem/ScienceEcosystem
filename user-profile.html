@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User Profile | ScienceEcosystem</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <nav>
+    <div class="logo" style="flex: 1;">
+      <a href="index.html">
+        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
+      </a>
+    </div>
+    <div style="flex: 2; display: flex; justify-content: center;">
+      <input type="text" id="searchInput" placeholder="Search..." style="width:100%; padding:0.5rem;" 
+      onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+    </div>
+    <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;color: white;">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <button id="orcidLoginBtn" style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
+        <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+        Login with ORCID
+      </button>
+    </div>
+  </nav>
+
+  <main style="padding:2rem 1rem;">
+    <div id="userProfileLayout" style="display:flex; flex-wrap:wrap; gap:2rem;">
+      <div id="userMain" style="flex:3; min-width:0;">
+        <p>Loading user profile...</p>
+      </div>
+      <aside id="userSidebar" style="flex:1; min-width:300px; background:#fff; padding:1rem; border-radius:10px;">
+        <p>Loading sidebar...</p>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+  </footer>
+
+  <script src="scripts/user-profile.js"></script>
+</body>
+</html>
