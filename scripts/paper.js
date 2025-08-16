@@ -33,12 +33,33 @@ async function fetchPaperData(paperId) {
 
 function renderPaperDetails(paper) {
     const container = document.getElementById("paper-container");
+
+    // AI summary placeholder
+    const topics = (paper.concepts || []).map(t => t.display_name).slice(0,5).join(", ");
+    const aiSummary = `This paper focuses on ${topics}. It has ${paper.cited_by_count || 0} citations and is published in ${paper.primary_location?.source?.display_name || 'Unknown journal'}.`;
+
+    // Datasets & code links
+    const researchObjects = [];
+    if (paper.sources?.length) {
+        paper.sources.forEach(s => {
+            if(s.type && (s.type.includes('dataset') || s.type.includes('software'))) {
+                researchObjects.push(`<li><a href="${s.url}" target="_blank">${s.display_name || s.type}</a></li>`);
+            }
+        });
+    }
+
     container.innerHTML = `
         <h1>${paper.display_name}</h1>
         <p><strong>Published:</strong> ${paper.publication_year}</p>
         <p><strong>Authors:</strong> ${formatAuthors(paper.authorships)}</p>
         <p><strong>Affiliations:</strong> ${formatAffiliations(paper.authorships)}</p>
         ${paper.abstract_inverted_index ? `<p>${formatAbstract(paper.abstract_inverted_index)}</p>` : "<p><em>No abstract available.</em></p>"}
+        <p><strong>AI Summary:</strong> ${aiSummary}</p>
+        <section>
+            <h3>Research Objects</h3>
+            <ul>${researchObjects.length ? researchObjects.join("") : "<li>None listed</li>"}</ul>
+        </section>
+        <button id="saveLibraryBtn">Save to Library (login required)</button>
         <p><a href="${paper.id}" target="_blank">View on OpenAlex</a></p>
     `;
 }
@@ -72,18 +93,15 @@ async function fetchCitingPapers(paperId) {
     return (await res.json()).results || [];
 }
 
-// Cluster Graph with short citation, clickable nodes, and tooltip
 function renderClusterGraph(main, cited, citing) {
     const container = document.getElementById("graphContainer");
     container.innerHTML = "<h2>Connected Papers</h2><div id='paperGraph' style='height:600px;'></div>";
 
-    // Function to create short citation: First author last name et al., Year
     const shortCitation = (p) => {
         const firstAuthor = p.authorships?.[0]?.author.display_name.split(" ").slice(-1)[0] || "Unknown";
         return `${firstAuthor} et al., ${p.publication_year || "n.d."}`;
     };
 
-    // Create nodes with short citation labels and full title as tooltip
     const nodes = [
         { id: main.id, label: shortCitation(main), title: main.display_name, group: 'main', paperId: main.id },
         ...cited.map(p => ({ id: p.id, label: shortCitation(p), title: p.display_name, group: 'cited', paperId: p.id })),
@@ -102,11 +120,10 @@ function renderClusterGraph(main, cited, citing) {
             nodes: { shape: 'dot', size: 15, font: { size: 14 } },
             edges: { arrows: 'to' },
             physics: { stabilization: true },
-            interaction: { hover: true }  // enable hover for tooltip
+            interaction: { hover: true }
         }
     );
 
-    // Click event to open paper page
     network.on("click", function (params) {
         if (params.nodes.length > 0) {
             const nodeId = params.nodes[0];
@@ -119,19 +136,14 @@ function renderClusterGraph(main, cited, citing) {
     });
 }
 
-
-// Sidebar: PDF, keywords, citations
 function renderSidebarExtras(paper) {
-    // Unpaywall PDF
     const doi = paper.doi;
     const pdfUrl = doi ? `https://api.unpaywall.org/v2/${doi}?email=info@scienceecosystem.com` : null;
     document.getElementById("pdf-link").innerHTML = pdfUrl ? `<p><strong>PDF:</strong> <a href="${doi}" target="_blank">Open PDF</a></p>` : "";
 
-    // Keywords/topics
     const topics = paper.concepts || [];
     document.getElementById("keywords").innerHTML = topics.length ? `<p><strong>Topics:</strong> ${topics.map(t=>`<a href="topic.html?id=${t.id.split('/').pop()}">${t.display_name}</a>`).join(", ")}</p>` : "";
 
-    // APA citation
     const apaFull = formatAPA(paper);
     const apaText = formatAPAInText(paper);
     document.getElementById("citations").innerHTML = `
