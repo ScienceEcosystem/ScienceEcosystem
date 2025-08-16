@@ -3,20 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ScienceEcosystem | Topic</title> <!-- placeholder, updated in JS -->
+  <title>ScienceEcosystem | Topic</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <nav>
-  <!-- Logo on the left -->
   <div class="logo" style="flex: 1;">
     <a href="index.html">
       <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
     </a>
   </div>
 
-  <!-- Centered search bar -->
   <div style="flex: 2; display: flex; justify-content: center;">
     <input
       id="searchInput"
@@ -27,7 +25,6 @@
     />
   </div>
 
-  <!-- Right links and ORCID login -->
   <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;color: white;">
     <a href="index.html">Home</a>
     <a href="about.html">About</a>
@@ -48,6 +45,7 @@
           <h3>Top papers</h3>
           <ul id="workList" style="list-style-type:none; padding-left:0; margin: 0;"></ul>
         </section>
+        <div id="topicMeta"></div>
       </div>
     </aside>
   </div>
@@ -60,8 +58,6 @@
 </footer>
 
 <script src="scripts/search.js"></script>
-<script src="scripts/profile.js"></script>
-<script src="scripts/paper.js"></script>
 <script src="scripts/topic.js"></script>
 </body>
 </html>
