@@ -11,18 +11,34 @@
 </head>
 <body>
   <nav>
-    <div class="logo" style="flex:1;"><a href="index.html"><img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height:90px;" /></a></div>
-    <div style="flex:2; display:flex; justify-content:center;">
-      <input id="searchInput" type="text" placeholder="Search..." style="width:100%; max-width:500px; padding:0.5rem 1rem; font-size:1rem; border:1px solid #ccc; border-radius:9999px;" onkeydown="if(event.key==='Enter') handleSearch()"/>
-    </div>
-    <div style="flex:1; display:flex; justify-content:flex-end; gap:1rem; align-items:center; color:white;">
-      <a href="index.html">Home</a>
-      <a href="about.html">About</a>
-      <button style="padding:0.5rem 1rem; background:#16a34a; color:white; border:none; border-radius:5px; display:flex; align-items:center; gap:0.5rem;">
-        <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height:20px;" />
-        Login with ORCID
-      </button>
-    </div>
+  <!-- Logo on the left -->
+  <div class="logo" style="flex: 1;">
+    <a href="index.html">
+      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
+    </a>
+  </div>
+
+  <!-- Centered search bar -->
+  <div style="flex: 2; display: flex; justify-content: center;">
+    <input
+      id="searchInput"
+      type="text"
+      placeholder="Search..."
+      style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
+      onkeydown="if(event.key==='Enter') handleSearch('searchInput')"
+    />
+  </div>
+
+  <!-- Right links and ORCID login -->
+  <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;color: white;">
+    <a href="index.html">Home</a>
+    <a href="about.html">About</a>
+    <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
+      <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+      Login with ORCID
+    </button>
+  </div>
+</nav>
   </nav>
 
   <main style="background:#f8f9fa; padding:2rem 1rem;">

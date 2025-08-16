@@ -27,23 +27,27 @@ async function loadTopic() {
   try {
     const topic = await (await fetch(`https://api.openalex.org/concepts/${id}`)).json();
 
-    // Update document title dynamically
-    document.title = `${topic.display_name} | ScienceEcosystem`;
+    // ✅ Update document title
+    document.title = `${topic.display_name} | Topic | ScienceEcosystem`;
 
+    // ✅ Fetch Wikipedia summary
     const { html: wikiHTML, url: wikiURL } = await getWikipediaExtractHTML(topic.display_name);
 
+    // ✅ Main content (Wikipedia-like layout)
     main.innerHTML = `
-      <section style="margin-bottom:2rem;">
-        <h1>${topic.display_name}</h1>
-        <div class="wiki-extract" style="margin-bottom:1rem;">
+      <article>
+        <header style="border-bottom:1px solid #ccc; margin-bottom:1rem;">
+          <h1>${topic.display_name}</h1>
+        </header>
+        <section class="wiki-extract" style="margin-bottom:1rem; line-height:1.6;">
           ${wikiHTML || `<p><strong>Description:</strong> ${topic.description || "No description available."}</p>`}
-        </div>
-        ${wikiURL ? `<p style="font-size: 0.9em;">Source: <a href="${wikiURL}" target="_blank" rel="noopener noreferrer">Wikipedia</a></p>` : ""}
+        </section>
+        ${wikiURL ? `<p style="font-size:0.9em; color:gray;">Source: <a href="${wikiURL}" target="_blank" rel="noopener noreferrer">Wikipedia</a></p>` : ""}
         <p><a href="${topic.id}" target="_blank" rel="noopener noreferrer">View on OpenAlex</a></p>
-      </section>
+      </article>
     `;
 
-    // Fix internal Wikipedia links
+    // ✅ Fix relative Wikipedia links
     document.querySelectorAll(".wiki-extract a").forEach(link => {
       const href = link.getAttribute("href");
       if (href?.startsWith("/wiki/")) {
@@ -53,6 +57,7 @@ async function loadTopic() {
       }
     });
 
+    // ✅ Load top cited works
     const worksResp = await fetch(`https://api.openalex.org/works?filter=concepts.id:${id}&sort=cited_by_count:desc&per_page=10`);
     const works = (await worksResp.json()).results || [];
 
@@ -73,6 +78,7 @@ async function loadTopic() {
         </li>`;
     }).join("");
 
+    // ✅ Sidebar details
     sidebar.innerHTML = `
       <section style="margin-bottom:2rem;">
         <h3>OpenAlex ID</h3>
@@ -97,6 +103,5 @@ async function loadTopic() {
     main.innerHTML = "<p>Error loading topic data.</p>";
   }
 }
-
 
 loadTopic();

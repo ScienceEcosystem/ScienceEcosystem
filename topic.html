@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>document.title = `${topic.display_name} | Topic | ScienceEcosystem`;</title>
+  <title>ScienceEcosystem | Topic</title> <!-- placeholder, updated in JS -->
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
-<body><nav>
+<body>
+<nav>
   <!-- Logo on the left -->
   <div class="logo" style="flex: 1;">
     <a href="index.html">
@@ -22,7 +23,7 @@
       type="text"
       placeholder="Search..."
       style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
-      onkeydown="if(event.key==='Enter') handleSearch()"
+      onkeydown="if(event.key==='Enter') handleSearch('searchInput')"
     />
   </div>
 
@@ -38,29 +39,29 @@
 </nav>
 
 <main>
-<div id="topicContent" style="display: flex; flex-wrap: wrap; gap: 2rem; padding: 2rem 1rem;">
+  <div id="topicContent" style="display: flex; flex-wrap: wrap; gap: 2rem; padding: 2rem 1rem;">
     <div style="flex: 3; min-width: 0;" id="topicMain">Loading topic...</div>
+    
     <aside style="flex: 1; min-width: 300px; background: transparent;" id="topicSidebar">
-  <div class="card">
-    <section>
-      <h3>Top papers</h3>
-      <ul id="workList" style="list-style-type:none; padding-left:0; margin: 0;"></ul>
-    </section>
-  </div>
-</aside>
+      <div class="card">
+        <section>
+          <h3>Top papers</h3>
+          <ul id="workList" style="list-style-type:none; padding-left:0; margin: 0;"></ul>
+        </section>
+      </div>
+    </aside>
   </div>
 </main>
 
-  <footer>
-    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
-    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
-  </footer>
+<footer>
+  <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+  <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+  <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+</footer>
 
-  <script src="scripts/search.js"></script>
-  <script src="scripts/profile.js"></script>
-  <script src="scripts/paper.js"></script>
-  <script src="scripts/topic.js"></script>
-
+<script src="scripts/search.js"></script>
+<script src="scripts/profile.js"></script>
+<script src="scripts/paper.js"></script>
+<script src="scripts/topic.js"></script>
 </body>
 </html>
