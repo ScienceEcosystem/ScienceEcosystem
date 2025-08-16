@@ -49,19 +49,25 @@ function renderPaperDetails(paper) {
     }
 
     container.innerHTML = `
+    <section>
         <h1>${paper.display_name}</h1>
         <p><strong>Published:</strong> ${paper.publication_year}</p>
         <p><strong>Authors:</strong> ${formatAuthors(paper.authorships)}</p>
         <p><strong>Affiliations:</strong> ${formatAffiliations(paper.authorships)}</p>
         ${paper.abstract_inverted_index ? `<p>${formatAbstract(paper.abstract_inverted_index)}</p>` : "<p><em>No abstract available.</em></p>"}
         <p><strong>AI Summary:</strong> ${aiSummary}</p>
-        <section>
-            <h3>Research Objects</h3>
-            <ul>${researchObjects.length ? researchObjects.join("") : "<li>None listed</li>"}</ul>
-        </section>
+    </section>
+
+    <section>
+        <h3>Research Objects</h3>
+        <ul>${researchObjects.length ? researchObjects.join("") : "<li>None listed</li>"}</ul>
+    </section>
+
+    <section>
         <button id="saveLibraryBtn">Save to Library (login required)</button>
         <p><a href="${paper.id}" target="_blank">View on OpenAlex</a></p>
-    `;
+    </section>
+`;
 }
 
 function formatAuthors(authorships) {
@@ -95,7 +101,12 @@ async function fetchCitingPapers(paperId) {
 
 function renderClusterGraph(main, cited, citing) {
     const container = document.getElementById("graphContainer");
-    container.innerHTML = "<h2>Connected Papers</h2><div id='paperGraph' style='height:600px;'></div>";
+    container.innerHTML = `
+        <section>
+            <h2>Connected Papers</h2>
+            <div id='paperGraph' style='height:600px;'></div>
+        </section>
+    `;
 
     const shortCitation = (p) => {
         const firstAuthor = p.authorships?.[0]?.author.display_name.split(" ").slice(-1)[0] || "Unknown";
@@ -135,6 +146,7 @@ function renderClusterGraph(main, cited, citing) {
         }
     });
 }
+
 
 function renderSidebarExtras(paper) {
     const doi = paper.doi;
