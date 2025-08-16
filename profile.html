@@ -3,34 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>document.title = `${name} | Researcher Profile | ScienceEcosystem`;</title>
+  <title>Researcher Profile | ScienceEcosystem</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
-<body><nav>
-  <!-- Logo on the left -->
+<body>
+<nav>
   <div class="logo" style="flex: 1;">
     <a href="index.html">
       <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
     </a>
   </div>
 
-  <!-- Centered search bar -->
   <div style="flex: 2; display: flex; justify-content: center;">
     <input 
-  type="text" 
-  id="searchInput" 
-  placeholder="Search for papers, researchers, or topics..." 
-  style="width:100%; padding:0.5rem;" 
-  onkeydown="if(event.key==='Enter') handleSearch('searchInput')"
-  />
+      type="text" 
+      id="searchInput" 
+      placeholder="Search..." 
+      class="search-bar"
+      onkeydown="if(event.key==='Enter') handleSearch('searchInput')"
+    />
   </div>
 
-  <!-- Right links and ORCID login -->
   <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;color: white;">
     <a href="index.html">Home</a>
     <a href="about.html">About</a>
-    <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
+    <button class="button">
       <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
       Login with ORCID
     </button>
@@ -38,22 +36,70 @@
 </nav>
 
 <main>
-  <div id="profileLayout" style="display: flex; flex-wrap: wrap; gap: 2rem; padding: 2rem 1rem;">
-    <div style="flex: 3; min-width: 0;" id="profileMain">Loading profile...</div>
-    <aside style="flex: 1; min-width: 300px;" id="profileSidebar"></aside>
+  <div id="profileHeader" class="profile-header">
+    <img id="profilePhoto" class="profile-photo" src="assets/default-profile.png" alt="Profile photo" />
+    <div>
+      <h1 id="profileName">Loading...</h1>
+      <p id="profileAffiliation" class="affiliation">Affiliation loading...</p>
+      <a id="profileOrcid" href="#" target="_blank" class="orcid-link">View ORCID</a>
+    </div>
+  </div>
+
+  <section class="ai-bio" id="aiBio">AI-generated summary will appear here...</section>
+
+  <section id="topicTags">
+    <h2>Research Areas</h2>
+    <div id="tagsContainer"></div>
+  </section>
+
+  <div id="profileLayout">
+    <div id="profileMain">
+      <h2>Publications</h2>
+      <div class="sort-controls">
+        <label>Sort by:</label>
+        <select id="pubSort">
+          <option value="date">Date</option>
+          <option value="citations">Citations</option>
+          <option value="relevance">Relevance</option>
+        </select>
+      </div>
+      <div id="publicationsList">Loading publications...</div>
+    </div>
+
+    <aside id="profileSidebar">
+      <section>
+        <h3>Key Metrics</h3>
+        <ul>
+          <li><strong id="totalWorks">0</strong> Works</li>
+          <li><strong id="totalCitations">0</strong> Citations</li>
+          <li><strong id="hIndex">0</strong> H-index</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3>Career Timeline</h3>
+        <ul id="careerTimeline">
+          <li>Loading affiliations...</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3>Co-Authors</h3>
+        <div id="coAuthorGraph">Graph placeholder...</div>
+      </section>
+    </aside>
   </div>
 </main>
 
-  <footer>
-    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
-    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
-  </footer>
+<footer>
+  <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+  <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+  <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+</footer>
 
-  <script src="scripts/search.js"></script>
-  <script src="scripts/profile.js"></script>
-  <script src="scripts/paper.js"></script>
-  <script src="scripts/topic.js"></script>
-
+<script src="scripts/search.js"></script>
+<script src="scripts/profile.js"></script>
+<script src="scripts/paper.js"></script>
+<script src="scripts/topic.js"></script>
 </body>
 </html>

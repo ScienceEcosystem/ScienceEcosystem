@@ -316,3 +316,85 @@ aside section:last-child {
 .result-card a:hover {
   text-decoration: underline;
 }
+
+
+/* Profile Header */
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 2rem 1rem;
+  background: white;
+  border-radius: 10px;
+  margin: 2rem auto;
+  max-width: 1100px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.profile-photo {
+  width: 100px;
+  height: 100px;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 3px solid #e2e8f0;
+}
+.profile-header h1 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+.affiliation {
+  color: #475569;
+  font-size: 1rem;
+}
+.orcid-link {
+  font-size: 0.95rem;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* AI Bio */
+.ai-bio {
+  max-width: 900px;
+  margin: 1rem auto;
+  font-style: italic;
+  background: #f8fafc;
+  padding: 1rem 1.5rem;
+  border-left: 4px solid #16a34a;
+  border-radius: 6px;
+  color: #374151;
+}
+
+/* Topic tags container */
+#tagsContainer {
+  margin: 1rem 0;
+}
+#tagsContainer .topic-tag {
+  margin: 0.2rem;
+}
+
+/* Profile Layout */
+#profileLayout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  padding: 2rem 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+#profileMain {
+  flex: 3;
+  min-width: 0;
+}
+#profileSidebar {
+  flex: 1;
+}
+
+/* Publications */
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+#publicationsList .result-card {
+  margin-bottom: 1rem;
+}

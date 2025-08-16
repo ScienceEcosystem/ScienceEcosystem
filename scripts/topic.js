@@ -79,10 +79,6 @@ async function loadTopic() {
 
     metaDiv.innerHTML = `
       <section style="margin-top:2rem;">
-        <h3>OpenAlex ID</h3>
-        <p>${topic.id}</p>
-      </section>
-      <section style="margin-top:2rem;">
         <h3>Works Count</h3>
         <p>${topic.works_count.toLocaleString()}</p>
       </section>
