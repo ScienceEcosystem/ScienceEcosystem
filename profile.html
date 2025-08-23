@@ -4,103 +4,110 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Researcher Profile | ScienceEcosystem</title>
+  <meta name="description" content="Public researcher profile on ScienceEcosystem with works, topics, affiliations, and co-authors." />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-<nav>
-  <div class="logo" style="flex: 1;">
-    <a href="index.html">
-      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
-    </a>
-  </div>
+  <a class="skip-link" href="#main">Skip to content</a>
 
-  <div style="flex: 2; display: flex; justify-content: center;">
-    <input 
-      type="text" 
-      id="searchInput" 
-      placeholder="Search..." 
-      class="search-bar"
-      onkeydown="if(event.key==='Enter') handleSearch('searchInput')"
-    />
-  </div>
-
-  <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center; color: white;">
-  <a href="index.html">Home</a>
-  <a href="about.html">About</a>
-  <a href="user-profile.html" 
-     style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
-    <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
-    Login with ORCID
-  </a>
-</div>
-</nav>
-
-<main>
-  <div id="profileHeader" class="profile-header">
-    <img id="profilePhoto" class="profile-photo" src="assets/default-profile.png" alt="Profile photo" />
-    <div>
-      <h1 id="profileName">Loading...</h1>
-      <p id="profileAffiliation" class="affiliation">Affiliation loading...</p>
-      <a id="profileOrcid" href="#" target="_blank" class="orcid-link">View ORCID</a>
-    </div>
-  </div>
-
-  <section class="ai-bio" id="aiBio">AI-generated summary will appear here...</section>
-
-  <section id="topicTags">
-    <h2>Research Areas</h2>
-    <div id="tagsContainer"></div>
-  </section>
-
-  <div id="profileLayout">
-    <div id="profileMain">
-      <h2>Publications</h2>
-      <div class="sort-controls">
-        <label>Sort by:</label>
-        <select id="pubSort">
-          <option value="date">Date</option>
-          <option value="citations">Citations</option>
-          <option value="relevance">Relevance</option>
-        </select>
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
       </div>
-      <div id="publicationsList">Loading publications...</div>
+
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search papers, people, datasets..." />
+        </form>
+      </div>
+
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="btn btn-orcid" href="user-profile.html" aria-label="Login with ORCID">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" class="container">
+    <!-- Profile header -->
+    <div id="profileHeader" class="profile-header">
+      <img id="profilePhoto" class="profile-photo" src="assets/default-profile.png" alt="Profile photo" />
+      <div>
+        <h1 id="profileName">Loading...</h1>
+        <p id="profileAffiliation" class="affiliation">Affiliation loading...</p>
+        <a id="profileOrcid" href="#" target="_blank" class="orcid-link" rel="noopener">View ORCID</a>
+      </div>
     </div>
 
-    <aside id="profileSidebar">
-      <section>
-        <h3>Key Metrics</h3>
-        <ul>
-          <li><strong id="totalWorks">0</strong> Works</li>
-          <li><strong id="totalCitations">0</strong> Citations</li>
-          <li><strong id="hIndex">0</strong> H-index</li>
-        </ul>
-      </section>
+    <!-- Bio -->
+    <section class="ai-bio" id="aiBio">A short summary will appear here.</section>
 
-      <section>
-        <h3>Career Timeline</h3>
-        <ul id="careerTimeline">
-          <li>Loading affiliations...</li>
-        </ul>
-      </section>
+    <!-- Topics -->
+    <section id="topicTags" class="panel">
+      <h2>Research Areas</h2>
+      <div id="tagsContainer"></div>
+    </section>
 
-      <section>
-        <h3>Co-Authors</h3>
-        <div id="coAuthorGraph">Graph placeholder...</div>
-      </section>
-    </aside>
-  </div>
-</main>
+    <!-- Layout -->
+    <div id="profileLayout">
+      <div id="profileMain">
+        <h2>Publications</h2>
+        <div class="sort-controls">
+          <label for="pubSort">Sort by:</label>
+          <select id="pubSort">
+            <option value="date" selected>Date</option>
+            <option value="citations">Citations</option>
+          </select>
+        </div>
+        <div id="publicationsList">Loading publications...</div>
+      </div>
 
-<footer>
-  <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-  <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
-  <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
-</footer>
+      <aside id="profileSidebar">
+        <section>
+          <h3>Key Metrics</h3>
+          <ul>
+            <li><strong id="totalWorks">0</strong> Works</li>
+            <li><strong id="totalCitations">0</strong> Citations</li>
+            <li><strong id="hIndex">0</strong> H-index</li>
+          </ul>
+        </section>
 
-<script src="scripts/search.js"></script>
-<script src="scripts/profile.js"></script>
-<script src="scripts/paper.js"></script>
-<script src="scripts/topic.js"></script>
+        <section>
+          <h3>Career Timeline</h3>
+          <ul id="careerTimeline">
+            <li>Loading affiliations...</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>Co-authors</h3>
+          <div id="coAuthorGraph" aria-live="polite">Graph will appear here.</div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js"></script>
+  <script src="scripts/profile.js"></script>
+  <script src="scripts/paper.js"></script>
+  <script src="scripts/topic.js"></script>
 </body>
 </html>

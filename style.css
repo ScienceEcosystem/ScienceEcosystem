@@ -256,3 +256,8 @@ body {
   .layout-grid { grid-template-columns: 1fr; }
   .side-col { min-width: 0; }
 }
+
+/* Profile page small helpers */
+#publicationsList .result-card { margin-bottom: 1rem; }
+#careerTimeline { margin: 0; padding-left: 1.25rem; }
+#coAuthorGraph { display: flex; justify-content: center; align-items: center; }
