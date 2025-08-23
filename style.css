@@ -257,21 +257,23 @@ body {
   .side-col { min-width: 0; }
 }
 
-/* ===== Profile top ===== */
-.profile-top { padding: 1.5rem; }
-.profile-top-header {
-  display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;
+/* ===== Profile layout ===== */
+.profile-top { padding: 1.25rem; overflow: visible; }
+.profile-top-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 1rem;
+  align-items: start;
 }
+.id-header { display: flex; gap: 1rem; align-items: center; margin-bottom: .5rem; }
 .profile-top .profile-photo { width: 88px; height: 88px; border-radius: 9999px; object-fit: cover; border: 3px solid #e2e8f0; }
 
-/* Stats grid with hover tooltips */
-.stats-grid {
+.metrics .stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: .75rem;
-  margin: 1rem 0 0.5rem;
 }
-.stat {
+.stats-grid .stat {
   position: relative;
   background: #ffffff;
   border: 1px solid #e5e7eb;
@@ -281,46 +283,34 @@ body {
 .stat-label { font-size: .85rem; color: var(--ink-dim); }
 .stat-value { font-size: 1.4rem; font-weight: 700; margin-top: .15rem; }
 
-/* Tooltip: use data-tooltip on .stat */
-.stat[data-tooltip]:hover::after,
-.stat[data-tooltip]:focus::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: 50%; top: -8px; transform: translate(-50%, -100%);
-  background: #111827; color: #fff;
-  padding: .4rem .55rem; border-radius: 6px; font-size: .85rem; line-height: 1.2;
-  max-width: 240px; white-space: normal; box-shadow: var(--shadow);
-}
-.stat[data-tooltip]:hover::before,
-.stat[data-tooltip]:focus::before {
-  content: "";
-  position: absolute;
-  left: 50%; top: -8px; transform: translate(-50%, -50%) rotate(45deg);
-  width: 10px; height: 10px; background: #111827;
-}
+/* Native tooltips via title=... already set; ensure no clipping */
+.panel { overflow: visible; }
 
-/* Topics */
-.topics-wrap { margin-top: .5rem; }
+/* Topic cards */
+.topics-wrap { margin-top: .25rem; }
 .topics-title { margin: .25rem 0 .5rem; font-size: 1.05rem; }
-.topics-pills { display: flex; flex-wrap: wrap; gap: .4rem; }
-.topic-pill {
-  display: inline-block;
-  padding: .35rem .6rem;
-  background: #eef2ff;
-  color: #3730a3;
-  border-radius: 9999px;
-  font-size: .9rem;
-  text-decoration: none;
+.topics-cards { display: flex; flex-wrap: wrap; gap: .5rem; }
+.topic-card {
+  display: inline-flex;
+  align-items: center;
+  padding: .5rem .7rem;
+  background: #ffffff;
   border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  text-decoration: none;
 }
-.topic-pill:hover, .topic-pill:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
+.topic-card:hover, .topic-card:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
+.topic-name { color: #111827; font-size: .95rem; }
 
-/* Publications header */
+/* Publications header + list */
 .pubs-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:.5rem; }
+#publicationsList .result-card { margin-bottom: 1rem; }
 
-/* Charts + timeline */
+/* Sidebar charts and timeline */
 .charts-wrap { overflow-x: auto; }
 .chart-block { max-width: 100%; overflow-x: auto; margin-bottom: 1rem; }
+.chart-block h4 { margin: 0 0 .25rem; }
 
 .timeline { list-style: none; margin: 0; padding-left: 0.75rem; border-left: 2px solid #e5e7eb; }
 .timeline li { position: relative; margin: 0 0 .75rem 0; padding-left: .75rem; }
@@ -330,10 +320,11 @@ body {
 }
 .timeline .title { font-weight: 600; }
 
-/* Responsive */
+/* Responsive tweaks */
 @media (max-width: 1024px) {
-  .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .profile-top-grid { grid-template-columns: 1fr; }
+  .metrics .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
-  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metrics .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
