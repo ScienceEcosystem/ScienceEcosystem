@@ -1,14 +1,29 @@
 // scripts/profile.js
 
 const getParam = (name) => new URLSearchParams(location.search).get(name);
-const main = document.getElementById("profileMain");
-const sidebar = document.getElementById("profileSidebar");
+const $ = (id) => document.getElementById(id);
 
-// Small helper
+const API = "https://api.openalex.org";
+const PER_PAGE = 50; // publications per page for the list
+
+let currentPage = 1;
+let totalWorksCount = 0;
+let accumulatedWorks = [];
+let authorObj = null;
+
+/* ---------- Utilities ---------- */
 function escapeHtml(str = "") {
   return str.replace(/[&<>'"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c])
   );
+}
+
+function yearsActiveFromWorks(works) {
+  const years = works.map(w => w.publication_year).filter(Boolean);
+  if (!years.length) return 0;
+  const minY = Math.min(...years);
+  const maxY = Math.max(...years);
+  return Math.max(0, maxY - minY + 1);
 }
 
 /* ---------- Chips for provenance ---------- */
@@ -17,7 +32,6 @@ function provenanceChips(w) {
   const openAlexUrl = w.id || null;
   const oaUrl = w.open_access?.oa_url || w.primary_location?.pdf_url || null;
   const venueUrl = w.primary_location?.source?.homepage_url || w.primary_location?.landing_page_url || null;
-
   const parts = [];
   if (doi) parts.push(`<a class="badge" href="${doi}" target="_blank" rel="noopener">DOI</a>`);
   if (oaUrl) parts.push(`<a class="badge badge-oa" href="${oaUrl}" target="_blank" rel="noopener">Open access</a>`);
@@ -26,60 +40,14 @@ function provenanceChips(w) {
   return parts.join(" ");
 }
 
-/* ---------- Co-author mini-graph (simple radial) ---------- */
-function renderCoAuthorGraph(coAuthors) {
-  if (!coAuthors.length) return "<p class=\"muted\">No co-authors available.</p>";
+/* ---------- Result card (same look as search) ---------- */
+function renderWorks(works, append = false) {
+  const list = $("publicationsList");
+  if (!list) return;
 
-  const nodes = coAuthors.map((c, i) => ({
-    id: c.name,
-    size: Math.min(12, 5 + c.count * 2),
-    link: `profile.html?id=${encodeURIComponent(c.id)}`
-  }));
+  if (!append) list.innerHTML = "";
 
-  const SVG_W = 260, SVG_H = 260, CX = 130, CY = 130, R = 95;
-
-  return `
-    <svg width="${SVG_W}" height="${SVG_H}" role="img" aria-label="Top co-authors">
-      <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="#e5e7eb"></circle>
-      ${nodes.map((n, i) => {
-        const angle = (i / nodes.length) * 2 * Math.PI;
-        const x = CX + R * Math.cos(angle);
-        const y = CY + R * Math.sin(angle);
-        const label = escapeHtml(n.id.split(" ")[0]);
-        return `
-          <a href="${n.link}">
-            <circle cx="${x}" cy="${y}" r="${n.size}" fill="#0ea5e9">
-              <title>${escapeHtml(n.id)} (${coAuthors[i].count} co-authored works)</title>
-            </circle>
-            <text x="${x}" y="${y + 3}" font-size="10" text-anchor="middle" fill="#ffffff">${label}</text>
-          </a>
-        `;
-      }).join("")}
-    </svg>
-  `;
-}
-
-/* ---------- Sort & render publications ---------- */
-function sortWorks(works, by) {
-  if (by === "citations") {
-    return [...works].sort((a, b) => (b.cited_by_count || 0) - (a.cited_by_count || 0));
-  }
-  // default: date (year)
-  return [...works].sort((a, b) => (b.publication_year || 0) - (a.publication_year || 0));
-}
-
-function renderPublications(works, authorId, sortBy = "date") {
-  const container = document.getElementById("publicationsList");
-  if (!container) return;
-
-  const sorted = sortWorks(works, sortBy === "date" ? "date" : "citations");
-
-  if (!sorted.length) {
-    container.innerHTML = `<p class="muted">No publications available.</p>`;
-    return;
-  }
-
-  const items = sorted.map((w) => {
+  works.forEach((w) => {
     const title = w.display_name || w.title || "Untitled work";
     const pid = w.doi ? `doi:${encodeURIComponent(w.doi)}` : (w.id ? w.id.split("/").pop() : "");
     const year = w.publication_year || "N/A";
@@ -94,135 +62,210 @@ function renderPublications(works, authorId, sortBy = "date") {
       })
       .join(", ") || "Unknown authors";
 
-    return `
+    list.insertAdjacentHTML("beforeend", `
       <article class="result-card">
         <h3><a href="paper.html?id=${pid}">${escapeHtml(title)}</a></h3>
         <p class="meta"><span class="muted">${year}</span> · <strong>Published in:</strong> ${escapeHtml(venue)} · <strong>Citations:</strong> ${cites}</p>
         <p><strong>Authors:</strong> ${authorsHtml}</p>
         <p class="chips">${provenanceChips(w)}</p>
       </article>
-    `;
-  }).join("");
+    `);
+  });
 
-  container.innerHTML = items;
+  const shown = accumulatedWorks.length;
+  const pagEl = $("pubsPagination");
+  if (!pagEl) return;
+
+  if (shown < totalWorksCount) {
+    pagEl.innerHTML = `<button id="loadMoreBtn" class="btn btn-secondary">Load more</button>`;
+    $("loadMoreBtn").onclick = async () => {
+      currentPage += 1;
+      await loadWorksPage(currentPage);
+    };
+  } else {
+    pagEl.innerHTML = `<p class="muted">All results loaded.</p>`;
+  }
 }
 
-/* ---------- Load profile ---------- */
+/* ---------- Charts (simple SVGs) ---------- */
+function renderBarChart(counts) {
+  if (!counts?.length) return "";
+  const sorted = [...counts].sort((a, b) => a.year - b.year);
+  const years = sorted.map(c => c.year);
+  const works = sorted.map(c => c.works_count);
+  const cites = sorted.map(c => c.cited_by_count);
+
+  const maxW = Math.max(...works, 1);
+  const maxC = Math.max(...cites, 1);
+  const h = 120, bw = 18, bs = 8, w = years.length * (bw + bs) + 60;
+
+  const axis = (max) => {
+    const step = Math.ceil(max / 4);
+    return Array.from({ length: 5 }, (_, i) => {
+      const val = i * step;
+      const y = h - (val / max) * h + 20;
+      return `<text x="0" y="${y}" font-size="10" fill="#999">${val}</text>`;
+    }).join("");
+  };
+  const bars = (data) => data.map((v, i) => {
+    const x = i * (bw + bs) + 30, hh = (v / (Math.max(...data, 1))) * h;
+    return `<rect x="${x}" y="${h - hh + 20}" width="${bw}" height="${hh}" rx="3" fill="#2563eb" />`;
+  }).join("");
+  const labels = () => years.map((yr, i) => {
+    const x = i * (bw + bs) + 40;
+    return `<text x="${x}" y="${h + 35}" font-size="10" text-anchor="middle">${yr}</text>`;
+  }).join("");
+
+  return `
+  <div class="chart-block">
+    <h4>Works per year</h4>
+    <svg width="${w}" height="${h + 50}" role="img" aria-label="Works per year">
+      ${axis(maxW)}${bars(works)}${labels()}
+    </svg>
+  </div>
+  <div class="chart-block">
+    <h4>Citations per year</h4>
+    <svg width="${w}" height="${h + 50}" role="img" aria-label="Citations per year">
+      ${axis(maxC)}${bars(cites).replaceAll('#2563eb', '#16a34a')}${labels()}
+    </svg>
+  </div>`;
+}
+
+/* ---------- Sidebar render ---------- */
+function renderSidebar(author) {
+  // Charts
+  $("trendCharts").innerHTML = renderBarChart(author.counts_by_year || []);
+
+  // Affiliations timeline
+  const affs = (author.affiliations || []).map((a) => {
+    const inst = a.institution?.display_name || "Institution";
+    const years = a.years?.length ? a.years.join(", ") : "N/A";
+    return `<li><span class="dot"></span><div><div class="title">${escapeHtml(inst)}</div><div class="muted">${escapeHtml(years)}</div></div></li>`;
+  });
+  $("careerTimeline").innerHTML = affs.length ? affs.join("") : "<li>No affiliations listed.</li>";
+}
+
+/* ---------- Works fetching with total count ---------- */
+async function loadWorksPage(page) {
+  let worksUrl;
+  try {
+    worksUrl = new URL(authorObj.works_api_url);
+  } catch {
+    worksUrl = new URL(authorObj.works_api_url, API);
+  }
+  worksUrl.searchParams.set("per-page", String(PER_PAGE));
+  worksUrl.searchParams.set("page", String(page));
+
+  const res = await fetch(worksUrl.toString());
+  const data = await res.json();
+
+  // total
+  if (!totalWorksCount) totalWorksCount = data.meta?.count || 0;
+  // append
+  const newWorks = data.results || [];
+  accumulatedWorks = accumulatedWorks.concat(newWorks);
+
+  // render chunk
+  renderWorks(newWorks, true);
+}
+
+/* ---------- Main loader ---------- */
 async function loadProfile() {
   const param = getParam("id");
   if (!param) {
-    main.innerHTML = "<p>Missing researcher ID.</p>";
+    $("profileMain").innerHTML = "<p>Missing researcher ID.</p>";
     return;
   }
-
   const authorId = param.split("/").pop();
 
   try {
-    // Author
-    const authorRes = await fetch(`https://api.openalex.org/authors/${authorId}`);
-    const author = await authorRes.json();
-
-    // Works (ensure correct per-page param)
-    let worksUrl;
-    try {
-      worksUrl = new URL(author.works_api_url);
-    } catch {
-      worksUrl = new URL(author.works_api_url, "https://api.openalex.org");
-    }
-    worksUrl.searchParams.set("per-page", "100");
-    const worksData = await (await fetch(worksUrl.toString())).json();
-    const works = worksData.results || [];
+    const res = await fetch(`${API}/authors/${authorId}`);
+    const author = await res.json();
+    authorObj = author;
 
     // Header
-    const nameEl = document.getElementById("profileName");
-    const affEl = document.getElementById("profileAffiliation");
-    const orcidLink = document.getElementById("profileOrcid");
-    const photoEl = document.getElementById("profilePhoto");
-
-    nameEl.textContent = author.display_name || "Unknown researcher";
+    $("profileName").textContent = author.display_name || "Unknown researcher";
     const affiliation = author.last_known_institution?.display_name
       || author.last_known_institutions?.[0]?.display_name
       || "Unknown affiliation";
-    affEl.textContent = affiliation;
+    $("profileAffiliation").textContent = affiliation;
+
+    const alt = author.display_name_alternatives || author.alternate_names || [];
+    $("otherNames").innerHTML = alt.length ? `<strong>Also published as:</strong> ${alt.map(escapeHtml).join(", ")}` : "";
 
     if (author.orcid) {
-      orcidLink.href = author.orcid;
-      orcidLink.style.display = "inline";
+      $("profileOrcid").href = author.orcid;
+      const code = author.orcid.split("/").pop();
+      $("profileOrcid").textContent = `ORCID: ${code}`;
+      $("profileOrcid").style.display = "inline-block";
     } else {
-      orcidLink.style.display = "none";
+      $("profileOrcid").style.display = "none";
     }
 
-    if (author.display_picture) {
-      photoEl.src = author.display_picture;
-    }
-
-    // Bio
-    const h = author.summary_stats?.h_index || 0;
-    const totalCitations = author.cited_by_count || 0;
-    const topics = (author.x_concepts || [])
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5)
-      .map((c) => c.display_name);
-
-    const bioEl = document.getElementById("aiBio");
-    bioEl.textContent =
-      `${author.display_name} studies ${topics.join(", ")}. `
-      + `They have ${works.length} works and ${totalCitations.toLocaleString()} citations. `
-      + `Current h-index is ${h} and their latest affiliation is ${affiliation}.`;
-
-    // Topics tags
-    const tagsContainer = document.getElementById("tagsContainer");
-    tagsContainer.innerHTML = (author.x_concepts || [])
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 10)
-      .map((c) => {
-        const tid = c.id.split("/").pop();
-        return `<a class="topic-tag" href="topic.html?id=${tid}" title="Open topic">${escapeHtml(c.display_name)}</a>`;
-      }).join("");
+    if (author.display_picture) $("profilePhoto").src = author.display_picture;
 
     // Metrics
-    document.getElementById("totalWorks").textContent = works.length.toLocaleString();
-    document.getElementById("totalCitations").textContent = totalCitations.toLocaleString();
-    document.getElementById("hIndex").textContent = h.toLocaleString();
+    const h = author.summary_stats?.h_index || 0;
+    const i10 = author.summary_stats?.i10_index || 0;
+    const totalCitations = author.cited_by_count || 0;
 
-    // Career timeline
-    const timeline = document.getElementById("careerTimeline");
-    const affs = (author.affiliations || []).map((a) => {
-      const inst = a.institution?.display_name || "Institution";
-      const years = a.years?.length ? a.years.join(", ") : "N/A";
-      return `<li>${escapeHtml(inst)} (${escapeHtml(years)})</li>`;
-    });
-    timeline.innerHTML = affs.length ? affs.join("") : "<li>No affiliations listed.</li>";
+    // We compute RIS using years active from all works; for startup use counts_by_year
+    const yrs = author.counts_by_year?.map(c => c.year) || [];
+    const minY = yrs.length ? Math.min(...yrs) : new Date().getFullYear();
+    const maxY = yrs.length ? Math.max(...yrs) : new Date().getFullYear();
+    const yearsActive = Math.max(0, maxY - minY + 1);
+    const ris = ((totalCitations * h) / (yearsActive + 1)) || 0;
 
-    // Co-authors
-    const coMap = {};
-    works.forEach((w) => {
-      (w.authorships || []).forEach((a) => {
-        if (a.author?.id && a.author.id !== author.id) {
-          if (!coMap[a.author.id]) {
-            coMap[a.author.id] = { count: 0, name: a.author.display_name, id: a.author.id };
-          }
-          coMap[a.author.id].count++;
-        }
-      });
-    });
-    const topCo = Object.values(coMap).sort((a, b) => b.count - a.count).slice(0, 10);
-    document.getElementById("coAuthorGraph").innerHTML = renderCoAuthorGraph(topCo);
+    $("hIndex").textContent = h.toLocaleString();
+    $("i10Index").textContent = i10.toLocaleString();
+    $("totalCitations").textContent = totalCitations.toLocaleString();
+    $("risValue").textContent = ris.toFixed(1);
 
-    // Publications
-    const sortSelect = document.getElementById("pubSort");
-    const sortMap = { date: "date", citations: "citations" };
-    const initialSort = sortMap[sortSelect?.value] || "date";
-    renderPublications(works, author.id, initialSort);
+    // Topics
+    $("tagsContainer").innerHTML = (author.x_concepts || [])
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map((c) => {
+        const tid = c.id.split("/").pop();
+        return `<a class="topic-pill" href="topic.html?id=${tid}" title="Open topic">${escapeHtml(c.display_name)}</a>`;
+      }).join("");
+
+    // Bio
+    const topTopics = (author.x_concepts || []).sort((a,b)=>b.score-a.score).slice(0,5).map(c=>c.display_name);
+    $("aiBio").textContent =
+      `${author.display_name} studies ${topTopics.join(", ")}. `
+      + `They have published works across ${yearsActive || "multiple"} years with ${totalCitations.toLocaleString()} citations. `
+      + `Current h-index is ${h}. Latest affiliation is ${affiliation}.`;
+
+    // Sidebar
+    renderSidebar(author);
+
+    // Publications: first page also sets total count
+    currentPage = 1;
+    accumulatedWorks = [];
+    totalWorksCount = 0;
+
+    // Load first page to get meta.count
+    await loadWorksPage(currentPage);
+
+    // Show total publications in stat tile
+    $("totalWorks").textContent = totalWorksCount.toLocaleString();
+
+    // Sorting
+    const sortSelect = $("pubSort");
     if (sortSelect) {
       sortSelect.addEventListener("change", () => {
-        const by = sortMap[sortSelect.value] || "date";
-        renderPublications(works, author.id, by);
+        const by = sortSelect.value === "citations" ? "citations" : "date";
+        const sorted = sortSelect.value === "citations"
+          ? [...accumulatedWorks].sort((a,b)=>(b.cited_by_count||0)-(a.cited_by_count||0))
+          : [...accumulatedWorks].sort((a,b)=>(b.publication_year||0)-(a.publication_year||0));
+        $("publicationsList").innerHTML = "";
+        renderWorks(sorted, true);
       });
     }
   } catch (err) {
     console.error(err);
-    main.innerHTML = "<p>Error loading profile.</p>";
+    $("profileMain").innerHTML = "<p>Error loading profile.</p>";
   }
 }
 
