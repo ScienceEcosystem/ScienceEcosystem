@@ -1,80 +1,105 @@
-<!-- ===================== /index.html ===================== -->
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ScienceEcosystem — Home</title>
-  <meta name="description" content="A unified home for science: open search, real libraries with PDFs, and trust signals backed by provenance." />
-  <link rel="canonical" href="/index.html" />
-  <!-- Optional: Inter font (keeps your 'Inter' usage working consistently) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScienceEcosystem | Reimagining Science</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <a class="skip-link sr-only" href="#main">Skip to content</a>
+  <nav>
+    <!-- Logo -->
+    <div class="logo" style="flex: 1;">
+      <a href="index.html">
+        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
+      </a>
+    </div>
 
-  <header class="site-header" role="banner">
-    <div class="container header-inner">
-      <a class="brand" href="/index.html" aria-label="ScienceEcosystem home">ScienceEcosystem</a>
-      <nav class="main-nav" aria-label="Primary">
-        <a href="/search.html">Search</a>
-        <a href="/about.html">About</a>
-        <a class="btn btn-orcid" href="/auth/orcid" aria-label="Login with ORCID">
-          <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
-          <span>Login with ORCID</span>
-        </a>
-      </nav>
+    <!-- Navigation links -->
+    <div style="flex: 2;"></div>
+
+    <!-- Right-side links -->
+    <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center; color: white;">
+  <a href="index.html">Home</a>
+  <a href="about.html">About</a>
+  <a href="user-profile.html" 
+     style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
+    <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+    Login with ORCID
+  </a>
+</div>
+  </nav>
+
+  <header class="hero" style="text-align: center; padding: 4rem 1rem; background-color: #ffffff;">
+    <h1 style="font-size: 3.5rem; font-weight: 700;">
+      <span class="text-science">Science</span><span class="text-ecosystem">Ecosystem</span>
+    </h1>
+    <p class="tagline" style="max-width: 800px; margin: 1rem auto 2rem; font-size: 1.2rem; color: #111827; line-height: 1.6;">
+      One <strong>Science</strong> platform unifying research papers, data, code, peer review, and funding.
+      Open, connected, and built for global collaboration in a trusted <strong>Ecosystem</strong>.
+    </p>
+
+    <!-- Search Bar -->
+    <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+      <input
+        id="searchInput"
+        type="text"
+        placeholder="Search..."
+        onkeydown="if(event.key==='Enter') handleSearch('searchInput')"
+        aria-label="Search input"
+        style="padding: 0.75rem 1rem; width: 100%; max-width: 480px; border: 1px solid #000000; border-radius: 8px; font-size: 1rem;"
+      />
+      <button
+        onclick="handleSearch('searchInput')"
+        style="padding: 0.75rem 1rem; background-color: #0284c7; color: #ffffff; border-radius: 8px; font-size: 1rem; cursor: pointer;">
+        Search
+      </button>
+    </div>
+
+    <!-- CTA Button -->
+    <div class="cta-buttons" style="margin-top: 2rem;">
+      <a href="about.html"
+         style="display: inline-block; padding: 0.75rem 1.5rem; background-color: #22c55e; color: #ffffff; border-radius: 8px; text-decoration: none; font-weight: 500;">
+        Why We're Building This
+      </a>
     </div>
   </header>
 
-  <main id="main" class="container">
-    <section class="hero" aria-labelledby="hero-title">
-      <h1 id="hero-title" class="hero-title">A unified home for science</h1>
-      <p class="hero-subtitle">Open search, real libraries with PDFs, and trust signals that keep you safe from retracted or unreliable work.</p>
-      <form class="search-bar" role="search" aria-label="Unified search" onsubmit="return false;">
-        <label class="sr-only" for="searchInput">Search papers, researchers, or paste a DOI</label>
-        <input id="searchInput" class="input" type="search" placeholder="Search papers, researchers, or paste a DOI" autocomplete="off" />
-        <button class="btn btn-primary" id="searchBtn" type="button">Search</button>
-      </form>
-      <p class="support-text">Tip: paste a DOI like <code>10.1038/s41586-024-XXXX-Y</code> or search an author name.</p>
-    </section>
+  <section class="intro">
+    <h2>ScienceEcosystem</h2>
+    <p>Science is held back by paywalls, siloed tools, and broken incentives.<br>
+      Researchers spend too much time navigating systems instead of making discoveries.<br>
+      ScienceEcosystem unites everything needed to do research — papers, data, code, review, and funding — in one open, modular space.
+    </p>
+  </section>
 
-    <section class="features-grid" aria-label="Key features">
-      <article class="card">
-        <h2 class="card-title">Unified search</h2>
-        <p>One box for titles, authors, topics, and DOIs. Results route to paper, profile, or topic pages.</p>
-      </article>
-      <article class="card">
-        <h2 class="card-title">Real library</h2>
-        <p>Save PDFs, annotate, organize with folders and tags, and export to BibTeX or RIS.</p>
-      </article>
-      <article class="card">
-        <h2 class="card-title">Trust signals</h2>
-        <p>Automatic alerts for retractions and corrections, with provenance badges and open access links.</p>
-      </article>
-    </section>
-  </main>
-
-  <footer class="site-footer" role="contentinfo">
-    <div class="container footer-inner">
-      <small>© <span id="year"></span> ScienceEcosystem. Open infrastructure for research.</small>
+  <section class="features">
+    <div class="feature">
+      <h3>Find Everything in One Place</h3>
+      <p>Search and explore papers, datasets, and code across fields, no paywalls, no tabs, no wasted time.</p>
     </div>
+    <div class="feature">
+      <h3>Review That Builds Trust</h3>
+      <p>Open peer review makes research stronger. Give and receive feedback transparently, with reputation that lasts.</p>
+    </div>
+    <div class="feature">
+      <h3>Tools for Real Collaboration</h3>
+      <p>Shared docs, project planning, and reproducible workspaces, everything designed for working together, not alone.</p>
+    </div>
+    <div class="feature">
+      <h3>Funding That Works for Researchers</h3>
+      <p>From microgrants to community-voted funding, ScienceEcosystem supports innovation without bureaucracy.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
   </footer>
 
-  <script type="module" src="/assets/app.js"></script>
-  <script type="module">
-    // Keep your existing attachUnifiedSearch usage
-    import { attachUnifiedSearch } from '/assets/app.js';
-    attachUnifiedSearch('searchInput','searchBtn');
-
-    // Consistent footer year
-    const y = document.getElementById('year');
-    if (y) y.textContent = new Date().getFullYear();
-  </script>
+  <script src="scripts/search.js"></script>
 </body>
 </html>
-
 

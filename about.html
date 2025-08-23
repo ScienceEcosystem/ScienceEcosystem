@@ -1,76 +1,205 @@
-<!-- ===================== /about.html ===================== -->
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ScienceEcosystem — About</title>
-  <meta name="description" content="What ScienceEcosystem stands for: openness, integrity, equity, and practical tools for the full research lifecycle." />
-  <link rel="canonical" href="/about.html" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+ <title>About | ScienceEcosystem</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <a class="skip-link sr-only" href="#main">Skip to content</a>
+  <nav>
+  <!-- Logo on the left -->
+  <div class="logo" style="flex: 1;">
+    <a href="index.html">
+      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
+    </a>
+  </div>
 
-  <header class="site-header" role="banner">
-    <div class="container header-inner">
-      <a class="brand" href="/index.html" aria-label="ScienceEcosystem home">ScienceEcosystem</a>
-      <nav class="main-nav" aria-label="Primary">
-        <a href="/search.html">Search</a>
-        <a href="/about.html" class="active" aria-current="page">About</a>
-        <a class="btn btn-orcid" href="/auth/orcid" aria-label="Login with ORCID">
-          <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
-          <span>Login with ORCID</span>
+  <!-- Centered search bar -->
+  <div style="flex: 2; display: flex; justify-content: center;">
+    <input
+      id="searchInput"
+      type="text"
+      placeholder="Search..."
+      style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
+      onkeydown="if(event.key==='Enter') handleSearch('searchInput')"
+    />
+  </div>
+
+  <!-- Right links and ORCID login -->
+  <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center; color: white;">
+  <a href="index.html">Home</a>
+  <a href="about.html">About</a>
+  <a href="user-profile.html" 
+     style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
+    <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
+    Login with ORCID
+  </a>
+</div>
+</nav>
+
+<main>
+  <header><h1>About ScienceEcosystem</h1></header>
+
+  <section>
+    <h2>Why We’re Building This</h2>
+    <p>
+      Science today is slowed down by a broken system, paywalled publications, scattered tools, and outdated incentives. 
+      Researchers spend too much time managing logistics instead of doing research.
+    </p>
+    <p>
+      ScienceEcosystem is our response. It's not just a platform, but a new foundation for how science can work: open, efficient, and collaborative from start to finish.
+    </p>
+  </section>
+
+  <section>
+    <h2>What We Believe</h2>
+    <ul>
+      <li><strong>Openness</strong> — Research should be free to access, share, and reuse.</li>
+      <li><strong>Integrity</strong> — Trust grows when methods, data, and review are transparent.</li>
+      <li><strong>Collaboration</strong> — Science improves when researchers can work together across fields and borders.</li>
+      <li><strong>Equity</strong> — Tools and knowledge should be available to everyone, not just elite institutions.</li>
+    </ul>
+  </section>
+  
+<section>
+  <h2>Our Vision</h2>
+  <p>ScienceEcosystem is built for the long term. Over the next years, we aim to transform how science is created, shared, and used. We will be replacing journals and paywalls with a unified, open infrastructure that serves the entire research community and the public.</p>
+
+  <ul>
+    <li><strong>No more journals:</strong> Research is shared as modular, living knowledge—open for review, reuse, and refinement from day one.</li>
+    <li><strong>All scientific knowledge is open:</strong> Data, code, methods, commentary, funding, and review are fully accessible and connected.</li>
+    <li><strong>AI works in the background:</strong> Smart tools summarize, link, and verify work quietly, without interrupting researchers or taking credit.</li>
+    <li><strong>Collaboration over competition:</strong> Scientists, institutions, and even private partners contribute to a shared public commons.</li>
+    <li><strong>The paper is replaced:</strong> Research is validated through transparency and reproducibility, not journal brands or gatekeeping.</li>
+    <li><strong>Science becomes public infrastructure:</strong> ScienceEcosystem is as essential and trusted as Wikipedia, nonprofit, and built to last.</li>
+  </ul>
+
+  <p>We believe scientific knowledge is too important to be hidden, sold, or lost. ScienceEcosystem will always be free, nonprofit, and owned by the communities it serves.</p>
+</section>
+
+  <section>
+    <h2>Who It’s For</h2>
+    <p>
+      ScienceEcosystem is built for researchers, students, educators, and funders, anyone who believes science should work better than it does today.
+    </p>
+    <p>
+      Whether you’re publishing a dataset, reviewing a preprint, or coordinating an interdisciplinary project, our aim is to support the full lifecycle of scientific work, not just the final publication.
+    </p>
+  </section>
+  
+  <section>
+    <h2>Where We're Going</h2>
+    <p>
+      We’re starting small, testing ideas with early adopters, and staying grounded in real research needs. 
+      As we grow, our goal is to become a shared infrastructure, not a product to sell, but a system to build with the scientific community.
+    </p>
+  </section>
+
+  <header><h1>Get Involved</h1></header>
+
+    <section>
+      <h2>Shape the Future of Open Science</h2>
+      <p>
+        ScienceEcosystem is just beginning. We're looking for people who want to help build something better — from the ground up.
+        Whether you’re a researcher, developer, funder, or open science advocate, there’s a role here for you.
+      </p>
+    </section>
+    
+    <section>
+      <h2>Ways to Contribute</h2>
+      <ul>
+        <li><strong>Researchers</strong> — Help us test early features and tell us what tools you actually need.</li>
+        <li><strong>Developers</strong> — Join our open-source work and help build modular, transparent infrastructure.</li>
+        <li><strong>Funders</strong> — Support an initiative focused on openness, equity, and long-term public value.</li>
+        <li><strong>Advisors</strong> — Contribute your insight from science, policy, or community organizing to guide our growth.</li>
+      </ul>
+    </section>
+    
+    <section>
+      <h2>Take the Survey</h2>
+      <p>
+        We’re collecting honest input about how science works today — and what needs to change. 
+        If you're a researcher or student, take five minutes to share your experience:
+      </p>
+      <p>
+        <a href="https://forms.gle/LydXUFYSSe7o6Mf47" target="_blank">
+          Fill out the short survey
         </a>
-      </nav>
-    </div>
-  </header>
-
-  <main id="main" class="container">
-    <header class="page-header">
-      <h1 class="page-title">About ScienceEcosystem</h1>
-      <p class="page-subtitle">We’re building open, durable infrastructure for the full research lifecycle — search, libraries with PDFs and annotations, and trust features to help you avoid retracted or unreliable work.</p>
-    </header>
-
-    <section aria-labelledby="beliefs-title">
-      <h2 id="beliefs-title">What we believe</h2>
-      <ul class="beliefs">
-        <li><strong>Openness</strong>: knowledge is a public good.</li>
-        <li><strong>Collaboration</strong>: research advances fastest when we build together.</li>
-        <li><strong>Integrity</strong>: provenance and reproducibility are first‑class.</li>
-        <li><strong>Equity</strong>: access and recognition should not depend on funding or geography.</li>
-        <li><strong>User‑first</strong>: tools should fit naturally into daily work.</li>
-        <li><strong>Sustainability</strong>: this is infrastructure for decades.</li>
-      </ul>
+      </p>
+    </section>
+    
+    <section>
+      <h2>Contact Us</h2>
+      <p>
+        If you’d like to talk directly or explore collaboration, reach out anytime:  
+        <a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a>
+      </p>
     </section>
 
-    <section id="data-sources" aria-labelledby="data-title">
-      <h2 id="data-title">Data sources & attribution</h2>
-      <p>We rely on open, reputable sources and always show provenance:</p>
-      <ul class="source-list">
-        <li><strong>OpenAlex</strong>: works, authors, institutions, venues, concepts.</li>
-        <li><strong>Crossref</strong>: DOI metadata, funders, Crossmark status when available.</li>
-        <li><strong>ORCID</strong>: researcher identity; sign‑in and public records.</li>
-        <li><strong>Unpaywall</strong>: open access locations and OA status.</li>
-        <li><strong>Zotero</strong>: library interoperability for collections, export.</li>
-      </ul>
-      <p class="muted">Every paper, profile, and venue page includes “View source” chips (e.g., OpenAlex, Crossref, ORCID, OA PDF) so you can verify information and follow it to the original record.</p>
-    </section>
-  </main>
 
-  <footer class="site-footer" role="contentinfo">
-    <div class="container footer-inner">
-      <small>© <span id="year"></span> ScienceEcosystem.</small>
-    </div>
+<section>
+    <h2>How We’re Building ScienceEcosystem</h2>
+    <p>
+      ScienceEcosystem is designed to grow in stages, starting with essential tools that address the most urgent barriers in science today, 
+      and expanding into a full open research infrastructure.
+    </p>
+    <p>
+      We are focused on steady, thoughtful development, working closely with early users and institutions to guide each step.
+    </p>
+    <p>We envision that in the future, science is no longer captured in static papers, but in dynamic, modular research objects that evolve over time.</p>
+  </section>
+  
+  <section>
+    <h2>2025: Foundation</h2>
+    <ul>
+      <li>Launch the public website and early messaging</li>
+      <li>Build the MVP: basic document upload, AI-powered summaries, semantic search</li>
+      <li>Start community outreach across disciplines</li>
+      <li>Begin integration work with ORCID, OpenAlex, and other open infrastructure</li>
+    </ul>
+  </section>
+  
+  <section>
+    <h2>2026: Review and Collaboration</h2>
+    <ul>
+      <li>Introduce open peer review, annotation, and reputation tools</li>
+      <li>Run beta testing with researchers and research groups</li>
+      <li>Begin piloting funding models (microgrants, community prioritization)</li>
+      <li>Build tools to support reproducibility and shared workspaces</li>
+    </ul>
+  </section>
+  
+  <section>
+    <h2>2027: Scale and Impact</h2>
+    <ul>
+      <li>Full platform release with collaboration, publication, and funding systems</li>
+      <li>Build partnerships with institutions, funders, and open science communities</li>
+      <li>Launch citizen science and public education components</li>
+      <li>Support policy translation and global access initiatives</li>
+    </ul>
+  </section>
+  
+  <section>
+    <h2>Live Business Plan</h2>
+    <p>
+      For more detailed planning and financial strategy, see the current version of our business plan:
+      <a href="https://www.overleaf.com/read/xyzyqvjmpdjh#75b02a" target="_blank">Read the Business Plan</a>
+    </p>
+  </section>
+</main>
+
+  <footer>
+    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
   </footer>
 
-  <script type="module" src="/assets/app.js"></script>
-  <script>
-    const y = document.getElementById('year');
-    if (y) y.textContent = new Date().getFullYear();
-  </script>
+  
+<script src="scripts/search.js"></script>
+
+
+
 </body>
 </html>
