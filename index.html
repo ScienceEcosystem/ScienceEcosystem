@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ScienceEcosystem | Reimagining Science</title>
-  <meta name="description" content="One Science platform unifying research papers, data, code, peer review, and funding—open, connected, and built for global collaboration." />
+  <meta name="description" content="One Science platform unifying research papers, data, code, peer review, and funding. Open, connected, and built for global collaboration." />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
@@ -20,9 +20,7 @@
         </a>
       </div>
 
-      <div class="nav-center">
-        <!-- empty on home (keeps layout symmetry) -->
-      </div>
+      <div class="nav-center"></div>
 
       <div class="nav-right">
         <a class="nav-link active" href="index.html" aria-current="page">Home</a>
@@ -47,7 +45,7 @@
 
       <form class="search-wrap" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
         <label class="visually-hidden" for="searchInput">Search</label>
-        <input id="searchInput" class="input" type="text" placeholder="Search papers, people, datasets…" />
+        <input id="searchInput" class="input" type="text" placeholder="Search papers, people, datasets..." />
         <button class="btn btn-primary" type="submit">Search</button>
       </form>
 
@@ -57,35 +55,33 @@
     </div>
   </header>
 
-  <main id="main">
+  <main id="main" class="container">
     <section class="panel">
-      <div class="container">
-        <h2>ScienceEcosystem</h2>
-        <p>
-          Science is held back by paywalls, siloed tools, and broken incentives.<br />
-          Researchers spend too much time navigating systems instead of making discoveries.<br />
-          ScienceEcosystem unites everything needed to do research — papers, data, code, review, and funding — in one open, modular space.
-        </p>
-      </div>
+      <h2>ScienceEcosystem</h2>
+      <p>
+        Science is held back by paywalls, siloed tools, and broken incentives.<br />
+        Researchers spend too much time navigating systems instead of making discoveries.<br />
+        ScienceEcosystem unites everything needed to do research — papers, data, code, review, and funding — in one open, modular space.
+      </p>
     </section>
 
-    <section class="panel features">
-      <div class="container features-grid">
+    <section class="panel">
+      <div class="features-grid">
         <article class="feature">
           <h3>Find Everything in One Place</h3>
-          <p>Search and explore papers, datasets, and code across fields — no paywalls, no tabs, no wasted time.</p>
+          <p>Search and explore papers, datasets, and code across fields. No paywalls, no tabs, no wasted time.</p>
         </article>
         <article class="feature">
           <h3>Review That Builds Trust</h3>
-          <p>Open peer review makes research stronger. Give and receive feedback transparently, with reputation that lasts.</p>
+          <p>Open review strengthens research. Give and receive feedback transparently, with reputation that lasts.</p>
         </article>
         <article class="feature">
           <h3>Tools for Real Collaboration</h3>
-          <p>Shared docs, project planning, and reproducible workspaces — designed for working together, not alone.</p>
+          <p>Shared docs, planning, and reproducible workspaces that fit how teams actually work.</p>
         </article>
         <article class="feature">
-          <h3>Funding That Works for Researchers</h3>
-          <p>From microgrants to community‑voted funding, ScienceEcosystem supports innovation without bureaucracy.</p>
+          <h3>Funding That Works</h3>
+          <p>From microgrants to community voting, SE supports innovation without needless bureaucracy.</p>
         </article>
       </div>
     </section>
