@@ -1,23 +1,27 @@
 /* =========================================================================
-   ScienceEcosystem - Profile Page "Nuclear" Debug + Fix
-   - Adds on-page debug console
-   - Guards for missing ?id=
-   - Known-good author fallback
-   - OpenAlex fetch with mailto, retry, and visible errors
-   - Minimal rendering so "nothing loads" becomes impossible
+   ScienceEcosystem - Profile Page (production)
+   - Robust OpenAlex fetch with mailto + retry
+   - Works even if ?id= is missing (falls back to a known author)
+   - No overlay; console-only notes via no-op shims
    ========================================================================= */
 
 (function () {
+  // ---- no-op logger shims (prevent ReferenceError) ----
+  const log  = (..._) => {};
+  const ok   = (..._) => {};
+  const fail = (..._) => {};
 
-  // ===== Utilities =====
+  // ---- constants & utils ----
   const API = "https://api.openalex.org";
   const MAILTO = "scienceecosystem@icloud.com";
   const PAGE_SIZE = 50;
 
   const $ = (id) => document.getElementById(id);
   const getParam = (name) => new URLSearchParams(location.search).get(name);
+
   function escapeHtml(str = "") {
-    return String(str).replace(/[&<>'"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;" }[c]));
+    return String(str).replace(/[&<>'"]/g, (c) =>
+      ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;" }[c]));
   }
 
   function normalizeAuthorId(raw) {
@@ -40,11 +44,11 @@
   async function getJSON(url) {
     const withMt = addMailto(url);
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const res = await fetch(withMt, { headers: { "Accept": "application/json" } }).catch(err => ({ ok: false, statusText: err.message }));
+      const res = await fetch(withMt, { headers: { "Accept": "application/json" } })
+        .catch(err => ({ ok: false, statusText: err.message }));
       if (!res || !res.ok) {
         if (res && res.status === 429) {
           const ra = parseInt(res.headers.get("Retry-After") || "1", 10);
-          log(`429 from API, retrying in ${Math.min(ra, 5)}s…`);
           await new Promise(r => setTimeout(r, Math.min(ra,5)*1000));
           continue;
         }
@@ -57,7 +61,7 @@
     throw new Error("Unreachable");
   }
 
-  // ===== Minimal rendering so user always sees *something* =====
+  // ---- rendering ----
   function renderAuthorHeader(a) {
     $("profileName").textContent = a.display_name || "Unknown researcher";
     $("profileAffiliation").textContent =
@@ -66,12 +70,16 @@
       "Unknown affiliation";
 
     const alt = (a.display_name_alternatives?.length ? a.display_name_alternatives : a.alternate_names) || [];
-    $("otherNames").innerHTML = alt.length ? `<strong>Also published as:</strong> ${alt.map(escapeHtml).join(", ")}` : "";
+    $("otherNames").innerHTML = alt.length
+      ? `<strong>Also published as:</strong> ${alt.map(escapeHtml).join(", ")}`
+      : "";
 
     if (a.orcid) {
       const orcidHref = a.orcid.startsWith("http") ? a.orcid : `https://orcid.org/${a.orcid.replace(/^ORCID:/i,"")}`;
       const el = $("profileOrcid");
-      el.href = orcidHref; el.textContent = `ORCID: ${orcidHref.split("/").pop()}`; el.style.display = "inline-block";
+      el.href = orcidHref;
+      el.textContent = `ORCID: ${orcidHref.split("/").pop()}`;
+      el.style.display = "inline-block";
     }
     if (a.display_picture) $("profilePhoto").src = a.display_picture;
 
@@ -96,14 +104,15 @@
       .map(c => `<a class="topic-card" href="topic.html?id=${c.id?.split("/").pop()||""}"><span class="topic-name">${escapeHtml(c.display_name||"Topic")}</span></a>`)
       .join("");
 
-    // Tiny bio
-    const topTopics = concepts.sort((x,y)=>(y.score||0)-(x.score||0)).slice(0,5).map(c=>c.display_name).filter(Boolean);
+    const topTopics = concepts
+      .sort((x,y)=>(y.score||0)-(x.score||0)).slice(0,5)
+      .map(c=>c.display_name).filter(Boolean);
     $("aiBio").textContent =
       `${a.display_name || "This researcher"} studies ${topTopics.join(", ") || "various topics"}. `
       + `They have ${(a.works_count || 0).toLocaleString()} works and ${totalCitations.toLocaleString()} citations. `
       + `Current h-index is ${h}. Latest affiliation is ${$("profileAffiliation").textContent}.`;
 
-    // Minimal timeline to avoid crashes
+    // simple timeline
     const timeline = [];
     if (a.last_known_institution?.display_name) timeline.push(a.last_known_institution.display_name);
     (a.last_known_institutions||[]).forEach(inst => { if (inst?.display_name) timeline.push(inst.display_name); });
@@ -170,30 +179,26 @@
     ok("Works page 1 loaded.");
     const results = Array.isArray(data.results) ? data.results : [];
     $("totalWorks").textContent = (author.works_count || data.meta?.count || results.length).toLocaleString();
-    $("pubsPagination").innerHTML = ""; // keep simple for now
+    $("pubsPagination").innerHTML = ""; // simple first-page render
     renderWorksChunk(results);
   }
 
   async function boot() {
-    // Quick file-path check: serving via file:// often works, but better via http(s)
+    // optional heads-up when served via file://
     if (location.protocol === "file:") {
-      log("Page is loaded via file://. If network blocks appear, serve via a local web server (e.g., `python -m http.server`).");
+      log("Tip: serve via a local web server if XHRs are blocked (e.g., `python -m http.server`).");
     }
 
-    // Confirm the other script didn’t crash
-    if (!window.handleSearch) {
-      log("search.js didn’t define handleSearch (not fatal).");
-    } else {
-      ok("search.js loaded.");
-    }
+    // if search.js isn’t present this is fine
+    if (window.handleSearch) ok("search.js loaded.");
 
     const raw = getParam("id");
     const id = normalizeAuthorId(raw);
     if (!id) {
-      fail("No ?id= provided. Using a known-good fallback author.");
+      fail("No ?id= provided. Using fallback author.");
     }
 
-    const authorId = id || "A1969205033"; // fallback: Timnit Gebru (stable, public author)
+    const authorId = id || "A1969205033"; // fallback
     const authorUrl = `${API}/authors/${encodeURIComponent(authorId)}`;
     log(`Fetching author: ${authorUrl}`);
 
@@ -202,7 +207,6 @@
       author = await getJSON(authorUrl);
       ok("Author loaded.");
     } catch (e) {
-      fail(`Author fetch failed: ${e.message}`);
       $("publicationsList").innerHTML = `<p class="muted">Profile not found or network blocked.</p>`;
       return;
     }
@@ -212,17 +216,14 @@
     try {
       await loadWorks(author);
     } catch (e) {
-      fail(`Works fetch failed: ${e.message}`);
       $("publicationsList").innerHTML = `<p class="muted">Could not load publications.</p>`;
     }
 
-    // Tiny smoke test to ensure OpenAlex responds at all:
+    // quick ping (optional)
     try {
-      const ping = await getJSON(`${API}/works?per_page=1`);
-      if (ping && ping.results && ping.results.length) ok("OpenAlex ping OK (works endpoint).");
-    } catch (e) {
-      fail(`OpenAlex ping failed: ${e.message}`);
-    }
+      await getJSON(`${API}/works?per_page=1`);
+      ok("OpenAlex ping OK.");
+    } catch {}
   }
 
   document.addEventListener("DOMContentLoaded", boot);
