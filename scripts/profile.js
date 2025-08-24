@@ -110,36 +110,34 @@
     }
   }
 
-  function renderWorksChunk(works){
-    var list = $("publicationsList"); if (!list) return;
-    if (/Loading publications/i.test(list.textContent)) list.innerHTML = "";
-    for (var i=0;i<works.length;i++){
-      var w = works[i];
-      var title = w.display_name || w.title || "Untitled work";
-      var idTail = w.id ? w.id.split("/").pop() : "";
-      var doiRaw = w.doi || get(w,"ids.doi","") || "";
-      var pid = doiRaw ? ("doi:"+encodeURIComponent(String(doiRaw).replace(/^https?:\/\/(dx\.)?doi\.org\//i,""))) : idTail;
-      var year = (w.publication_year!=null ? w.publication_year : "N/A");
-      var venue = get(w,"host_venue.display_name",null) || get(w,"primary_location.source.display_name",null) || "Unknown venue";
-      var cites = w.cited_by_count || 0;
+  function renderWorksChunk(works) {
+  const list = document.getElementById("publicationsList");
+  if (!list) return;
+  if (/Loading publications/i.test(list.textContent)) list.innerHTML = "";
 
-      var authorships = Array.isArray(w.authorships) ? w.authorships : [];
-      var authorsHtml = authorships.map(function(a){
-        var aid = get(a,"author.id",null); aid = (aid ? aid.split("/").pop() : null);
-        var name = escapeHtml(get(a,"author.display_name","Unknown"));
-        return (aid ? '<a href="profile.html?id='+aid+'">'+name+'</a>' : name);
-      }).join(", ") || "Unknown authors";
-
-      list.insertAdjacentHTML("beforeend",
-        '<article class="result-card">'+
-          '<h3><a href="paper.html?id='+pid+'">'+escapeHtml(title)+'</a></h3>'+
-          '<p class="meta"><span class="muted">'+year+'</span> · <strong>Published in:</strong> '+escapeHtml(venue)+' · <strong>Citations:</strong> '+cites+'</p>'+
-          '<p><strong>Authors:</strong> '+authorsHtml+'</p>'+
-          '<p class="chips">'+provenanceChips(w)+'</p>'+
-        '</article>'
-      );
-    }
+  for (var i=0;i<works.length;i++){
+    list.insertAdjacentHTML("beforeend", SE.components.renderPaperCard(works[i]));
   }
+  // enhance cards (Unpaywall + toggle + save)
+  SE.components.enhancePaperCards(list);
+
+  const pag = document.getElementById("pubsPagination");
+  if (!pag) return;
+  const shown = accumulatedWorks.length;
+  if (shown < totalWorksCount) {
+    pag.innerHTML = `<button id="loadMoreBtn" class="btn btn-secondary">Load more</button>`;
+    const btn = document.getElementById("loadMoreBtn");
+    if (btn) {
+      btn.onclick = async () => {
+        btn.disabled = true; btn.textContent = "Loading…";
+        currentPage += 1; await fetchWorksPage(currentPage, false);
+      };
+    }
+  } else {
+    pag.innerHTML = `<p class="muted">All results loaded.</p>`;
+  }
+}
+
 
   async function loadWorks(author){
     var worksApi = author && author.works_api_url;

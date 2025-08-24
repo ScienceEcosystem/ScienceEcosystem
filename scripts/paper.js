@@ -312,25 +312,16 @@
     // Graph (resilient even if one list is empty)
     renderGraph(paper, cited, citing);
 
-    // Related block
-    var relatedHtml = [];
-    var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
-    for (var i=0;i<joinFew.length;i++){
-      var w = joinFew[i];
-      var wid = w.id ? w.id.split("/").pop() : "";
-      relatedHtml.push(
-        '<article class="result-card">' +
-          '<h3><a href="paper.html?id='+wid+'">'+escapeHtml(w.display_name || "Untitled")+'</a></h3>' +
-          '<p class="meta"><span class="muted">'+(w.publication_year!=null?w.publication_year:"n.d.")+
-          '</span> · <strong>Published in:</strong> '+
-          escapeHtml(get(w,"host_venue.display_name", get(w,"primary_location.source.display_name","Unknown venue")) )+
-          '</p>' +
-        '</article>'
-      );
-    }
-    $("relatedBlock").innerHTML =
-      '<h2>Related papers</h2>' +
-      (relatedHtml.length ? relatedHtml.join("") : "<p class='muted'>No related papers found.</p>");
+    // Related block (full-width) using shared card
+var relatedHtml = [];
+var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
+for (var i=0;i<joinFew.length;i++){
+  var w = joinFew[i];
+  relatedHtml.push(SE.components.renderPaperCard(w, { compact: true }));
+}
+$("relatedBlock").innerHTML = '<h2>Related papers</h2>' + (relatedHtml.length ? relatedHtml.join("") : "<p class='muted'>No related papers found.</p>");
+// Enhance (Unpaywall + toggle + save)
+SE.components.enhancePaperCards($("relatedBlock"));
 
     // enable copy buttons
     enableCopyButtons();

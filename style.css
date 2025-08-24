@@ -356,3 +356,48 @@ body {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+/* Card look (shared) */
+.result-card.paper-card {
+  position: relative;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem 1rem 0.75rem 1rem;
+  background: #fff;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 6px rgba(0,0,0,.04);
+}
+
+.result-card.paper-card .card-title {
+  margin: 0 0 .25rem 0;
+}
+
+.result-card.paper-card .btn-save {
+  position: absolute;
+  top: .75rem;
+  right: .75rem;
+  font-size: .85rem;
+  padding: .25rem .5rem;
+  border-radius: 9999px;
+}
+
+.result-card.paper-card .abstract { margin-top: .35rem; }
+.result-card.paper-card .abs-full { display: inline; }
+.result-card.paper-card .link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: .35rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #2563eb;
+}
+
+/* Keep sidebar text inside its boxes */
+.side-col .panel, .side-col .panel * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Chips badges */
+.badge-oa { background: #e6ffed; border: 1px solid #b7f7c3; color: #047857; }
