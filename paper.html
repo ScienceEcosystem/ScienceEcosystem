@@ -4,68 +4,99 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Research Paper | ScienceEcosystem</title>
+  <meta name="description" content="Paper details on ScienceEcosystem with abstract, authors, topics, open access links, citations, and related works." />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
   <link href="https://unpkg.com/vis-network/styles/vis-network.min.css" rel="stylesheet" />
-  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js" defer></script>
 </head>
 
 <body data-page="paper">
-  <nav>
-  <!-- Logo on the left -->
-  <div class="logo" style="flex: 1;">
-    <a href="index.html">
-      <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
-    </a>
-  </div>
+  <a class="skip-link" href="#main">Skip to content</a>
 
-  <!-- Centered search bar -->
-  <div style="flex: 2; display: flex; justify-content: center;">
-    <input
-      id="searchInput"
-      type="text"
-      placeholder="Search..."
-      style="width: 100%; max-width: 500px; padding: 0.5rem 1rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 9999px;"
-      onkeydown="if(event.key==='Enter') handleSearch('searchInput')"
-    />
-  </div>
+  <!-- Reuse the same nav from profile for consistency -->
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
+      </div>
 
-  <!-- Right links and ORCID login -->
-  <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center;color: white;">
-    <a href="index.html">Home</a>
-    <a href="about.html">About</a>
-    <button style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem;">
-      <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
-      Login with ORCID
-    </button>
-  </div>
-</nav>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search papers, people, datasets..." />
+        </form>
+      </div>
+
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="btn btn-orcid" href="user-profile.html" aria-label="Login with ORCID">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
+      </div>
+    </div>
   </nav>
 
-  <main style="background:#f8f9fa; padding:2rem 1rem;">
-    <div id="paperContent" style="display:flex; flex-wrap:wrap; gap:2rem;">
-      <div style="flex:3; min-width:0;" id="paper-container">Loading paper...</div>
-      <aside style="flex:1; min-width:300px; background:#fff; padding:1rem; border-radius:10px;" id="paperSidebar">
-        <div id="pdf-link"></div>
-        <div id="keywords"></div>
-        <div id="citations"></div>
-        <div id="related-papers"></div>
+  <main id="main" class="container">
+    <!-- TOP SECTION (title + meta badges) -->
+    <section class="panel">
+      <div id="paperHeader">
+        <!-- Filled by JS: title, year, venue, OA/DOI badges -->
+        Loading paper...
+      </div>
+    </section>
+
+    <!-- MAIN + SIDEBAR -->
+    <div class="layout-grid">
+      <!-- Main column -->
+      <section class="panel main-col" id="paperMain">
+        <section class="paper-section" id="abstractBlock"></section>
+        <section class="paper-section" id="authorsBlock"></section>
+        <section class="paper-section" id="affiliationsBlock"></section>
+        <section class="paper-section" id="objectsBlock"></section>
+        <section class="paper-section" id="graphBlock"></section>
+      </section>
+
+      <!-- Sidebar -->
+      <aside class="side-col">
+        <section class="panel">
+          <h3>Access</h3>
+          <div id="accessBlock">—</div>
+        </section>
+
+        <section class="panel">
+          <h3>Topics</h3>
+          <div id="topicsBlock" class="topics-cards">—</div>
+        </section>
+
+        <section class="panel">
+          <h3>Citation</h3>
+          <div id="citationBlock">—</div>
+        </section>
+
+        <section class="panel">
+          <h3>Related papers</h3>
+          <div id="relatedBlock">—</div>
+        </section>
       </aside>
     </div>
-    <div id="graphContainer" style="margin-top:2rem;"></div>
   </main>
 
-  <footer>
-    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
-    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
   </footer>
 
-  <script src="scripts/search.js"></script>
-  <script src="scripts/profile.js"></script>
-  <script src="scripts/paper.js"></script>
-  <script src="scripts/topic.js"></script>
+  <!-- Only what this page needs -->
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/paper.js?v=1" defer></script>
 </body>
 </html>
-
-
