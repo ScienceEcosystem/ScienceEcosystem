@@ -11,14 +11,30 @@ let currentPage = 1;
 let totalWorksCount = 0;
 let accumulatedWorks = [];
 
-/* ========= Utilities ========= */
+/* ========== Utilities ========== */
 function escapeHtml(str = "") {
   return str.replace(/[&<>'"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c])
   );
 }
 
-/* ========= Provenance chips ========= */
+/** Accepts:
+ *  - "A123456789"
+ *  - "https://api.openalex.org/authors/A123456789"
+ *  - "https%3A%2F%2Fapi.openalex.org%2Fauthors%2FA123456789"
+ * Returns: "A123456789"
+ */
+function normalizeAuthorId(raw) {
+  if (!raw) return "";
+  let s = raw;
+  try { s = decodeURIComponent(s); } catch {}
+  // If it's a full URL, take the last segment.
+  if (s.includes("/")) s = s.split("/").filter(Boolean).pop();
+  // Just to be safe, trim spaces.
+  return (s || "").trim();
+}
+
+/* ========== Provenance chips ========== */
 function provenanceChips(w) {
   const doi = w.doi ? `https://doi.org/${encodeURIComponent(w.doi)}` : null;
   const openAlexUrl = w.id || null;
@@ -33,22 +49,19 @@ function provenanceChips(w) {
   return parts.join(" ");
 }
 
-/* ========= Charts (no replaceAll, color param) ========= */
+/* ========== Charts (simple SVG) ========== */
 function barChartSVG({ years, series, color, label }) {
   if (!years.length || !series.length) return "";
   const h = 120, bw = 18, bs = 8, w = years.length * (bw + bs) + 60;
   const max = Math.max(...series, 1);
 
-  const axis = (() => {
-    const step = Math.ceil(max / 4);
-    let out = "";
-    for (let i = 0; i < 5; i++) {
-      const val = i * step;
-      const y = h - (val / max) * h + 20;
-      out += `<text x="0" y="${y}" font-size="10" fill="#999">${val}</text>`;
-    }
-    return out;
-  })();
+  let axis = "";
+  const step = Math.ceil(max / 4);
+  for (let i = 0; i < 5; i++) {
+    const val = i * step;
+    const y = h - (val / max) * h + 20;
+    axis += `<text x="0" y="${y}" font-size="10" fill="#999">${val}</text>`;
+  }
 
   let bars = "";
   for (let i = 0; i < series.length; i++) {
@@ -76,12 +89,10 @@ function barChartSVG({ years, series, color, label }) {
 function renderCharts(counts) {
   const el = $("trendCharts");
   if (!el) return;
-
   if (!counts?.length) {
     el.innerHTML = `<p class="muted">No trend data.</p>`;
     return;
   }
-
   const sorted = [...counts].sort((a, b) => a.year - b.year);
   const years = sorted.map(c => c.year);
   const works = sorted.map(c => c.works_count || 0);
@@ -92,16 +103,14 @@ function renderCharts(counts) {
   el.innerHTML = worksChart + citesChart;
 }
 
-/* ========= Sidebar timeline ========= */
+/* ========== Sidebar timeline ========== */
 function renderTimeline(affiliations = []) {
   const el = $("careerTimeline");
   if (!el) return;
-
   if (!affiliations.length) {
     el.innerHTML = "<li>No affiliations listed.</li>";
     return;
   }
-
   el.innerHTML = affiliations.map(a => {
     const inst = a.institution?.display_name || "Institution";
     const years = a.years?.length ? a.years.join(", ") : "N/A";
@@ -109,7 +118,7 @@ function renderTimeline(affiliations = []) {
   }).join("");
 }
 
-/* ========= Publications ========= */
+/* ========== Sort & render publications ========== */
 function sortWorks(works, by) {
   if (by === "citations") return [...works].sort((a, b) => (b.cited_by_count || 0) - (a.cited_by_count || 0));
   return [...works].sort((a, b) => (b.publication_year || 0) - (a.publication_year || 0));
@@ -119,7 +128,6 @@ function renderWorksChunk(works) {
   const list = $("publicationsList");
   if (!list) return;
 
-  // Clear placeholder once
   if (list.textContent.includes("Loading publications")) list.innerHTML = "";
 
   works.forEach((w) => {
@@ -155,14 +163,14 @@ function renderWorksChunk(works) {
     pag.innerHTML = `<button id="loadMoreBtn" class="btn btn-secondary">Load more</button>`;
     $("loadMoreBtn").onclick = async () => {
       currentPage += 1;
-      await fetchWorksPage(currentPage, /*clear*/ false);
+      await fetchWorksPage(currentPage, false);
     };
   } else {
     pag.innerHTML = `<p class="muted">All results loaded.</p>`;
   }
 }
 
-/* Fetch a page of works, keep meta.count, and render chunk */
+/* Fetch a page of works, keep total meta.count, render chunk */
 async function fetchWorksPage(page, clear) {
   let url;
   try {
@@ -174,6 +182,11 @@ async function fetchWorksPage(page, clear) {
   url.searchParams.set("page", String(page));
 
   const res = await fetch(url.toString());
+  if (!res.ok) {
+    console.error("Works fetch failed:", res.status, res.statusText);
+    $("publicationsList").innerHTML = `<p class="muted">Could not load publications.</p>`;
+    return;
+  }
   const data = await res.json();
 
   if (!totalWorksCount) totalWorksCount = data.meta?.count || 0;
@@ -181,25 +194,31 @@ async function fetchWorksPage(page, clear) {
   const chunk = data.results || [];
   accumulatedWorks = accumulatedWorks.concat(chunk);
 
-  // Sort according to UI state before rendering
   const sortBy = ($("pubSort")?.value === "citations") ? "citations" : "date";
   const toRender = sortWorks(chunk, sortBy);
   if (clear) $("publicationsList").innerHTML = "";
   renderWorksChunk(toRender);
 }
 
-/* ========= Load profile ========= */
+/* ========== Load profile ========== */
 async function loadProfile() {
-  const param = getParam("id");
-  if (!param) {
-    $("publicationsList").innerHTML = "<p>Missing researcher ID.</p>";
+  const rawParam = getParam("id");
+  const authorId = normalizeAuthorId(rawParam);
+
+  if (!authorId) {
+    $("publicationsList").innerHTML = "<p>Missing or invalid researcher ID.</p>";
     return;
   }
-  const authorId = param.split("/").pop();
 
   try {
     // Author
-    const author = await (await fetch(`${API}/authors/${authorId}`)).json();
+    const authorRes = await fetch(`${API}/authors/${authorId}`);
+    if (!authorRes.ok) {
+      console.error("Author fetch failed:", authorRes.status, authorRes.statusText);
+      $("publicationsList").innerHTML = "<p>Profile not found.</p>";
+      return;
+    }
+    const author = await authorRes.json();
     authorObj = author;
 
     // Identity
@@ -219,7 +238,7 @@ async function loadProfile() {
     }
     if (author.display_picture) $("profilePhoto").src = author.display_picture;
 
-    // Metrics (use counts_by_year to estimate years active for RIS)
+    // Metrics
     const h = author.summary_stats?.h_index || 0;
     const i10 = author.summary_stats?.i10_index || 0;
     const totalCitations = author.cited_by_count || 0;
@@ -251,7 +270,7 @@ async function loadProfile() {
     const topTopics = (author.x_concepts || []).sort((a,b)=>b.score-a.score).slice(0,5).map(c=>c.display_name);
     $("aiBio").textContent =
       `${author.display_name} studies ${topTopics.join(", ")}. `
-      + `They have ${author.works_count?.toLocaleString?.() || "many"} works and ${totalCitations.toLocaleString()} citations. `
+      + `They have ${(author.works_count || 0).toLocaleString()} works and ${totalCitations.toLocaleString()} citations. `
       + `Current h-index is ${h}. Latest affiliation is ${affiliation}.`;
 
     // Sidebar
@@ -263,10 +282,10 @@ async function loadProfile() {
     totalWorksCount = 0;
     accumulatedWorks = [];
 
-    await fetchWorksPage(currentPage, /*clear*/ true);
+    await fetchWorksPage(currentPage, true);
     $("totalWorks").textContent = (author.works_count || totalWorksCount).toLocaleString();
 
-    // Sort change
+    // Sorting change
     const sortSelect = $("pubSort");
     if (sortSelect) {
       sortSelect.addEventListener("change", () => {
@@ -278,7 +297,7 @@ async function loadProfile() {
     }
   } catch (err) {
     console.error(err);
-    $("publicationsList").innerHTML = "<p>Error loading profile.</p>";
+    $("publicationsList").innerHTML = "<p>Unexpected error loading profile.</p>";
   }
 }
 
