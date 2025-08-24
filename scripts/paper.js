@@ -41,28 +41,16 @@
     var s = raw;
     try { s = decodeURIComponent(s); } catch(e){}
     s = s.trim();
-
-    // Accept:
-    //  - OpenAlex URL or ID: "https://openalex.org/W123...", "W123..."
-    //  - DOI forms: "10.xxxx/yyy", "doi:10.xxxx/yyy", "https://doi.org/10.xxxx/yyy"
     if (s.indexOf("/") !== -1 && s.indexOf("openalex.org/") !== -1) {
       s = s.split("/").filter(Boolean).pop(); // W...
     }
-
-    // If it's a DOI in URL form, extract the DOI
     var doiMatch = s.match(/10\.\d{4,9}\/\S+/i);
     if (doiMatch) {
-      var doi = doiMatch[0].replace(/[">)\]]+$/g, ""); // trim trailing punctuation
+      var doi = doiMatch[0].replace(/[">)\]]+$/g, "");
       return "doi:" + doi;
     }
-
-    // If it's prefixed doi:
     if (/^doi:/i.test(s)) return s;
-
-    // Bare DOI
     if (/^10\.\d{4,9}\/\S+/i.test(s)) return "doi:" + s;
-
-    // Otherwise assume it is an OpenAlex Work ID (W... or similar)
     return s;
   }
 
@@ -75,7 +63,6 @@
 
   async function fetchCitedPapers(refs){
     if (!Array.isArray(refs) || !refs.length) return [];
-    // OpenAlex accepts pipe-separated IDs (OpenAlex IDs only)
     var ids = refs.slice(0, 20).map(function(id){
       var tail = id.split("/").pop();
       return "https://openalex.org/" + tail;
@@ -92,12 +79,53 @@
     return Array.isArray(data.results) ? data.results : [];
   }
 
-  // ---------- Rendering ----------
+  // ---------- Formatting helpers ----------
+  function authorLinks(authorships, limit){
+    if (!Array.isArray(authorships) || !authorships.length) return "Unknown authors";
+    var out = [];
+    for (var i=0;i<authorships.length;i++){
+      if (limit && i >= limit) break;
+      var id = get(authorships[i],"author.id",null);
+      var name = escapeHtml(get(authorships[i],"author.display_name","Unknown"));
+      if (!id) { out.push(name); continue; }
+      var aid = id.split("/").pop();
+      out.push('<a href="profile.html?id='+aid+'">'+name+'</a>');
+    }
+    var more = (limit && authorships.length > limit) ? ' <span class="muted">+'+(authorships.length - limit)+' more</span>' : '';
+    return out.join(", ") + more;
+  }
+
+  function uniqueAffiliations(authorships, limit){
+    var set = [];
+    if (Array.isArray(authorships)){
+      for (var i=0;i<authorships.length;i++){
+        var insts = Array.isArray(authorships[i].institutions)?authorships[i].institutions:[];
+        for (var j=0;j<insts.length;j++){
+          var nm = get(insts[j],"display_name",null);
+          if (nm && set.indexOf(nm) === -1) set.push(nm);
+        }
+      }
+    }
+    var more = (limit && set.length > limit) ? ' <span class="muted">+'+(set.length - limit)+' more</span>' : '';
+    return (limit ? set.slice(0,limit) : set).join(", ") + more || "—";
+  }
+
+  function formatAbstract(idx){
+    if (!idx || typeof idx !== "object") return "<em>No abstract available.</em>";
+    var words = [];
+    Object.keys(idx).forEach(function(word){
+      var positions = idx[word] || [];
+      for (var i=0;i<positions.length;i++){ words[positions[i]] = word; }
+    });
+    return escapeHtml(words.join(" ") || "");
+  }
+
   function badge(href, text, className){
     if (!href) return "";
     return '<a class="badge ' + (className||"") + '" href="'+href+'" target="_blank" rel="noopener">'+escapeHtml(text)+'</a>';
   }
 
+  // ---------- Rendering ----------
   function buildHeader(p){
     var title = p.display_name || "Untitled";
     var year  = (p.publication_year != null ? p.publication_year : "n.d.");
@@ -116,46 +144,17 @@
       badge(p.id, "OpenAlex")
     ].filter(Boolean).join(" ");
 
+    // NEW: Authors + Affiliations shown in header (trimmed but linked)
+    var authorsLine = authorLinks(p.authorships, 8);
+    var affLine = uniqueAffiliations(p.authorships, 6);
+
     return (
       '<h1 class="paper-title">'+escapeHtml(title)+'</h1>' +
       '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+escapeHtml(venue)+'</p>' +
+      '<p class="meta-row"><strong>Authors:</strong> <span class="wrap-text">'+authorsLine+'</span></p>' +
+      '<p class="meta-row"><strong>Affiliations:</strong> <span class="wrap-text">'+escapeHtml(affLine)+'</span></p>' +
       '<p class="chips">'+chips+'</p>'
     );
-  }
-
-  function formatAuthors(authorships){
-    if (!Array.isArray(authorships) || !authorships.length) return "Unknown authors";
-    return authorships.map(function(a){
-      var id = get(a,"author.id",null);
-      var name = escapeHtml(get(a,"author.display_name","Unknown"));
-      if (!id) return name;
-      var aid = id.split("/").pop();
-      return '<a href="profile.html?id='+aid+'">'+name+'</a>';
-    }).join(", ");
-  }
-
-  function formatAffiliations(authorships){
-    if (!Array.isArray(authorships)) return "—";
-    var acc = [];
-    for (var i=0;i<authorships.length;i++){
-      var insts = Array.isArray(authorships[i].institutions) ? authorships[i].institutions : [];
-      for (var j=0;j<insts.length;j++){
-        var nm = get(insts[j],"display_name",null);
-        if (nm && acc.indexOf(nm) === -1) acc.push(nm);
-      }
-    }
-    return acc.length ? acc.join(", ") : "—";
-  }
-
-  function formatAbstract(idx){
-    if (!idx || typeof idx !== "object") return "<em>No abstract available.</em>";
-    var words = [];
-    Object.keys(idx).forEach(function(word){
-      var positions = idx[word] || [];
-      for (var i=0;i<positions.length;i++){ words[positions[i]] = word; }
-    });
-    var text = words.join(" ");
-    return escapeHtml(text || "");
   }
 
   function renderPaper(p){
@@ -166,18 +165,6 @@
     $("abstractBlock").innerHTML = (
       '<h2>Abstract</h2>' +
       '<p>' + formatAbstract(p.abstract_inverted_index) + '</p>'
-    );
-
-    // Authors
-    $("authorsBlock").innerHTML = (
-      '<h2>Authors</h2>' +
-      '<p>' + formatAuthors(p.authorships) + '</p>'
-    );
-
-    // Affiliations
-    $("affiliationsBlock").innerHTML = (
-      '<h2>Affiliations</h2>' +
-      '<p>' + escapeHtml(formatAffiliations(p.authorships)) + '</p>'
     );
 
     // Research objects (datasets / software) from locations/sources when available
@@ -227,7 +214,6 @@
     var authorships = Array.isArray(p.authorships) ? p.authorships : [];
     var authors = authorships.map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean);
     var firstAuthorLast = authors.length ? (authors[0].split(" ").slice(-1)[0]) : "Author";
-
     var venue = get(p,"host_venue.display_name",null) || get(p,"primary_location.source.display_name","");
 
     var apaFull = (authors.join(", ")) + " ("+year+"). " + (p.display_name||"") + ". " + (venue||"") + (p.doi ? ". https://doi.org/" + p.doi.replace(/^doi:/i,"") : "");
@@ -235,7 +221,7 @@
 
     return '' +
       '<p><strong>APA:</strong> <span id="apaFull">'+escapeHtml(apaFull)+'</span> <button class="btn btn-secondary btn-xs" data-copy="#apaFull">Copy</button></p>' +
-      '<p><strong>In‑text:</strong> <span id="apaIn">'+escapeHtml(inText)+'</span> <button class="btn btn-secondary btn-xs" data-copy="#apaIn">Copy</button></p>';
+      '<p><strong>In-text:</strong> <span id="apaIn">'+escapeHtml(inText)+'</span> <button class="btn btn-secondary btn-xs" data-copy="#apaIn">Copy</button></p>';
   }
 
   function enableCopyButtons(){
@@ -311,27 +297,30 @@
       var paper = await fetchPaperData(rawId);
       renderPaper(paper);
 
-      // sidebar: related
+      // related items (now in MAIN, under graph)
       var cited = await fetchCitedPapers(paper.referenced_works || []);
       var citing = await fetchCitingPapers(rawId);
 
-      // Related list
+      // Graph
+      renderGraph(paper, cited, citing);
+
+      // Related block (full-width)
       var relatedHtml = [];
-      var joinFew = (cited.slice(0,6).concat(citing.slice(0,6))).slice(0,12);
+      var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
       for (var i=0;i<joinFew.length;i++){
         var w = joinFew[i];
         var wid = w.id ? w.id.split("/").pop() : "";
         relatedHtml.push(
-          '<article class="result-card small">' +
-            '<h4><a href="paper.html?id='+wid+'">'+escapeHtml(w.display_name || "Untitled")+'</a></h4>' +
-            '<p class="meta"><span class="muted">'+(w.publication_year!=null?w.publication_year:"n.d.")+'</span> · '+escapeHtml(get(w,"host_venue.display_name", get(w,"primary_location.source.display_name","Unknown venue")) ) +'</p>' +
+          '<article class="result-card">' +
+            '<h3><a href="paper.html?id='+wid+'">'+escapeHtml(w.display_name || "Untitled")+'</a></h3>' +
+            '<p class="meta"><span class="muted">'+(w.publication_year!=null?w.publication_year:"n.d.")+
+            '</span> · <strong>Published in:</strong> '+
+            escapeHtml(get(w,"host_venue.display_name", get(w,"primary_location.source.display_name","Unknown venue")) )+
+            '</p>' +
           '</article>'
         );
       }
-      $("relatedBlock").innerHTML = relatedHtml.length ? relatedHtml.join("") : "<p class='muted'>No related papers found.</p>";
-
-      // graph
-      renderGraph(paper, cited, citing);
+      $("relatedBlock").innerHTML = '<h2>Related papers</h2>' + (relatedHtml.length ? relatedHtml.join("") : "<p class='muted'>No related papers found.</p>");
 
       // enable copy buttons
       enableCopyButtons();

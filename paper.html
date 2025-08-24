@@ -15,7 +15,6 @@
 <body data-page="paper">
   <a class="skip-link" href="#main">Skip to content</a>
 
-  <!-- Reuse the same nav from profile for consistency -->
   <nav class="app-nav" role="navigation" aria-label="Primary">
     <div class="nav-inner container">
       <div class="logo">
@@ -43,12 +42,9 @@
   </nav>
 
   <main id="main" class="container">
-    <!-- TOP SECTION (title + meta badges) -->
+    <!-- TOP HEADER (title + meta + authors + affiliations + badges) -->
     <section class="panel">
-      <div id="paperHeader">
-        <!-- Filled by JS: title, year, venue, OA/DOI badges -->
-        Loading paper...
-      </div>
+      <div id="paperHeader">Loading paper...</div>
     </section>
 
     <!-- MAIN + SIDEBAR -->
@@ -56,10 +52,9 @@
       <!-- Main column -->
       <section class="panel main-col" id="paperMain">
         <section class="paper-section" id="abstractBlock"></section>
-        <section class="paper-section" id="authorsBlock"></section>
-        <section class="paper-section" id="affiliationsBlock"></section>
         <section class="paper-section" id="objectsBlock"></section>
         <section class="paper-section" id="graphBlock"></section>
+        <section class="paper-section" id="relatedBlock"></section> <!-- moved here -->
       </section>
 
       <!-- Sidebar -->
@@ -78,11 +73,6 @@
           <h3>Citation</h3>
           <div id="citationBlock">—</div>
         </section>
-
-        <section class="panel">
-          <h3>Related papers</h3>
-          <div id="relatedBlock">—</div>
-        </section>
       </aside>
     </div>
   </main>
@@ -95,8 +85,7 @@
     </div>
   </footer>
 
-  <!-- Only what this page needs -->
   <script src="scripts/search.js" defer></script>
-  <script src="scripts/paper.js?v=1" defer></script>
+  <script src="scripts/paper.js?v=2" defer></script>
 </body>
 </html>
