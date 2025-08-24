@@ -18,7 +18,7 @@ function escapeHtml(str = "") {
 // Authors
 async function fetchAuthors(query) {
   try {
-    const res = await fetch(`${API_BASE}/authors?search=${encodeURIComponent(query)}&per-page=5`);
+    const res = await fetch(`${API_BASE}/authors?search=${encodeURIComponent(query)}&per_page=5`);
     const data = await res.json();
     return data.results || [];
   } catch (err) {
@@ -33,13 +33,13 @@ async function fetchPapers(query, authorIds = [], page = 1) {
   try {
     // Author-constrained works
     for (const authorId of authorIds) {
-      const res = await fetch(`${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}&per-page=5&page=${page}`);
+      const res = await fetch(`${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}&per_page=5&page=${page}`);
       const data = await res.json();
       works = works.concat(data.results || []);
     }
 
     // General search
-    const res = await fetch(`${API_BASE}/works?search=${encodeURIComponent(query)}&per-page=100&page=${page}`);
+    const res = await fetch(`${API_BASE}/works?search=${encodeURIComponent(query)}&per_page=100&page=${page}`);
     const data = await res.json();
     const generalWorks = data.results || [];
 
@@ -62,7 +62,7 @@ async function fetchPapers(query, authorIds = [], page = 1) {
 // Topics
 async function fetchTopics(query) {
   try {
-    const res = await fetch(`${API_BASE}/concepts?search=${encodeURIComponent(query)}&per-page=5`);
+    const res = await fetch(`${API_BASE}/concepts?search=${encodeURIComponent(query)}&per_page=5`);
     const data = await res.json();
     return data.results || [];
   } catch (err) {

@@ -64,25 +64,25 @@ router.get('/search', async (req, res) => {
   const includeWorks = req.query.include_works !== 'false';
   const includeConcepts = req.query.include_concepts !== 'false';
 
-  // Build requests (OpenAlex expects 'per-page', not 'per_page')
+  // Build requests (OpenAlex expects 'per_page')
   const tasks = [];
   if (includeAuthors) {
     tasks.push(
-      getOpenAlex('/authors', { search: q, 'per-page': 5, page })
+      getOpenAlex('/authors', { search: q, 'per_page': 5, page })
         .then(d => ({ ok: true, type: 'authors', data: d }))
         .catch(e => ({ ok: false, type: 'authors', error: e?.message || 'authors failed' }))
     );
   }
   if (includeWorks) {
     tasks.push(
-      getOpenAlex('/works', { search: q, 'per-page': perPage, page })
+      getOpenAlex('/works', { search: q, 'per_page': perPage, page })
         .then(d => ({ ok: true, type: 'works', data: d }))
         .catch(e => ({ ok: false, type: 'works', error: e?.message || 'works failed' }))
     );
   }
   if (includeConcepts) {
     tasks.push(
-      getOpenAlex('/concepts', { search: q, 'per-page': 5, page })
+      getOpenAlex('/concepts', { search: q, 'per_page': 5, page })
         .then(d => ({ ok: true, type: 'concepts', data: d }))
         .catch(e => ({ ok: false, type: 'concepts', error: e?.message || 'concepts failed' }))
     );

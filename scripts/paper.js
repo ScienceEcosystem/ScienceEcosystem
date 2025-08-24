@@ -94,7 +94,7 @@ async function fetchCitedPapers(refs) {
 }
 
 async function fetchCitingPapers(paperId) {
-    const res = await fetch(`https://api.openalex.org/works?filter=cites:${paperId}&per-page=20`);
+    const res = await fetch(`https://api.openalex.org/works?filter=cites:${paperId}&per_page=20`);
     if (!res.ok) return [];
     return (await res.json()).results || [];
 }
