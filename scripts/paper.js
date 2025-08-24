@@ -72,12 +72,16 @@
     return Array.isArray(data.results) ? data.results : [];
   }
 
-  async function fetchCitingPapers(paperId){
-    var id = normalizePaperId(paperId).replace(/^https?:\/\/openalex\.org\//i, "");
-    var url = API + "/works?filter=cites:" + encodeURIComponent(id) + "&per_page=20";
-    var data = await getJSON(url);
-    return Array.isArray(data.results) ? data.results : [];
-  }
+ async function fetchCitingPapers(paperOpenAlexIdOrUrl){
+  // expects something like "https://openalex.org/W2741809807" or "W2741809807"
+  var s = String(paperOpenAlexIdOrUrl || "");
+  // strip URL prefix if present
+  var idTail = s.replace(/^https?:\/\/openalex\.org\//i, "");
+  var url = API + "/works?filter=cites:" + encodeURIComponent(idTail) + "&per_page=20";
+  var data = await getJSON(url);
+  return Array.isArray(data.results) ? data.results : [];
+}
+
 
   // ---------- Formatting helpers ----------
   function authorLinks(authorships, limit){
@@ -286,50 +290,58 @@
   }
 
   // ---------- Boot ----------
-  async function boot(){
-    var rawId = getParam("id");
-    if (!rawId) {
-      $("paperHeader").innerHTML = "<p class='muted'>No paper specified.</p>";
-      return;
-    }
-
-    try {
-      var paper = await fetchPaperData(rawId);
-      renderPaper(paper);
-
-      // related items (now in MAIN, under graph)
-      var cited = await fetchCitedPapers(paper.referenced_works || []);
-      var citing = await fetchCitingPapers(rawId);
-
-      // Graph
-      renderGraph(paper, cited, citing);
-
-      // Related block (full-width)
-      var relatedHtml = [];
-      var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
-      for (var i=0;i<joinFew.length;i++){
-        var w = joinFew[i];
-        var wid = w.id ? w.id.split("/").pop() : "";
-        relatedHtml.push(
-          '<article class="result-card">' +
-            '<h3><a href="paper.html?id='+wid+'">'+escapeHtml(w.display_name || "Untitled")+'</a></h3>' +
-            '<p class="meta"><span class="muted">'+(w.publication_year!=null?w.publication_year:"n.d.")+
-            '</span> · <strong>Published in:</strong> '+
-            escapeHtml(get(w,"host_venue.display_name", get(w,"primary_location.source.display_name","Unknown venue")) )+
-            '</p>' +
-          '</article>'
-        );
-      }
-      $("relatedBlock").innerHTML = '<h2>Related papers</h2>' + (relatedHtml.length ? relatedHtml.join("") : "<p class='muted'>No related papers found.</p>");
-
-      // enable copy buttons
-      enableCopyButtons();
-    } catch (e) {
-      console.error(e);
-      $("paperHeader").innerHTML = "<p class='muted'>Error loading paper details.</p>";
-      $("paperMain").innerHTML = "";
-    }
+ async function boot(){
+  var rawId = getParam("id");
+  if (!rawId) {
+    $("paperHeader").innerHTML = "<p class='muted'>No paper specified.</p>";
+    return;
   }
+
+  try {
+    var paper = await fetchPaperData(rawId);
+    renderPaper(paper);
+
+    // fetch extras, but never let failures kill the page
+    var cited = [], citing = [];
+    try { cited = await fetchCitedPapers(paper.referenced_works || []); }
+    catch(e){ console.warn("cited fetch failed:", e); }
+
+    try { citing = await fetchCitingPapers(paper.id); }  // <-- use OpenAlex id, not the raw URL param
+    catch(e){ console.warn("citing fetch failed:", e); }
+
+    // Graph (resilient even if one list is empty)
+    renderGraph(paper, cited, citing);
+
+    // Related block
+    var relatedHtml = [];
+    var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
+    for (var i=0;i<joinFew.length;i++){
+      var w = joinFew[i];
+      var wid = w.id ? w.id.split("/").pop() : "";
+      relatedHtml.push(
+        '<article class="result-card">' +
+          '<h3><a href="paper.html?id='+wid+'">'+escapeHtml(w.display_name || "Untitled")+'</a></h3>' +
+          '<p class="meta"><span class="muted">'+(w.publication_year!=null?w.publication_year:"n.d.")+
+          '</span> · <strong>Published in:</strong> '+
+          escapeHtml(get(w,"host_venue.display_name", get(w,"primary_location.source.display_name","Unknown venue")) )+
+          '</p>' +
+        '</article>'
+      );
+    }
+    $("relatedBlock").innerHTML =
+      '<h2>Related papers</h2>' +
+      (relatedHtml.length ? relatedHtml.join("") : "<p class='muted'>No related papers found.</p>");
+
+    // enable copy buttons
+    enableCopyButtons();
+  } catch (e) {
+    console.error(e);
+    // Only show a soft message; keep whatever rendered
+    $("paperHeader").innerHTML = "<p class='muted'>Error loading paper details.</p>";
+    // Do NOT clear the main content here anymore
+  }
+}
+
 
   document.addEventListener("DOMContentLoaded", boot);
 })();
