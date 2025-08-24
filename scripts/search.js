@@ -9,10 +9,11 @@
     window.location.href = "search.html?q=" + encodeURIComponent(q);
   };
 
-  // --- run only on search page (but still allow auto-run if ?q= is present) ---
+  // --- decide if we should run the search experience on this page ---
   var hasQParam = new URLSearchParams(location.search).has("q");
-  var isSearchPage = document.body && document.body.dataset && document.body.dataset.page === "search";
-  if (!isSearchPage && !hasQParam) return;
+  var hasSearchInput = !!(document.getElementById("unifiedSearchInput") || document.getElementById("searchInput"));
+  var shouldRun = hasQParam || hasSearchInput || !!document.getElementById("unifiedSearchResults");
+  if (!shouldRun) return; // don't touch other pages
 
   // ---------- constants & helpers ----------
   var API = "https://api.openalex.org";
@@ -20,8 +21,8 @@
   var PAGE_SIZE = 25;
 
   function $(id){ return document.getElementById(id); }
-  function escapeHtml(str){ str=(str==null?"":String(str)); return str.replace(/[&<>'"]/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;" }[c])); }
-  function get(obj, path, fb){ try{ var p=path.split("."),cur=obj; for(var i=0;i<p.length;i++){ if(cur==null) return fb; cur=cur[p[i]]; } return cur==null?fb:cur; }catch(e){ return fb; } }
+  function escapeHtml(str){ str=(str==null?"":String(str)); return str.replace(/[&<>'"]/g, function(c){ return ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]; }); }
+  function get(obj, path, fb){ try{ var p=path.split("."), cur=obj; for(var i=0;i<p.length;i++){ if(cur==null) return fb; cur=cur[p[i]]; } return cur==null?fb:cur; }catch(e){ return fb; } }
   function addMailto(u){ var url=new URL(u, API); if(!url.searchParams.get("mailto")) url.searchParams.set("mailto", MAILTO); return url.toString(); }
   async function getJSON(url){
     var withMt = addMailto(url);
@@ -30,7 +31,7 @@
         var res = await fetch(withMt, { headers:{ "Accept":"application/json" }});
         if (res.status === 429){
           var ra = parseInt(res.headers.get("Retry-After")||"1",10);
-          await new Promise(r=>setTimeout(r, Math.min(ra,5)*1000));
+          await new Promise(function(r){ setTimeout(r, Math.min(ra,5)*1000); });
           continue;
         }
         if (!res.ok) throw new Error(res.status+" "+res.statusText);
@@ -47,72 +48,7 @@
   var totalResults = 0;
   var seen = Object.create(null);
 
-  // ---------- fetchers ----------
-  async function fetchAuthors(query){
-    try {
-      var url = API + "/authors?search=" + encodeURIComponent(query)
-        + "&per_page=5"
-        + "&select=id,display_name,last_known_institution";
-      var data = await getJSON(url);
-      return data.results || [];
-    } catch(e){ console.warn("Author fetch failed", e); return []; }
-  }
-
-  async function fetchTopics(query){
-    try {
-      var url = API + "/concepts?search=" + encodeURIComponent(query)
-        + "&per_page=5"
-        + "&select=id,display_name";
-      var data = await getJSON(url);
-      return data.results || [];
-    } catch(e){ console.warn("Topic fetch failed", e); return []; }
-  }
-
-  async function fetchPapers(query, authorIds, page){
-    var out = [];
-    try {
-      // author-scoped pulls
-      if (Array.isArray(authorIds) && authorIds.length){
-        for (var i=0;i<authorIds.length;i++){
-          var aid = authorIds[i];
-          var u = API + "/works?filter=author.id:" + encodeURIComponent(aid)
-            + "&per_page=" + PAGE_SIZE + "&page=" + page
-            + "&select=" + [
-              "id","ids","doi","display_name","publication_year",
-              "host_venue","primary_location","best_oa_location","open_access",
-              "authorships","abstract_inverted_index","cited_by_count"
-            ].join(",");
-          var d = await getJSON(u);
-          if (Array.isArray(d.results)) out = out.concat(d.results);
-        }
-      }
-      // general search
-      var url = API + "/works?search=" + encodeURIComponent(query)
-        + "&per_page=" + PAGE_SIZE + "&page=" + page
-        + "&select=" + [
-          "id","ids","doi","display_name","publication_year",
-          "host_venue","primary_location","best_oa_location","open_access",
-          "authorships","abstract_inverted_index","cited_by_count"
-        ].join(",");
-      var data = await getJSON(url);
-      var general = Array.isArray(data.results) ? data.results : [];
-      if (page === 1) totalResults = get(data,"meta.count",general.length) || general.length;
-
-      // dedupe by OpenAlex id (fallback keys if needed)
-      var merged = out.concat(general);
-      var deduped = [];
-      for (var j=0;j<merged.length;j++){
-        var w = merged[j];
-        var key = (w.id || get(w,"ids.openalex","") || get(w,"doi","") || get(w,"display_name","")) + "";
-        if (seen[key]) continue;
-        seen[key] = 1;
-        deduped.push(w);
-      }
-      return deduped;
-    } catch(e){ console.warn("Paper fetch failed", e); return []; }
-  }
-
-  // ---------- renderers ----------
+  // ---------- ensure containers (papers always render; authors/topics only if their targets exist) ----------
   function ensureResultsShell(){
     var results = $("unifiedSearchResults");
     if (!results) {
@@ -130,11 +66,82 @@
     return results;
   }
 
+  // ---------- fetchers ----------
+  async function fetchAuthors(query){
+    try {
+      var url = API + "/authors?search=" + encodeURIComponent(query)
+        + "&per_page=5"
+        + "&select=id,display_name,last_known_institution";
+      var data = await getJSON(url);
+      return data.results || [];
+    } catch(e){ return []; }
+  }
+
+  async function fetchTopics(query){
+    try {
+      var url = API + "/concepts?search=" + encodeURIComponent(query)
+        + "&per_page=5"
+        + "&select=id,display_name";
+      var data = await getJSON(url);
+      return data.results || [];
+    } catch(e){ return []; }
+  }
+
+  async function fetchPapers(query, authorIds, page){
+    var all = [];
+    try {
+      // author-scoped pulls
+      if (Array.isArray(authorIds) && authorIds.length){
+        for (var i=0;i<authorIds.length;i++){
+          var aid = authorIds[i];
+          var urlA = API + "/works?filter=author.id:" + encodeURIComponent(aid)
+            + "&per_page=" + String(PAGE_SIZE)
+            + "&page=" + String(page)
+            + "&select=" + [
+              "id","ids","doi","display_name","publication_year",
+              "host_venue","primary_location","best_oa_location","open_access",
+              "authorships","abstract_inverted_index","cited_by_count"
+            ].join(",");
+          var dataA = await getJSON(urlA);
+          if (Array.isArray(dataA.results)) all = all.concat(dataA.results);
+        }
+      }
+
+      // general search
+      var url = API + "/works?search=" + encodeURIComponent(query)
+        + "&per_page=" + String(PAGE_SIZE)
+        + "&page=" + String(page)
+        + "&select=" + [
+          "id","ids","doi","display_name","publication_year",
+          "host_venue","primary_location","best_oa_location","open_access",
+          "authorships","abstract_inverted_index","cited_by_count"
+        ].join(",");
+      var data = await getJSON(url);
+      var general = Array.isArray(data.results) ? data.results : [];
+      if (page === 1) totalResults = get(data,"meta.count",general.length) || general.length;
+
+      // dedupe
+      var merged = all.concat(general);
+      var out = [];
+      for (var j=0;j<merged.length;j++){
+        var w = merged[j];
+        var key = (w.id || get(w,"ids.openalex","") || get(w,"doi","") || get(w,"display_name","")) + "";
+        if (seen[key]) continue;
+        seen[key] = 1;
+        out.push(w);
+      }
+      return out;
+    } catch(e){
+      // soft fail: return what we have
+      return [];
+    }
+  }
+
+  // ---------- renderers ----------
   function renderAuthorsList(authors){
     var el = $("researcherList");
-    if (!el) return;
-    if (!authors.length){ el.innerHTML = '<li class="muted">No authors found.</li>'; return; }
-    el.innerHTML = authors.map(function(a){
+    if (!el) return; // page might not have authors column
+    el.innerHTML = authors.length ? authors.map(function(a){
       var id = (a.id||"").split("/").pop();
       var inst = get(a,"last_known_institution.display_name","No affiliation");
       return (
@@ -143,23 +150,23 @@
           '<div class="muted">'+escapeHtml(inst)+'</div>' +
         '</li>'
       );
-    }).join("");
+    }).join("") : '<li class="muted">No authors found.</li>';
   }
 
   function renderTopicsList(topics){
     var el = $("topicList");
-    if (!el) return;
-    if (!topics.length){ el.innerHTML = '<li class="muted">No topics found.</li>'; return; }
-    el.innerHTML = topics.map(function(t){
+    if (!el) return; // page might not have topics column
+    el.innerHTML = topics.length ? topics.map(function(t){
       var id = (t.id||"").split("/").pop();
       return '<li class="list-item list-card" onclick="location.href=\'topic.html?id='+id+'\'" tabindex="0" role="button" aria-label="'+escapeHtml(t.display_name)+'">'+escapeHtml(t.display_name)+'</li>';
-    }).join("");
+    }).join("") : '<li class="muted">No topics found.</li>';
   }
 
   function renderPapers(works, append){
     var shell = ensureResultsShell();
     var list = $("papersList");
     if (!list) return;
+
     if (!append) list.innerHTML = "";
 
     var useComp = (window.SE && SE.components && typeof SE.components.renderPaperCard === "function");
@@ -167,7 +174,6 @@
       if (useComp) {
         list.insertAdjacentHTML("beforeend", SE.components.renderPaperCard(works[i]));
       } else {
-        // fallback card
         var w = works[i];
         var idTail = (w.id||"").split("/").pop();
         var title = w.display_name || "Untitled work";
@@ -189,7 +195,6 @@
     }
     if (useComp) SE.components.enhancePaperCards(list);
 
-    // count + pagination
     var countEl = $("paperCount");
     if (countEl) countEl.textContent = (totalResults||0).toLocaleString();
 
@@ -214,28 +219,42 @@
     }
   }
 
-  // ---------- search flow ----------
+  // ---------- flow ----------
   async function runSearch(query){
     currentQuery = query;
     currentPage = 1;
     seen = Object.create(null);
 
-    var results = $("unifiedSearchResults"); if (results) results.innerHTML = "<p>Loading papers...</p>";
+    var results = $("unifiedSearchResults");
+    if (results) results.innerHTML = "<p>Loading papers...</p>";
     var rList = $("researcherList"); if (rList) rList.innerHTML = '<li class="muted">Loading authors...</li>';
     var tList = $("topicList"); if (tList) tList.innerHTML = '<li class="muted">Loading topics...</li>';
 
-    var authors = await fetchAuthors(query);
+    // authors first so we can boost author-scoped pulls
+    var authors = [];
+    try { authors = await fetchAuthors(query); } catch(e){}
     renderAuthorsList(authors);
     currentAuthorIds = authors.map(function(a){ return a.id; });
 
-    var papers = await fetchPapers(query, currentAuthorIds, currentPage);
-    renderPapers(papers, false);
+    // papers
+    try {
+      var papers = await fetchPapers(query, currentAuthorIds, currentPage);
+      renderPapers(papers, false);
+    } catch(e){
+      ensureResultsShell();
+      $("papersList").innerHTML = '<p class="muted">Could not load papers.</p>';
+    }
 
-    var topics = await fetchTopics(query);
-    renderTopicsList(topics);
+    // topics
+    try {
+      var topics = await fetchTopics(query);
+      renderTopicsList(topics);
+    } catch(e){
+      var t = $("topicList"); if (t) t.innerHTML = '<li class="muted">Could not load topics.</li>';
+    }
   }
 
-  // expose for page button/enter
+  // expose for the on-page button / Enter key
   window.handleUnifiedSearch = function(){
     var input = $("unifiedSearchInput") || $("searchInput");
     var q = input ? (input.value || "").trim() : "";
@@ -251,7 +270,7 @@
 
     if (q) {
       if (input) input.value = q;
-      runSearch(q); // <-- auto-run with URL param even if the input isn't present
+      runSearch(q); // auto-run with URL param
     }
 
     if (input) {
