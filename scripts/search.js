@@ -54,19 +54,22 @@
   function idTail(anyId){
     if (!anyId) return "";
     var s = String(anyId);
-    // works for raw ID or full URL
     var parts = s.split("/");
     return parts[parts.length - 1];
   }
 
-  function showFatal(msg){
+  function showBanner(kind, msg){
     var container = $("unifiedSearchResults") || $("main") || document.body;
     var box = document.createElement("div");
-    box.className = "panel error";
-    box.style.border = "1px solid #e33"; box.style.padding = "12px"; box.style.marginBottom = "12px";
-    box.innerHTML = '<strong>Search error</strong><br><span class="muted">'+escapeHtml(String(msg))+'</span>';
+    box.className = "panel " + (kind === "error" ? "error" : "info");
+    box.style.border = kind === "error" ? "1px solid #e33" : "1px solid #999";
+    box.style.padding = "12px"; box.style.marginBottom = "12px";
+    box.innerHTML = (kind === "error"
+      ? '<strong>Search error</strong><br><span class="muted">'+escapeHtml(String(msg))+'</span>'
+      : '<strong>Notice</strong><br><span class="muted">'+escapeHtml(String(msg))+'</span>');
     container.prepend(box);
   }
+  function showFatal(msg){ showBanner("error", msg); }
 
   // ---------- state ----------
   var currentPage = 1;
@@ -75,7 +78,7 @@
   var totalResults = 0;
   var seen = Object.create(null);
 
-  // ---------- ensure containers (papers always render; authors/topics only if their targets exist) ----------
+  // ---------- ensure containers ----------
   function ensureResultsShell(){
     var results = $("unifiedSearchResults");
     if (!results) {
@@ -93,31 +96,46 @@
     return results;
   }
 
-  // ---------- fetchers ----------
+  // ---------- Fallback-friendly fetchers ----------
   async function fetchAuthors(query){
-    try {
-      var url = API + "/authors?search=" + encodeURIComponent(query)
-        + "&per_page=5"
-        + "&select=id,display_name,last_known_institution";
-      var data = await getJSON(url);
-      return data.results || [];
-    } catch(e){
-      console.error("fetchAuthors failed", e);
-      return [];
+    // Try canonical search= first, then display_name.search= fallback
+    var endpoints = [
+      API + "/authors?search=" + encodeURIComponent(query) + "&per_page=5&select=id,display_name,last_known_institution",
+      API + "/authors?filter=display_name.search:" + encodeURIComponent(query) + "&per_page=5&select=id,display_name,last_known_institution"
+    ];
+    for (var i=0;i<endpoints.length;i++){
+      try{
+        var data = await getJSON(endpoints[i]);
+        var results = data && Array.isArray(data.results) ? data.results : [];
+        console.log("[authors] endpoint", i, "count", results.length);
+        if (results.length) return results;
+        if (i === endpoints.length - 1) return results; // return empty if last try
+      }catch(e){
+        console.warn("fetchAuthors attempt", i, "failed", e);
+        if (i === endpoints.length - 1) return [];
+      }
     }
+    return [];
   }
 
   async function fetchTopics(query){
-    try {
-      var url = API + "/concepts?search=" + encodeURIComponent(query)
-        + "&per_page=5"
-        + "&select=id,display_name";
-      var data = await getJSON(url);
-      return data.results || [];
-    } catch(e){
-      console.error("fetchTopics failed", e);
-      return [];
+    var endpoints = [
+      API + "/concepts?search=" + encodeURIComponent(query) + "&per_page=5&select=id,display_name",
+      API + "/concepts?filter=display_name.search:" + encodeURIComponent(query) + "&per_page=5&select=id,display_name"
+    ];
+    for (var i=0;i<endpoints.length;i++){
+      try{
+        var data = await getJSON(endpoints[i]);
+        var results = data && Array.isArray(data.results) ? data.results : [];
+        console.log("[topics] endpoint", i, "count", results.length);
+        if (results.length) return results;
+        if (i === endpoints.length - 1) return results;
+      }catch(e){
+        console.warn("fetchTopics attempt", i, "failed", e);
+        if (i === endpoints.length - 1) return [];
+      }
     }
+    return [];
   }
 
   async function fetchPapers(query, authorIds, page){
@@ -138,27 +156,52 @@
             ].join(",");
           try{
             var dataA = await getJSON(urlA);
-            if (Array.isArray(dataA.results)) collated = collated.concat(dataA.results);
+            var resA = Array.isArray(dataA.results) ? dataA.results : [];
+            console.log("[works by author]", aidTail, "page", page, "count", resA.length);
+            collated = collated.concat(resA);
           }catch(e){
             console.warn("author-scoped works failed for", aidTail, e);
           }
         }
       }
 
-      // general search
-      var url = API + "/works?search=" + encodeURIComponent(query)
-        + "&per_page=" + String(PAGE_SIZE)
-        + "&page=" + String(page)
-        + "&select=" + [
-          "id","ids","doi","display_name","publication_year",
-          "host_venue","primary_location","best_oa_location","open_access",
-          "authorships","abstract_inverted_index","cited_by_count"
-        ].join(",");
-      var data = await getJSON(url);
-      var general = Array.isArray(data.results) ? data.results : [];
+      // general search (with fallback if needed)
+      var endpoints = [
+        API + "/works?search=" + encodeURIComponent(query)
+          + "&per_page=" + String(PAGE_SIZE)
+          + "&page=" + String(page)
+          + "&select=" + [
+            "id","ids","doi","display_name","publication_year",
+            "host_venue","primary_location","best_oa_location","open_access",
+            "authorships","abstract_inverted_index","cited_by_count"
+          ].join(","),
+        API + "/works?filter=title.search:" + encodeURIComponent(query)
+          + "&per_page=" + String(PAGE_SIZE)
+          + "&page=" + String(page)
+          + "&select=" + [
+            "id","ids","doi","display_name","publication_year",
+            "host_venue","primary_location","best_oa_location","open_access",
+            "authorships","abstract_inverted_index","cited_by_count"
+          ].join(",")
+      ];
+
+      var general = [];
+      var metaCount = null;
+      for (var ei=0; ei<endpoints.length; ei++){
+        try{
+          var data = await getJSON(endpoints[ei]);
+          general = Array.isArray(data.results) ? data.results : [];
+          metaCount = get(data,"meta.count", null);
+          console.log("[works general] endpoint", ei, "page", page, "count", general.length, "meta.count", metaCount);
+          if (general.length || metaCount != null) break; // accept this attempt
+        }catch(e){
+          console.warn("works general attempt", ei, "failed", e);
+          if (ei === endpoints.length - 1) general = [];
+        }
+      }
 
       if (page === 1) {
-        totalResults = get(data,"meta.count",general.length) || general.length;
+        totalResults = (metaCount != null ? metaCount : (general.length || 0));
       }
 
       // dedupe by stable key
@@ -296,6 +339,9 @@
     // papers
     try {
       var papers = await fetchPapers(query, currentAuthorIds, currentPage);
+      if (!papers.length && !totalResults){
+        showBanner("info", "No papers found for “"+query+"”. Try refining your keywords.");
+      }
       renderPapers(papers, false);
     } catch(e){
       showFatal(e.message || e);
@@ -339,5 +385,12 @@
         if (e.key === "Enter"){ e.preventDefault(); window.handleUnifiedSearch(); }
       });
     }
+
+    // Dev hint if running from file:// (some browsers restrict fetch from file origins)
+    try {
+      if (location.protocol === "file:") {
+        console.warn("You are running from file:// — if you see CORS/network errors, serve the folder with a local web server (e.g. `python3 -m http.server`).");
+      }
+    } catch(_) {}
   });
 })();
