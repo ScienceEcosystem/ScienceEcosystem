@@ -26,7 +26,7 @@
       <div class="nav-center">
         <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
           <label class="visually-hidden" for="searchInput">Search</label>
-          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." />
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
         </form>
       </div>
 

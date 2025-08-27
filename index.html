@@ -45,7 +45,7 @@
 
       <form class="search-wrap" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
         <label class="visually-hidden" for="searchInput">Search</label>
-        <input id="searchInput" class="input" type="text" placeholder="Search papers, researchers, datasets..." />
+        <input id="searchInput" class="input" type="text" placeholder="Search papers, researchers, datasets..."onkeydown="if(event.key==='Enter') handleSearch('searchInput')" />
         <button class="btn btn-primary" type="submit">Search</button>
       </form>
 
