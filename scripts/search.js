@@ -1,4 +1,3 @@
-// scripts/search.js
 const $ = (id) => document.getElementById(id);
 const API_BASE = "https://api.openalex.org";
 
@@ -6,6 +5,7 @@ let currentPage = 1;
 let currentQuery = "";
 let currentAuthorIds = [];
 let totalResults = 0;
+let currentFilter = "relevance"; // default filter
 
 function escapeHtml(str = "") {
   return str.replace(/[&<>'"]/g, (c) =>
@@ -14,8 +14,6 @@ function escapeHtml(str = "") {
 }
 
 /* ---------- Fetch helpers ---------- */
-
-// Authors
 async function fetchAuthors(query) {
   try {
     const res = await fetch(`${API_BASE}/authors?search=${encodeURIComponent(query)}&per_page=5`);
@@ -27,13 +25,12 @@ async function fetchAuthors(query) {
   }
 }
 
-// Works (with optional author filters) + pagination
 async function fetchPapers(query, authorIds = [], page = 1) {
   let works = [];
   try {
     // Author-constrained works
     for (const authorId of authorIds) {
-      const res = await fetch(`${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}&per_page=5&page=${page}`);
+      const res = await fetch(`${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}&per_page=100&page=${page}`);
       const data = await res.json();
       works = works.concat(data.results || []);
     }
@@ -48,7 +45,7 @@ async function fetchPapers(query, authorIds = [], page = 1) {
     // Deduplicate by OpenAlex id
     const seen = new Set();
     return [...works, ...generalWorks].filter(w => {
-      const id = w.id || w.doi || w.title;
+      const id = w.id || w.doi || w.display_name;
       if (seen.has(id)) return false;
       seen.add(id);
       return true;
@@ -59,7 +56,6 @@ async function fetchPapers(query, authorIds = [], page = 1) {
   }
 }
 
-// Topics
 async function fetchTopics(query) {
   try {
     const res = await fetch(`${API_BASE}/concepts?search=${encodeURIComponent(query)}&per_page=5`);
@@ -72,10 +68,8 @@ async function fetchTopics(query) {
 }
 
 /* ---------- Render helpers ---------- */
-
 function provenanceChips(w) {
   const doi = w.doi ? `https://doi.org/${encodeURIComponent(w.doi)}` : null;
-  const openAlexUrl = w.id || null;
   const oaUrl = w.open_access?.oa_url || w.primary_location?.pdf_url || null;
   const venueUrl = w.primary_location?.source?.homepage_url || w.primary_location?.landing_page_url || null;
 
@@ -83,7 +77,6 @@ function provenanceChips(w) {
   if (doi) parts.push(`<a class="badge" href="${doi}" target="_blank" rel="noopener">DOI</a>`);
   if (oaUrl) parts.push(`<a class="badge badge-oa" href="${oaUrl}" target="_blank" rel="noopener">Open access</a>`);
   if (venueUrl) parts.push(`<a class="badge" href="${venueUrl}" target="_blank" rel="noopener">Source</a>`);
-  if (openAlexUrl) parts.push(`<a class="badge" href="${openAlexUrl}" target="_blank" rel="noopener">OpenAlex</a>`);
   return parts.join(" ");
 }
 
@@ -126,15 +119,29 @@ function renderPapers(works, append = false) {
   if (!append) {
     results.innerHTML = `
       <h2>Papers <span class="muted">(${totalResults.toLocaleString()} results)</span></h2>
+      <div id="filters">
+        <label>Sort by: 
+          <select id="paperFilter" onchange="changeFilter(this.value)">
+            <option value="relevance">Relevance</option>
+            <option value="citations">Citations</option>
+            <option value="year">Year</option>
+          </select>
+        </label>
+      </div>
       <div id="papersList"></div>
       <div id="pagination"></div>
     `;
   }
 
+  // Apply filtering
+  if (currentFilter === "citations") works.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
+  else if (currentFilter === "year") works.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
+  // relevance is default order from API
+
   const papersList = $("papersList");
   if (!papersList) return;
 
-  works.forEach((w, index) => {
+  works.forEach((w) => {
     const paperId = w.doi ? `doi:${encodeURIComponent(w.doi)}` : (w.id ? w.id.split("/").pop() : "");
     const authorsHtml = (w.authorships || [])
       .map(a => `<a href="profile.html?id=${a.author.id.split('/').pop()}">${escapeHtml(a.author.display_name)}</a>`)
@@ -144,11 +151,9 @@ function renderPapers(works, append = false) {
     const citations = w.cited_by_count || 0;
     const year = w.publication_year || "";
 
-    const number = ((currentPage - 1) * 100) + index + 1;
-
     papersList.insertAdjacentHTML("beforeend", `
       <article class="result-card">
-        <h3>${number}. <a href="paper.html?id=${paperId}">${escapeHtml(w.display_name || "Untitled work")}</a></h3>
+        <h3><a href="paper.html?id=${paperId}">${escapeHtml(w.display_name || "Untitled work")}</a></h3>
         <p class="meta">
           ${year ? `<span class="muted">${year}</span> · ` : ""}
           <strong>Published in:</strong> ${escapeHtml(venue)} ·
@@ -156,6 +161,7 @@ function renderPapers(works, append = false) {
         </p>
         <p><strong>Authors:</strong> ${authorsHtml || "Unknown authors"}</p>
         <p class="chips">${provenanceChips(w)}</p>
+        <button class="btn btn-secondary" onclick="addToLibrary('${paperId}')">Add to library</button>
       </article>
     `);
   });
@@ -177,8 +183,19 @@ function renderPapers(works, append = false) {
   }
 }
 
-/* ---------- Unified search flow ---------- */
+/* ---------- Filters ---------- */
+function changeFilter(filter) {
+  currentFilter = filter;
+  handleUnifiedSearch();
+}
 
+/* ---------- Library ---------- */
+function addToLibrary(paperId) {
+  // Placeholder: you can connect this to your backend or localStorage
+  alert(`Paper ${paperId} added to your library.`);
+}
+
+/* ---------- Unified search flow ---------- */
 async function handleUnifiedSearch() {
   const input = $("unifiedSearchInput");
   if (!input) return;
@@ -195,21 +212,18 @@ async function handleUnifiedSearch() {
   if (rList) rList.innerHTML = `<li class="muted">Loading authors...</li>`;
   if (tList) tList.innerHTML = `<li class="muted">Loading topics...</li>`;
 
-  // Authors
   const authors = await fetchAuthors(query);
   renderAuthors(authors);
 
-  // Papers
   currentAuthorIds = authors.map(a => a.id);
   const papers = await fetchPapers(query, currentAuthorIds, currentPage);
   renderPapers(papers);
 
-  // Topics
   const topics = await fetchTopics(query);
   renderTopics(topics);
 }
 
-// Redirector from any nav search box
+/* ---------- Redirect from nav search box ---------- */
 function handleSearch(inputId) {
   const input = $(inputId);
   if (!input) return;
@@ -219,9 +233,7 @@ function handleSearch(inputId) {
 }
 
 /* ---------- Init ---------- */
-
 document.addEventListener("DOMContentLoaded", () => {
-  // Run unified search if there is a query param
   const params = new URLSearchParams(window.location.search);
   const input = $("unifiedSearchInput");
 
@@ -230,7 +242,6 @@ document.addEventListener("DOMContentLoaded", () => {
     handleUnifiedSearch();
   }
 
-  // Enter key on the on-page input
   if (input) {
     input.addEventListener("keypress", (e) => {
       if (e.key === "Enter") {
