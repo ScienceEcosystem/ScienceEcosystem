@@ -20,9 +20,8 @@
   var currentAuthorIds = [];
   var totalResults = 0;
   var seen = Object.create(null);
-  var currentSort = "relevance"; // default sort
+  var currentSort = "relevance_score:desc"; // fixed default
   var currentYearFilter = "";
-  var currentCitationsFilter = "";
 
   // ---------- helpers ----------
   function $(id){ return document.getElementById(id); }
@@ -43,7 +42,7 @@
       `<div class="filters">
         <label>Sort by:
           <select id="sortSelect">
-            <option value="relevance">Relevance</option>
+            <option value="relevance_score:desc">Relevance</option>
             <option value="cited_by_count:desc">Most cited</option>
             <option value="publication_year:desc">Newest</option>
             <option value="publication_year:asc">Oldest</option>
@@ -86,7 +85,12 @@
       +"&per_page="+PAGE_SIZE+"&page="+page
       +"&sort="+encodeURIComponent(currentSort)
       +"&select=id,ids,doi,display_name,publication_year,host_venue,primary_location,best_oa_location,open_access,authorships,abstract_inverted_index,cited_by_count";
-    if (currentYearFilter) url += "&filter=publication_year:"+currentYearFilter;
+
+    // add filters only if present
+    var filters = [];
+    if (currentYearFilter) filters.push("publication_year:"+currentYearFilter);
+    if (filters.length) url += "&filter=" + filters.join(",");
+
     var data = await getJSON(url);
     if (page===1) totalResults = data.meta.count || 0;
     return data.results || [];
