@@ -349,40 +349,51 @@ body {
 .meta-row { margin: .25rem 0; }
 .meta-row .wrap-text { display: inline; }
 
-/* optional: make small cards tidy */
-.result-card.small h4,
-.result-card h3,
-.paper-title {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
 /* Card look (shared) */
 .result-card.paper-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 1rem 1rem 0.75rem 1rem;
   background: #fff;
   margin-bottom: 1rem;
   box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  justify-content: space-between;
 }
 
 .result-card.paper-card .card-title {
   margin: 0 0 .25rem 0;
 }
 
+/* Save button bottom right */
 .result-card.paper-card .btn-save {
-  position: absolute;
-  top: .75rem;
-  right: .75rem;
+  align-self: flex-end;
+  margin-top: auto;
   font-size: .85rem;
   padding: .25rem .5rem;
   border-radius: 9999px;
 }
 
+/* Abstract handling */
 .result-card.paper-card .abstract { margin-top: .35rem; }
-.result-card.paper-card .abs-full { display: inline; }
+
+.abs-short {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;  /* show only first line */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.abs-full {
+  display: none;
+}
+
+.abstract.expanded .abs-short { display: none; }
+.abstract.expanded .abs-full { display: inline; }
+
+/* Show/hide link button */
 .result-card.paper-card .link-btn {
   background: none;
   border: none;
@@ -393,11 +404,11 @@ body {
   color: #2563eb;
 }
 
-/* Keep sidebar text inside its boxes */
+/* Chips badges */
+.badge-oa { background: #e6ffed; border: 1px solid #b7f7c3; color: #047857; }
+
+/* Keep text inside sidebar panels */
 .side-col .panel, .side-col .panel * {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-
-/* Chips badges */
-.badge-oa { background: #e6ffed; border: 1px solid #b7f7c3; color: #047857; }
