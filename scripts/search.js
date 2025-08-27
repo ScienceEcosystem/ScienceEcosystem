@@ -136,35 +136,18 @@ function renderPapers(works, append = false) {
   // Apply filtering
   if (currentFilter === "citations") works.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
   else if (currentFilter === "year") works.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
-  // relevance is default order from API
+  // relevance = API order
 
   const papersList = $("papersList");
   if (!papersList) return;
 
-  works.forEach((w) => {
-    const paperId = w.doi ? `doi:${encodeURIComponent(w.doi)}` : (w.id ? w.id.split("/").pop() : "");
-    const authorsHtml = (w.authorships || [])
-      .map(a => `<a href="profile.html?id=${a.author.id.split('/').pop()}">${escapeHtml(a.author.display_name)}</a>`)
-      .join(", ");
-
-    const venue = w.host_venue?.display_name || "Unknown venue";
-    const citations = w.cited_by_count || 0;
-    const year = w.publication_year || "";
-
-    papersList.insertAdjacentHTML("beforeend", `
-      <article class="result-card">
-        <h3><a href="paper.html?id=${paperId}">${escapeHtml(w.display_name || "Untitled work")}</a></h3>
-        <p class="meta">
-          ${year ? `<span class="muted">${year}</span> · ` : ""}
-          <strong>Published in:</strong> ${escapeHtml(venue)} ·
-          <strong>Citations:</strong> ${citations}
-        </p>
-        <p><strong>Authors:</strong> ${authorsHtml || "Unknown authors"}</p>
-        <p class="chips">${provenanceChips(w)}</p>
-        <button class="btn btn-secondary" onclick="addToLibrary('${paperId}')">Add to library</button>
-      </article>
-    `);
+  works.forEach(w => {
+    const cardHtml = SE.components.renderPaperCard(w, { compact: true });
+    papersList.insertAdjacentHTML("beforeend", cardHtml);
   });
+
+  // Enable all interactions (abstract toggle, library, Unpaywall)
+  SE.components.enhancePaperCards(papersList);
 
   // Pagination
   const pagination = $("pagination");
@@ -182,6 +165,7 @@ function renderPapers(works, append = false) {
     }
   }
 }
+
 
 /* ---------- Filters ---------- */
 function changeFilter(filter) {
