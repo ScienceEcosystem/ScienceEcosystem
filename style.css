@@ -354,34 +354,43 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
+  justify-content: space-between; /* push save button to bottom */
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 1rem 1rem 0.75rem 1rem;
   background: #fff;
   margin-bottom: 1rem;
   box-shadow: 0 1px 6px rgba(0,0,0,.04);
-  justify-content: space-between;
 }
 
+/* Card title spacing */
 .result-card.paper-card .card-title {
-  margin: 0 0 .25rem 0;
+  margin: 0 0 0.25rem 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
-/* Save button bottom right */
-.result-card.paper-card .btn-save {
-  align-self: flex-end;
-  margin-top: auto;
-  font-size: .85rem;
-  padding: .25rem .5rem;
-  border-radius: 9999px;
+/* Authors spacing */
+.result-card.paper-card .authors {
+  margin: 0.25rem 0;
 }
 
 /* Abstract handling */
-.result-card.paper-card .abstract { margin-top: .35rem; }
+.result-card.paper-card .abstract {
+  margin-top: 0.35rem;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;  /* show only first line */
+  -webkit-box-orient: vertical;
+}
+
+.result-card.paper-card .abstract.expanded {
+  -webkit-line-clamp: unset;
+}
 
 .abs-short {
   display: -webkit-box;
-  -webkit-line-clamp: 1;  /* show only first line */
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -398,17 +407,38 @@ body {
   background: none;
   border: none;
   padding: 0;
-  margin-left: .35rem;
+  margin-left: 0.35rem;
   font-weight: 600;
   cursor: pointer;
   color: #2563eb;
 }
 
-/* Chips badges */
-.badge-oa { background: #e6ffed; border: 1px solid #b7f7c3; color: #047857; }
+/* Save button bottom right */
+.result-card.paper-card .btn-save {
+  align-self: flex-end;
+  margin-top: 1rem; /* spacing above button */
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+}
 
-/* Keep text inside sidebar panels */
+/* Chips badges */
+.badge-oa {
+  background: #e6ffed;
+  border: 1px solid #b7f7c3;
+  color: #047857;
+}
+
+/* Sidebar text handling */
 .side-col .panel, .side-col .panel * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Optional: make small cards tidy */
+.result-card.small h4,
+.result-card h3,
+.paper-title {
   overflow-wrap: anywhere;
   word-break: break-word;
 }

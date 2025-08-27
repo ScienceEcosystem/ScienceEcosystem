@@ -109,16 +109,16 @@
 
     return ''+
     '<article class="result-card paper-card" data-paper-id="'+escapeHtml(idTail)+'" '+(doi?'data-doi="'+escapeHtml(String(doi).replace(/^doi:/i,""))+'"':'')+'>'+
-      '<button class="btn btn-secondary btn-save" title="Add to Library" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
       '<h3 class="card-title"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+escapeHtml(title)+'</a></h3>'+
       '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+escapeHtml(venue)+'</p>'+
       '<p class="authors"><strong>Authors:</strong> '+authors+'</p>'+
       '<p class="abstract">'+
         (short ? '<span class="abs-short">'+escapeHtml(short)+'</span>' : '<span class="muted">No summary available.</span>')+
         (hasMore ? ' <button class="link-btn" data-role="toggle-abs">Show more</button>' : '')+
-        (hasMore ? '<span class="abs-full" hidden>'+escapeHtml(abs)+'</span>' : '')+
+        (hasMore ? '<span class="abs-full">'+escapeHtml(abs)+'</span>' : '')+
       '</p>'+
       '<p class="chips" data-chips>'+chips.join(" ")+'</p>'+
+      '<button class="btn btn-secondary btn-save" title="Add to Library" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'
     '</article>';
   }
 
@@ -151,24 +151,13 @@
 
     // 2) Expand/collapse abstract
     container.addEventListener("click", function(e){
-      var btn = e.target.closest('[data-role="toggle-abs"]');
-      if (!btn) return;
-      var card = btn.closest(".paper-card");
-      if (!card) return;
-      var full = card.querySelector(".abs-full");
-      var short = card.querySelector(".abs-short");
-      if (!full || !short) return;
-      var hidden = full.hasAttribute("hidden");
-      if (hidden){
-        full.removeAttribute("hidden");
-        short.style.display = "none";
-        btn.textContent = "Show less";
-      } else {
-        full.setAttribute("hidden","hidden");
-        short.style.display = "";
-        btn.textContent = "Show more";
-      }
-    });
+  var btn = e.target.closest('[data-role="toggle-abs"]');
+  if (!btn) return;
+  var abstract = btn.closest(".abstract");
+  if (!abstract) return;
+  abstract.classList.toggle("expanded");
+  btn.textContent = abstract.classList.contains("expanded") ? "Show less" : "Show more";
+});
 
     // 3) Add to Library (localStorage stub)
     container.addEventListener("click", function(e){
