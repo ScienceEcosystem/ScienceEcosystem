@@ -1,100 +1,80 @@
-const getParam = (name) => new URLSearchParams(location.search).get(name);
-const main = document.getElementById("topicMain");
-const workList = document.getElementById("workList");
-const metaDiv = document.getElementById("topicMeta");
+(function(){
+  if (!document.body || document.body.dataset.page !== "topic") return;
 
-const getWikipediaExtractHTML = async (title) => {
-  try {
-    const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
-    if (!response.ok) throw new Error("Wikipedia fetch failed");
-    const data = await response.json();
-    return {
-      html: data.extract_html,
-      url: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`
-    };
-  } catch (error) {
-    console.warn("Wikipedia summary not available:", error);
-    return { html: null, url: null };
-  }
-};
+  const API = "https://api.openalex.org";
+  const main = document.getElementById("topicMain");
+  const topicHeader = document.getElementById("topicHeader");
+  const wikiBlock = document.getElementById("wikiBlock");
+  const topPapersBlock = document.getElementById("topPapersBlock");
+  const graphBlock = document.getElementById("graphBlock");
+  const relatedBlock = document.getElementById("relatedBlock");
+  const topicMeta = document.getElementById("topicMeta");
 
-async function loadTopic() {
-  const idParam = getParam("id");
-  if (!idParam) {
-    main.innerHTML = "<p>Missing topic ID.</p>";
-    return;
+  const getParam = (name) => new URLSearchParams(location.search).get(name);
+
+  async function getWikipediaExtract(title){
+    try {
+      const resp = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
+      if(!resp.ok) throw new Error("Wikipedia fetch failed");
+      const data = await resp.json();
+      return { html: data.extract_html, url: data.content_urls?.desktop?.page };
+    } catch(e){ console.warn(e); return { html: null, url: null }; }
   }
 
-  // Handle both "C12345" and "https://openalex.org/C12345"
-  const id = idParam.includes("openalex.org") ? idParam.split("/").pop() : idParam;
+  function shortCitation(work){
+    const authors = (work.authorships || []).map(a=>a.author?.display_name).filter(Boolean);
+    const yr = work.publication_year || "n.d.";
+    return (authors[0]?.split(" ").slice(-1)[0] || "Author") + " et al., " + yr;
+  }
 
-  try {
-    const topic = await (await fetch(`https://api.openalex.org/concepts/${id}`)).json();
+  async function loadTopic(){
+    const idParam = getParam("id");
+    if(!idParam) { main.innerHTML = "<p>Missing topic ID.</p>"; return; }
+    const id = idParam.includes("openalex.org") ? idParam.split("/").pop() : idParam;
 
-    document.title = `${topic.display_name} | Topic | ScienceEcosystem`;
+    try {
+      const topic = await (await fetch(`${API}/concepts/${id}`)).json();
+      document.title = `${topic.display_name} | Topic | ScienceEcosystem`;
 
-    const { html: wikiHTML, url: wikiURL } = await getWikipediaExtractHTML(topic.display_name);
+      const { html: wikiHTML, url: wikiURL } = await getWikipediaExtract(topic.display_name);
 
-    main.innerHTML = `
-      <article>
-        <header style="border-bottom:1px solid #ccc; margin-bottom:1rem;">
-          <h1>${topic.display_name}</h1>
-        </header>
-        <section class="wiki-extract" style="margin-bottom:1rem; line-height:1.6;">
-          ${wikiHTML || `<p><strong>Description:</strong> ${topic.description || "No description available."}</p>`}
-        </section>
-        ${wikiURL ? `<p style="font-size:0.9em; color:gray;">Source: <a href="${wikiURL}" target="_blank" rel="noopener noreferrer">Wikipedia</a></p>` : ""}
-        <p><a href="${topic.id}" target="_blank" rel="noopener noreferrer">View on OpenAlex</a></p>
-      </article>
-    `;
+      // Header
+      topicHeader.innerHTML = `<h1>${topic.display_name}</h1>
+        <p class="muted">Works: ${topic.works_count.toLocaleString()} · Level: ${topic.level} · Top ancestor: ${topic.ancestors?.[0]?.display_name || "N/A"}</p>
+        <p><a href="${topic.id}" target="_blank">View on OpenAlex</a></p>`;
 
-    document.querySelectorAll(".wiki-extract a").forEach(link => {
-      const href = link.getAttribute("href");
-      if (href?.startsWith("/wiki/")) {
-        link.href = "https://en.wikipedia.org" + href;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
+      // Wiki extract
+      wikiBlock.innerHTML = `<h2>About this topic</h2>
+        ${wikiHTML || `<p>${topic.description || "No description available."}</p>`}
+        ${wikiURL ? `<p style="font-size:0.9em;">Source: <a href="${wikiURL}" target="_blank">Wikipedia</a></p>` : ""}`;
+
+      // Top papers
+      const worksResp = await fetch(`${API}/works?filter=concepts.id:${id}&sort=cited_by_count:desc&per_page=10`);
+      const works = (await worksResp.json()).results || [];
+      topPapersBlock.innerHTML = `<h2>Top Papers</h2>` + 
+        (works.length ? '<ul>' + works.map(w=>`<li><a href="paper.html?id=${w.id.split("/").pop()}">${w.title}</a><br>${(w.authorships||[]).map(a=>a.author?.display_name||"Unknown").join(", ")} — ${w.publication_year||"N/A"}</li>`).join("") + '</ul>' : '<p class="muted">No papers found.</p>');
+
+      // Related topics
+      relatedBlock.innerHTML = `<h2>Related Topics</h2>` + 
+        (topic.related_concepts?.length ? '<ul>' + topic.related_concepts.map(t=>`<li><a href="topic.html?id=${t.id.split("/").pop()}">${t.display_name}</a></li>`).join("") + '</ul>' : '<p class="muted">No related topics.</p>');
+
+      // Graph
+      graphBlock.innerHTML = `<h2>Topic Graph</h2><div id="topicGraph" style="height:400px;"></div>`;
+      if(window.vis && topicGraph) {
+        const nodes = [{id: topic.id, label: topic.display_name}];
+        const edges = [];
+        (topic.related_concepts||[]).forEach(t=>{
+          nodes.push({id: t.id, label: t.display_name});
+          edges.push({from: topic.id, to: t.id});
+        });
+        new vis.Network(document.getElementById("topicGraph"), {nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges)}, {nodes:{shape:"dot", size:15}, edges:{arrows:"to"}});
       }
-    });
 
-    const worksResp = await fetch(`https://api.openalex.org/works?filter=concepts.id:${id}&sort=cited_by_count:desc&per_page=10`);
-    const works = (await worksResp.json()).results || [];
-
-    workList.innerHTML = works.map(w => {
-      const authors = w.authorships?.map(a =>
-        a.author.id
-          ? `<a href="profile.html?id=${encodeURIComponent(a.author.id)}" style="color:#0d9488;">${a.author.display_name}</a>`
-          : a.author.display_name
-      ).join(", ") || "Unknown authors";
-
-      const year = w.publication_year || "N/A";
-      const link = `paper.html?id=${w.id.split("/").pop()}`;
-
-      return `
-        <li style="margin-bottom: 1rem;">
-          <p style="font-weight:bold;"><a href="${link}" style="color:#2563eb;">${w.title}</a></p>
-          <p>${authors} — ${year}</p>
-        </li>`;
-    }).join("");
-
-    metaDiv.innerHTML = `
-      <section style="margin-top:2rem;">
-        <h3>Works Count</h3>
-        <p>${topic.works_count.toLocaleString()}</p>
-      </section>
-      <section style="margin-top:2rem;">
-        <h3>Level</h3>
-        <p>${topic.level}</p>
-      </section>
-      <section style="margin-top:2rem;">
-        <h3>Top Ancestor</h3>
-        <p>${topic.ancestors?.[0]?.display_name || "N/A"}</p>
-      </section>
-    `;
-  } catch (err) {
-    console.error(err);
-    main.innerHTML = "<p>Error loading topic data.</p>";
+    } catch(e){
+      console.error(e);
+      main.innerHTML = "<p>Error loading topic data.</p>";
+    }
   }
-}
 
-loadTopic();
+  document.addEventListener("DOMContentLoaded", loadTopic);
+})();

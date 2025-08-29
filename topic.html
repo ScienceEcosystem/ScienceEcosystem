@@ -1,66 +1,66 @@
-<!-- ===================== /topic.html ===================== -->
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ScienceEcosystem — Topic</title>
-  <link rel="stylesheet" href="assets/style.css" />
+  <title>Topic | ScienceEcosystem</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/vis-network/styles/vis-network.min.css" rel="stylesheet" />
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js" defer></script>
 </head>
 <body data-page="topic">
-  <header class="site-header">
-    <div class="container header-inner">
-      <a class="brand" href="/index.html">ScienceEcosystem</a>
-      <nav class="main-nav" aria-label="Primary">
-        <a href="/search.html">Search</a>
-        <a href="/about.html">About</a>
-        <a class="btn btn-orcid" href="/auth/orcid">
-          <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" />
-          Login with ORCID
+
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo"><a href="index.html">ScienceEcosystem</a></div>
+      <div class="nav-center">
+        <form class="nav-search" onsubmit="return false;">
+          <input id="searchInput" type="text" placeholder="Search..." />
+        </form>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="btn btn-orcid" href="user-profile.html">
+          <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" /> Login with ORCID
         </a>
-      </nav>
+      </div>
     </div>
-  </header>
+  </nav>
 
-  <main class="container layout-2col">
-    <article class="col-main">
-      <header class="topic-header">
-        <h1 id="topicName">Loading…</h1>
-        <p id="topicMeta" class="muted"></p>
-      </header>
+  <main id="main" class="container">
+    <section class="panel" id="topicHeader">Loading topic...</section>
 
-      <section class="card">
-        <h2>Top papers</h2>
-        <div id="topicPapers" class="list"></div>
+    <div class="layout-grid">
+      <!-- Main column -->
+      <section class="panel main-col" id="topicMain">
+        <section class="topic-section" id="wikiBlock"></section>
+        <section class="topic-section" id="topPapersBlock"></section>
+        <section class="topic-section" id="graphBlock"></section>
+        <section class="topic-section" id="relatedBlock"></section>
       </section>
 
-      <section class="card">
-        <h2>Related topics</h2>
-        <ul id="relatedTopics" class="tags"></ul>
-      </section>
-
-      <section class="card">
-        <h2>Topic graph</h2>
-        <div id="topicGraph" class="graph-container"></div>
-      </section>
-    </article>
-
-    <aside class="col-side">
-      <section class="card">
-        <h2>People</h2>
-        <ul id="topicPeople" class="list"></ul>
-      </section>
-    </aside>
+      <!-- Sidebar -->
+      <aside class="side-col">
+        <section class="panel">
+          <h3>Topic Info</h3>
+          <div id="topicMeta">—</div>
+        </section>
+        <section class="panel">
+          <h3>People</h3>
+          <ul id="topicPeople">—</ul>
+        </section>
+      </aside>
+    </div>
   </main>
 
   <footer class="site-footer">
-    <div class="container footer-inner">
-      <small>© <span id="year"></span> ScienceEcosystem.</small>
+    <div class="container">
+      <p>&copy; <span id="year"></span> ScienceEcosystem.</p>
     </div>
   </footer>
 
-  <script type="module" src="/assets/app.js"></script>
-  <script type="module" src="/assets/topic.js"></script>
+  <script type="module" src="topic.js"></script>
 </body>
 </html>
-
