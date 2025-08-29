@@ -11,29 +11,39 @@
 </head>
 <body data-page="topic">
 
+  <!-- Nav like paper page -->
   <nav class="app-nav" role="navigation" aria-label="Primary">
     <div class="nav-inner container">
-      <div class="logo"><a href="index.html">ScienceEcosystem</a></div>
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
+      </div>
+
       <div class="nav-center">
-        <form class="nav-search" onsubmit="return false;">
-          <input id="searchInput" type="text" placeholder="Search..." />
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..."/>
         </form>
       </div>
+
       <div class="nav-right">
         <a class="nav-link" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <a class="btn btn-orcid" href="user-profile.html">
-          <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" /> Login with ORCID
+        <a class="btn btn-orcid" href="user-profile.html" aria-label="Login with ORCID">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
         </a>
       </div>
     </div>
   </nav>
 
   <main id="main" class="container">
+    <!-- Topic Header -->
     <section class="panel" id="topicHeader">Loading topic...</section>
 
     <div class="layout-grid">
-      <!-- Main column -->
+      <!-- Main Column -->
       <section class="panel main-col" id="topicMain">
         <section class="topic-section" id="wikiBlock"></section>
         <section class="topic-section" id="topPapersBlock"></section>
@@ -61,6 +71,7 @@
     </div>
   </footer>
 
-  <script type="module" src="topic.js"></script>
+  <script src="scripts/search.js"></script>
+  <script src="scripts/topic.js"></script>
 </body>
 </html>
