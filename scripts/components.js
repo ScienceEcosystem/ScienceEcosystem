@@ -1,7 +1,7 @@
 // scripts/components.js
 (function () {
   // Expose under window.SE so all pages can reuse
-  if (window.SE && window.SE.components) return;
+  window.SE = window.SE || {};
 
   var API = "https://api.openalex.org";
   var OPENALEX_MAILTO = "scienceecosystem@icloud.com";
