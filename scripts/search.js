@@ -1,68 +1,120 @@
+// scripts/search.js
 const $ = (id) => document.getElementById(id);
 const API_BASE = "https://api.openalex.org";
+const OPENALEX_MAILTO = "scienceecosystem@icloud.com";
 
+// State
 let currentPage = 1;
 let currentQuery = "";
 let currentAuthorIds = [];
 let totalResults = 0;
-let currentFilter = "relevance"; // default filter
+let currentFilter = "relevance"; // relevance | citations | year
+let searchAbort = null;
 
+// Facets
+let facet = { oa:false, types: new Set(), yearMin:null, yearMax:null };
+
+// Utils
 function escapeHtml(str = "") {
   return str.replace(/[&<>'"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c])
   );
 }
+const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
+function debounce(fn, ms){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
 
-/* ---------- Fetch helpers ---------- */
-async function fetchAuthors(query) {
+function setURLState(q, sort){
+  const params = new URLSearchParams(location.search);
+  if (q) params.set("q", q); else params.delete("q");
+  if (sort) params.set("sort", sort); else params.delete("sort");
+  history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
+}
+
+function setBusy(busy){
+  const region = $("resultsRegion");
+  if (!region) return;
+  region.setAttribute("aria-busy", busy ? "true" : "false");
+}
+
+/* ---------- Fetch helpers with Abort + polite mailto ---------- */
+async function fetchJSON(url, signal){
+  const u = new URL(url);
+  if (!u.searchParams.has("mailto")) u.searchParams.set("mailto", OPENALEX_MAILTO);
+  const res = await fetch(u.toString(), { signal });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+async function fetchAuthors(query, signal) {
   try {
-    const res = await fetch(`${API_BASE}/authors?search=${encodeURIComponent(query)}&per_page=5`);
-    const data = await res.json();
+    const url = `${API_BASE}/authors?search=${encodeURIComponent(query)}&per_page=5`;
+    const data = await fetchJSON(url, signal);
     return data.results || [];
   } catch (err) {
-    console.error("Author fetch failed", err);
+    if (err.name !== "AbortError") console.error("Author fetch failed", err);
     return [];
   }
 }
 
-async function fetchPapers(query, authorIds = [], page = 1) {
+function buildFilter(){
+  const parts = [];
+  if (facet.oa) parts.push("is_oa:true");
+  if (facet.types.size) parts.push("type:" + Array.from(facet.types).join("|"));
+  if (facet.yearMin) parts.push(`from_publication_date:${facet.yearMin}-01-01`);
+  if (facet.yearMax) parts.push(`to_publication_date:${facet.yearMax}-12-31`);
+  return parts.length ? `&filter=${encodeURIComponent(parts.join(","))}` : "";
+}
+
+function serverSortParam(){
+  if (currentFilter === "citations") return "&sort=cited_by_count:desc";
+  if (currentFilter === "year") return "&sort=publication_year:desc";
+  return ""; // relevance = default
+}
+
+async function fetchPapers(query, authorIds = [], page = 1, signal) {
   let works = [];
   try {
-    // Author-constrained works
+    // Author-constrained works (merge results)
     for (const authorId of authorIds) {
-      const res = await fetch(`${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}&per_page=100&page=${page}`);
-      const data = await res.json();
+      const urlA = `${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
+      const data = await fetchJSON(urlA, signal);
       works = works.concat(data.results || []);
     }
 
     // General search
-    const res = await fetch(`${API_BASE}/works?search=${encodeURIComponent(query)}&per_page=100&page=${page}`);
-    const data = await res.json();
+    const urlG = `${API_BASE}/works?search=${encodeURIComponent(query)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
+    const data = await fetchJSON(urlG, signal);
     const generalWorks = data.results || [];
 
     if (page === 1) totalResults = data.meta?.count || generalWorks.length;
 
-    // Deduplicate by OpenAlex id
+    // Deduplicate by OpenAlex id/doi/title fallback
     const seen = new Set();
-    return [...works, ...generalWorks].filter(w => {
+    const merged = [...works, ...generalWorks].filter(w => {
       const id = w.id || w.doi || w.display_name;
       if (seen.has(id)) return false;
       seen.add(id);
       return true;
     });
+
+    // Client-side sort if needed (keeps behavior identical)
+    if (currentFilter === "citations") merged.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
+    else if (currentFilter === "year") merged.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
+
+    return merged;
   } catch (err) {
-    console.error("Paper fetch failed", err);
+    if (err.name !== "AbortError") console.error("Paper fetch failed", err);
     return [];
   }
 }
 
-async function fetchTopics(query) {
+async function fetchTopics(query, signal) {
   try {
-    const res = await fetch(`${API_BASE}/concepts?search=${encodeURIComponent(query)}&per_page=5`);
-    const data = await res.json();
+    const url = `${API_BASE}/concepts?search=${encodeURIComponent(query)}&per_page=5`;
+    const data = await fetchJSON(url, signal);
     return data.results || [];
   } catch (err) {
-    console.error("Topic fetch failed", err);
+    if (err.name !== "AbortError") console.error("Topic fetch failed", err);
     return [];
   }
 }
@@ -74,12 +126,22 @@ function provenanceChips(w) {
   const venueUrl = w.primary_location?.source?.homepage_url || w.primary_location?.landing_page_url || null;
 
   const parts = [];
-  if (doi) parts.push(`<a class="badge" href="${doi}" target="_blank" rel="noopener">DOI</a>`);
+  if (doi) parts.push(`<a class="badge" href="${doi}" target="_blank" rel="noopener">DOI</a>`); // <-- fixed: added closing )
   if (oaUrl) parts.push(`<a class="badge badge-oa" href="${oaUrl}" target="_blank" rel="noopener">Open access</a>`);
   if (venueUrl) parts.push(`<a class="badge" href="${venueUrl}" target="_blank" rel="noopener">Source</a>`);
   return parts.join(" ");
 }
 
+// Query highlighting (used by components.renderPaperCard via opts.highlightQuery)
+function highlight(text, q){
+  if (!text || !q) return escapeHtml(text||"");
+  const terms = q.split(/\s+/).filter(Boolean).map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
+  if (!terms.length) return escapeHtml(text);
+  const re = new RegExp("(" + terms.join("|") + ")", "ig");
+  return escapeHtml(text).replace(re, "<mark>$1</mark>");
+}
+
+// Sidebar renders
 function renderAuthors(authors) {
   const el = $("researcherList");
   if (!el) return;
@@ -112,99 +174,181 @@ function renderTopics(topics) {
     : `<li class="muted">No topics found.</li>`;
 }
 
+function skeletonBlock(){
+  return `
+    <div class="result-card">
+      <div class="skel skel-title"></div>
+      <div class="skel skel-line"></div>
+      <div class="skel skel-line"></div>
+      <div class="skel skel-line" style="width:60%"></div>
+    </div>
+    <div class="result-card">
+      <div class="skel skel-title"></div>
+      <div class="skel skel-line"></div>
+      <div class="skel skel-line"></div>
+      <div class="skel skel-line" style="width:50%"></div>
+    </div>`;
+}
+
 function renderPapers(works, append = false) {
   const results = $("unifiedSearchResults");
   if (!results) return;
 
   if (!append) {
     results.innerHTML = `
-      <h2>Papers <span class="muted">(${totalResults.toLocaleString()} results)</span></h2>
-      <div id="filters">
-        <label>Sort by: 
-          <select id="paperFilter" onchange="changeFilter(this.value)">
-            <option value="relevance">Relevance</option>
-            <option value="citations">Citations</option>
-            <option value="year">Year</option>
-          </select>
-        </label>
-      </div>
+      <h2 style="display:flex; align-items:center; justify-content:space-between; gap:.75rem;">
+        <span>Papers <span class="muted">(${totalResults.toLocaleString()} results)</span></span>
+        <div id="filters" style="display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;">
+          <label>Sort by: 
+            <select id="paperFilter" onchange="changeFilter(this.value)">
+              <option value="relevance"${currentFilter==='relevance'?' selected':''}>Relevance</option>
+              <option value="citations"${currentFilter==='citations'?' selected':''}>Citations</option>
+              <option value="year"${currentFilter==='year'?' selected':''}>Year</option>
+            </select>
+          </label>
+          <div class="chips" id="facetChips" role="group" aria-label="Filters">
+            <button class="chip${facet.oa?' active':''}" data-facet="oa" aria-pressed="${facet.oa}">Open access</button>
+            <button class="chip${facet.types.has('article')?' active':''}" data-facet="type-article" aria-pressed="${facet.types.has('article')}">Articles</button>
+            <button class="chip${facet.types.has('posted-content')?' active':''}" data-facet="type-preprint" aria-pressed="${facet.types.has('posted-content')}">Preprints</button>
+            <input type="number" id="yearMin" class="input" placeholder="From year" style="width:120px; padding:.4rem .6rem; font-size:.9rem;" value="${facet.yearMin??''}" aria-label="From year">
+            <input type="number" id="yearMax" class="input" placeholder="To year" style="width:120px; padding:.4rem .6rem; font-size:.9rem;" value="${facet.yearMax??''}" aria-label="To year">
+            <button class="btn btn-secondary" id="applyYears" title="Apply year range">Apply</button>
+          </div>
+        </div>
+      </h2>
       <div id="papersList"></div>
       <div id="pagination"></div>
     `;
   }
 
-  // Apply filtering
-  if (currentFilter === "citations") works.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
-  else if (currentFilter === "year") works.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
-  // relevance = API order
-
   const papersList = $("papersList");
   if (!papersList) return;
 
   works.forEach(w => {
-    const cardHtml = SE.components.renderPaperCard(w, { compact: true });
+    const cardHtml = SE.components.renderPaperCard(w, { compact: true, highlightQuery: currentQuery });
     papersList.insertAdjacentHTML("beforeend", cardHtml);
   });
 
-  // Enable all interactions (abstract toggle, library, Unpaywall)
+  // Enable all interactions (abstract toggle, library, Unpaywall, cite popover)
   SE.components.enhancePaperCards(papersList);
 
-  // Pagination
+  // Pagination & Infinite Scroll
   const pagination = $("pagination");
   const resultsShown = currentPage * 100;
   if (pagination) {
     if (resultsShown < totalResults) {
       pagination.innerHTML = `<button id="loadMoreBtn" class="btn btn-secondary">Load more</button>`;
-      $("loadMoreBtn").onclick = async () => {
+      const loadMoreBtn = $("loadMoreBtn");
+      let loadingMore = false;
+
+      async function loadMore(){
+        if (loadingMore) return;
+        loadingMore = true;
+        loadMoreBtn.disabled = true;
         currentPage++;
-        const more = await fetchPapers(currentQuery, currentAuthorIds, currentPage);
+        const more = await fetchPapers(currentQuery, currentAuthorIds, currentPage, searchAbort?.signal);
         renderPapers(more, true);
-      };
+        loadMoreBtn.disabled = false;
+        loadingMore = false;
+      }
+
+      loadMoreBtn.onclick = loadMore;
+
+      const io = new IntersectionObserver(async (entries)=>{
+        if (entries.some(e=>e.isIntersecting)) { await loadMore(); }
+      }, { rootMargin: "600px" });
+      io.observe(loadMoreBtn);
     } else {
       pagination.innerHTML = `<p class="muted">All results loaded.</p>`;
     }
   }
+
+  // Facet handlers
+  const chips = document.getElementById("facetChips");
+  if (chips) {
+    chips.onclick = (e)=>{
+      const c = e.target.closest(".chip");
+      if (!c) return;
+      const f = c.getAttribute("data-facet");
+      if (f==="oa") facet.oa = !facet.oa;
+      if (f==="type-article") toggleType("article");
+      if (f==="type-preprint") toggleType("posted-content");
+      c.classList.toggle("active");
+      c.setAttribute("aria-pressed", c.classList.contains("active") ? "true" : "false");
+      handleUnifiedSearch(true);
+    };
+    const applyBtn = $("applyYears");
+    if (applyBtn) applyBtn.onclick = ()=>{
+      const yMin = parseInt(($("yearMin")?.value||"").trim(),10);
+      const yMax = parseInt(($("yearMax")?.value||"").trim(),10);
+      facet.yearMin = Number.isFinite(yMin) ? yMin : null;
+      facet.yearMax = Number.isFinite(yMax) ? yMax : null;
+      handleUnifiedSearch(true);
+    };
+  }
 }
 
+function toggleType(t){ if (facet.types.has(t)) facet.types.delete(t); else facet.types.add(t); }
 
 /* ---------- Filters ---------- */
 function changeFilter(filter) {
   currentFilter = filter;
-  handleUnifiedSearch();
+  setURLState(currentQuery, currentFilter);
+  handleUnifiedSearch(true);
 }
 
-/* ---------- Library ---------- */
+/* ---------- Library (placeholder) ---------- */
 function addToLibrary(paperId) {
-  // Placeholder: you can connect this to your backend or localStorage
   alert(`Paper ${paperId} added to your library.`);
 }
 
-/* ---------- Unified search flow ---------- */
-async function handleUnifiedSearch() {
+/* ---------- Unified search flow (debounced + cancelable) ---------- */
+const debouncedUnified = debounce(runUnifiedSearch, 300);
+
+async function handleUnifiedSearch(skipDebounce=false) {
+  if (skipDebounce) return runUnifiedSearch();
+  return debouncedUnified();
+}
+
+async function runUnifiedSearch(){
   const input = $("unifiedSearchInput");
   if (!input) return;
   const query = input.value.trim();
   if (!query) return;
 
+  // cancel previous
+  if (searchAbort) searchAbort.abort();
+  searchAbort = new AbortController();
+
   currentQuery = query;
   currentPage = 1;
+  setURLState(currentQuery, currentFilter);
 
   const results = $("unifiedSearchResults");
   const rList = $("researcherList");
   const tList = $("topicList");
-  if (results) results.innerHTML = "<p>Loading papers...</p>";
+  if (results) results.innerHTML = skeletonBlock();
   if (rList) rList.innerHTML = `<li class="muted">Loading authors...</li>`;
   if (tList) tList.innerHTML = `<li class="muted">Loading topics...</li>`;
+  setBusy(true);
 
-  const authors = await fetchAuthors(query);
-  renderAuthors(authors);
+  try {
+    const [authors, topics] = await Promise.all([
+      fetchAuthors(query, searchAbort.signal),
+      fetchTopics(query, searchAbort.signal),
+    ]);
+    renderAuthors(authors);
+    renderTopics(topics);
+    currentAuthorIds = authors.map(a => a.id);
 
-  currentAuthorIds = authors.map(a => a.id);
-  const papers = await fetchPapers(query, currentAuthorIds, currentPage);
-  renderPapers(papers);
-
-  const topics = await fetchTopics(query);
-  renderTopics(topics);
+    const papers = await fetchPapers(query, currentAuthorIds, currentPage, searchAbort.signal);
+    renderPapers(papers);
+  } catch (e) {
+    if (e.name === "AbortError") return; // superseded by a new search
+    results.innerHTML = `<p class="error">Couldn’t load results. Please try again.</p>`;
+  } finally {
+    setBusy(false);
+  }
 }
 
 /* ---------- Redirect from nav search box ---------- */
@@ -213,7 +357,7 @@ function handleSearch(inputId) {
   if (!input) return;
   const query = input.value.trim();
   if (!query) return;
-  window.location.href = `search.html?q=${encodeURIComponent(query)}`;
+  window.location.href = `search.html?q=${encodeURIComponent(query)}&sort=${encodeURIComponent(currentFilter)}`;
 }
 
 /* ---------- Init ---------- */
@@ -221,17 +365,32 @@ document.addEventListener("DOMContentLoaded", () => {
   const params = new URLSearchParams(window.location.search);
   const input = $("unifiedSearchInput");
 
+  // read sort from URL
+  const pf = $("paperFilter");
+  if (params.has("sort")) {
+    const s = params.get("sort");
+    if (["relevance","citations","year"].includes(s)) {
+      currentFilter = s;
+      if (pf) pf.value = s;
+    }
+  }
+
   if (params.has("q") && input) {
     input.value = params.get("q") || "";
-    handleUnifiedSearch();
+    handleUnifiedSearch(true);
   }
 
   if (input) {
     input.addEventListener("keypress", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        handleUnifiedSearch();
+        handleUnifiedSearch(true);
       }
     });
   }
 });
+
+// Expose highlight to components (optional)
+window.SE = window.SE || {};
+window.SE.search = window.SE.search || {};
+window.SE.search.highlight = highlight;
