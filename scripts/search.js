@@ -197,7 +197,7 @@ function renderPapers(works, append = false) {
   if (!append) {
     results.innerHTML = `
       <h2 style="display:flex; align-items:center; justify-content:space-between; gap:.75rem;">
-        <span>Papers <span class="muted">(${totalResults.toLocaleString()} results)</span></span>
+        <span>Papers <span class="muted">(${totalResults.toLocaleString()})</span></span>
         <div id="filters" style="display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;">
           <label>Sort by: 
             <select id="paperFilter" onchange="changeFilter(this.value)">

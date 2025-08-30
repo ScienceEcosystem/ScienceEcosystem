@@ -1,10 +1,8 @@
 // scripts/components.js
 (function () {
   // Expose under window.SE so all pages can reuse
-  window.SE = window.SE || {};
+  if (window.SE && window.SE.components) return;
 
-  var API = "https://api.openalex.org";
-  var OPENALEX_MAILTO = "scienceecosystem@icloud.com";
   var UNPAYWALL_EMAIL = "scienceecosystem@icloud.com"; // your email for Unpaywall compliance
 
   // ---------- helpers ----------
@@ -38,15 +36,22 @@
   }
   function firstSentence(s){
     if (!s) return "";
-    // basic first sentence split (handles ., !, ?)
     var m = s.match(/[^.!?]*[.!?]/);
     return m ? m[0].trim() : s.trim();
   }
 
+  // ---- optional highlight passthrough from search.js ----
+  function maybeHighlight(text, q){
+    try{
+      if (window.SE && window.SE.search && typeof window.SE.search.highlight === "function") {
+        return window.SE.search.highlight(text, q);
+      }
+    } catch(_){}
+    return escapeHtml(text || "");
+  }
+
   // ---------- name utils (for citation formatting) ----------
   function splitName(full){
-    // Very simple splitter: last token = family name, rest = given/middle
-    // Handles hyphenated/compound families reasonably well
     if (!full) return { given:"", family:"" };
     var parts = String(full).trim().split(/\s+/);
     if (parts.length === 1) return { given:"", family:parts[0] };
@@ -63,14 +68,11 @@
       .join(" ");
   }
   function titleSentenceCase(t){
-    // Conservative: lowercase most words but keep existing capitalization for proper nouns
     try{
       if (!t) return "";
       var s = String(t);
-      // If already mostly lowercase words, keep as-is
       var upperRatio = (s.match(/[A-Z]/g)||[]).length / Math.max(1, s.replace(/[^A-Za-z]/g,"").length);
       if (upperRatio < 0.2) return s;
-      // Otherwise lowercase all except first char
       s = s.toLowerCase();
       return s.charAt(0).toUpperCase() + s.slice(1);
     }catch(_){ return t || ""; }
@@ -107,7 +109,6 @@
 
   // ---------- Formatters for styles ----------
   function fmtAuthorsAPA(list){
-    // APA 7th: up to 20 authors; if >20: first 19, …, last author
     if (!list || !list.length) return "";
     var arr = list.map(function(full){
       var p = splitName(full);
@@ -152,7 +153,6 @@
   }
   function fmtAuthorsHarvard(list){
     if (!list || !list.length) return "";
-    // Harvard: Last, I., Last, I. and Last, I.
     var parts = list.map(function(full){
       var p = splitName(full);
       var init = initials(p.given).replace(/\s+/g,"");
@@ -164,7 +164,6 @@
   }
   function fmtAuthorsVancouver(list){
     if (!list || !list.length) return "";
-    // Vancouver: up to 6 authors; if >6 then first 6 + "et al."
     var parts = list.slice(0,6).map(function(full){
       var p = splitName(full);
       var init = initials(p.given).replace(/\s+/g,"");
@@ -181,7 +180,6 @@
   }
 
   function fmtAPA(d){
-    // Author. (Year). Title. Journal, volume(issue), pages. https://doi.org/...
     var a = fmtAuthorsAPA(d.authors);
     var y = d.year || "n.d.";
     var t = titleSentenceCase(d.title || "");
@@ -192,7 +190,6 @@
            + (vi ? ", " + vi : "") + pages + (tail ? ". " + tail : ".");
   }
   function fmtMLA(d){
-    // Author. "Title." Journal, vol. x, no. y, Year, pp. x–y. DOI/URL.
     var a = fmtAuthorsMLA(d.authors);
     var pieces = [];
     if (a) pieces.push(a + ".");
@@ -209,7 +206,6 @@
     return out;
   }
   function fmtChicago(d){
-    // Author. "Title." Journal volume, no. issue (Year): pages. DOI/URL.
     var a = fmtAuthorsChicago(d.authors);
     var vi = d.volume ? d.volume : "";
     var issue = d.issue ? ", no. " + d.issue : "";
@@ -221,7 +217,6 @@
     return core;
   }
   function fmtHarvard(d){
-    // Author(s) (Year) 'Title', Journal, volume(issue), pp. x–y. DOI/URL.
     var a = fmtAuthorsHarvard(d.authors);
     var vi = joinVolIssue(d.volume, d.issue);
     var pages = d.pages ? ", pp. " + d.pages : "";
@@ -230,7 +225,6 @@
            + (d.venue||"") + (vi ? ", " + vi : "") + pages + (tail ? ". " + tail : ".");
   }
   function fmtVancouver(d){
-    // Author(s). Title. Journal. Year;volume(issue):pages. doi:...
     var a = fmtAuthorsVancouver(d.authors);
     var vi = joinVolIssue(d.volume, d.issue);
     var year = d.year || "";
@@ -310,14 +304,19 @@
     var doi = doiFrom(work);
     var year = (work.publication_year != null ? work.publication_year : "n.d.");
     var venue = journalFrom(work);
-    var title = work.display_name || work.title || "Untitled";
+    var titleRaw = work.display_name || work.title || "Untitled";
     var authors = authorLinks(work.authorships, 10);
     var cited = get(work,"cited_by_count",0) || 0;
 
+    // Highlight title based on query if provided
+    var title = opts.highlightQuery ? maybeHighlight(titleRaw, opts.highlightQuery) : escapeHtml(titleRaw);
+
     // abstract (first sentence + full)
     var abs = abstractTextFrom(work);
-    var short = firstSentence(abs);
-    var hasMore = !!abs && abs.length > short.length + 1;
+    var shortRaw = firstSentence(abs);
+    var short = opts.highlightQuery ? maybeHighlight(shortRaw, opts.highlightQuery) : escapeHtml(shortRaw);
+    var full = escapeHtml(abs);
+    var hasMore = !!abs && abs.length > shortRaw.length + 1;
 
     // chips we know synchronously (OpenAlex, DOI if present)
     var chips = [];
@@ -347,21 +346,20 @@
       'data-cite-doiurl="'+attr(citeData.doi_url)+'" '+
       'data-cite-url="'+attr(citeData.url)+'" '+
       'data-cite-authors="'+attr((citeData.authors||[]).join(' | '))+'">'+
-      '<h3 class="card-title"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+escapeHtml(title)+'</a></h3>'+
+      '<h3 class="card-title"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+title+'</a></h3>'+
       '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+escapeHtml(venue)+
         ' · <span title="Times this work has been cited">Cited by '+escapeHtml(String(cited))+'</span></p>'+
       '<p class="authors"><strong>Authors:</strong> '+authors+'</p>'+
       '<p class="abstract">'+
-        (short ? '<span class="abs-short">'+escapeHtml(short)+'</span>' : '<span class="muted">No summary available.</span>')+
+        (short ? '<span class="abs-short">'+short+'</span>' : '<span class="muted">No summary available.</span>')+
         (hasMore ? ' <button class="link-btn" data-role="toggle-abs">Show more</button>' : '')+
-        (hasMore ? '<span class="abs-full">'+escapeHtml(abs)+'</span>' : '')+
+        (hasMore ? '<span class="abs-full">'+full+'</span>' : '')+
       '</p>'+
       '<p class="chips" data-chips>'+chips.join(" ")+'</p>'+
-      '<div class="card-actions" style="display:flex; gap:.5rem; flex-wrap:wrap;">'+
+      '<div class="card-actions">'+
         '<button class="btn btn-secondary btn-save" title="Add to Library" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
         '<button class="btn btn-secondary btn-cite" title="Cite this paper" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'+
       '</div>'+
-      // Popover container (created on demand)
       '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '+
         'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+
     '</article>';
@@ -437,12 +435,10 @@
     var cardRect = card.getBoundingClientRect();
     var top = (btnRect.bottom - cardRect.top) + 8; // below the button
     var left = (btnRect.left - cardRect.left);
-    // keep within card bounds
     var maxLeft = card.clientWidth - popover.clientWidth - 8;
     if (left > maxLeft) left = Math.max(8, maxLeft);
     if (left < 8) left = 8;
     if (top + popover.clientHeight > card.clientHeight) {
-      // if too tall, pin to bottom with some padding
       top = card.clientHeight - popover.clientHeight - 12;
       if (top < 8) top = 8;
     }
@@ -450,9 +446,10 @@
     popover.style.top  = top + "px";
   }
 
-  // ---------- Enhance cards after insertion: Unpaywall + interactions ----------
+  // ---------- Enhance cards after insertion ----------
   async function enhancePaperCards(container){
     container = container || document;
+
     // 1) Unpaywall PDF indicator
     var cards = Array.prototype.slice.call(container.querySelectorAll(".paper-card[data-doi]"));
     for (var i=0;i<cards.length;i++){
@@ -516,7 +513,6 @@
     }
 
     container.addEventListener("click", function(e){
-      // open
       var open = e.target.closest('[data-action="open-cite"]');
       if (open){
         var card = open.closest(".paper-card");
@@ -524,9 +520,7 @@
         var pop = card.querySelector(".cite-popover");
         if (!pop) return;
 
-        if (!pop.innerHTML) {
-          pop.innerHTML = buildCitePopover(card);
-        }
+        if (!pop.innerHTML) pop.innerHTML = buildCitePopover(card);
         if (!pop.hidden) {
           pop.hidden = true;
           open.setAttribute("aria-expanded","false");
@@ -535,12 +529,10 @@
         closeAllPopovers();
         pop.hidden = false;
         open.setAttribute("aria-expanded","true");
-        // delay to measure size for positioning
         requestAnimationFrame(function(){ positionPopover(card, pop, open); });
         return;
       }
 
-      // close
       var close = e.target.closest('[data-action="close-cite"]');
       if (close){
         var cardC = close.closest(".paper-card");
@@ -551,20 +543,20 @@
         return;
       }
 
-      // copy single line
       var copyBtn = e.target.closest('[data-role="copy-cite"]');
       if (copyBtn){
         var row = copyBtn.closest(".cite-row");
         if (!row) return;
         var text = row.getAttribute("data-cite-text") || "";
-        navigator.clipboard && navigator.clipboard.writeText(text).then(function(){
-          copyBtn.textContent = "Copied ✓";
-          setTimeout(function(){ copyBtn.textContent = "Copy"; }, 1200);
-        }).catch(function(){});
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(function(){
+            copyBtn.textContent = "Copied ✓";
+            setTimeout(function(){ copyBtn.textContent = "Copy"; }, 1200);
+          }).catch(function(){});
+        }
         return;
       }
 
-      // copy bibtex
       var copyBib = e.target.closest('[data-role="copy-bibtex"]');
       if (copyBib){
         var wrap = copyBib.closest(".cite-row-bibtex");
@@ -572,13 +564,12 @@
         var ta = wrap.querySelector("textarea");
         if (!ta) return;
         ta.select();
-        document.execCommand("copy");
+        try { document.execCommand("copy"); } catch(_){}
         copyBib.textContent = "Copied ✓";
         setTimeout(function(){ copyBib.textContent = "Copy"; }, 1200);
         return;
       }
 
-      // copy all
       var copyAll = e.target.closest('[data-action="copy-all"]');
       if (copyAll){
         var cardA = copyAll.closest(".paper-card");
@@ -587,17 +578,20 @@
         var parts = [];
         var rows = popA.querySelectorAll(".cite-row");
         rows.forEach(function(r){
-          var label = r.querySelector(".muted") ? r.querySelector(".muted").textContent : "";
+          var labelEl = r.querySelector(".muted");
+          var label = labelEl ? labelEl.textContent : "";
           var text = r.getAttribute("data-cite-text") || "";
           if (label && text) parts.push(label + ":\n" + text);
         });
         var bibTA = popA.querySelector(".cite-row-bibtex textarea");
         if (bibTA){ parts.push("BibTeX:\n" + bibTA.value); }
         var bundle = parts.join("\n\n");
-        navigator.clipboard && navigator.clipboard.writeText(bundle).then(function(){
-          copyAll.textContent = "Copied ✓";
-          setTimeout(function(){ copyAll.textContent = "Copy All"; }, 1200);
-        }).catch(function(){});
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(bundle).then(function(){
+            copyAll.textContent = "Copied ✓";
+            setTimeout(function(){ copyAll.textContent = "Copy All"; }, 1200);
+          }).catch(function(){});
+        }
       }
     });
 

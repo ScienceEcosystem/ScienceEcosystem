@@ -442,3 +442,43 @@ body {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+
+/* ==== Search skeletons (visual polish) ==== */
+.skel { background: #f2f4f7; border-radius: 8px; position: relative; overflow: hidden; }
+.skel::after { content:""; position:absolute; inset:0; transform:translateX(-100%); background:linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent); animation:shimmer 1.3s infinite; }
+@keyframes shimmer { 100% { transform:translateX(100%); } }
+.skel-line{ height:12px; margin:8px 0; }
+.skel-title{ height:18px; width:70%; margin-bottom:.5rem; }
+
+/* ==== Facet chips ==== */
+.chip {
+  display:inline-flex; align-items:center; gap:.35rem;
+  padding:.35rem .6rem; border:1px solid #e5e7eb; border-radius:9999px;
+  background:#fff; cursor:pointer; font-weight:600; font-size:.85rem;
+}
+.chip.active { background:#eef2ff; border-color:#c7d2fe; }
+.chip:focus { outline:2px solid var(--ring); outline-offset:2px; }
+
+/* ==== Card action bar: align right + equal heights ==== */
+.result-card.paper-card .card-actions{
+  margin-top:.75rem;
+  display:flex;
+  gap:.5rem;
+  justify-content:flex-end;   /* right side */
+  align-items:center;
+}
+
+/* Normalize both buttons to same size */
+.result-card.paper-card .btn-save,
+.result-card.paper-card .btn-cite{
+  font-size:.95rem;
+  padding:.5rem .9rem;
+  line-height:1;              /* equal height */
+  border-radius:8px;          /* match .btn */
+  align-self:auto;            /* no special self alignment */
+  margin-top:0;               /* remove extra top margin from previous rule */
+}
+
+/* Keep pill look optional (remove if you prefer square) */
+/* .result-card.paper-card .btn-save { border-radius:9999px; } */
