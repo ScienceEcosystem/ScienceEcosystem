@@ -375,25 +375,46 @@ body {
   margin: 0.25rem 0;
 }
 
-/* Abstract handling */
+/* Abstract handling (linter-friendly, with fallback) */
 .result-card.paper-card .abstract {
   margin-top: 0.35rem;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;  /* show only first line */
-  -webkit-box-orient: vertical;
 }
 
-.result-card.paper-card .abstract.expanded {
-  -webkit-line-clamp: unset;
-}
-
+/* Fallback for all browsers: single-line ellipsis */
+.result-card.paper-card .abstract,
 .abs-short {
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
   overflow: hidden;
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
+
+/* Expanded state shows full content */
+.result-card.paper-card .abstract.expanded {
+  white-space: normal;
+}
+
+/* Progressive enhancement: multi-line clamp where supported */
+@supports (-webkit-line-clamp: 1) {
+  .result-card.paper-card .abstract,
+  .abs-short {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1; /* show only first line */
+    white-space: normal;    /* reset fallback nowrap */
+  }
+
+  /* Break the clamp when expanded by switching display */
+  .result-card.paper-card .abstract.expanded {
+    display: block;         /* disables -webkit-box clamp */
+  }
+}
+
+/* Keep your show/hide pieces */
+.abs-full { display: none; }
+.abstract.expanded .abs-short { display: none; }
+.abstract.expanded .abs-full { display: inline; }
+
 
 .abs-full {
   display: none;
