@@ -43,6 +43,227 @@
     return m ? m[0].trim() : s.trim();
   }
 
+  // ---------- name utils (for citation formatting) ----------
+  function splitName(full){
+    // Very simple splitter: last token = family name, rest = given/middle
+    // Handles hyphenated/compound families reasonably well
+    if (!full) return { given:"", family:"" };
+    var parts = String(full).trim().split(/\s+/);
+    if (parts.length === 1) return { given:"", family:parts[0] };
+    var family = parts.pop();
+    var given = parts.join(" ");
+    return { given: given, family: family };
+  }
+  function initials(given){
+    if (!given) return "";
+    return given
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(function(p){ return p[0].toUpperCase() + "."; })
+      .join(" ");
+  }
+  function titleSentenceCase(t){
+    // Conservative: lowercase most words but keep existing capitalization for proper nouns
+    try{
+      if (!t) return "";
+      var s = String(t);
+      // If already mostly lowercase words, keep as-is
+      var upperRatio = (s.match(/[A-Z]/g)||[]).length / Math.max(1, s.replace(/[^A-Za-z]/g,"").length);
+      if (upperRatio < 0.2) return s;
+      // Otherwise lowercase all except first char
+      s = s.toLowerCase();
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }catch(_){ return t || ""; }
+  }
+
+  // ---------- Collect per-work citation data from an OpenAlex work ----------
+  function collectCiteData(work){
+    var authors = (get(work,"authorships",[]) || [])
+      .map(function(a){ return get(a,"author.display_name",""); })
+      .filter(Boolean);
+
+    var venue = journalFrom(work);
+    var doi = doiFrom(work);
+    var doi_href = doiUrl(doi);
+    var landing = get(work,"primary_location.landing_page_url", null) || doi_href || (work.id || null);
+
+    var first_page = get(work,"biblio.first_page", "") || "";
+    var last_page  = get(work,"biblio.last_page", "") || "";
+    var pages = (first_page && last_page) ? (first_page + "-" + last_page) : (first_page || last_page || "");
+
+    return {
+      title: work.display_name || work.title || "Untitled",
+      year: (work.publication_year != null ? String(work.publication_year) : "n.d."),
+      venue: venue || "",
+      volume: get(work,"biblio.volume","") || "",
+      issue: get(work,"biblio.issue","") || "",
+      pages: pages,
+      doi: doi ? String(doi).replace(/^doi:/i,"") : "",
+      doi_url: doi_href || "",
+      url: landing || "",
+      authors: authors
+    };
+  }
+
+  // ---------- Formatters for styles ----------
+  function fmtAuthorsAPA(list){
+    // APA 7th: up to 20 authors; if >20: first 19, …, last author
+    if (!list || !list.length) return "";
+    var arr = list.map(function(full){
+      var p = splitName(full);
+      var init = initials(p.given);
+      return (p.family ? p.family : full) + (init ? ", " + init : "");
+    });
+    if (arr.length <= 20){
+      if (arr.length === 1) return arr[0];
+      if (arr.length === 2) return arr[0] + " & " + arr[1];
+      return arr.slice(0, -1).join(", ") + ", & " + arr[arr.length - 1];
+    }else{
+      var first19 = arr.slice(0,19).join(", ");
+      var last = arr[arr.length-1];
+      return first19 + ", …, " + last;
+    }
+  }
+  function fmtAuthorsMLA(list){
+    if (!list || !list.length) return "";
+    if (list.length === 1){
+      var one = splitName(list[0]);
+      return (one.family || list[0]) + ", " + (one.given || "");
+    }
+    if (list.length === 2){
+      var a = splitName(list[0]), b = splitName(list[1]);
+      return (a.family||list[0]) + ", " + (a.given||"") + ", and " + (b.given||"") + " " + (b.family||"");
+    }
+    var first = splitName(list[0]);
+    return (first.family||list[0]) + ", " + (first.given||"") + ", et al.";
+  }
+  function fmtAuthorsChicago(list){
+    if (!list || !list.length) return "";
+    if (list.length === 1){
+      var a = splitName(list[0]);
+      return (a.family||list[0]) + ", " + (a.given||"");
+    }
+    if (list.length === 2){
+      var b0 = splitName(list[0]), b1 = splitName(list[1]);
+      return (b0.family||list[0]) + ", " + (b0.given||"") + ", and " + (b1.given||"") + " " + (b1.family||"");
+    }
+    var first = splitName(list[0]), second = splitName(list[1]);
+    return (first.family||list[0]) + ", " + (first.given||"") + ", " + (second.given||"") + " " + (second.family||"") + ", et al.";
+  }
+  function fmtAuthorsHarvard(list){
+    if (!list || !list.length) return "";
+    // Harvard: Last, I., Last, I. and Last, I.
+    var parts = list.map(function(full){
+      var p = splitName(full);
+      var init = initials(p.given).replace(/\s+/g,"");
+      return (p.family||full) + (init ? ", " + init : "");
+    });
+    if (parts.length === 1) return parts[0];
+    if (parts.length === 2) return parts[0] + " and " + parts[1];
+    return parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
+  }
+  function fmtAuthorsVancouver(list){
+    if (!list || !list.length) return "";
+    // Vancouver: up to 6 authors; if >6 then first 6 + "et al."
+    var parts = list.slice(0,6).map(function(full){
+      var p = splitName(full);
+      var init = initials(p.given).replace(/\s+/g,"");
+      return (p.family||full) + (init ? " " + init : "");
+    });
+    if (list.length > 6) parts.push("et al.");
+    return parts.join(", ");
+  }
+  function joinVolIssue(vol, iss){
+    var v = vol ? String(vol) : "";
+    var i = iss ? String(iss) : "";
+    if (v && i) return v + "(" + i + ")";
+    return v || (i ? "(" + i + ")" : "");
+  }
+
+  function fmtAPA(d){
+    // Author. (Year). Title. Journal, volume(issue), pages. https://doi.org/...
+    var a = fmtAuthorsAPA(d.authors);
+    var y = d.year || "n.d.";
+    var t = titleSentenceCase(d.title || "");
+    var vi = joinVolIssue(d.volume, d.issue);
+    var pages = d.pages ? (", " + d.pages) : "";
+    var tail = d.doi_url || d.url || "";
+    return (a ? a + ". " : "") + "(" + y + "). " + t + ". " + (d.venue||"")
+           + (vi ? ", " + vi : "") + pages + (tail ? ". " + tail : ".");
+  }
+  function fmtMLA(d){
+    // Author. "Title." Journal, vol. x, no. y, Year, pp. x–y. DOI/URL.
+    var a = fmtAuthorsMLA(d.authors);
+    var pieces = [];
+    if (a) pieces.push(a + ".");
+    pieces.push('"' + (d.title||"") + '."');
+    if (d.venue) pieces.push(d.venue + ",");
+    if (d.volume) pieces.push("vol. " + d.volume + ",");
+    if (d.issue) pieces.push("no. " + d.issue + ",");
+    if (d.year) pieces.push(d.year + ",");
+    if (d.pages) pieces.push("pp. " + d.pages + ",");
+    var tail = d.doi_url || d.url || "";
+    if (tail) pieces.push(tail);
+    var out = pieces.join(" ").replace(/,\s*$/,"");
+    if (!/[.!?]$/.test(out)) out += ".";
+    return out;
+  }
+  function fmtChicago(d){
+    // Author. "Title." Journal volume, no. issue (Year): pages. DOI/URL.
+    var a = fmtAuthorsChicago(d.authors);
+    var vi = d.volume ? d.volume : "";
+    var issue = d.issue ? ", no. " + d.issue : "";
+    var year = d.year ? " (" + d.year + ")" : "";
+    var pages = d.pages ? ": " + d.pages : "";
+    var tail = d.doi_url || d.url || "";
+    var core = (a ? a + ". " : "") + '"' + (d.title||"") + '." ' + (d.venue||"");
+    core += (vi ? " " + vi : "") + issue + year + pages + (tail ? ". " + tail : ".");
+    return core;
+  }
+  function fmtHarvard(d){
+    // Author(s) (Year) 'Title', Journal, volume(issue), pp. x–y. DOI/URL.
+    var a = fmtAuthorsHarvard(d.authors);
+    var vi = joinVolIssue(d.volume, d.issue);
+    var pages = d.pages ? ", pp. " + d.pages : "";
+    var tail = d.doi_url || d.url || "";
+    return (a ? a + " " : "") + "(" + (d.year || "n.d.") + ") '" + (d.title||"") + "', "
+           + (d.venue||"") + (vi ? ", " + vi : "") + pages + (tail ? ". " + tail : ".");
+  }
+  function fmtVancouver(d){
+    // Author(s). Title. Journal. Year;volume(issue):pages. doi:...
+    var a = fmtAuthorsVancouver(d.authors);
+    var vi = joinVolIssue(d.volume, d.issue);
+    var year = d.year || "";
+    var pages = d.pages ? ":" + d.pages : "";
+    var doiPart = d.doi ? " doi:" + d.doi : (d.doi_url ? " " + d.doi_url : (d.url ? " " + d.url : ""));
+    var out = (a ? a + ". " : "") + (d.title||"") + ". " + (d.venue||"") + ". "
+              + (year ? year + ";" : "") + (vi ? vi : "") + pages + "." + (doiPart ? doiPart : "");
+    return out.replace(/\s+\./g,".");
+  }
+  function bibtexKey(d){
+    var first = d.authors && d.authors.length ? splitName(d.authors[0]).family || d.authors[0] : "key";
+    var year = d.year && /^\d{4}$/.test(d.year) ? d.year : "n.d.";
+    var shortTitle = (d.title||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim().split(/\s+/).slice(0,3).join("");
+    return (first + year + shortTitle).replace(/\s+/g,"");
+  }
+  function fmtBibTeX(d){
+    var key = bibtexKey(d);
+    var pages = d.pages && d.pages.includes("-") ? d.pages : (d.pages || "");
+    var lines = [
+      "@article{" + key + ",",
+      "  title={" + (d.title||"") + "},",
+      d.authors && d.authors.length ? "  author={" + d.authors.map(function(full){ var p = splitName(full); return (p.family||full) + ", " + (p.given||""); }).join(" and ") + "}," : "",
+      d.venue ? "  journal={" + d.venue + "}," : "",
+      d.year ? "  year={" + d.year + "}," : "",
+      d.volume ? "  volume={" + d.volume + "}," : "",
+      d.issue ? "  number={" + d.issue + "}," : "",
+      pages ? "  pages={" + pages + "}," : "",
+      d.doi ? "  doi={" + d.doi + "}," : (d.doi_url ? "  url={" + d.doi_url + "}," : (d.url ? "  url={" + d.url + "}," : "")),
+      "}"
+    ].filter(Boolean);
+    return lines.join("\n");
+  }
+
   // ---------- Unpaywall (adds "downloadable" PDF info) ----------
   var oaCache = Object.create(null);
   async function fetchUnpaywall(doi){
@@ -91,6 +312,7 @@
     var venue = journalFrom(work);
     var title = work.display_name || work.title || "Untitled";
     var authors = authorLinks(work.authorships, 10);
+    var cited = get(work,"cited_by_count",0) || 0;
 
     // abstract (first sentence + full)
     var abs = abstractTextFrom(work);
@@ -107,10 +329,27 @@
     var oaPDF = get(work,"best_oa_location.url_for_pdf",null) || get(work,"primary_location.pdf_url",null) || get(work,"open_access.oa_url",null);
     if (oaPDF) chips.unshift('<a class="badge badge-oa" href="'+oaPDF+'" target="_blank" rel="noopener">PDF</a>');
 
+    // ---- Citation data attributes (for popover generation) ----
+    var citeData = collectCiteData(work);
+    function attr(v){ return v ? escapeHtml(String(v)) : ""; }
+
     return ''+
-    '<article class="result-card paper-card" data-paper-id="'+escapeHtml(idTail)+'" '+(doi?'data-doi="'+escapeHtml(String(doi).replace(/^doi:/i,""))+'"':'')+'>'+
+    '<article class="result-card paper-card" ' +
+      'data-paper-id="'+escapeHtml(idTail)+'" '+
+      (doi?'data-doi="'+escapeHtml(String(doi).replace(/^doi:/i,""))+'"':'')+
+      'data-cite-title="'+attr(citeData.title)+'" '+
+      'data-cite-year="'+attr(citeData.year)+'" '+
+      'data-cite-venue="'+attr(citeData.venue)+'" '+
+      'data-cite-volume="'+attr(citeData.volume)+'" '+
+      'data-cite-issue="'+attr(citeData.issue)+'" '+
+      'data-cite-pages="'+attr(citeData.pages)+'" '+
+      'data-cite-doi="'+attr(citeData.doi)+'" '+
+      'data-cite-doiurl="'+attr(citeData.doi_url)+'" '+
+      'data-cite-url="'+attr(citeData.url)+'" '+
+      'data-cite-authors="'+attr((citeData.authors||[]).join(' | '))+'">'+
       '<h3 class="card-title"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+escapeHtml(title)+'</a></h3>'+
-      '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+escapeHtml(venue)+'</p>'+
+      '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+escapeHtml(venue)+
+        ' · <span title="Times this work has been cited">Cited by '+escapeHtml(String(cited))+'</span></p>'+
       '<p class="authors"><strong>Authors:</strong> '+authors+'</p>'+
       '<p class="abstract">'+
         (short ? '<span class="abs-short">'+escapeHtml(short)+'</span>' : '<span class="muted">No summary available.</span>')+
@@ -118,11 +357,100 @@
         (hasMore ? '<span class="abs-full">'+escapeHtml(abs)+'</span>' : '')+
       '</p>'+
       '<p class="chips" data-chips>'+chips.join(" ")+'</p>'+
-      '<button class="btn btn-secondary btn-save" title="Add to Library" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'
+      '<div class="card-actions" style="display:flex; gap:.5rem; flex-wrap:wrap;">'+
+        '<button class="btn btn-secondary btn-save" title="Add to Library" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
+        '<button class="btn btn-secondary btn-cite" title="Cite this paper" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'+
+      '</div>'+
+      // Popover container (created on demand)
+      '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '+
+        'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+
     '</article>';
   }
 
-  // Enhance cards after insertion: Unpaywall + interactions
+  // Build popover content
+  function buildCitePopover(card){
+    var getAttr = function(k){ return (card.getAttribute(k) || "").trim(); };
+    var d = {
+      title: getAttr("data-cite-title"),
+      year:  getAttr("data-cite-year"),
+      venue: getAttr("data-cite-venue"),
+      volume: getAttr("data-cite-volume"),
+      issue: getAttr("data-cite-issue"),
+      pages: getAttr("data-cite-pages"),
+      doi:   getAttr("data-cite-doi"),
+      doi_url: getAttr("data-cite-doiurl"),
+      url:   getAttr("data-cite-url"),
+      authors: (getAttr("data-cite-authors") ? getAttr("data-cite-authors").split(" | ") : [])
+    };
+
+    var apa = fmtAPA(d);
+    var mla = fmtMLA(d);
+    var chi = fmtChicago(d);
+    var har = fmtHarvard(d);
+    var van = fmtVancouver(d);
+    var bib = fmtBibTeX(d);
+
+    var tpl = ''+
+      '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">' +
+        '<strong style="font-size:1rem;">Cite this</strong>' +
+        '<div style="display:flex; gap:8px; align-items:center;">' +
+          '<button class="btn btn-secondary" data-action="copy-all" title="Copy all formats">Copy All</button>' +
+          '<button class="btn btn-secondary" data-action="close-cite" aria-label="Close">Close</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:grid; grid-template-columns: 1fr; gap:10px; max-height:55vh; overflow:auto;">' +
+        citeRow("APA (7th)", apa) +
+        citeRow("MLA (9th)", mla) +
+        citeRow("Chicago (Notes & Bib)", chi) +
+        citeRow("Harvard", har) +
+        citeRow("Vancouver", van) +
+        citeRowTextarea("BibTeX", bib) +
+      '</div>';
+
+    function citeRow(label, text){
+      return '' +
+        '<div class="cite-row" data-cite-text="'+escapeHtml(text)+'">' +
+          '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">' +
+            '<span class="muted" style="font-weight:600;">'+escapeHtml(label)+'</span>' +
+            '<button class="btn btn-secondary" data-role="copy-cite" aria-label="Copy '+escapeHtml(label)+'">Copy</button>' +
+          '</div>' +
+          '<div style="font-size:.95rem; line-height:1.4;">'+escapeHtml(text)+'</div>' +
+        '</div>';
+    }
+    function citeRowTextarea(label, text){
+      return '' +
+        '<div class="cite-row-bibtex">' +
+          '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">' +
+            '<span class="muted" style="font-weight:600;">'+escapeHtml(label)+'</span>' +
+            '<button class="btn btn-secondary" data-role="copy-bibtex" aria-label="Copy BibTeX">Copy</button>' +
+          '</div>' +
+          '<textarea readonly style="width:100%; min-height:140px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:.9rem; padding:8px; border:1px solid #e5e7eb; border-radius:8px;">'+escapeHtml(text)+'</textarea>' +
+        '</div>';
+    }
+
+    return tpl;
+  }
+
+  // Position popover near the Cite button within the card
+  function positionPopover(card, popover, button){
+    var btnRect = button.getBoundingClientRect();
+    var cardRect = card.getBoundingClientRect();
+    var top = (btnRect.bottom - cardRect.top) + 8; // below the button
+    var left = (btnRect.left - cardRect.left);
+    // keep within card bounds
+    var maxLeft = card.clientWidth - popover.clientWidth - 8;
+    if (left > maxLeft) left = Math.max(8, maxLeft);
+    if (left < 8) left = 8;
+    if (top + popover.clientHeight > card.clientHeight) {
+      // if too tall, pin to bottom with some padding
+      top = card.clientHeight - popover.clientHeight - 12;
+      if (top < 8) top = 8;
+    }
+    popover.style.left = left + "px";
+    popover.style.top  = top + "px";
+  }
+
+  // ---------- Enhance cards after insertion: Unpaywall + interactions ----------
   async function enhancePaperCards(container){
     container = container || document;
     // 1) Unpaywall PDF indicator
@@ -151,13 +479,13 @@
 
     // 2) Expand/collapse abstract
     container.addEventListener("click", function(e){
-  var btn = e.target.closest('[data-role="toggle-abs"]');
-  if (!btn) return;
-  var abstract = btn.closest(".abstract");
-  if (!abstract) return;
-  abstract.classList.toggle("expanded");
-  btn.textContent = abstract.classList.contains("expanded") ? "Show less" : "Show more";
-});
+      var btn = e.target.closest('[data-role="toggle-abs"]');
+      if (!btn) return;
+      var abstract = btn.closest(".abstract");
+      if (!abstract) return;
+      abstract.classList.toggle("expanded");
+      btn.textContent = abstract.classList.contains("expanded") ? "Show less" : "Show more";
+    });
 
     // 3) Add to Library (localStorage stub)
     container.addEventListener("click", function(e){
@@ -176,6 +504,113 @@
         setTimeout(function(){ btn.textContent = "Add to Library"; }, 1500);
       }catch(_){}
     });
+
+    // 4) Cite popover (open/close/copy)
+    function closeAllPopovers(){
+      Array.prototype.forEach.call(container.querySelectorAll(".paper-card .cite-popover"), function(pop){
+        pop.hidden = true;
+        var card = pop.closest(".paper-card");
+        var openBtn = card && card.querySelector('[data-action="open-cite"]');
+        if (openBtn) openBtn.setAttribute("aria-expanded","false");
+      });
+    }
+
+    container.addEventListener("click", function(e){
+      // open
+      var open = e.target.closest('[data-action="open-cite"]');
+      if (open){
+        var card = open.closest(".paper-card");
+        if (!card) return;
+        var pop = card.querySelector(".cite-popover");
+        if (!pop) return;
+
+        if (!pop.innerHTML) {
+          pop.innerHTML = buildCitePopover(card);
+        }
+        if (!pop.hidden) {
+          pop.hidden = true;
+          open.setAttribute("aria-expanded","false");
+          return;
+        }
+        closeAllPopovers();
+        pop.hidden = false;
+        open.setAttribute("aria-expanded","true");
+        // delay to measure size for positioning
+        requestAnimationFrame(function(){ positionPopover(card, pop, open); });
+        return;
+      }
+
+      // close
+      var close = e.target.closest('[data-action="close-cite"]');
+      if (close){
+        var cardC = close.closest(".paper-card");
+        var popC = cardC && cardC.querySelector(".cite-popover");
+        if (popC){ popC.hidden = true; }
+        var openBtn = cardC && cardC.querySelector('[data-action="open-cite"]');
+        if (openBtn) openBtn.setAttribute("aria-expanded","false");
+        return;
+      }
+
+      // copy single line
+      var copyBtn = e.target.closest('[data-role="copy-cite"]');
+      if (copyBtn){
+        var row = copyBtn.closest(".cite-row");
+        if (!row) return;
+        var text = row.getAttribute("data-cite-text") || "";
+        navigator.clipboard && navigator.clipboard.writeText(text).then(function(){
+          copyBtn.textContent = "Copied ✓";
+          setTimeout(function(){ copyBtn.textContent = "Copy"; }, 1200);
+        }).catch(function(){});
+        return;
+      }
+
+      // copy bibtex
+      var copyBib = e.target.closest('[data-role="copy-bibtex"]');
+      if (copyBib){
+        var wrap = copyBib.closest(".cite-row-bibtex");
+        if (!wrap) return;
+        var ta = wrap.querySelector("textarea");
+        if (!ta) return;
+        ta.select();
+        document.execCommand("copy");
+        copyBib.textContent = "Copied ✓";
+        setTimeout(function(){ copyBib.textContent = "Copy"; }, 1200);
+        return;
+      }
+
+      // copy all
+      var copyAll = e.target.closest('[data-action="copy-all"]');
+      if (copyAll){
+        var cardA = copyAll.closest(".paper-card");
+        var popA = cardA && cardA.querySelector(".cite-popover");
+        if (!popA) return;
+        var parts = [];
+        var rows = popA.querySelectorAll(".cite-row");
+        rows.forEach(function(r){
+          var label = r.querySelector(".muted") ? r.querySelector(".muted").textContent : "";
+          var text = r.getAttribute("data-cite-text") || "";
+          if (label && text) parts.push(label + ":\n" + text);
+        });
+        var bibTA = popA.querySelector(".cite-row-bibtex textarea");
+        if (bibTA){ parts.push("BibTeX:\n" + bibTA.value); }
+        var bundle = parts.join("\n\n");
+        navigator.clipboard && navigator.clipboard.writeText(bundle).then(function(){
+          copyAll.textContent = "Copied ✓";
+          setTimeout(function(){ copyAll.textContent = "Copy All"; }, 1200);
+        }).catch(function(){});
+      }
+    });
+
+    // 5) Close popovers on Escape / outside click
+    document.addEventListener("keydown", function(e){
+      if (e.key === "Escape") closeAllPopovers();
+    });
+    document.addEventListener("click", function(e){
+      var pop = e.target.closest(".cite-popover");
+      var btn = e.target.closest('[data-action="open-cite"]');
+      if (pop || btn) return;
+      closeAllPopovers();
+    }, true);
   }
 
   // expose
@@ -185,5 +620,3 @@
     enhancePaperCards: enhancePaperCards
   };
 })();
-
-
