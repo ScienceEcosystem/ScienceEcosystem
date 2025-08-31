@@ -242,33 +242,35 @@
     return html;
   }
 
-  function collectCiteDataForHeader(work){
-    if (!window.SE || !SE.components || !SE.components.renderPaperCard){
-      // fallback (same schema as components.collectCiteData output)
-      var venue = get(work,"host_venue.display_name",null) || get(work,"primary_location.source.display_name","") || "";
-      var doi = work.doi || get(work,"ids.doi",null);
-      var doiHref = doi ? (String(doi).replace(/^doi:/i,"").indexOf("http")===0 ? String(doi).replace(/^doi:/i,"") : ("https://doi.org/"+String(doi).replace(/^doi:/i,""))) : "";
-      var first_page = get(work,"biblio.first_page","") || "";
-      var last_page  = get(work,"biblio.last_page","") || "";
-      var pages = (first_page && last_page) ? (first_page + "-" + last_page) : (first_page || last_page || "");
-      var auths = (get(work,"authorships",[])||[]).map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean);
-      return {
-        title: work.display_name || work.title || "Untitled",
-        year: (work.publication_year != null ? String(work.publication_year) : "n.d."),
-        venue: venue,
-        volume: get(work,"biblio.volume","") || "",
-        issue: get(work,"biblio.issue","") || "",
-        pages: pages,
-        doi: doi ? String(doi).replace(/^doi:/i,"") : "",
-        doi_url: doiHref || "",
-        url: get(work,"primary_location.landing_page_url","") || doiHref || (work.id || ""),
-        authors: auths
-      };
-    }
-    // Reuse components.collectCiteData indirectly by rendering a hidden card? Not exposed.
-    // We'll compute here (same as above for consistency).
-    return collectCiteDataForHeader(work); // (will not actually recurse due to early return above)
-  }
+  // Replace the old collectCiteDataForHeader with this:
+function collectCiteDataForHeader(work){
+  var venue = get(work,"host_venue.display_name",null) || get(work,"primary_location.source.display_name","") || "";
+  var doiRaw = work.doi || get(work,"ids.doi",null);
+  var doiClean = doiRaw ? String(doiRaw).replace(/^doi:/i,"") : "";
+  var doiHref = doiClean ? (doiClean.indexOf("http")===0 ? doiClean : ("https://doi.org/" + doiClean)) : "";
+
+  var first_page = get(work,"biblio.first_page","") || "";
+  var last_page  = get(work,"biblio.last_page","") || "";
+  var pages = (first_page && last_page) ? (first_page + "-" + last_page) : (first_page || last_page || "");
+
+  var authors = (get(work,"authorships",[])||[])
+    .map(function(a){ return get(a,"author.display_name",""); })
+    .filter(Boolean);
+
+  return {
+    title: work.display_name || work.title || "Untitled",
+    year:  (work.publication_year != null ? String(work.publication_year) : "n.d."),
+    venue: venue,
+    volume: get(work,"biblio.volume","") || "",
+    issue:  get(work,"biblio.issue","")  || "",
+    pages:  pages,
+    doi:    doiClean,
+    doi_url: doiHref,
+    url:    get(work,"primary_location.landing_page_url","") || doiHref || (work.id || ""),
+    authors: authors
+  };
+}
+
 
   function buildInfoCards(p){
     var citedBy = get(p,'cited_by_count',0) || 0;
