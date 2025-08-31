@@ -317,8 +317,9 @@
 
     var edges = [];
     for (var k=0;k<cited.length;k++)  edges.push({ from: main.id, to: cited[k].id });
-    for (var m=0;m+citing.length>m; m++){} // no-op guard
-    for (var m2=0;m2<citing.length;m2++) edges.push({ from: citing[m2].id, to: main.id });
+    for (var m=0;m<citing.length;m++) {
+  edges.push({ from: citing[m].id, to: main.id });
+}
 
     var network = new vis.Network(
       document.getElementById("paperGraph"),
