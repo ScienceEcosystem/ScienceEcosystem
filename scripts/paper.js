@@ -10,6 +10,7 @@
   function getParam(name){ return new URLSearchParams(location.search).get(name); }
   function escapeHtml(str){ str = (str==null?"":String(str)); return str.replace(/[&<>'"]/g, function(c){ return ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"})[c]; }); }
   function get(obj, path, fb){ try{ var p=path.split("."), cur=obj; for(var i=0;i<p.length;i++){ if(cur==null) return fb; cur=cur[p[i]]; } return cur==null?fb:cur; } catch(e){ return fb; } }
+  function has(fn){ try { return !!fn; } catch(e){ return false; } }
 
   function addMailto(u){
     var url = new URL(u, API);
@@ -42,7 +43,7 @@
     try { s = decodeURIComponent(s); } catch(e){}
     s = s.trim();
     if (s.indexOf("/") !== -1 && s.indexOf("openalex.org/") !== -1) {
-      s = s.split("/").filter(Boolean).pop(); // W...
+      s = s.split("/").filter(Boolean).pop();
     }
     var doiMatch = s.match(/10\.\d{4,9}\/\S+/i);
     if (doiMatch) {
@@ -73,7 +74,6 @@
   }
 
   async function fetchCitingPapers(paperOpenAlexIdOrUrl){
-    // expects like "https://openalex.org/W274..." or "W274..."
     var s = String(paperOpenAlexIdOrUrl || "");
     var idTail = s.replace(/^https?:\/\/openalex\.org\//i, "");
     var url = API + "/works?filter=cites:" + encodeURIComponent(idTail) + "&per_page=20";
@@ -98,7 +98,6 @@
       var res = await fetch(url, { headers: { "Accept": "application/json" } });
       if (!res.ok) return null;
       var j = await res.json();
-      // Altmetric returns fields like: "cited_by_tweeters_count", "cited_by_feeds_count", "cited_by_msm_count"
       var social = (j.cited_by_tweeters_count || 0) + (j.cited_by_facebook_count || 0) + (j.cited_by_gplus_count || 0) + (j.cited_by_weibo_count || 0) + (j.cited_by_threads_count || 0) + (j.cited_by_mendeley_count || 0);
       var news = (j.cited_by_msm_count || 0) + (j.cited_by_blogs_count || 0);
       return { social: social, news: news, raw: j };
@@ -189,10 +188,8 @@
     var container = $("paperActions");
     if (!container) return;
 
-    // Build lightweight action buttons (compatible classes with card actions)
     var workId = String(p.id || "");
     var shortId = workId.replace(/^https?:\/\/openalex\.org\//i, "");
-    var doi = p.doi || get(p,"ids.doi",null) || "";
 
     container.innerHTML =
       '<div class="actions-group">'
@@ -200,18 +197,16 @@
       + '  <button id="btnCite" class="btn btn-secondary" data-cite-id="'+escapeHtml(shortId)+'">Cite</button>'
       + '</div>';
 
-    // If your components library provides enhancers, prefer them
     try {
       if (window.SE && SE.components) {
-        if (typeof SE.components.enhanceSaveButton === "function") {
+        if (has(SE.components.enhanceSaveButton)) {
           SE.components.enhanceSaveButton($("#btnSave"), p);
-        } else if (typeof SE.components.attachSaveHandler === "function") {
+        } else if (has(SE.components.attachSaveHandler)) {
           SE.components.attachSaveHandler($("#btnSave"), p);
         }
       }
-    } catch(e){ console.warn("save enhancer not found; falling back", e); }
+    } catch(e){ console.warn("save enhancer not found; using fallback", e); }
 
-    // Fallback save handler (localStorage)
     $("#btnSave").addEventListener("click", function(){
       var key = "seLibrary";
       var raw = localStorage.getItem(key);
@@ -226,10 +221,7 @@
       setTimeout(() => { this.textContent = "Save to library"; }, 1500);
     });
 
-    // Cite button opens modal with APA + In-text; keyboard/esc safe
-    $("#btnCite").addEventListener("click", function(){
-      openCiteModal(p);
-    });
+    $("#btnCite").addEventListener("click", function(){ openCiteModal(p); });
   }
 
   function buildCitationStrings(p){
@@ -273,7 +265,6 @@
     modal.addEventListener("click", function(e){ if (e.target.matches("[data-close]") || e.target === modal) close(); });
     document.addEventListener("keydown", esc);
 
-    // copy buttons
     modal.addEventListener("click", function(e){
       var btn = e.target.closest("button[data-copy]");
       if (!btn) return;
@@ -317,13 +308,10 @@
   }
 
   function renderPaper(p, source){
-    // Header
     $("paperHeader").innerHTML = buildHeader(p);
 
-    // Actions + Stats (render now; stats might update after Altmetric)
     renderActionBar(p);
 
-    // Try Altmetric in background; render stats with or without it
     var doiRaw = p.doi || get(p,"ids.doi",null) || null;
     fetchAltmetricMentions(doiRaw).then(function(alt){
       renderStatsRow(p, alt || null);
@@ -331,13 +319,12 @@
       renderStatsRow(p, null);
     });
 
-    // Abstract
     $("abstractBlock").innerHTML = (
       '<h2>Abstract</h2>' +
       '<p>' + formatAbstract(p.abstract_inverted_index) + '</p>'
     );
 
-    // Research objects (datasets / software) from locations/sources when available
+    // Research objects
     var items = [];
     var locs = Array.isArray(p.locations) ? p.locations : [];
     for (var i=0;i<locs.length;i++){
@@ -353,10 +340,10 @@
       (items.length ? '<ul>'+items.join("")+'</ul>' : '<p class="muted">None listed.</p>')
     );
 
-    // Journal & Quality sidebar (first box)
+    // Journal & Quality
     renderJournalBlock(p, source);
 
-    // Topics chips
+    // Topics
     var concepts = Array.isArray(p.concepts) ? p.concepts.slice() : [];
     concepts.sort(function(x,y){ return (y.score||0)-(x.score||0); });
     $("topicsBlock").innerHTML = concepts.length
@@ -378,14 +365,12 @@
     var homepage   = get(source, 'homepage_url', null);
     var srcOpenAlex= get(source, 'id', null);
 
-    // Article-level signals
     var citedBy    = get(p, 'cited_by_count', 0);
     var refCount   = Array.isArray(p.referenced_works) ? p.referenced_works.length : 0;
     var isRetracted= !!get(p, 'is_retracted', false);
     var hasCorrArr = Array.isArray(get(p, 'corrections', [])) ? get(p, 'corrections', []) : [];
     var hasCorr    = hasCorrArr.length > 0;
 
-    // Data/code availability from locations
     var locs = Array.isArray(p.locations) ? p.locations : [];
     var dataCount = 0, codeCount = 0;
     for (var i=0;i<locs.length;i++){
@@ -395,7 +380,6 @@
     }
 
     var lines = [];
-    // Title row with links
     lines.push('<p><strong>Journal:</strong> '+escapeHtml(journalName)
       + (homepage?(' · <a href="'+homepage+'" target="_blank" rel="noopener">Homepage</a>'):'')
       + (srcOpenAlex?(' · <a href="'+srcOpenAlex+'" target="_blank" rel="noopener">OpenAlex</a>'):'')
@@ -408,7 +392,6 @@
     if (issns && issns.length) issnBits.push('ISSN: '+escapeHtml(issns.join(', ')));
     if (issnBits.length) lines.push('<p class="meta">'+issnBits.join(' · ')+'</p>');
 
-    // Badges
     var badges = [];
     badges.push('<span class="badge '+(oaJournal?'badge-oa':'')+'">'+(oaJournal?'OA journal':'Closed / Hybrid')+'</span>');
     badges.push('<span class="badge">'+(doaj?'In DOAJ':'Not in DOAJ')+'</span>');
@@ -417,7 +400,6 @@
     if (hasCorr)     badges.push('<span class="badge">Correction noted</span>');
     lines.push('<p class="chips">'+badges.join(' ')+'</p>');
 
-    // Article-level quick stats
     lines.push('<ul class="kv-list">'
       + '<li><span>Citations</span><strong>'+escapeHtml(String(citedBy))+'</strong></li>'
       + '<li><span>References</span><strong>'+escapeHtml(String(refCount))+'</strong></li>'
@@ -425,7 +407,6 @@
       + '<li><span>Code linked</span><strong>'+escapeHtml(String(codeCount))+'</strong></li>'
       + '</ul>');
 
-    // Transparency note (heuristic)
     var vt = String(venueType||'').toLowerCase();
     var peerReviewGuess = (vt==='journal' && !/repository|preprint/.test(vt)) ? 'Likely peer-reviewed (journal)' : 'Peer review unknown';
     lines.push('<p class="muted">'+escapeHtml(peerReviewGuess)+'. Sources: OpenAlex (journal metadata & OA status).</p>');
@@ -480,6 +461,21 @@
     });
   }
 
+  // Render a simple fallback card if SE.components.renderPaperCard is unavailable
+  function fallbackCard(w){
+    var title = escapeHtml(w.display_name || "Untitled");
+    var idTail = String(w.id || "").replace(/^https?:\/\/openalex\.org\//i, "");
+    var href = "paper.html?id=" + encodeURIComponent(idTail);
+    var venue = escapeHtml(get(w, "host_venue.display_name", "") || get(w,"primary_location.source.display_name","") || "");
+    var yr = (w.publication_year != null ? w.publication_year : "n.d.");
+    return (
+      '<article class="paper-card">' +
+        '<h4 class="paper-card-title"><a href="'+href+'">'+title+'</a></h4>' +
+        '<p class="paper-card-meta">'+escapeHtml(String(yr)) + (venue ? " · " + venue : "") + '</p>' +
+      '</article>'
+    );
+  }
+
   // ---------- Boot ----------
   async function boot(){
     var rawId = getParam("id");
@@ -501,20 +497,27 @@
       try { citing = await fetchCitingPapers(paper.id); }
       catch(e){ console.warn("citing fetch failed:", e); }
 
-      // Graph (resilient even if one list is empty)
+      // Graph
       renderGraph(paper, cited, citing);
 
-      // Related block (full-width) using shared card
+      // Related block (use SE.components.renderPaperCard if available, else fallback)
       var relatedHtml = [];
       var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
+
+      var useSECard = !!(window.SE && SE.components && has(SE.components.renderPaperCard));
       for (var i=0;i<joinFew.length;i++){
         var w = joinFew[i];
-        relatedHtml.push(SE.components.renderPaperCard(w, { compact: true }));
+        relatedHtml.push(
+          useSECard ? SE.components.renderPaperCard(w, { compact: true })
+                    : fallbackCard(w)
+        );
       }
+
       $("relatedBlock").innerHTML = '<h2>Related papers</h2>' + (relatedHtml.length ? relatedHtml.join("") : "<p class='muted'>No related papers found.</p>");
-      // Enhance (Unpaywall + toggle + save) for the related cards
-      if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
-        SE.components.enhancePaperCards($("relatedBlock"));
+
+      // Enhance related cards if enhancer exists
+      if (window.SE && SE.components && has(SE.components.enhancePaperCards)) {
+        try { SE.components.enhancePaperCards($("relatedBlock")); } catch(e){ console.warn("enhancePaperCards failed", e); }
       }
     } catch (e) {
       console.error(e);
