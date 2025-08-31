@@ -89,6 +89,25 @@
     try { return await getJSON(url); } catch(e){ console.warn("source fetch failed", e); return null; }
   }
 
+  // best-effort Altmetric by DOI (may be CORS-blocked)
+  async function fetchAltmetricMentions(doi){
+    if (!doi) return null;
+    var clean = String(doi).replace(/^doi:/i, "");
+    var url = "https://api.altmetric.com/v1/doi/" + encodeURIComponent(clean);
+    try {
+      var res = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!res.ok) return null;
+      var j = await res.json();
+      // Altmetric returns fields like: "cited_by_tweeters_count", "cited_by_feeds_count", "cited_by_msm_count"
+      var social = (j.cited_by_tweeters_count || 0) + (j.cited_by_facebook_count || 0) + (j.cited_by_gplus_count || 0) + (j.cited_by_weibo_count || 0) + (j.cited_by_threads_count || 0) + (j.cited_by_mendeley_count || 0);
+      var news = (j.cited_by_msm_count || 0) + (j.cited_by_blogs_count || 0);
+      return { social: social, news: news, raw: j };
+    } catch(e){
+      console.warn("Altmetric fetch failed", e);
+      return null;
+    }
+  }
+
   // ---------- Formatting helpers ----------
   function authorLinks(authorships, limit){
     if (!Array.isArray(authorships) || !authorships.length) return "Unknown authors";
@@ -166,9 +185,151 @@
     );
   }
 
+  function renderActionBar(p){
+    var container = $("paperActions");
+    if (!container) return;
+
+    // Build lightweight action buttons (compatible classes with card actions)
+    var workId = String(p.id || "");
+    var shortId = workId.replace(/^https?:\/\/openalex\.org\//i, "");
+    var doi = p.doi || get(p,"ids.doi",null) || "";
+
+    container.innerHTML =
+      '<div class="actions-group">'
+      + '  <button id="btnSave" class="btn btn-primary" data-save-id="'+escapeHtml(shortId)+'">Save to library</button>'
+      + '  <button id="btnCite" class="btn btn-secondary" data-cite-id="'+escapeHtml(shortId)+'">Cite</button>'
+      + '</div>';
+
+    // If your components library provides enhancers, prefer them
+    try {
+      if (window.SE && SE.components) {
+        if (typeof SE.components.enhanceSaveButton === "function") {
+          SE.components.enhanceSaveButton($("#btnSave"), p);
+        } else if (typeof SE.components.attachSaveHandler === "function") {
+          SE.components.attachSaveHandler($("#btnSave"), p);
+        }
+      }
+    } catch(e){ console.warn("save enhancer not found; falling back", e); }
+
+    // Fallback save handler (localStorage)
+    $("#btnSave").addEventListener("click", function(){
+      var key = "seLibrary";
+      var raw = localStorage.getItem(key);
+      var arr = [];
+      try { arr = raw ? JSON.parse(raw) : []; } catch(e){}
+      var exists = arr.some(function(x){ return x && x.id === p.id; });
+      if (!exists) {
+        arr.push({ id: p.id, title: p.display_name, doi: p.doi || null, year: p.publication_year || null });
+        localStorage.setItem(key, JSON.stringify(arr));
+      }
+      this.textContent = exists ? "Saved" : "Saved ✓";
+      setTimeout(() => { this.textContent = "Save to library"; }, 1500);
+    });
+
+    // Cite button opens modal with APA + In-text; keyboard/esc safe
+    $("#btnCite").addEventListener("click", function(){
+      openCiteModal(p);
+    });
+  }
+
+  function buildCitationStrings(p){
+    var year = (p.publication_year != null ? p.publication_year : "n.d.");
+    var authorships = Array.isArray(p.authorships) ? p.authorships : [];
+    var authors = authorships.map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean);
+    var firstAuthorLast = authors.length ? (authors[0].split(" ").slice(-1)[0]) : "Author";
+    var venue = get(p,"host_venue.display_name",null) || get(p,"primary_location.source.display_name","");
+    var title = p.display_name || "";
+    var doi = p.doi ? ('https://doi.org/' + p.doi.replace(/^doi:/i,"")) : "";
+
+    var apaFull = (authors.join(", ")) + " ("+year+"). " + title + ". " + (venue||"") + (doi ? ". " + doi : "");
+    var inText = "(" + firstAuthorLast + ", " + year + ")";
+    return { apaFull: apaFull, inText: inText };
+  }
+
+  function openCiteModal(p){
+    var strings = buildCitationStrings(p);
+    var modal = document.createElement("div");
+    modal.className = "modal-backdrop";
+    modal.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="citeTitle">'
+      + '  <div class="modal-header">'
+      + '    <h3 id="citeTitle">Cite this paper</h3>'
+      + '    <button class="btn btn-icon" aria-label="Close" data-close>×</button>'
+      + '  </div>'
+      + '  <div class="modal-body">'
+      + '    <p><strong>APA:</strong> <span id="apaFull">'+escapeHtml(strings.apaFull)+'</span> '
+      + '      <button class="btn btn-secondary btn-xs" data-copy="#apaFull">Copy</button></p>'
+      + '    <p><strong>In-text:</strong> <span id="apaIn">'+escapeHtml(strings.inText)+'</span> '
+      + '      <button class="btn btn-secondary btn-xs" data-copy="#apaIn">Copy</button></p>'
+      + '  </div>'
+      + '  <div class="modal-footer">'
+      + '    <button class="btn" data-close>Close</button>'
+      + '  </div>'
+      + '</div>';
+
+    document.body.appendChild(modal);
+    function close(){ if (modal && modal.parentNode) modal.parentNode.removeChild(modal); document.removeEventListener("keydown", esc); }
+    function esc(e){ if (e.key === "Escape") close(); }
+    modal.addEventListener("click", function(e){ if (e.target.matches("[data-close]") || e.target === modal) close(); });
+    document.addEventListener("keydown", esc);
+
+    // copy buttons
+    modal.addEventListener("click", function(e){
+      var btn = e.target.closest("button[data-copy]");
+      if (!btn) return;
+      var sel = btn.getAttribute("data-copy");
+      var el = modal.querySelector(sel);
+      if (!el) return;
+      var text = el.innerText || el.textContent || "";
+      navigator.clipboard.writeText(text).catch(function(){});
+      btn.textContent = "Copied!";
+      setTimeout(function(){ btn.textContent = "Copy"; }, 1200);
+    });
+  }
+
+  function renderStatsRow(p, altmetric){
+    var container = $("paperStats");
+    if (!container) return;
+
+    var citedBy = get(p, 'cited_by_count', 0);
+    var refCount = Array.isArray(p.referenced_works) ? p.referenced_works.length : 0;
+    var social = altmetric && typeof altmetric.social === "number" ? altmetric.social : "—";
+    var news   = altmetric && typeof altmetric.news === "number" ? altmetric.news : "—";
+
+    container.innerHTML =
+      '<div class="info-cards">'
+      + card("Cited by", citedBy, "Total citations tracked in OpenAlex.")
+      + card("Sources used", refCount, "References listed by this work.")
+      + card("Mentions (social)", social, "Aggregated social mentions (Altmetric).")
+      + card("Mentions (news/blogs)", news, "News & blog mentions (Altmetric).")
+      + '</div>'
+      + ((altmetric===null) ? '<p class="muted" style="margin-top:.5rem">Mentions unavailable (Altmetric may be blocked via CORS or DOI not tracked).</p>' : '');
+
+    function card(label, value, hint){
+      return (
+        '<div class="info-card" role="group" aria-label="'+escapeHtml(label)+'">'
+        + '  <div class="info-card-value">'+escapeHtml(String(value))+'</div>'
+        + '  <div class="info-card-label">'+escapeHtml(label)+'</div>'
+        + '  <div class="info-card-hint">'+escapeHtml(hint)+'</div>'
+        + '</div>'
+      );
+    }
+  }
+
   function renderPaper(p, source){
     // Header
     $("paperHeader").innerHTML = buildHeader(p);
+
+    // Actions + Stats (render now; stats might update after Altmetric)
+    renderActionBar(p);
+
+    // Try Altmetric in background; render stats with or without it
+    var doiRaw = p.doi || get(p,"ids.doi",null) || null;
+    fetchAltmetricMentions(doiRaw).then(function(alt){
+      renderStatsRow(p, alt || null);
+    }).catch(function(){
+      renderStatsRow(p, null);
+    });
 
     // Abstract
     $("abstractBlock").innerHTML = (
@@ -351,8 +512,10 @@
         relatedHtml.push(SE.components.renderPaperCard(w, { compact: true }));
       }
       $("relatedBlock").innerHTML = '<h2>Related papers</h2>' + (relatedHtml.length ? relatedHtml.join("") : "<p class='muted'>No related papers found.</p>");
-      // Enhance (Unpaywall + toggle + save)
-      SE.components.enhancePaperCards($("relatedBlock"));
+      // Enhance (Unpaywall + toggle + save) for the related cards
+      if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
+        SE.components.enhancePaperCards($("relatedBlock"));
+      }
     } catch (e) {
       console.error(e);
       $("paperHeader").innerHTML = "<p class='muted'>Error loading paper details.</p>";
