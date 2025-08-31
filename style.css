@@ -646,3 +646,55 @@ body {
 .kv-list{ list-style: none; padding: 0; margin: .5rem 0 0; }
 .kv-list li{ display: flex; justify-content: space-between; padding: .25rem 0; }
 .kv-list li span{ color: var(--ink-dim); }
+
+
+/* ===== Compact stat boxes (paper header + profile) ===== */
+/* Make boxes shorter and auto-flow into multiple columns as space allows */
+.header-stats.stats-grid,
+.metrics .stats-grid{
+  /* Shorter, multi-column cards that auto-fit nicely */
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important;
+  gap: .6rem !important;
+}
+
+/* Tighter card */
+.header-stats .stat,
+.metrics .stat{
+  padding: .6rem .7rem !important;
+  border-radius: 9px;
+}
+
+/* Values: slightly smaller, no wrapping */
+.header-stats .stat-value,
+.metrics .stat-value{
+  font-size: 1.15rem !important;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Labels: compact, single line with ellipsis if needed */
+.header-stats .stat-label,
+.metrics .stat-label{
+  font-size: .8rem !important;
+  line-height: 1.15;
+  color: var(--ink-dim);
+  margin-top: .15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Slightly denser layout on very small screens */
+@media (max-width: 640px){
+  .header-stats.stats-grid,
+  .metrics .stats-grid{
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important;
+    gap: .5rem !important;
+  }
+  .header-stats .stat-value,
+  .metrics .stat-value{ font-size: 1.05rem !important; }
+  .header-stats .stat-label,
+  .metrics .stat-label{ font-size: .78rem !important; }
+}
