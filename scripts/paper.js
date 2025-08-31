@@ -2,7 +2,6 @@
 (function () {
   if (!document.body || document.body.dataset.page !== "paper") return;
 
-  // ---------- Constants & helpers ----------
   var API = "https://api.openalex.org";
   var MAILTO = "scienceecosystem@icloud.com";
 
@@ -42,7 +41,7 @@
     try { s = decodeURIComponent(s); } catch(e){}
     s = s.trim();
     if (s.indexOf("/") !== -1 && s.indexOf("openalex.org/") !== -1) {
-      s = s.split("/").filter(Boolean).pop(); // W...
+      s = s.split("/").filter(Boolean).pop();
     }
     var doiMatch = s.match(/10\.\d{4,9}\/\S+/i);
     if (doiMatch) {
@@ -100,11 +99,7 @@
       out.push('<a href="profile.html?id='+aid+'">'+name+'</a>');
     }
     var short = out.slice(0,8);
-    return {
-      allHtml: out.join(", "),
-      shortHtml: short.join(", "),
-      moreCount: Math.max(0, out.length - short.length)
-    };
+    return { allHtml: out.join(", "), shortHtml: short.join(", "), moreCount: Math.max(0, out.length - short.length) };
   }
 
   function uniqueAffiliationsList(authorships){
@@ -120,11 +115,7 @@
     }
     var out = set.map(escapeHtml);
     var short = out.slice(0,8);
-    return {
-      allHtml: out.join(", "),
-      shortHtml: short.join(", "),
-      moreCount: Math.max(0, out.length - short.length)
-    };
+    return { allHtml: out.join(", "), shortHtml: short.join(", "), moreCount: Math.max(0, out.length - short.length) };
   }
 
   function formatAbstract(idx){
@@ -142,7 +133,7 @@
     return '<a class="badge ' + (className||"") + '" href="'+href+'" target="_blank" rel="noopener">'+escapeHtml(text)+'</a>';
   }
 
-  // ---------- Header & actions ----------
+  // ---------- Header content ----------
   function buildHeaderMain(p){
     var title = p.display_name || "Untitled";
     var year  = (p.publication_year != null ? p.publication_year : "n.d.");
@@ -167,19 +158,14 @@
     return (
       '<h1 class="paper-title">'+escapeHtml(title)+'</h1>' +
       '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+escapeHtml(venue)+'</p>' +
-
-      // authors row
       '<p class="meta-row"><strong>Authors:</strong> ' +
         '<span class="wrap-text" id="authorsShort">'+aList.shortHtml+(aList.moreCount?(' <button class="link-btn" id="authorsShowMore">Show more</button>'):'')+'</span>' +
         '<span class="wrap-text" id="authorsFull" style="display:none;">'+aList.allHtml+' <button class="link-btn" id="authorsShowLess">Show less</button></span>' +
       '</p>' +
-
-      // affiliations row
       '<p class="meta-row"><strong>Affiliations:</strong> ' +
         '<span class="wrap-text" id="affShort">'+affList.shortHtml+(affList.moreCount?(' <button class="link-btn" id="affShowMore">Show more</button>'):'')+'</span>' +
         '<span class="wrap-text" id="affFull" style="display:none;">'+affList.allHtml+' <button class="link-btn" id="affShowLess">Show less</button></span>' +
       '</p>' +
-
       '<p class="chips">'+chips+'</p>'
     );
   }
@@ -187,26 +173,12 @@
   function wireHeaderToggles(){
     var asMore = $("authorsShowMore"), asLess = $("authorsShowLess");
     var afMore = $("affShowMore"), afLess = $("affShowLess");
-
-    if (asMore) asMore.onclick = function(){
-      $("authorsShort").style.display = "none";
-      $("authorsFull").style.display = "inline";
-    };
-    if (asLess) asLess.onclick = function(){
-      $("authorsFull").style.display = "none";
-      $("authorsShort").style.display = "inline";
-    };
-    if (afMore) afMore.onclick = function(){
-      $("affShort").style.display = "none";
-      $("affFull").style.display = "inline";
-    };
-    if (afLess) afLess.onclick = function(){
-      $("affFull").style.display = "none";
-      $("affShort").style.display = "inline";
-    };
+    if (asMore) asMore.onclick = function(){ $("authorsShort").style.display="none"; $("authorsFull").style.display="inline"; };
+    if (asLess) asLess.onclick = function(){ $("authorsFull").style.display="none"; $("authorsShort").style.display="inline"; };
+    if (afMore) afMore.onclick = function(){ $("affShort").style.display="none"; $("affFull").style.display="inline"; };
+    if (afLess) afLess.onclick = function(){ $("affFull").style.display="none"; $("affShort").style.display="inline"; };
   }
 
-  // Non-recursive (fixes stack overflow)
   function collectCiteDataForHeader(work){
     var venue = get(work,"host_venue.display_name",null) || get(work,"primary_location.source.display_name","") || "";
     var doiRaw = work.doi || get(work,"ids.doi",null);
@@ -216,18 +188,9 @@
     var last_page  = get(work,"biblio.last_page","") || "";
     var pages = (first_page && last_page) ? (first_page + "-" + last_page) : (first_page || last_page || "");
     var authors = (get(work,"authorships",[])||[]).map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean);
-    return {
-      title: work.display_name || work.title || "Untitled",
-      year:  (work.publication_year != null ? String(work.publication_year) : "n.d."),
-      venue: venue,
-      volume: get(work,"biblio.volume","") || "",
-      issue:  get(work,"biblio.issue","")  || "",
-      pages:  pages,
-      doi:    doiClean,
-      doi_url: doiHref,
-      url:    get(work,"primary_location.landing_page_url","") || doiHref || (work.id || ""),
-      authors: authors
-    };
+    return { title: work.display_name || work.title || "Untitled", year: (work.publication_year != null ? String(work.publication_year) : "n.d."),
+      venue: venue, volume: get(work,"biblio.volume","") || "", issue: get(work,"biblio.issue","") || "", pages: pages,
+      doi: doiClean, doi_url: doiHref, url: get(work,"primary_location.landing_page_url","") || doiHref || (work.id || ""), authors: authors };
   }
 
   function buildActionsBar(p){
@@ -259,7 +222,7 @@
       '</article>';
   }
 
-  function buildStatsSidebar(p){
+  function buildStatsHeader(p){
     var citedBy = get(p,'cited_by_count',0) || 0;
     var refCount = Array.isArray(p.referenced_works) ? p.referenced_works.length : 0;
     var socialOrNews = "—"; // placeholder until Altmetric/Crossref Events is wired
@@ -331,7 +294,7 @@
     $("journalBlock").innerHTML = lines.join("");
   }
 
-  // ---------- Graph helpers ----------
+  // ---------- Graph ----------
   function shortCitation(p){
     var first = get(p,"authorships.0.author.display_name","Unknown");
     var last = first.split(" ").slice(-1)[0] || first || "Unknown";
@@ -342,17 +305,20 @@
   function renderGraph(main, cited, citing){
     var block = $("graphBlock");
     block.innerHTML = '<h2>Connected Papers</h2><div id="paperGraph" class="panel" style="height:600px"></div>';
+
     if (!window.vis || !vis.Network){
       block.insertAdjacentHTML("beforeend", "<p class='muted'>Graph library not loaded.</p>");
       return;
     }
+
     var nodes = [{ id: main.id, label: shortCitation(main), title: main.display_name, group: "main", paperId: main.id }];
     for (var i=0;i<cited.length;i++)  nodes.push({ id: cited[i].id,  label: shortCitation(cited[i]),  title: cited[i].display_name,  group: "cited",  paperId: cited[i].id });
     for (var j=0;j<citing.length;j++) nodes.push({ id: citing[j].id, label: shortCitation(citing[j]), title: citing[j].display_name, group: "citing", paperId: citing[j].id });
 
     var edges = [];
     for (var k=0;k<cited.length;k++)  edges.push({ from: main.id, to: cited[k].id });
-    for (var m=0;m<citing.length;m++) edges.push({ from: citing[m].id, to: main.id });
+    for (var m=0;m+citing.length>m; m++){} // no-op guard
+    for (var m2=0;m2<citing.length;m2++) edges.push({ from: citing[m2].id, to: main.id });
 
     var network = new vis.Network(
       document.getElementById("paperGraph"),
@@ -374,26 +340,20 @@
 
   // ---------- Render ----------
   function renderPaper(p, source){
-    // Header left + actions right
     $("paperHeaderMain").innerHTML = buildHeaderMain(p);
-    $("paperActions").innerHTML = buildActionsBar(p);
+    $("paperActions").innerHTML   = buildActionsBar(p);
+    $("paperStats").innerHTML     = buildStatsHeader(p);
     wireHeaderToggles();
 
-    // Enhance header buttons using shared component logic
+    // Reuse shared behaviors (save, cite popover)
     if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
       SE.components.enhancePaperCards($("paperActions"));
     }
 
-    // Sidebar stats
-    $("paperStats").innerHTML = buildStatsSidebar(p);
-
     // Abstract
-    $("abstractBlock").innerHTML = (
-      '<h2>Abstract</h2>' +
-      '<p>' + formatAbstract(p.abstract_inverted_index) + '</p>'
-    );
+    $("abstractBlock").innerHTML = '<h2>Abstract</h2><p>' + formatAbstract(p.abstract_inverted_index) + '</p>';
 
-    // Research objects (datasets / software)
+    // Research objects
     var items = [];
     var locs = Array.isArray(p.locations) ? p.locations : [];
     for (var i=0;i<locs.length;i++){
@@ -404,15 +364,12 @@
         items.push('<li><a href="'+url+'" target="_blank" rel="noopener">'+escapeHtml(label)+'</a></li>');
       }
     }
-    $("objectsBlock").innerHTML = (
-      '<h2>Research Objects</h2>' +
-      (items.length ? '<ul>'+items.join("")+'</ul>' : '<p class="muted">None listed.</p>')
-    );
+    $("objectsBlock").innerHTML = '<h2>Research Objects</h2>' + (items.length ? '<ul>'+items.join("")+'</ul>' : '<p class="muted">None listed.</p>');
 
     // Journal & Quality
     renderJournalBlock(p, source);
 
-    // Topics chips
+    // Topics
     var concepts = Array.isArray(p.concepts) ? p.concepts.slice() : [];
     concepts.sort(function(x,y){ return (y.score||0)-(x.score||0); });
     $("topicsBlock").innerHTML = concepts.length
@@ -423,7 +380,6 @@
       : "<p class='muted'>No topics listed.</p>";
   }
 
-  // ---------- Boot ----------
   async function boot(){
     var rawId = getParam("id");
     if (!rawId) {
@@ -436,14 +392,12 @@
       var source = await fetchSourceFromPaper(paper);
       renderPaper(paper, source);
 
-      // extras (resilient)
-      var cited = [], citing = [];
+      var cited=[], citing=[];
       try { cited = await fetchCitedPapers(paper.referenced_works || []); } catch(e){ console.warn("cited fetch failed:", e); }
       try { citing = await fetchCitingPapers(paper.id); } catch(e){ console.warn("citing fetch failed:", e); }
 
       renderGraph(paper, cited, citing);
 
-      // Related block
       var relatedHtml = [];
       var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
       for (var i=0;i<joinFew.length;i++){

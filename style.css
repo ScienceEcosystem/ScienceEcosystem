@@ -572,3 +572,77 @@ body {
   font-size: .85rem;
   color: var(--ink-dim);
 }
+
+/* ===== Paper header: left content + right actions & stat boxes ===== */
+.paper-header-grid{
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 360px);
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Right column container */
+.header-side{
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  align-items: stretch;
+}
+
+/* Actions bar (right-aligned) */
+.header-actions{
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+.header-actions .paper-card.header-card{
+  border: 0; background: transparent; padding: 0; box-shadow: none;
+}
+.header-actions-inner{ position: relative; display: flex; gap: .5rem; }
+.header-actions .btn-save,
+.header-actions .btn-cite{
+  font-size: .95rem;
+  padding: .5rem .9rem;
+  line-height: 1;
+  border-radius: 8px;
+}
+
+/* Stat boxes inside the header (match profile look) */
+.header-stats.stats-grid{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .75rem;
+}
+.header-stats .stat{
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: .75rem .9rem;
+}
+.header-stats .stat-value{
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+.header-stats .stat-label{
+  font-size: .85rem;
+  color: var(--ink-dim);
+}
+
+/* Responsive: on narrow screens the right column stacks below; show stats in 3 columns */
+@media (max-width: 1024px){
+  .paper-header-grid{ grid-template-columns: 1fr; }
+  .header-actions{ justify-content: flex-start; }
+  .header-stats.stats-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Small helper for warning badge used in Journal box (if retracted) */
+.badge-warn{
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
+/* (Optional) simple key-value list */
+.kv-list{ list-style: none; padding: 0; margin: .5rem 0 0; }
+.kv-list li{ display: flex; justify-content: space-between; padding: .25rem 0; }
+.kv-list li span{ color: var(--ink-dim); }
