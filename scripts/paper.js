@@ -143,7 +143,7 @@
   }
 
   // ---------- Header & actions ----------
-  function buildHeader(p){
+  function buildHeaderMain(p){
     var title = p.display_name || "Untitled";
     var year  = (p.publication_year != null ? p.publication_year : "n.d.");
     var venue = get(p, "host_venue.display_name", null) || get(p, "primary_location.source.display_name", null) || "Unknown venue";
@@ -161,7 +161,6 @@
       badge(p.id, "OpenAlex")
     ].filter(Boolean).join(" ");
 
-    // Authors (collapsible)
     var aList = authorLinksList(p.authorships);
     var affList = uniqueAffiliationsList(p.authorships);
 
@@ -207,145 +206,71 @@
     };
   }
 
+  // Non-recursive (fixes stack overflow)
+  function collectCiteDataForHeader(work){
+    var venue = get(work,"host_venue.display_name",null) || get(work,"primary_location.source.display_name","") || "";
+    var doiRaw = work.doi || get(work,"ids.doi",null);
+    var doiClean = doiRaw ? String(doiRaw).replace(/^doi:/i,"") : "";
+    var doiHref = doiClean ? (doiClean.indexOf("http")===0 ? doiClean : ("https://doi.org/" + doiClean)) : "";
+    var first_page = get(work,"biblio.first_page","") || "";
+    var last_page  = get(work,"biblio.last_page","") || "";
+    var pages = (first_page && last_page) ? (first_page + "-" + last_page) : (first_page || last_page || "");
+    var authors = (get(work,"authorships",[])||[]).map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean);
+    return {
+      title: work.display_name || work.title || "Untitled",
+      year:  (work.publication_year != null ? String(work.publication_year) : "n.d."),
+      venue: venue,
+      volume: get(work,"biblio.volume","") || "",
+      issue:  get(work,"biblio.issue","")  || "",
+      pages:  pages,
+      doi:    doiClean,
+      doi_url: doiHref,
+      url:    get(work,"primary_location.landing_page_url","") || doiHref || (work.id || ""),
+      authors: authors
+    };
+  }
+
   function buildActionsBar(p){
-    // Build a tiny, invisible `.paper-card` shell so we can reuse SE.components.enhancePaperCards
-    // for Add to Library + Cite popover behavior exactly like search/profile.
     var idTail = String(p.id||"").replace(/^https?:\/\/openalex\.org\//i,"");
     var doi = p.doi || get(p,"ids.doi",null) || "";
     var citeData = collectCiteDataForHeader(p);
-
     function attr(v){ return v ? escapeHtml(String(v)) : ""; }
 
-    var html = ''+
-      '<div class="card-actions header-actions">' +
-        '<article class="paper-card" ' +
-          'data-paper-id="'+attr(idTail)+'" '+
-          (doi ? 'data-doi="'+attr(String(doi).replace(/^doi:/i,""))+'"' : '') +
-          'data-cite-title="'+attr(citeData.title)+'" '+
-          'data-cite-year="'+attr(citeData.year)+'" '+
-          'data-cite-venue="'+attr(citeData.venue)+'" '+
-          'data-cite-volume="'+attr(citeData.volume)+'" '+
-          'data-cite-issue="'+attr(citeData.issue)+'" '+
-          'data-cite-pages="'+attr(citeData.pages)+'" '+
-          'data-cite-doi="'+attr(citeData.doi)+'" '+
-          'data-cite-doiurl="'+attr(citeData.doi_url)+'" '+
-          'data-cite-url="'+attr(citeData.url)+'" '+
-          'data-cite-authors="'+attr((citeData.authors||[]).join(' | '))+'">'+
-            '<div class="header-actions-inner">'+
-              '<button class="btn btn-secondary btn-save" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
-              '<button class="btn btn-secondary btn-cite" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'+
-              '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '+
-                'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+
-            '</div>'+
-        '</article>' +
-      '</div>';
-    return html;
+    return ''+
+      '<article class="paper-card header-card" ' +
+        'data-paper-id="'+attr(idTail)+'" '+
+        (doi ? 'data-doi="'+attr(String(doi).replace(/^doi:/i,""))+'"' : '') +
+        'data-cite-title="'+attr(citeData.title)+'" '+
+        'data-cite-year="'+attr(citeData.year)+'" '+
+        'data-cite-venue="'+attr(citeData.venue)+'" '+
+        'data-cite-volume="'+attr(citeData.volume)+'" '+
+        'data-cite-issue="'+attr(citeData.issue)+'" '+
+        'data-cite-pages="'+attr(citeData.pages)+'" '+
+        'data-cite-doi="'+attr(citeData.doi)+'" '+
+        'data-cite-doiurl="'+attr(citeData.doi_url)+'" '+
+        'data-cite-url="'+attr(citeData.url)+'" '+
+        'data-cite-authors="'+attr((citeData.authors||[]).join(' | '))+'">'+
+          '<div class="header-actions-inner">'+
+            '<button class="btn btn-secondary btn-save" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
+            '<button class="btn btn-secondary btn-cite" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'+
+            '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '+
+              'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+
+          '</div>'+
+      '</article>';
   }
 
-  // Replace the old collectCiteDataForHeader with this:
-function collectCiteDataForHeader(work){
-  var venue = get(work,"host_venue.display_name",null) || get(work,"primary_location.source.display_name","") || "";
-  var doiRaw = work.doi || get(work,"ids.doi",null);
-  var doiClean = doiRaw ? String(doiRaw).replace(/^doi:/i,"") : "";
-  var doiHref = doiClean ? (doiClean.indexOf("http")===0 ? doiClean : ("https://doi.org/" + doiClean)) : "";
-
-  var first_page = get(work,"biblio.first_page","") || "";
-  var last_page  = get(work,"biblio.last_page","") || "";
-  var pages = (first_page && last_page) ? (first_page + "-" + last_page) : (first_page || last_page || "");
-
-  var authors = (get(work,"authorships",[])||[])
-    .map(function(a){ return get(a,"author.display_name",""); })
-    .filter(Boolean);
-
-  return {
-    title: work.display_name || work.title || "Untitled",
-    year:  (work.publication_year != null ? String(work.publication_year) : "n.d."),
-    venue: venue,
-    volume: get(work,"biblio.volume","") || "",
-    issue:  get(work,"biblio.issue","")  || "",
-    pages:  pages,
-    doi:    doiClean,
-    doi_url: doiHref,
-    url:    get(work,"primary_location.landing_page_url","") || doiHref || (work.id || ""),
-    authors: authors
-  };
-}
-
-
-  function buildInfoCards(p){
+  function buildStatsSidebar(p){
     var citedBy = get(p,'cited_by_count',0) || 0;
     var refCount = Array.isArray(p.referenced_works) ? p.referenced_works.length : 0;
+    var socialOrNews = "—"; // placeholder until Altmetric/Crossref Events is wired
 
-    // Best-effort for “shared on social media or news”.
-    // OpenAlex sometimes includes "primary_location.source.host_organization" etc., but social mentions typically need Altmetric/Crossref Events.
-    // We’ll show “—” if not available; easy to plug in later.
-    var socialOrNews = "—";
-
-    return ''+
-      '<div class="info-cards">'+
-        infoCard('Cited by', String(citedBy))+
-        infoCard('References used', String(refCount))+
-        infoCard('Shared in news / social', socialOrNews)+
-      '</div>';
-
-    function infoCard(label, value){
-      return ''+
-        '<div class="info-card">'+
-          '<div class="info-card-value">'+escapeHtml(value)+'</div>'+
-          '<div class="info-card-label">'+escapeHtml(label)+'</div>'+
-        '</div>';
+    function stat(label, value){
+      return '<div class="stat"><div class="stat-value">'+escapeHtml(String(value))+'</div><div class="stat-label">'+escapeHtml(label)+'</div></div>';
     }
+    return stat('Cited by', citedBy) + stat('References used', refCount) + stat('Shared in news / social', socialOrNews);
   }
 
-  // ---------- Rendering ----------
-  function renderPaper(p, source){
-    // Header + actions + stats
-    $("paperHeader").innerHTML = buildHeader(p);
-    $("paperActions").innerHTML = buildActionsBar(p);
-    $("paperStats").innerHTML = buildInfoCards(p);
-    wireHeaderToggles();
-
-    // Enhance header actions with the existing shared behaviors
-    if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
-      SE.components.enhancePaperCards($("paperActions"));
-    }
-
-    // Abstract
-    $("abstractBlock").innerHTML = (
-      '<h2>Abstract</h2>' +
-      '<p>' + formatAbstract(p.abstract_inverted_index) + '</p>'
-    );
-
-    // Research objects (datasets / software)
-    var items = [];
-    var locs = Array.isArray(p.locations) ? p.locations : [];
-    for (var i=0;i<locs.length;i++){
-      var type = get(locs[i], "source.type", "") || get(locs[i], "type", "");
-      var url = get(locs[i], "landing_page_url", null) || get(locs[i], "pdf_url", null);
-      var label = get(locs[i], "source.display_name", null) || type || "Link";
-      if (type && (type.indexOf("dataset") !== -1 || type.indexOf("software") !== -1) && url){
-        items.push('<li><a href="'+url+'" target="_blank" rel="noopener">'+escapeHtml(label)+'</a></li>');
-      }
-    }
-    $("objectsBlock").innerHTML = (
-      '<h2>Research Objects</h2>' +
-      (items.length ? '<ul>'+items.join("")+'</ul>' : '<p class="muted">None listed.</p>')
-    );
-
-    // Journal & Quality sidebar
-    renderJournalBlock(p, source);
-
-    // Topics chips
-    var concepts = Array.isArray(p.concepts) ? p.concepts.slice() : [];
-    concepts.sort(function(x,y){ return (y.score||0)-(x.score||0); });
-    $("topicsBlock").innerHTML = concepts.length
-      ? concepts.slice(0,12).map(function(c){
-          var tid = (c.id ? c.id.split("/").pop() : "");
-          return '<a class="topic-card" href="topic.html?id='+tid+'"><span class="topic-name">'+escapeHtml(c.display_name||"Topic")+'</span></a>';
-        }).join("")
-      : "<p class='muted'>No topics listed.</p>";
-  }
-
+  // ---------- Journal block ----------
   function renderJournalBlock(p, source){
     var journalName = get(source, 'display_name', null) || get(p, 'host_venue.display_name', null) || get(p, 'primary_location.source.display_name', '—');
     var venueType  = get(source, 'type', get(p, 'primary_location.source.type', '—'));
@@ -357,14 +282,12 @@ function collectCiteDataForHeader(work){
     var homepage   = get(source, 'homepage_url', null);
     var srcOpenAlex= get(source, 'id', null);
 
-    // Article-level signals
     var citedBy    = get(p, 'cited_by_count', 0);
     var refCount   = Array.isArray(p.referenced_works) ? p.referenced_works.length : 0;
     var isRetracted= !!get(p, 'is_retracted', false);
     var hasCorrArr = Array.isArray(get(p, 'corrections', [])) ? get(p, 'corrections', []) : [];
     var hasCorr    = hasCorrArr.length > 0;
 
-    // Data/code availability from locations
     var locs = Array.isArray(p.locations) ? p.locations : [];
     var dataCount = 0, codeCount = 0;
     for (var i=0;i<locs.length;i++){
@@ -408,7 +331,7 @@ function collectCiteDataForHeader(work){
     $("journalBlock").innerHTML = lines.join("");
   }
 
-  // ---------- Graph ----------
+  // ---------- Graph helpers ----------
   function shortCitation(p){
     var first = get(p,"authorships.0.author.display_name","Unknown");
     var last = first.split(" ").slice(-1)[0] || first || "Unknown";
@@ -419,12 +342,10 @@ function collectCiteDataForHeader(work){
   function renderGraph(main, cited, citing){
     var block = $("graphBlock");
     block.innerHTML = '<h2>Connected Papers</h2><div id="paperGraph" class="panel" style="height:600px"></div>';
-
     if (!window.vis || !vis.Network){
       block.insertAdjacentHTML("beforeend", "<p class='muted'>Graph library not loaded.</p>");
       return;
     }
-
     var nodes = [{ id: main.id, label: shortCitation(main), title: main.display_name, group: "main", paperId: main.id }];
     for (var i=0;i<cited.length;i++)  nodes.push({ id: cited[i].id,  label: shortCitation(cited[i]),  title: cited[i].display_name,  group: "cited",  paperId: cited[i].id });
     for (var j=0;j<citing.length;j++) nodes.push({ id: citing[j].id, label: shortCitation(citing[j]), title: citing[j].display_name, group: "citing", paperId: citing[j].id });
@@ -436,12 +357,7 @@ function collectCiteDataForHeader(work){
     var network = new vis.Network(
       document.getElementById("paperGraph"),
       { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) },
-      {
-        nodes: { shape: "dot", size: 15, font: { size: 14 } },
-        edges: { arrows: "to" },
-        physics: { stabilization: true },
-        interaction: { hover: true }
-      }
+      { nodes: { shape: "dot", size: 15, font: { size: 14 } }, edges: { arrows: "to" }, physics: { stabilization: true }, interaction: { hover: true } }
     );
 
     network.on("click", function (params) {
@@ -456,11 +372,62 @@ function collectCiteDataForHeader(work){
     });
   }
 
+  // ---------- Render ----------
+  function renderPaper(p, source){
+    // Header left + actions right
+    $("paperHeaderMain").innerHTML = buildHeaderMain(p);
+    $("paperActions").innerHTML = buildActionsBar(p);
+    wireHeaderToggles();
+
+    // Enhance header buttons using shared component logic
+    if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
+      SE.components.enhancePaperCards($("paperActions"));
+    }
+
+    // Sidebar stats
+    $("paperStats").innerHTML = buildStatsSidebar(p);
+
+    // Abstract
+    $("abstractBlock").innerHTML = (
+      '<h2>Abstract</h2>' +
+      '<p>' + formatAbstract(p.abstract_inverted_index) + '</p>'
+    );
+
+    // Research objects (datasets / software)
+    var items = [];
+    var locs = Array.isArray(p.locations) ? p.locations : [];
+    for (var i=0;i<locs.length;i++){
+      var type = get(locs[i], "source.type", "") || get(locs[i], "type", "");
+      var url = get(locs[i], "landing_page_url", null) || get(locs[i], "pdf_url", null);
+      var label = get(locs[i], "source.display_name", null) || type || "Link";
+      if (type && (type.indexOf("dataset") !== -1 || type.indexOf("software") !== -1) && url){
+        items.push('<li><a href="'+url+'" target="_blank" rel="noopener">'+escapeHtml(label)+'</a></li>');
+      }
+    }
+    $("objectsBlock").innerHTML = (
+      '<h2>Research Objects</h2>' +
+      (items.length ? '<ul>'+items.join("")+'</ul>' : '<p class="muted">None listed.</p>')
+    );
+
+    // Journal & Quality
+    renderJournalBlock(p, source);
+
+    // Topics chips
+    var concepts = Array.isArray(p.concepts) ? p.concepts.slice() : [];
+    concepts.sort(function(x,y){ return (y.score||0)-(x.score||0); });
+    $("topicsBlock").innerHTML = concepts.length
+      ? concepts.slice(0,12).map(function(c){
+          var tid = (c.id ? c.id.split("/").pop() : "");
+          return '<a class="topic-card" href="topic.html?id='+tid+'"><span class="topic-name">'+escapeHtml(c.display_name||"Topic")+'</span></a>';
+        }).join("")
+      : "<p class='muted'>No topics listed.</p>";
+  }
+
   // ---------- Boot ----------
   async function boot(){
     var rawId = getParam("id");
     if (!rawId) {
-      $("paperHeader").innerHTML = "<p class='muted'>No paper specified.</p>";
+      $("paperHeaderMain").innerHTML = "<p class='muted'>No paper specified.</p>";
       return;
     }
 
@@ -469,15 +436,11 @@ function collectCiteDataForHeader(work){
       var source = await fetchSourceFromPaper(paper);
       renderPaper(paper, source);
 
-      // fetch extras, but never let failures kill the page
+      // extras (resilient)
       var cited = [], citing = [];
-      try { cited = await fetchCitedPapers(paper.referenced_works || []); }
-      catch(e){ console.warn("cited fetch failed:", e); }
+      try { cited = await fetchCitedPapers(paper.referenced_works || []); } catch(e){ console.warn("cited fetch failed:", e); }
+      try { citing = await fetchCitingPapers(paper.id); } catch(e){ console.warn("citing fetch failed:", e); }
 
-      try { citing = await fetchCitingPapers(paper.id); }
-      catch(e){ console.warn("citing fetch failed:", e); }
-
-      // Graph
       renderGraph(paper, cited, citing);
 
       // Related block
@@ -491,7 +454,7 @@ function collectCiteDataForHeader(work){
       SE.components.enhancePaperCards($("relatedBlock"));
     } catch (e) {
       console.error(e);
-      $("paperHeader").innerHTML = "<p class='muted'>Error loading paper details.</p>";
+      $("paperHeaderMain").innerHTML = "<p class='muted'>Error loading paper details.</p>";
     }
   }
 

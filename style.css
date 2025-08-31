@@ -503,3 +503,72 @@ body {
 
 /* Keep pill look optional (remove if you prefer square) */
 /* .result-card.paper-card .btn-save { border-radius:9999px; } */
+
+
+/* ===== Paper header layout (content left, actions right) ===== */
+.paper-header-grid{
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1rem;
+  align-items: start;
+}
+
+.header-actions{
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  min-width: 220px;
+}
+
+/* Use the same component popover/behavior, but no card chrome in header */
+.header-actions .paper-card.header-card{
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.header-actions-inner{
+  position: relative;          /* anchor cite popover */
+  display: flex;
+  gap: .5rem;
+}
+
+/* Buttons visually match your shared .btn styles */
+.header-actions .btn-save,
+.header-actions .btn-cite{
+  font-size: .95rem;
+  padding: .5rem .9rem;
+  line-height: 1;
+  border-radius: 8px;
+}
+
+/* Stack on smaller screens */
+@media (max-width: 1024px){
+  .paper-header-grid{ grid-template-columns: 1fr; }
+  .header-actions{ justify-content: flex-start; }
+}
+
+/* ===== Paper stats in sidebar use the existing profile metric cards ===== */
+.side-col .metrics .stats-grid{
+  display: grid;
+  grid-template-columns: 1fr;   /* one per row in sidebar */
+  gap: .75rem;
+}
+
+.side-col .metrics .stat{
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: .75rem .9rem;
+}
+
+.side-col .metrics .stat-value{
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.side-col .metrics .stat-label{
+  font-size: .85rem;
+  color: var(--ink-dim);
+}
