@@ -42,9 +42,11 @@
   </nav>
 
   <main id="main" class="container">
-    <!-- TOP HEADER (title + meta + authors + affiliations + badges) -->
+    <!-- TOP HEADER (title + meta + authors + affiliations + chips + actions) -->
     <section class="panel">
       <div id="paperHeader">Loading paper...</div>
+      <div id="paperActions" class="paper-actions-row"></div>
+      <div id="paperStats" class="info-cards-row"></div>
     </section>
 
     <!-- MAIN + SIDEBAR -->
@@ -59,13 +61,13 @@
 
       <!-- Sidebar -->
       <aside class="side-col">
-        <!-- New: Journal & Quality signals (first sidebar box) -->
+        <!-- First box: Journal & Quality signals -->
         <section class="panel">
           <h3>Journal & Quality</h3>
           <div id="journalBlock">—</div>
         </section>
 
-        <!-- Keep topics box as requested -->
+        <!-- Keep topics box -->
         <section class="panel">
           <h3>Topics</h3>
           <div id="topicsBlock" class="topics-cards">—</div>
@@ -84,6 +86,6 @@
 
   <script src="scripts/search.js" defer></script>
   <script src="scripts/components.js" defer></script>
-  <script src="scripts/paper.js" defer></script>
+  <script src="scripts/paper.js?v=6" defer></script>
 </body>
 </html>
