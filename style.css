@@ -632,7 +632,7 @@ body {
 @media (max-width: 1024px){
   .paper-header-grid{ grid-template-columns: 1fr; }
   .header-actions{ justify-content: flex-start; }
-  .header-stats.stats-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .header-stats.stats-grid{ grid-template-columns: repeat(1, minmax(0, 1fr)); }
 }
 
 /* Small helper for warning badge used in Journal box (if retracted) */
@@ -698,3 +698,9 @@ body {
   .header-stats .stat-label,
   .metrics .stat-label{ font-size: .78rem !important; }
 }
+
+/* Trend charts: ensure visible height and crisp grid */
+.chart-block h4 { margin: 0 0 .35rem; }
+.chart-svg { width: 100%; height: 180px; display: block; }
+.chart-svg .grid { shape-rendering: crispEdges; }
+.chart-svg .xlabel { fill: #475569; }

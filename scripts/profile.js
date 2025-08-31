@@ -121,6 +121,126 @@
     }
   }
 
+  // ---- Trends (new) ----
+  function buildYearSeries(author){
+    // OpenAlex authors usually include counts_by_year: [{year, works_count, cited_by_count}, ...]
+    var rows = Array.isArray(author.counts_by_year) ? author.counts_by_year.slice() : [];
+    if (!rows.length) return [];
+
+    // sort ascending by year
+    rows.sort(function(a,b){ return a.year - b.year; });
+
+    // Determine active range (min..max present)
+    var minY = rows[0].year;
+    var maxY = rows[rows.length - 1].year;
+
+    // Normalize to full span, filling missing years with zero
+    var byYear = {};
+    rows.forEach(function(r){
+      byYear[r.year] = {
+        year: r.year,
+        works: Number(r.works_count || r.works || 0),
+        cites: Number(r.cited_by_count || r.citations || 0)
+      };
+    });
+
+    var out = [];
+    for (var y=minY; y<=maxY; y++){
+      var v = byYear[y] || { year:y, works:0, cites:0 };
+      out.push(v);
+    }
+    return out;
+  }
+
+  function renderBarChartSVG(opts){
+    // opts: { title, series:[{year, value}], maxHint, id }
+    var title = opts.title || "";
+    var series = Array.isArray(opts.series) ? opts.series : [];
+    var id = opts.id || ("c" + Math.random().toString(36).slice(2));
+    var H = 170, W = 560, padL = 36, padR = 8, padT = 10, padB = 26;
+    var innerW = W - padL - padR;
+    var innerH = H - padT - padB;
+
+    if (!series.length){
+      return '<div class="chart-block"><h4>'+escapeHtml(title)+'</h4><p class="muted">No data.</p></div>';
+    }
+
+    var n = series.length;
+    var maxVal = 0;
+    for (var i=0;i<n;i++){ if (series[i].value > maxVal) maxVal = series[i].value; }
+    if (opts.maxHint && opts.maxHint > maxVal) maxVal = opts.maxHint;
+    if (maxVal <= 0) maxVal = 1;
+
+    var step = innerW / n;
+    var barW = Math.max(4, Math.min(22, step * 0.6));
+
+    function x(i){ return padL + i*step + (step - barW)/2; }
+    function y(v){ return padT + innerH - (v/maxVal)*innerH; }
+
+    // x-axis labels: first, middle, last (avoid clutter)
+    var y0 = padT + innerH;
+    var first = series[0].year;
+    var mid = series[Math.floor(n/2)].year;
+    var last = series[n-1].year;
+
+    var bars = [];
+    for (var i=0;i<n;i++){
+      var s = series[i];
+      var bx = x(i), by = y(s.value), h = Math.max(0, y0 - by);
+      var titleTag = '<title>'+escapeHtml(String(s.year))+': '+escapeHtml(String(s.value))+'</title>';
+      bars.push('<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" ry="3">'+titleTag+'</rect>');
+    }
+
+    var grid = [];
+    // simple horizontal grid at 0%, 50%, 100%
+    [0,0.5,1].forEach(function(t){
+      var gy = padT + innerH * (1 - t);
+      grid.push('<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+gy.toFixed(1)+'" y2="'+gy.toFixed(1)+'" class="grid"/>');
+    });
+
+    var labels = [];
+    labels.push('<text x="'+padL+'" y="'+(H-6)+'" class="xlabel">'+escapeHtml(String(first))+'</text>');
+    labels.push('<text x="'+(padL + innerW/2)+'" y="'+(H-6)+'" class="xlabel" text-anchor="middle">'+escapeHtml(String(mid))+'</text>');
+    labels.push('<text x="'+(W-padR)+'" y="'+(H-6)+'" class="xlabel" text-anchor="end">'+escapeHtml(String(last))+'</text>');
+
+    var svg =
+      '<div class="chart-block">' +
+        '<h4>'+escapeHtml(title)+'</h4>' +
+        '<svg class="chart-svg" role="img" aria-labelledby="'+id+'-title" viewBox="0 0 '+W+' '+H+'" width="100%" height="180">' +
+          '<title id="'+id+'-title">'+escapeHtml(title)+'</title>' +
+          // grid
+          '<g fill="none" stroke="currentColor" stroke-opacity=".08" stroke-width="1">'+ grid.join("") +'</g>' +
+          // bars
+          '<g class="bars" fill="currentColor" fill-opacity=".78">'+ bars.join("") +'</g>' +
+          // axis
+          '<g class="axis" fill="currentColor" fill-opacity=".66" font-size="11">'+ labels.join("") +'</g>' +
+        '</svg>' +
+      '</div>';
+    return svg;
+  }
+
+  function renderTrendCharts(author){
+    var wrap = $("trendCharts");
+    if (!wrap) return;
+
+    var seriesFull = buildYearSeries(author);
+    if (!seriesFull.length){
+      wrap.innerHTML = '<p class="muted">No trend data available.</p>';
+      return;
+    }
+
+    // Build two series arrays: citations and works
+    var citesSeries = seriesFull.map(function(r){ return { year: r.year, value: r.cites }; });
+    var worksSeries = seriesFull.map(function(r){ return { year: r.year, value: r.works }; });
+
+    // Render two charts (bars) stacked
+    var chartsHTML = ''
+      + renderBarChartSVG({ title: "Citations per year", series: citesSeries, id: "cites" })
+      + renderBarChartSVG({ title: "Works per year", series: worksSeries, id: "works" });
+
+    wrap.innerHTML = chartsHTML;
+  }
+
   // ---- Publications rendering (uses components.js) ----
   function clearPublications(){
     var list = $("publicationsList");
@@ -227,6 +347,7 @@
 
       var author = await getJSON(authorUrl);
       renderAuthorHeader(author);
+      renderTrendCharts(author);     // <-- NEW: render charts
       await loadWorks(author);
 
       // Wire up sort control (date/citations)
@@ -247,6 +368,8 @@
     }catch(e){
       hardError(e.message || String(e));
       console.error(e);
+      var wrap = $("trendCharts");
+      if (wrap) wrap.innerHTML = '<p class="muted">Could not load trends.</p>';
     }
   }
 
