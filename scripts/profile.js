@@ -281,8 +281,8 @@
     var worksSeries = seriesFull.map(function(r){ return { year: r.year, value: r.works }; });
 
     wrap.innerHTML =
-      renderBarChartSVG({ title: "Citations per year", series: citesSeries, id: "cites", yLabel: "Citations" }) +
-      renderBarChartSVG({ title: "Works per year",     series: worksSeries, id: "works", yLabel: "Works" });
+      renderBarChartSVG({ title: "Citations per year", series: citesSeries, id: "cites" }) +
+      renderBarChartSVG({ title: "Works per year",     series: worksSeries, id: "works" });
   }
 
   // ---- Publications rendering (uses components.js) ----

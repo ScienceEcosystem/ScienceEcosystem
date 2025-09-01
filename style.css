@@ -771,3 +771,51 @@ body {
 .chart-svg .ylabel { font-size: 12px; fill: #1e293b; }
 .chart-svg .ylabel.strong { font-weight: 700; fill: #0f172a; }
 
+/* === Right-align compact stat boxes (paper header + profile) === */
+/* Keep one column, but push each card to the far right edge */
+.header-stats.stats-grid,
+.metrics .stats-grid{
+  grid-template-columns: 1fr !important; /* single column */
+  justify-items: end !important;         /* align the column to the right */
+  align-items: start;
+  gap: .5rem !important;
+}
+
+/* Keep the cards short/compact and make sure they sit at the right edge */
+.header-stats .stat,
+.metrics .stat{
+  width: auto;                 /* shrink to content */
+  max-width: 220px;
+  min-width: 140px;
+  padding: .55rem .7rem !important;
+  border-radius: 9px;
+  justify-self: end;           /* right within the grid cell */
+  margin-left: auto;           /* extra safety for some browsers */
+}
+
+/* Compact text inside */
+.header-stats .stat-value,
+.metrics .stat-value{
+  font-size: 1.1rem !important;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.header-stats .stat-label,
+.metrics .stat-label{
+  font-size: .8rem !important;
+  line-height: 1.15;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Optional: on very small screens you can left-align again if you prefer */
+/*
+@media (max-width: 480px){
+  .header-stats.stats-grid,
+  .metrics .stats-grid{ justify-items: start !important; }
+}
+*/

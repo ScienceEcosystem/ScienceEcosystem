@@ -6,8 +6,6 @@
   <title>Topic | ScienceEcosystem</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <link href="https://unpkg.com/vis-network/styles/vis-network.min.css" rel="stylesheet" />
-  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js" defer></script>
 </head>
 <body data-page="topic">
 
@@ -21,9 +19,9 @@
       </div>
 
       <div class="nav-center">
-        <form class="nav-search" role="search" aria-label="Site search" onsubmit="return false;">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
           <label class="visually-hidden" for="searchInput">Search</label>
-          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..."/>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
         </form>
       </div>
 
@@ -46,9 +44,9 @@
       <!-- Main Column -->
       <section class="panel main-col" id="topicMain">
         <section class="topic-section" id="wikiBlock"></section>
+        <section class="topic-section" id="resourcesBlock"></section>
         <section class="topic-section" id="topPapersBlock"></section>
-        <section class="topic-section" id="graphBlock"></section>
-        <section class="topic-section" id="relatedBlock"></section>
+        <!-- (Removed: graphBlock + relatedBlock as requested) -->
       </section>
 
       <!-- Sidebar -->
@@ -59,7 +57,7 @@
         </section>
         <section class="panel">
           <h3>People</h3>
-          <ul id="topicPeople">—</ul>
+          <ul id="topicPeople" class="list-reset">—</ul>
         </section>
       </aside>
     </div>
@@ -71,7 +69,8 @@
     </div>
   </footer>
 
-  <script src="scripts/search.js"></script>
-  <script src="scripts/topic.js"></script>
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/topic.js?v=2.0" defer></script>
 </body>
 </html>

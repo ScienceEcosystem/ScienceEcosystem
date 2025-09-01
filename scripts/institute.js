@@ -110,8 +110,8 @@
     var cites = series.map(function(r){ return { year:r.year, value:r.cites }; });
     var works = series.map(function(r){ return { year:r.year, value:r.works }; });
     wrap.innerHTML =
-  renderBarChartSVG({ title: "Citations per year", series: cites, id:"inst-cites", yLabel:"Citations" }) +
-  renderBarChartSVG({ title: "Works per year", series: works, id:"inst-works", yLabel:"Works" });
+  renderBarChartSVG({ title: "Citations per year", series: cites, id:"inst-cites" }) +
+  renderBarChartSVG({ title: "Works per year", series: works, id:"inst-works" });
   }
 
   // ---- Header ----
