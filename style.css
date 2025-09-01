@@ -714,3 +714,60 @@ body {
 /* Keep profile metrics one column too (right-side column) */
 .metrics .stats-grid { grid-template-columns: 1fr !important; }
 
+
+/* === Compact single-column stat boxes (paper header + profile) === */
+.header-stats.stats-grid,
+.metrics .stats-grid{
+  grid-template-columns: 1fr !important;  /* one column */
+  justify-items: start;                    /* don't stretch items to full width */
+  align-items: start;
+  gap: .5rem !important;
+}
+
+/* Make each box shrink to its content (short & tidy) */
+.header-stats .stat,
+.metrics .stat{
+  width: auto;                 /* shrink to fit content */
+  max-width: 220px;            /* cap width so it never looks wide */
+  min-width: 140px;            /* keeps a neat, consistent card width */
+  padding: .55rem .7rem !important;
+  border-radius: 9px;
+}
+
+/* Compact typography inside boxes */
+.header-stats .stat-value,
+.metrics .stat-value{
+  font-size: 1.1rem !important;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-stats .stat-label,
+.metrics .stat-label{
+  font-size: .8rem !important;
+  line-height: 1.15;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Tiny screens: allow boxes to relax so they don't overflow */
+@media (max-width: 480px){
+  .header-stats .stat,
+  .metrics .stat{
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+/* Trend charts: larger, clearer labels */
+.chart-block h4 { margin: 0 0 .4rem; font-size: 1rem; }
+.chart-svg { width: 100%; height: 220px; display: block; }
+.chart-svg .grid { shape-rendering: crispEdges; }
+.chart-svg .xlabel,
+.chart-svg .ylabel { font-size: 12px; fill: #1e293b; }
+.chart-svg .ylabel.strong { font-weight: 700; fill: #0f172a; }
+

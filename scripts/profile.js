@@ -14,6 +14,11 @@
   var worksApiBaseUrl = null;
   var abortCtrl = null;
 
+  // ---- Sidebar derived state ----
+  var authorTail = null;                // "A12345"
+  var coauthors = Object.create(null);  // idTail -> { name, tail, count }
+  var affYears  = Object.create(null);  // instTail -> { name, tail, min, max }
+
   // ---- Small utils ----
   function $(id){ return document.getElementById(id); }
   function getParam(name){ return new URLSearchParams(location.search).get(name); }
@@ -66,8 +71,8 @@
 
     // Main affiliation — link to institute page when possible
     var affNode = $("profileAffiliation");
+    var lki = get(a,"last_known_institution", null);
     if (affNode){
-      var lki = get(a,"last_known_institution", null);
       if (lki && lki.display_name){
         var tail = (lki.id ? String(lki.id).replace(/^https?:\/\/openalex\.org\//i,"") : null);
         if (tail) {
@@ -123,13 +128,10 @@
         "Current h-index is "+h+". Latest affiliation is "+(lki && lki.display_name ? lki.display_name : "Unknown")+".";
     }
 
-    // Past affiliations timeline (linked)
+    // Past affiliations timeline: initial fallback to last_known_institutions
     var items = [];
     var lkis = Array.isArray(a.last_known_institutions) ? a.last_known_institutions : [];
-    if (!lkis.length) {
-      var single = get(a,"last_known_institution", null);
-      if (single) lkis = [single];
-    }
+    if (!lkis.length && lki) lkis = [lki];
     if ($("careerTimeline")){
       if (lkis.length){
         for (var i=0;i<lkis.length;i++){
@@ -147,32 +149,34 @@
     }
   }
 
-  // ---- Trends (two charts) ----
-  function buildYearSeries(author){
-    var rows = Array.isArray(author.counts_by_year) ? author.counts_by_year.slice() : [];
-    if (!rows.length) return [];
-    rows.sort(function(a,b){ return a.year - b.year; });
-    var minY = rows[0].year, maxY = rows[rows.length - 1].year;
-    var byYear = {};
-    rows.forEach(function(r){
-      byYear[r.year] = {
-        year: r.year,
-        works: Number(r.works_count || r.works || 0),
-        cites: Number(r.cited_by_count || r.citations || 0)
-      };
-    });
-    var out = [];
-    for (var y=minY; y<=maxY; y++){
-      out.push(byYear[y] || { year:y, works:0, cites:0 });
+  // ---- Trend charts (bigger text + Y ticks + full span) ----
+  function niceTicks(maxValue, count){
+    // produce "nice" ticks from 0..max, roughly count+1 lines
+    count = count || 4;
+    if (maxValue <= 0) return [0, 1];
+    var exp = Math.floor(Math.log10(maxValue));
+    var base = Math.pow(10, exp);
+    var niceMax = Math.ceil(maxValue / base) * base;
+    var steps = [1,2,5,10];
+    var step = base;
+    for (var i=0;i<steps.length;i++){
+      var s = steps[i]*base;
+      if (niceMax / s <= count) { step = s; break; }
     }
-    return out;
+    var ticks = [];
+    for (var v=0; v<=niceMax+1e-9; v+=step){ ticks.push(Math.round(v)); }
+    if (ticks[ticks.length-1] !== niceMax) ticks.push(niceMax);
+    return ticks;
   }
 
   function renderBarChartSVG(opts){
+    // opts: { title, series:[{year, value}], id, yLabel }
     var title = opts.title || "";
     var series = Array.isArray(opts.series) ? opts.series : [];
+    var yLabel = opts.yLabel || "";
     var id = opts.id || ("c" + Math.random().toString(36).slice(2));
-    var H = 170, W = 560, padL = 36, padR = 8, padT = 10, padB = 26;
+
+    var H = 220, W = 600, padL = 56, padR = 10, padT = 14, padB = 40;
     var innerW = W - padL - padR;
     var innerH = H - padT - padB;
 
@@ -185,11 +189,14 @@
     for (var i=0;i<n;i++){ if (series[i].value > maxVal) maxVal = series[i].value; }
     if (maxVal <= 0) maxVal = 1;
 
+    var ticks = niceTicks(maxVal, 4);
+    var maxTick = ticks[ticks.length-1];
+
     var step = innerW / n;
-    var barW = Math.max(4, Math.min(22, step * 0.6));
+    var barW = Math.max(5, Math.min(24, step * 0.6));
 
     function x(i){ return padL + i*step + (step - barW)/2; }
-    function y(v){ return padT + innerH - (v/maxVal)*innerH; }
+    function y(v){ return padT + innerH - (v/maxTick)*innerH; }
 
     var y0 = padT + innerH;
     var first = series[0].year;
@@ -200,32 +207,64 @@
     for (var i=0;i<n;i++){
       var s = series[i];
       var bx = x(i), by = y(s.value), h = Math.max(0, y0 - by);
-      var titleTag = '<title>'+escapeHtml(String(s.year))+': '+escapeHtml(String(s.value))+'</title>';
-      bars.push('<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" ry="3">'+titleTag+'</rect>');
+      bars.push('<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" ry="3"><title>'+escapeHtml(String(s.year))+': '+escapeHtml(String(s.value))+'</title></rect>');
     }
 
     var grid = [];
-    [0,0.5,1].forEach(function(t){
-      var gy = padT + innerH * (1 - t);
+    var yLabels = [];
+    for (var t=0; t<ticks.length; t++){
+      var val = ticks[t];
+      var gy = y(val);
       grid.push('<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+gy.toFixed(1)+'" y2="'+gy.toFixed(1)+'" class="grid"/>');
-    });
+      yLabels.push('<text x="'+(padL-8)+'" y="'+(gy+4).toFixed(1)+'" class="ylabel" text-anchor="end">'+escapeHtml(val.toLocaleString())+'</text>');
+    }
 
-    var labels = [];
-    labels.push('<text x="'+padL+'" y="'+(H-6)+'" class="xlabel">'+escapeHtml(String(first))+'</text>');
-    labels.push('<text x="'+(padL + innerW/2)+'" y="'+(H-6)+'" class="xlabel" text-anchor="middle">'+escapeHtml(String(mid))+'</text>');
-    labels.push('<text x="'+(W-padR)+'" y="'+(H-6)+'" class="xlabel" text-anchor="end">'+escapeHtml(String(last))+'</text>');
+    var xLabels = [
+      '<text x="'+padL+'" y="'+(H-10)+'" class="xlabel">'+escapeHtml(String(first))+'</text>',
+      '<text x="'+(padL + innerW/2)+'" y="'+(H-10)+'" class="xlabel" text-anchor="middle">'+escapeHtml(String(mid))+'</text>',
+      '<text x="'+(W-padR)+'" y="'+(H-10)+'" class="xlabel" text-anchor="end">'+escapeHtml(String(last))+'</text>'
+    ];
 
-    var svg =
+    return ''+
       '<div class="chart-block">' +
         '<h4>'+escapeHtml(title)+'</h4>' +
-        '<svg class="chart-svg" role="img" aria-labelledby="'+id+'-title" viewBox="0 0 '+W+' '+H+'" width="100%" height="180">' +
+        '<svg class="chart-svg" role="img" aria-labelledby="'+id+'-title" viewBox="0 0 '+W+' '+H+'" width="100%" height="220">' +
           '<title id="'+id+'-title">'+escapeHtml(title)+'</title>' +
+          // y-label (left top)
+          (yLabel ? '<text x="'+(8)+'" y="'+(16)+'" class="ylabel strong">'+escapeHtml(yLabel)+'</text>' : '') +
+          // grid
           '<g fill="none" stroke="currentColor" stroke-opacity=".08" stroke-width="1">'+ grid.join("") +'</g>' +
+          // y ticks
+          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="12">'+ yLabels.join("") +'</g>' +
+          // bars
           '<g class="bars" fill="currentColor" fill-opacity=".78">'+ bars.join("") +'</g>' +
-          '<g class="axis" fill="currentColor" fill-opacity=".66" font-size="11">'+ labels.join("") +'</g>' +
+          // x-axis labels
+          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="12">'+ xLabels.join("") +'</g>' +
         '</svg>' +
       '</div>';
-    return svg;
+  }
+
+  function buildYearSeries(author){
+    // Use counts_by_year, but ensure a continuous  min..max range (fill with zeros)
+    var rows = Array.isArray(author.counts_by_year) ? author.counts_by_year.slice() : [];
+    if (!rows.length) return [];
+    rows.sort(function(a,b){ return a.year - b.year; });
+    var minY = rows[0].year, maxY = rows[rows.length - 1].year;
+
+    // Fill zeros
+    var map = {};
+    rows.forEach(function(r){
+      map[r.year] = {
+        year: r.year,
+        works: Number(r.works_count || r.works || 0),
+        cites: Number(r.cited_by_count || r.citations || 0)
+      };
+    });
+    var out = [];
+    for (var y=minY; y<=maxY; y++){
+      out.push(map[y] || { year:y, works:0, cites:0 });
+    }
+    return out;
   }
 
   function renderTrendCharts(author){
@@ -241,11 +280,9 @@
     var citesSeries = seriesFull.map(function(r){ return { year: r.year, value: r.cites }; });
     var worksSeries = seriesFull.map(function(r){ return { year: r.year, value: r.works }; });
 
-    var chartsHTML = ''
-      + renderBarChartSVG({ title: "Citations per year", series: citesSeries, id: "cites" })
-      + renderBarChartSVG({ title: "Works per year", series: worksSeries, id: "works" });
-
-    wrap.innerHTML = chartsHTML;
+    wrap.innerHTML =
+      renderBarChartSVG({ title: "Citations per year", series: citesSeries, id: "cites", yLabel: "Citations" }) +
+      renderBarChartSVG({ title: "Works per year",     series: worksSeries, id: "works", yLabel: "Works" });
   }
 
   // ---- Publications rendering (uses components.js) ----
@@ -266,6 +303,12 @@
     }
     SE.components.enhancePaperCards(list);
 
+    // After rendering, update sidebar derivations (co-authors + aff years) from these works
+    processWorksForSidebar(works);
+    renderCoauthors();
+    renderAffTimelineFromWorks();
+
+    // Pagination UI
     var pag = $("pubsPagination");
     if (!pag) return;
     var shown = accumulatedWorks.length;
@@ -307,6 +350,9 @@
 
       if (replace) {
         accumulatedWorks = results.slice();
+        // reset derivations
+        coauthors = Object.create(null);
+        affYears  = Object.create(null);
         clearPublications();
       } else {
         accumulatedWorks = accumulatedWorks.concat(results);
@@ -338,17 +384,103 @@
     if ($("totalWorks")) $("totalWorks").textContent = (total || 0).toLocaleString();
   }
 
+  // ---- Derivations from works: co-authors + affiliation years ----
+  function idTail(any){ return any ? String(any).replace(/^https?:\/\/openalex\.org\//i,"") : null; }
+
+  function processWorksForSidebar(works){
+    var latestYearSeen = 0;
+    for (var i=0;i<works.length;i++){
+      var w = works[i];
+      var yr = get(w, "publication_year", null);
+      if (yr && yr > latestYearSeen) latestYearSeen = yr;
+
+      var authorships = Array.isArray(w.authorships) ? w.authorships : [];
+
+      // co-authors
+      for (var a=0;a<authorships.length;a++){
+        var aid = idTail(get(authorships[a], "author.id", null));
+        var name = get(authorships[a], "author.display_name", null);
+        if (!aid || aid === authorTail) continue;
+        if (!coauthors[aid]) coauthors[aid] = { name: name || "Unknown", tail: aid, count: 0 };
+        coauthors[aid].count += 1;
+      }
+
+      // affiliations for THIS author in this paper
+      var my = null;
+      for (var a2=0;a2<authorships.length;a2++){
+        var aid2 = idTail(get(authorships[a2], "author.id", null));
+        if (aid2 === authorTail){ my = authorships[a2]; break; }
+      }
+      if (my){
+        var insts = Array.isArray(my.institutions) ? my.institutions : [];
+        for (var k=0;k<insts.length;k++){
+          var itail = idTail(get(insts[k], "id", null));
+          var nm = get(insts[k], "display_name", null) || "Institution";
+          if (!itail) continue;
+          if (!affYears[itail]) affYears[itail] = { name: nm, tail: itail, min: yr||null, max: yr||null };
+          if (yr != null){
+            if (affYears[itail].min==null || yr < affYears[itail].min) affYears[itail].min = yr;
+            if (affYears[itail].max==null || yr > affYears[itail].max) affYears[itail].max = yr;
+          }
+        }
+      }
+    }
+  }
+
+  function renderCoauthors(){
+    var box = $("coauthorsList");
+    if (!box) return;
+    var arr = Object.keys(coauthors).map(function(k){ return coauthors[k]; });
+    if (!arr.length){
+      box.innerHTML = '<li class="muted">No co-authors found (yet).</li>';
+      return;
+    }
+    arr.sort(function(a,b){ return b.count - a.count; });
+    var top = arr.slice(0, 12);
+    box.innerHTML = top.map(function(c){
+      return '<li class="list-item list-card" style="display:flex; justify-content:space-between; align-items:center;">' +
+               '<a href="profile.html?id='+encodeURIComponent(c.tail)+'">'+escapeHtml(c.name)+'</a>' +
+               '<span class="badge" title="Co-authored papers together">'+escapeHtml(String(c.count))+'</span>' +
+             '</li>';
+    }).join("");
+  }
+
+  function renderAffTimelineFromWorks(){
+    var dom = $("careerTimeline");
+    if (!dom) return;
+    var arr = Object.keys(affYears).map(function(k){ return affYears[k]; });
+    if (!arr.length) return; // keep initial fallback (already rendered)
+
+    arr.sort(function(a,b){
+      // Recent first by max year
+      return (b.max||0) - (a.max||0);
+    });
+
+    var lastActive = 0;
+    for (var i=0;i<arr.length;i++){ if (arr[i].max!=null && arr[i].max > lastActive) lastActive = arr[i].max; }
+
+    dom.innerHTML = arr.map(function(x){
+      var range = "—";
+      if (x.min!=null && x.max!=null){
+        range = (x.min === x.max) ? String(x.min) : (x.min + "–" + (x.max === lastActive ? "present" : x.max));
+      } else if (x.min!=null){ range = String(x.min); } else if (x.max!=null){ range = String(x.max); }
+      var label = '<a href="institute.html?id='+encodeURIComponent(x.tail)+'">'+escapeHtml(x.name)+'</a>';
+      return '<li><span class="dot"></span><div><div class="title">'+label+'</div><div class="muted">'+escapeHtml(range)+'</div></div></li>';
+    }).join("");
+  }
+
   // ---- Boot ----
   async function boot(){
     try{
       var raw = getParam("id");
       var id = normalizeAuthorId(raw);
       var authorId = id || "A1969205033"; // fallback example
-      var authorUrl = API + "/authors/" + encodeURIComponent(authorId);
+      authorTail = authorId.replace(/^https?:\/\/openalex\.org\//i,"");
+      var authorUrl = API + "/authors/" + encodeURIComponent(authorTail);
 
       var author = await getJSON(authorUrl);
       renderAuthorHeader(author);
-      renderTrendCharts(author);     // charts
+      renderTrendCharts(author);
       await loadWorks(author);
 
       var sortSel = $("pubSort");
