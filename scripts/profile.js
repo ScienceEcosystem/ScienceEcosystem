@@ -63,8 +63,22 @@
   // ---- Header / metrics ----
   function renderAuthorHeader(a){
     if ($("profileName")) $("profileName").textContent = a.display_name || "Unknown researcher";
-    var aff = get(a,"last_known_institution.display_name",null) || get(a,"last_known_institutions.0.display_name",null) || "Unknown affiliation";
-    if ($("profileAffiliation")) $("profileAffiliation").textContent = aff;
+
+    // Main affiliation — link to institute page when possible
+    var affNode = $("profileAffiliation");
+    if (affNode){
+      var lki = get(a,"last_known_institution", null);
+      if (lki && lki.display_name){
+        var tail = (lki.id ? String(lki.id).replace(/^https?:\/\/openalex\.org\//i,"") : null);
+        if (tail) {
+          affNode.innerHTML = '<a href="institute.html?id='+encodeURIComponent(tail)+'">'+escapeHtml(lki.display_name)+'</a>';
+        } else {
+          affNode.textContent = lki.display_name;
+        }
+      } else {
+        affNode.textContent = "Unknown affiliation";
+      }
+    }
 
     var alt = (Array.isArray(a.display_name_alternatives)&&a.display_name_alternatives.length)?a.display_name_alternatives:(Array.isArray(a.alternate_names)?a.alternate_names:[]);
     if ($("otherNames")) $("otherNames").innerHTML = alt.length ? '<strong>Also published as:</strong> '+alt.map(escapeHtml).join(", ") : "";
@@ -106,35 +120,39 @@
       $("aiBio").textContent =
         (a.display_name||"This researcher")+" studies "+(topTopics.join(", ")||"various topics")+". "+
         "They have "+((a.works_count||0).toLocaleString())+" works and "+(totalCitations.toLocaleString())+" citations. "+
-        "Current h-index is "+h+". Latest affiliation is "+aff+".";
+        "Current h-index is "+h+". Latest affiliation is "+(lki && lki.display_name ? lki.display_name : "Unknown")+".";
     }
 
-    // simple timeline
-    var names = [];
-    var lki = get(a,"last_known_institution.display_name",null); if (lki) names.push(lki);
-    var lkis = Array.isArray(a.last_known_institutions)?a.last_known_institutions:[];
-    for (var i=0;i<lkis.length;i++){ var nm=get(lkis[i],"display_name",null); if(nm) names.push(nm); }
+    // Past affiliations timeline (linked)
+    var items = [];
+    var lkis = Array.isArray(a.last_known_institutions) ? a.last_known_institutions : [];
+    if (!lkis.length) {
+      var single = get(a,"last_known_institution", null);
+      if (single) lkis = [single];
+    }
     if ($("careerTimeline")){
-      $("careerTimeline").innerHTML = names.length
-        ? names.map(function(name){ return '<li><span class="dot"></span><div><div class="title">'+escapeHtml(name)+'</div><div class="muted">Affiliation</div></div></li>'; }).join("")
-        : "<li>No affiliations listed.</li>";
+      if (lkis.length){
+        for (var i=0;i<lkis.length;i++){
+          var nm = get(lkis[i], "display_name", null);
+          if (!nm) continue;
+          var tail = get(lkis[i], "id", null);
+          tail = tail ? String(tail).replace(/^https?:\/\/openalex\.org\//i,"") : null;
+          var label = tail ? '<a href="institute.html?id='+encodeURIComponent(tail)+'">'+escapeHtml(nm)+'</a>' : escapeHtml(nm);
+          items.push('<li><span class="dot"></span><div><div class="title">'+label+'</div><div class="muted">Affiliation</div></div></li>');
+        }
+        $("careerTimeline").innerHTML = items.join("");
+      } else {
+        $("careerTimeline").innerHTML = "<li>No affiliations listed.</li>";
+      }
     }
   }
 
-  // ---- Trends (new) ----
+  // ---- Trends (two charts) ----
   function buildYearSeries(author){
-    // OpenAlex authors usually include counts_by_year: [{year, works_count, cited_by_count}, ...]
     var rows = Array.isArray(author.counts_by_year) ? author.counts_by_year.slice() : [];
     if (!rows.length) return [];
-
-    // sort ascending by year
     rows.sort(function(a,b){ return a.year - b.year; });
-
-    // Determine active range (min..max present)
-    var minY = rows[0].year;
-    var maxY = rows[rows.length - 1].year;
-
-    // Normalize to full span, filling missing years with zero
+    var minY = rows[0].year, maxY = rows[rows.length - 1].year;
     var byYear = {};
     rows.forEach(function(r){
       byYear[r.year] = {
@@ -143,17 +161,14 @@
         cites: Number(r.cited_by_count || r.citations || 0)
       };
     });
-
     var out = [];
     for (var y=minY; y<=maxY; y++){
-      var v = byYear[y] || { year:y, works:0, cites:0 };
-      out.push(v);
+      out.push(byYear[y] || { year:y, works:0, cites:0 });
     }
     return out;
   }
 
   function renderBarChartSVG(opts){
-    // opts: { title, series:[{year, value}], maxHint, id }
     var title = opts.title || "";
     var series = Array.isArray(opts.series) ? opts.series : [];
     var id = opts.id || ("c" + Math.random().toString(36).slice(2));
@@ -168,7 +183,6 @@
     var n = series.length;
     var maxVal = 0;
     for (var i=0;i<n;i++){ if (series[i].value > maxVal) maxVal = series[i].value; }
-    if (opts.maxHint && opts.maxHint > maxVal) maxVal = opts.maxHint;
     if (maxVal <= 0) maxVal = 1;
 
     var step = innerW / n;
@@ -177,7 +191,6 @@
     function x(i){ return padL + i*step + (step - barW)/2; }
     function y(v){ return padT + innerH - (v/maxVal)*innerH; }
 
-    // x-axis labels: first, middle, last (avoid clutter)
     var y0 = padT + innerH;
     var first = series[0].year;
     var mid = series[Math.floor(n/2)].year;
@@ -192,7 +205,6 @@
     }
 
     var grid = [];
-    // simple horizontal grid at 0%, 50%, 100%
     [0,0.5,1].forEach(function(t){
       var gy = padT + innerH * (1 - t);
       grid.push('<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+gy.toFixed(1)+'" y2="'+gy.toFixed(1)+'" class="grid"/>');
@@ -208,11 +220,8 @@
         '<h4>'+escapeHtml(title)+'</h4>' +
         '<svg class="chart-svg" role="img" aria-labelledby="'+id+'-title" viewBox="0 0 '+W+' '+H+'" width="100%" height="180">' +
           '<title id="'+id+'-title">'+escapeHtml(title)+'</title>' +
-          // grid
           '<g fill="none" stroke="currentColor" stroke-opacity=".08" stroke-width="1">'+ grid.join("") +'</g>' +
-          // bars
           '<g class="bars" fill="currentColor" fill-opacity=".78">'+ bars.join("") +'</g>' +
-          // axis
           '<g class="axis" fill="currentColor" fill-opacity=".66" font-size="11">'+ labels.join("") +'</g>' +
         '</svg>' +
       '</div>';
@@ -229,11 +238,9 @@
       return;
     }
 
-    // Build two series arrays: citations and works
     var citesSeries = seriesFull.map(function(r){ return { year: r.year, value: r.cites }; });
     var worksSeries = seriesFull.map(function(r){ return { year: r.year, value: r.works }; });
 
-    // Render two charts (bars) stacked
     var chartsHTML = ''
       + renderBarChartSVG({ title: "Citations per year", series: citesSeries, id: "cites" })
       + renderBarChartSVG({ title: "Works per year", series: worksSeries, id: "works" });
@@ -255,13 +262,10 @@
     if (/Loading publications/i.test(list.textContent)) list.innerHTML = "";
 
     for (var i=0;i<works.length;i++){
-      // Use the shared card renderer
       list.insertAdjacentHTML("beforeend", SE.components.renderPaperCard(works[i], { compact: true }));
     }
-    // Enhance cards (Unpaywall, abstract toggle, save, cite popover)
     SE.components.enhancePaperCards(list);
 
-    // Pagination UI
     var pag = $("pubsPagination");
     if (!pag) return;
     var shown = accumulatedWorks.length;
@@ -283,7 +287,6 @@
 
   function sortParam(){
     if (currentSort === "citations") return "cited_by_count:desc";
-    // default date sort
     return "publication_year:desc";
   }
 
@@ -292,7 +295,6 @@
     if (abortCtrl) abortCtrl.abort();
     abortCtrl = new AbortController();
 
-    // Build URL from works_api_url (can be absolute)
     var u = new URL(worksApiBaseUrl);
     u.searchParams.set("page", String(page));
     u.searchParams.set("per_page", String(PAGE_SIZE));
@@ -325,14 +327,13 @@
       if (list) list.innerHTML = '<p class="muted">No publications endpoint provided.</p>';
       return;
     }
-    worksApiBaseUrl = worksApi; // keep as-is; add mailto later via getJSON
+    worksApiBaseUrl = worksApi;
     currentPage = 1;
     accumulatedWorks = [];
 
     if (list) list.innerHTML = '<p class="muted">Loading publications…</p>';
     await fetchWorksPage(currentPage, true);
 
-    // Update total works stat (prefer author.works_count if present)
     var total = author.works_count != null ? author.works_count : totalWorksCount;
     if ($("totalWorks")) $("totalWorks").textContent = (total || 0).toLocaleString();
   }
@@ -347,10 +348,9 @@
 
       var author = await getJSON(authorUrl);
       renderAuthorHeader(author);
-      renderTrendCharts(author);     // <-- NEW: render charts
+      renderTrendCharts(author);     // charts
       await loadWorks(author);
 
-      // Wire up sort control (date/citations)
       var sortSel = $("pubSort");
       if (sortSel) {
         sortSel.value = "date";
@@ -362,7 +362,6 @@
         });
       }
 
-      // Optional: micro-ping to surface network in console (no UI change)
       try { await getJSON(API + "/works?per_page=1"); } catch(_){}
 
     }catch(e){

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Institute | ScienceEcosystem</title>
+  <meta name="description" content="Institution profile on ScienceEcosystem with identity, location, metrics, and published works." />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="institution">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
+      </div>
+
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="btn btn-orcid" href="user-profile.html" aria-label="Login with ORCID">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" class="container">
+    <!-- HEADER (left identity, right metric boxes) -->
+    <section class="panel">
+      <div class="paper-header-grid">
+        <div id="instHeaderMain">Loading institution…</div>
+        <div class="header-side">
+          <!-- optional actions could go here later -->
+          <div id="instStats" class="header-stats stats-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN + SIDEBAR -->
+    <div class="layout-grid">
+      <!-- Main column -->
+      <section id="instMain" class="panel main-col">
+        <div class="pubs-header">
+          <h2>Published works</h2>
+          <div class="sort-controls">
+            <label for="instSort">Sort by:</label>
+            <select id="instSort">
+              <option value="date" selected>Date</option>
+              <option value="citations">Citations</option>
+            </select>
+          </div>
+        </div>
+        <div id="instWorksList" aria-live="polite">Loading works…</div>
+        <div id="instWorksPagination" style="margin-top:1rem;"></div>
+      </section>
+
+      <!-- Sidebar -->
+      <aside class="side-col">
+        <section class="panel">
+          <h3>Trends</h3>
+          <div id="instTrends" class="charts-wrap">Loading charts…</div>
+        </section>
+
+        <section class="panel">
+          <h3>About</h3>
+          <div id="instAbout">—</div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/institute.js?v=1.0" defer></script>
+</body>
+</html>

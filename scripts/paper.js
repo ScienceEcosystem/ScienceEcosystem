@@ -2,6 +2,7 @@
 (function () {
   if (!document.body || document.body.dataset.page !== "paper") return;
 
+  // ---------- Constants & helpers ----------
   var API = "https://api.openalex.org";
   var MAILTO = "scienceecosystem@icloud.com";
 
@@ -41,7 +42,7 @@
     try { s = decodeURIComponent(s); } catch(e){}
     s = s.trim();
     if (s.indexOf("/") !== -1 && s.indexOf("openalex.org/") !== -1) {
-      s = s.split("/").filter(Boolean).pop();
+      s = s.split("/").filter(Boolean).pop(); // W...
     }
     var doiMatch = s.match(/10\.\d{4,9}\/\S+/i);
     if (doiMatch) {
@@ -102,20 +103,40 @@
     return { allHtml: out.join(", "), shortHtml: short.join(", "), moreCount: Math.max(0, out.length - short.length) };
   }
 
-  function uniqueAffiliationsList(authorships){
-    var set = [];
-    if (Array.isArray(authorships)){
-      for (var i=0;i<authorships.length;i++){
-        var insts = Array.isArray(authorships[i].institutions)?authorships[i].institutions:[];
-        for (var j=0;j<insts.length;j++){
-          var nm = get(insts[j],"display_name",null);
-          if (nm && set.indexOf(nm) === -1) set.push(nm);
+  // institutions → links to institute.html (unique list)
+  function collectInstitutions(authorships){
+    var map = Object.create(null);
+    var out = [];
+    if (!Array.isArray(authorships)) return out;
+
+    for (var i=0;i<authorships.length;i++){
+      var insts = Array.isArray(authorships[i].institutions) ? authorships[i].institutions : [];
+      for (var j=0;j<insts.length;j++){
+        var nm = get(insts[j], "display_name", null);
+        if (!nm) continue;
+        var id = get(insts[j], "id", null);
+        var tail = id ? String(id).replace(/^https?:\/\/openalex\.org\//i, "") : null;
+        var key = tail || ("name:" + nm.toLowerCase());
+        if (!map[key]){
+          map[key] = true;
+          out.push({ name: nm, idTail: tail });
         }
       }
     }
-    var out = set.map(escapeHtml);
-    var short = out.slice(0,8);
-    return { allHtml: out.join(", "), shortHtml: short.join(", "), moreCount: Math.max(0, out.length - short.length) };
+    return out;
+  }
+  function institutionsLinksHTML(authorships){
+    var list = collectInstitutions(authorships);
+    if (!list.length) {
+      return { shortHtml: "—", allHtml: "—", moreCount: 0 };
+    }
+    function render(item){
+      if (item.idTail) return '<a href="institute.html?id='+encodeURIComponent(item.idTail)+'">'+escapeHtml(item.name)+'</a>';
+      return escapeHtml(item.name);
+    }
+    var short = list.slice(0,8).map(render).join(", ");
+    var full  = list.map(render).join(", ");
+    return { shortHtml: short, allHtml: full, moreCount: Math.max(0, list.length - 8) };
   }
 
   function formatAbstract(idx){
@@ -153,7 +174,7 @@
     ].filter(Boolean).join(" ");
 
     var aList = authorLinksList(p.authorships);
-    var affList = uniqueAffiliationsList(p.authorships);
+    var affList = institutionsLinksHTML(p.authorships);
 
     return (
       '<h1 class="paper-title">'+escapeHtml(title)+'</h1>' +
@@ -225,7 +246,7 @@
   function buildStatsHeader(p){
     var citedBy = get(p,'cited_by_count',0) || 0;
     var refCount = Array.isArray(p.referenced_works) ? p.referenced_works.length : 0;
-    var socialOrNews = "—"; // placeholder until Altmetric/Crossref Events is wired
+    var socialOrNews = "—"; // placeholder for future altmetrics
 
     function stat(label, value){
       return '<div class="stat"><div class="stat-value">'+escapeHtml(String(value))+'</div><div class="stat-label">'+escapeHtml(label)+'</div></div>';
@@ -317,9 +338,7 @@
 
     var edges = [];
     for (var k=0;k<cited.length;k++)  edges.push({ from: main.id, to: cited[k].id });
-    for (var m=0;m<citing.length;m++) {
-  edges.push({ from: citing[m].id, to: main.id });
-}
+    for (var m=0;m<citing.length;m++) edges.push({ from: citing[m].id, to: main.id }); // FIXED
 
     var network = new vis.Network(
       document.getElementById("paperGraph"),
@@ -341,12 +360,17 @@
 
   // ---------- Render ----------
   function renderPaper(p, source){
+    // Header main (title/meta/authors/affiliations/chips)
     $("paperHeaderMain").innerHTML = buildHeaderMain(p);
+
+    // Right column: actions + stat boxes (one column via CSS)
     $("paperActions").innerHTML   = buildActionsBar(p);
     $("paperStats").innerHTML     = buildStatsHeader(p);
+
+    // toggles for authors/affiliations
     wireHeaderToggles();
 
-    // Reuse shared behaviors (save, cite popover)
+    // Reuse shared behaviors (save, cite popover) on the header card
     if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
       SE.components.enhancePaperCards($("paperActions"));
     }
@@ -354,7 +378,7 @@
     // Abstract
     $("abstractBlock").innerHTML = '<h2>Abstract</h2><p>' + formatAbstract(p.abstract_inverted_index) + '</p>';
 
-    // Research objects
+    // Research objects (datasets/software)
     var items = [];
     var locs = Array.isArray(p.locations) ? p.locations : [];
     for (var i=0;i<locs.length;i++){
@@ -367,7 +391,7 @@
     }
     $("objectsBlock").innerHTML = '<h2>Research Objects</h2>' + (items.length ? '<ul>'+items.join("")+'</ul>' : '<p class="muted">None listed.</p>');
 
-    // Journal & Quality
+    // Journal & Quality in sidebar
     renderJournalBlock(p, source);
 
     // Topics
@@ -381,6 +405,7 @@
       : "<p class='muted'>No topics listed.</p>";
   }
 
+  // ---------- Boot ----------
   async function boot(){
     var rawId = getParam("id");
     if (!rawId) {
@@ -397,8 +422,10 @@
       try { cited = await fetchCitedPapers(paper.referenced_works || []); } catch(e){ console.warn("cited fetch failed:", e); }
       try { citing = await fetchCitingPapers(paper.id); } catch(e){ console.warn("citing fetch failed:", e); }
 
+      // Graph (resilient)
       renderGraph(paper, cited, citing);
 
+      // Related block
       var relatedHtml = [];
       var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
       for (var i=0;i<joinFew.length;i++){

@@ -704,3 +704,13 @@ body {
 .chart-svg { width: 100%; height: 180px; display: block; }
 .chart-svg .grid { shape-rendering: crispEdges; }
 .chart-svg .xlabel { fill: #475569; }
+
+/* Force compact stat boxes to always stack in one column on the right */
+.header-stats.stats-grid { grid-template-columns: 1fr !important; }
+@media (max-width: 1024px){
+  .header-stats.stats-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Keep profile metrics one column too (right-side column) */
+.metrics .stats-grid { grid-template-columns: 1fr !important; }
+
