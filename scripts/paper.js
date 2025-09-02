@@ -1,10 +1,27 @@
-// scripts/paper.js
 (function () {
   if (!document.body || document.body.dataset.page !== "paper") return;
 
   // ---------- Constants & helpers ----------
   var API = "https://api.openalex.org";
   var MAILTO = "scienceecosystem@icloud.com";
+
+  // Small allow-list of journals that publish open peer review routinely (you can tune this)
+  var OPEN_PEER_REVIEW_JOURNALS = [
+    "eLife",
+    "F1000Research",
+    "PeerJ",
+    "Royal Society Open Science",
+    "BMJ",
+    "BMC",                   // many BMC titles have open peer review
+    "Nature Communications", // some have open peer review or transparent peer review packages
+    "PLOS ONE",
+    "PLOS Biology"
+  ];
+
+  // Repository/preprint indicators (peer review usually not done yet)
+  var PREPRINT_VENUES = [
+    "arXiv", "bioRxiv", "medRxiv", "ChemRxiv", "SSRN", "OSF Preprints", "PsyArXiv", "EarthArXiv", "Research Square"
+  ];
 
   function $(id){ return document.getElementById(id); }
   function getParam(name){ return new URLSearchParams(location.search).get(name); }
@@ -103,7 +120,6 @@
     return { allHtml: out.join(", "), shortHtml: short.join(", "), moreCount: Math.max(0, out.length - short.length) };
   }
 
-  // institutions → links to institute.html (unique list)
   function collectInstitutions(authorships){
     var map = Object.create(null);
     var out = [];
@@ -154,6 +170,89 @@
     return '<a class="badge ' + (className||"") + '" href="'+href+'" target="_blank" rel="noopener">'+escapeHtml(text)+'</a>';
   }
 
+  // ---------- NEW: Quality helper utilities ----------
+  function doiFromWork(p){
+    var doiRaw = p.doi || get(p,"ids.doi",null);
+    if (!doiRaw) return null;
+    return String(doiRaw).replace(/^doi:/i,"");
+  }
+
+  function pubPeerLink(doi){
+    return doi ? ("https://pubpeer.com/search?q=" + encodeURIComponent(doi)) : null;
+  }
+
+  function retractionSearchLinks(doi, title){
+    var links = [];
+    if (doi) links.push({ label: "Search Retraction Watch", href: "https://retractionwatch.com/?s=" + encodeURIComponent(doi) });
+    if (title) links.push({ label: "Search by title", href: "https://retractionwatch.com/?s=" + encodeURIComponent(title) });
+    return links;
+  }
+
+  function isPreprintVenue(name, type){
+    name = String(name || "").toLowerCase();
+    type = String(type || "").toLowerCase();
+    if (type.includes("repository") || type.includes("preprint")) return true;
+    for (var i=0;i<PREPRINT_VENUES.length;i++){
+      if (name.includes(PREPRINT_VENUES[i].toLowerCase())) return true;
+    }
+    return false;
+  }
+
+  function hasOpenPeerReview(journalName){
+    var nm = String(journalName || "").toLowerCase();
+    for (var i=0;i<OPEN_PEER_REVIEW_JOURNALS.length;i++){
+      if (nm.includes(OPEN_PEER_REVIEW_JOURNALS[i].toLowerCase())) return true;
+    }
+    return false;
+  }
+
+  function detectCorrections(title){
+    var t = String(title || "").toLowerCase();
+    return /(correction|corrigendum|erratum)/i.test(t);
+  }
+
+  function detectReplicationSignals(title, abstractText){
+    var t = (String(title || "") + " " + String(abstractText || "")).toLowerCase();
+    return /(replication|reproduc(?:e|ibility)|reanalysis|robustness check)/i.test(t);
+  }
+
+  function computeJournalScore(src){
+    // Transparent, adjustable heuristic:
+    // Start at 3; adjust with observable metadata.
+    var score = 3;
+
+    if (get(src, "is_in_doaj", false)) score += 1;      // indexed in DOAJ
+    if (get(src, "is_oa", false)) score += 1;           // OA journal
+
+    var works = +get(src, "works_count", 0) || 0;
+    if (works > 10000) score += 1;
+    if (works < 100) score -= 1;
+
+    var type = String(get(src, "type", "") || "").toLowerCase();
+    if (type.includes("repository") || type.includes("preprint")) score = Math.max(1, score - 2);
+
+    // Clamp 1–5
+    if (score < 1) score = 1;
+    if (score > 5) score = 5;
+    return score;
+  }
+
+  function scoreExplanation(src){
+    var bits = [];
+    if (get(src, "is_in_doaj", false)) bits.push("Indexed in DOAJ (+1)");
+    if (get(src, "is_oa", false)) bits.push("Open access journal (+1)");
+
+    var works = +get(src, "works_count", 0) || 0;
+    if (works > 10000) bits.push("Large output (>10k works) (+1)");
+    if (works < 100) bits.push("Very small output (<100 works) (−1)");
+
+    var type = String(get(src, "type", "") || "").toLowerCase();
+    if (type.includes("repository") || type.includes("preprint")) bits.push("Repository/preprint venue (−2)");
+
+    if (!bits.length) bits.push("Neutral baseline");
+    return bits.join(" · ");
+  }
+
   // ---------- Header content ----------
   function buildHeaderMain(p){
     var title = p.display_name || "Untitled";
@@ -161,7 +260,7 @@
     var venue = get(p, "host_venue.display_name", null) || get(p, "primary_location.source.display_name", null) || "Unknown venue";
 
     var doiRaw = p.doi || get(p,"ids.doi",null);
-    var doiUrl = doiRaw ? (String(doiRaw).indexOf("http")===0 ? doiRaw : ("https://doi.org/" + doiRaw.replace(/^doi:/i,""))) : null;
+    var doiUrl = doiRaw ? (String(doiRaw).indexOf("http")===0 ? doiRaw : ("https://doi.org/" + String(doiRaw).replace(/^doi:/i,""))) : null;
 
     var oaPdf = get(p,"best_oa_location.url_for_pdf",null) || get(p,"primary_location.pdf_url",null);
     var oaLanding = get(p,"open_access.oa_url",null) || get(p,"best_oa_location.url",null) || get(p,"primary_location.landing_page_url",null);
@@ -171,7 +270,16 @@
       badge(oaPdf, "PDF", "badge-oa"),
       badge(oaLanding, "Open access", "badge-oa"),
       badge(p.id, "OpenAlex")
-    ].filter(Boolean).join(" ");
+    ];
+
+    // NEW: PubPeer badge if DOI present
+    var doiClean = doiFromWork(p);
+    var pp = pubPeerLink(doiClean);
+    if (pp) chips.push(badge(pp, "PubPeer", "badge-neutral"));
+
+    // NEW: quick retraction search link (non-invasive small badge)
+    var rw = retractionSearchLinks(doiClean, p.display_name || "");
+    if (rw.length) chips.push(badge(rw[0].href, "Retraction search", "badge-warn"));
 
     var aList = authorLinksList(p.authorships);
     var affList = institutionsLinksHTML(p.authorships);
@@ -187,7 +295,7 @@
         '<span class="wrap-text" id="affShort">'+affList.shortHtml+(affList.moreCount?(' <button class="link-btn" id="affShowMore">Show more</button>'):'')+'</span>' +
         '<span class="wrap-text" id="affFull" style="display:none;">'+affList.allHtml+' <button class="link-btn" id="affShowLess">Show less</button></span>' +
       '</p>' +
-      '<p class="chips">'+chips+'</p>'
+      '<p class="chips">'+chips.filter(Boolean).join(" ")+'</p>'
     );
   }
 
@@ -254,7 +362,7 @@
     return stat('Cited by', citedBy) + stat('References used', refCount) + stat('Shared in news / social', socialOrNews);
   }
 
-  // ---------- Journal block ----------
+  // ---------- Journal & Quality block ----------
   function renderJournalBlock(p, source){
     var journalName = get(source, 'display_name', null) || get(p, 'host_venue.display_name', null) || get(p, 'primary_location.source.display_name', '—');
     var venueType  = get(source, 'type', get(p, 'primary_location.source.type', '—'));
@@ -265,13 +373,13 @@
     var oaJournal  = !!get(source, 'is_oa', false);
     var homepage   = get(source, 'homepage_url', null);
     var srcOpenAlex= get(source, 'id', null);
+    var worksCount = +get(source, 'works_count', 0) || 0;
 
     var citedBy    = get(p, 'cited_by_count', 0);
     var refCount   = Array.isArray(p.referenced_works) ? p.referenced_works.length : 0;
     var isRetracted= !!get(p, 'is_retracted', false);
-    var hasCorrArr = Array.isArray(get(p, 'corrections', [])) ? get(p, 'corrections', []) : [];
-    var hasCorr    = hasCorrArr.length > 0;
 
+    // Scan locations for research objects (datasets/software)
     var locs = Array.isArray(p.locations) ? p.locations : [];
     var dataCount = 0, codeCount = 0;
     for (var i=0;i<locs.length;i++){
@@ -280,11 +388,46 @@
       if (t.indexOf('software') !== -1) codeCount++;
     }
 
+    // Heuristic signals we can compute locally
+    var title = p.display_name || "";
+    var abstractPlain = (function(idx){
+      if (!idx || typeof idx !== "object") return "";
+      var words = [];
+      Object.keys(idx).forEach(function(word){
+        var positions = idx[word] || [];
+        for (var i=0;i<positions.length;i++){ words[positions[i]] = word; }
+      });
+      return (words.join(" ") || "");
+    })(p.abstract_inverted_index);
+
+    var hasCorrection = detectCorrections(title);
+    var hasReplication = detectReplicationSignals(title, abstractPlain);
+
+    // Peer review availability (guess)
+    var isPreprint = isPreprintVenue(journalName, venueType);
+    var peerReviewText = isPreprint
+      ? "Preprint / repository — typically not peer reviewed yet"
+      : (hasOpenPeerReview(journalName)
+          ? "Journal with open/transparent peer review"
+          : "Journal article — peer review likely (not verified)");
+    
+    // PubPeer + Retraction search
+    var doi = doiFromWork(p);
+    var pubpeer = pubPeerLink(doi);
+    var rwLinks = retractionSearchLinks(doi, title);
+
+    // Journal score (beta)
+    var score = computeJournalScore(source || {});
+    var scoreExplain = scoreExplanation(source || {});
+
     var lines = [];
-    lines.push('<p><strong>Journal:</strong> '+escapeHtml(journalName)
+    // Header
+    lines.push(
+      '<p><strong>Journal:</strong> '+escapeHtml(journalName)
       + (homepage?(' · <a href="'+homepage+'" target="_blank" rel="noopener">Homepage</a>'):'')
       + (srcOpenAlex?(' · <a href="'+srcOpenAlex+'" target="_blank" rel="noopener">OpenAlex</a>'):'')
-      + '</p>');
+      + '</p>'
+    );
 
     lines.push('<p class="meta"><strong>Type:</strong> '+escapeHtml(String(venueType||'—'))+' · <strong>Publisher:</strong> '+escapeHtml(String(publisher||'—'))+'</p>');
 
@@ -293,24 +436,53 @@
     if (issns && issns.length) issnBits.push('ISSN: '+escapeHtml(issns.join(', ')));
     if (issnBits.length) lines.push('<p class="meta">'+issnBits.join(' · ')+'</p>');
 
+    // Badges row
     var badges = [];
     badges.push('<span class="badge '+(oaJournal?'badge-oa':'')+'">'+(oaJournal?'OA journal':'Closed / Hybrid')+'</span>');
     badges.push('<span class="badge">'+(doaj?'In DOAJ':'Not in DOAJ')+'</span>');
     if (get(p,'host_venue.is_oa',false)) badges.push('<span class="badge badge-oa">This article OA</span>');
     if (isRetracted) badges.push('<span class="badge badge-warn">Retracted</span>');
-    if (hasCorr)     badges.push('<span class="badge">Correction noted</span>');
+    // PubPeer badge
+    if (pubpeer) badges.push('<a class="badge" href="'+pubpeer+'" target="_blank" rel="noopener">PubPeer</a>');
+    // Retraction search (first link)
+    if (rwLinks.length) badges.push('<a class="badge badge-warn" href="'+rwLinks[0].href+'" target="_blank" rel="noopener">Retraction search</a>');
+
     lines.push('<p class="chips">'+badges.join(' ')+'</p>');
 
-    lines.push('<ul class="kv-list">'
-      + '<li><span>Citations</span><strong>'+escapeHtml(String(citedBy))+'</strong></li>'
-      + '<li><span>References</span><strong>'+escapeHtml(String(refCount))+'</strong></li>'
-      + '<li><span>Datasets linked</span><strong>'+escapeHtml(String(dataCount))+'</strong></li>'
-      + '<li><span>Code linked</span><strong>'+escapeHtml(String(codeCount))+'</strong></li>'
-      + '</ul>');
+    // Quality indicators list
+    lines.push('<ul class="kv-list">');
+    lines.push('<li><span>Citations</span><strong>'+escapeHtml(String(citedBy))+'</strong></li>');
+    lines.push('<li><span>References</span><strong>'+escapeHtml(String(refCount))+'</strong></li>');
+    lines.push('<li><span>Datasets linked</span><strong>'+escapeHtml(String(dataCount))+'</strong></li>');
+    lines.push('<li><span>Code linked</span><strong>'+escapeHtml(String(codeCount))+'</strong></li>');
+    lines.push('<li><span>Peer review</span><strong>'+escapeHtml(peerReviewText)+'</strong></li>');
+    lines.push('<li><span>Corrections/Errata</span><strong>'+(hasCorrection ? "Mentioned in title" : "None detected in title")+'</strong></li>');
+    lines.push('<li><span>Replication signal</span><strong>'+(hasReplication ? "Likely replication/reproducibility study" : "Not detected (heuristic)")+'</strong></li>');
+    if (rwLinks.length > 1) {
+      lines.push('<li><span>Retraction check</span><strong><a href="'+rwLinks[1].href+'" target="_blank" rel="noopener">Search by title</a></strong></li>');
+    }
+    lines.push('</ul>');
 
+    // Journal score (1–5)
+    lines.push(
+      '<div class="panel light" style="margin-top:.5rem;">' +
+        '<div style="display:flex; align-items:center; gap:.5rem;">' +
+          '<strong>Journal score (beta):</strong> ' +
+          '<span aria-label="Journal score" title="'+escapeHtml(scoreExplain)+'">' + '★'.repeat(score) + '☆'.repeat(5-score) + '</span>' +
+          '<span class="muted">('+score+'/5)</span>' +
+        '</div>' +
+        '<p class="muted" style="margin:.25rem 0 0 .1rem;">' +
+          'Heuristic based on DOAJ/OA status, venue type, and size. Hover to see factors. Treat as a quick orientation, not a definitive judgment.' +
+        '</p>' +
+      '</div>'
+    );
+
+    // Small footer note for transparency
     var vt = String(venueType||'').toLowerCase();
-    var peerReviewGuess = (vt==='journal' && !/repository|preprint/.test(vt)) ? 'Likely peer-reviewed (journal)' : 'Peer review unknown';
-    lines.push('<p class="muted">'+escapeHtml(peerReviewGuess)+'. Sources: OpenAlex (journal metadata & OA status).</p>');
+    var peerReviewNote = isPreprint
+      ? 'Preprints are valuable for speed but typically lack formal peer review. Check PubPeer for discussion.'
+      : (hasOpenPeerReview(journalName) ? 'This journal often exposes peer-review reports (open/transparent peer review).' : 'Peer-review details vary by journal.');
+    lines.push('<p class="muted" style="margin-top:.25rem;">'+escapeHtml(peerReviewNote)+'</p>');
 
     $("journalBlock").innerHTML = lines.join("");
   }
@@ -338,7 +510,7 @@
 
     var edges = [];
     for (var k=0;k<cited.length;k++)  edges.push({ from: main.id, to: cited[k].id });
-    for (var m=0;m<citing.length;m++) edges.push({ from: citing[m].id, to: main.id }); // FIXED
+    for (var m=0;m<citing.length;m++) edges.push({ from: citing[m].id, to: main.id });
 
     var network = new vis.Network(
       document.getElementById("paperGraph"),
@@ -363,14 +535,13 @@
     // Header main (title/meta/authors/affiliations/chips)
     $("paperHeaderMain").innerHTML = buildHeaderMain(p);
 
-    // Right column: actions + stat boxes (one column via CSS)
+    // Right column: actions + stat boxes
     $("paperActions").innerHTML   = buildActionsBar(p);
     $("paperStats").innerHTML     = buildStatsHeader(p);
 
-    // toggles for authors/affiliations
     wireHeaderToggles();
 
-    // Reuse shared behaviors (save, cite popover) on the header card
+    // Hook your shared behaviors (save/cite) on header card
     if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
       SE.components.enhancePaperCards($("paperActions"));
     }
@@ -385,7 +556,7 @@
       var type = get(locs[i], "source.type", "") || get(locs[i], "type", "");
       var url = get(locs[i], "landing_page_url", null) || get(locs[i], "pdf_url", null);
       var label = get(locs[i], "source.display_name", null) || type || "Link";
-      if (type && (type.indexOf("dataset") !== -1 || type.indexOf("software") !== -1) && url){
+      if (type && (type.toLowerCase().includes("dataset") || type.toLowerCase().includes("software")) && url){
         items.push('<li><a href="'+url+'" target="_blank" rel="noopener">'+escapeHtml(label)+'</a></li>');
       }
     }
@@ -430,10 +601,19 @@
       var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
       for (var i=0;i<joinFew.length;i++){
         var w = joinFew[i];
-        relatedHtml.push(SE.components.renderPaperCard(w, { compact: true }));
+        if (window.SE && SE.components && typeof SE.components.renderPaperCard === "function") {
+          relatedHtml.push(SE.components.renderPaperCard(w, { compact: true }));
+        } else {
+          // Simple fallback
+          var title = escapeHtml(w.display_name || "Untitled");
+          var idTail = String(w.id || "").replace(/^https?:\/\/openalex\.org\//i, "");
+          relatedHtml.push('<article class="paper-card"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+title+'</a></article>');
+        }
       }
       $("relatedBlock").innerHTML = '<h2>Related papers</h2>' + (relatedHtml.length ? relatedHtml.join("") : "<p class='muted'>No related papers found.</p>");
-      SE.components.enhancePaperCards($("relatedBlock"));
+      if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
+        SE.components.enhancePaperCards($("relatedBlock"));
+      }
     } catch (e) {
       console.error(e);
       $("paperHeaderMain").innerHTML = "<p class='muted'>Error loading paper details.</p>";

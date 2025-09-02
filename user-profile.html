@@ -3,41 +3,41 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>User Profile | ScienceEcosystem</title>
+  <title>Researcher Profile | ScienceEcosystem</title>
+  <meta name="description" content="Researcher profile on ScienceEcosystem with publications, topics, metrics, trends, and affiliations." />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body data-page="user-profile">
-  <nav>
-    <div class="logo" style="flex: 1;">
-      <a href="index.html">
-        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem Logo" style="height: 90px;" />
-      </a>
-    </div>
-    <div style="flex: 2; display: flex; justify-content: center;">
-      <input
-        type="text"
-        id="searchInput"
-        placeholder="Search..."
-        style="width:100%; padding:0.5rem;"
-        onkeydown="if(event.key==='Enter') handleSearch('searchInput')"
-      />
-    </div>
-    <div style="flex: 1; display: flex; justify-content: flex-end; gap: 1rem; align-items: center; color: white;">
-      <a href="index.html">Home</a>
-      <a href="about.html">About</a>
+  <a class="skip-link" href="#main">Skip to content</a>
 
-      <!-- CHANGED: this now hits the server to start ORCID OAuth -->
-      <a id="orcidLoginBtn"
-         href="/auth/orcid/login"
-         style="padding: 0.5rem 1rem; background: #16a34a; color: white; border: none; border-radius: 5px; display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
-        <img src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="ORCID iD" style="height: 20px;" />
-        Login with ORCID
-      </a>
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
+      </div>
 
-      <button id="logoutBtn" style="display:none; padding:0.5rem 1rem; border-radius:5px;">Logout</button>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="btn btn-orcid" href="user-profile.html" aria-label="Login with ORCID">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
+      </div>
     </div>
   </nav>
+
 
   <main style="padding:2rem 1rem;">
     <div id="userProfileLayout" style="display:flex; flex-wrap:wrap; gap:2rem;">
@@ -56,6 +56,7 @@
     <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
   </footer>
 
+  <script src="scripts/search.js" defer></script>
   <script src="scripts/user-profile.js" defer></script>
 </body>
 </html>
