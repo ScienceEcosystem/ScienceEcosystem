@@ -30,16 +30,18 @@
       <div class="nav-right">
         <a class="nav-link" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <a class="btn btn-orcid" href="user-profile.html" aria-label="Login with ORCID">
+
+        <!-- Changed: route to server login + add IDs expected by JS -->
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
           <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
           <span>Login with ORCID</span>
         </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
       </div>
     </div>
   </nav>
 
-
-  <main style="padding:2rem 1rem;">
+  <main id="main" class="container" style="padding:2rem 1rem;">
     <div id="userProfileLayout" style="display:flex; flex-wrap:wrap; gap:2rem;">
       <div id="userMain" style="flex:3; min-width:0;">
         <p>Loading user profile...</p>
@@ -50,10 +52,12 @@
     </div>
   </main>
 
-  <footer>
-    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-    <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
-    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
   </footer>
 
   <script src="scripts/search.js" defer></script>
