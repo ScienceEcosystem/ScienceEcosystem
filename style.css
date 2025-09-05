@@ -400,13 +400,14 @@ body {
   .abs-short {
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1; /* show only first line */
+    /* Provide both standard + prefixed */
+    line-clamp: 1;          /* not supported yet, but avoids linter warning */
+    -webkit-line-clamp: 1;  /* actual working property in Chrome/Safari */
     white-space: normal;    /* reset fallback nowrap */
   }
-
   /* Break the clamp when expanded by switching display */
   .result-card.paper-card .abstract.expanded {
-    display: block;         /* disables -webkit-box clamp */
+    display: block; /* disables -webkit-box clamp */
   }
 }
 

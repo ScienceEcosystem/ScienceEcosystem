@@ -19,7 +19,8 @@ const {
   ORCID_CLIENT_ID,
   ORCID_CLIENT_SECRET,
   ORCID_REDIRECT_URI,
-  STATIC_DIR = "../"
+  STATIC_DIR = "../",
+  NODE_ENV = "development"
 } = process.env;
 
 if (!ORCID_CLIENT_ID || !ORCID_CLIENT_SECRET || !ORCID_REDIRECT_URI) {
@@ -28,25 +29,38 @@ if (!ORCID_CLIENT_ID || !ORCID_CLIENT_SECRET || !ORCID_REDIRECT_URI) {
 }
 
 const app = express();
+
+// If you're behind a proxy/edge TLS (most hosts), this lets Express see req.secure
+app.set("trust proxy", 1);
+
 app.use(express.json());
 app.use(cookieParser(SESSION_SECRET));
 
 // --- Very light session using a signed cookie containing a random session id mapped in-memory ---
 // For production you might use Redis; here we keep it simple.
 const sessions = new Map();
-function setSession(res, data) {
+function cookieOptions(req) {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    signed: true,
+    // secure cookies in production; ok plain over http for local dev
+    secure: NODE_ENV === "production",
+  };
+}
+function setSession(req, res, data) {
   const sid = crypto.randomBytes(24).toString("hex");
   sessions.set(sid, { ...data, createdAt: Date.now() });
-  res.cookie("sid", sid, { httpOnly: true, sameSite: "lax", signed: true });
+  res.cookie("sid", sid, cookieOptions(req));
 }
 function getSession(req) {
   const sid = req.signedCookies?.sid;
   return sid ? sessions.get(sid) : null;
 }
-function clearSession(res, req) {
+function clearSession(req, res) {
   const sid = req.signedCookies?.sid;
   if (sid) sessions.delete(sid);
-  res.clearCookie("sid");
+  res.clearCookie("sid", cookieOptions(req));
 }
 
 // --- SQLite setup (file scienceecosystem.sqlite in server folder) ---
@@ -76,8 +90,15 @@ const qLibAdd = db.prepare(`INSERT OR IGNORE INTO library_items (orcid, id, titl
 const qLibDel = db.prepare(`DELETE FROM library_items WHERE orcid=? AND id=?`);
 const qLibClear = db.prepare(`DELETE FROM library_items WHERE orcid=?`);
 
-// --- Static site ---
-app.use(express.static(path.resolve(__dirname, STATIC_DIR)));
+// --- Health check (useful for uptime monitors) ---
+app.get("/health", (_req, res) => res.type("text").send("ok"));
+
+// --- Static site (serve your HTML/CSS/JS) ---
+const staticRoot = path.resolve(__dirname, STATIC_DIR);
+app.use(express.static(staticRoot, {
+  extensions: ["html"], // so /about resolves to about.html if you like
+  maxAge: NODE_ENV === "production" ? "1h" : 0
+}));
 
 // --- OAuth: start login ---
 app.get("/auth/orcid/login", (req, res) => {
@@ -98,9 +119,6 @@ app.get("/auth/orcid/callback", async (req, res) => {
   }
   if (!code) return res.status(400).send("Missing authorization code");
 
-  // Exchange code for token (must be server-side) per ORCID docs
-  // POST { client_id, client_secret, grant_type=authorization_code, code, redirect_uri }
-  // Response contains access_token and orcid iD
   const form = new URLSearchParams({
     client_id: ORCID_CLIENT_ID,
     client_secret: ORCID_CLIENT_SECRET,
@@ -125,48 +143,45 @@ app.get("/auth/orcid/callback", async (req, res) => {
   if (!orcid) return res.status(400).send("Token response missing ORCID iD");
 
   // Fetch public profile data
-  const recRes = await fetch(`${ORCID_API_BASE}/${orcid}/record`, {
-    headers: { Accept: "application/json" }
-  });
-  // Tolerate failures (user might be empty); default to minimal profile
   let name = null, affiliation = null;
-  if (recRes.ok) {
-    const rec = await recRes.json();
-    // Extract a display name
-    const person = rec?.person;
-    const given = person?.name?.["given-names"]?.value || "";
-    const family = person?.name?.["family-name"]?.value || "";
-    const credit = person?.name?.["credit-name"]?.value || "";
-    name = (credit || `${given} ${family}`).trim() || null;
-
-    // Extract first employment affiliation if present
-    const emp = rec?.["activities-summary"]?.employments?.["employment-summary"]?.[0];
-    const org = emp?.organization?.name;
-    affiliation = org || null;
-  }
+  try {
+    const recRes = await fetch(`${ORCID_API_BASE}/${orcid}/record`, {
+      headers: { Accept: "application/json" }
+    });
+    if (recRes.ok) {
+      const rec = await recRes.json();
+      const person = rec?.person;
+      const given = person?.name?.["given-names"]?.value || "";
+      const family = person?.name?.["family-name"]?.value || "";
+      const credit = person?.name?.["credit-name"]?.value || "";
+      name = (credit || `${given} ${family}`).trim() || null;
+      const emp = rec?.["activities-summary"]?.employments?.["employment-summary"]?.[0];
+      const org = emp?.organization?.name;
+      affiliation = org || null;
+    }
+  } catch {}
 
   qUserUpsert.run({ orcid, name, affiliation });
 
   // Minimal session
-  setSession(res, { orcid });
+  setSession(req, res, { orcid });
+
   // Send back to profile page
   res.redirect("/user-profile.html");
 });
 
 // --- Logout ---
 app.post("/auth/logout", (req, res) => {
-  clearSession(res, req);
+  clearSession(req, res);
   res.status(204).end();
 });
 
 // --- API: who am I ---
-app.get("/api/me", async (req, res) => {
+app.get("/api/me", (req, res) => {
   const sess = getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
-
   const row = db.prepare("SELECT orcid, name, affiliation FROM users WHERE orcid=?").get(sess.orcid);
   if (!row) return res.status(404).json({ error: "User not found" });
-
   res.json(row);
 });
 
@@ -180,10 +195,8 @@ app.get("/api/library", (req, res) => {
 app.post("/api/library", (req, res) => {
   const sess = getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
-
   const { id, title } = req.body || {};
   if (!id || !title) return res.status(400).json({ error: "id and title required" });
-
   qLibAdd.run(sess.orcid, String(id), String(title));
   res.status(201).json({ ok: true });
 });
@@ -202,14 +215,15 @@ app.delete("/api/library", (req, res) => {
   res.status(204).end();
 });
 
-// Fallback to index if route not found (optional)
-app.use((req, res, next) => {
+// --- Fallback: serve index.html for unknown GET routes (SPA-friendly) ---
+app.get("*", (req, res, next) => {
   if (req.method === "GET" && req.accepts("html")) {
-    return res.sendFile(path.resolve(__dirname, STATIC_DIR, "index.html"));
+    return res.sendFile(path.join(staticRoot, "index.html"));
   }
   next();
 });
 
 app.listen(PORT, () => {
-  console.log(`ScienceEcosystem auth server running on http://localhost:${PORT}`);
+  const host = NODE_ENV === "production" ? "https://scienceecosystem.org" : `http://localhost:${PORT}`;
+  console.log(`ScienceEcosystem server running at ${host}`);
 });
