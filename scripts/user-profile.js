@@ -118,17 +118,7 @@ function renderLibrary(items) {
   });
 }
 
-// Public function other pages can call to save a paper
-// Keep signature compatible with your existing 'savePaper(paper)'
-window.savePaper = async function savePaper(paper) {
-  // Paper: { id, title }
-  try {
-    await api("/api/library", { method: "POST", body: JSON.stringify(paper) });
-    alert(`Saved "${paper.title}" to your library`);
-  } catch (e) {
-    alert(e.message);
-  }
-};
+
 
 // Simple HTML escape
 function escapeHtml(s) {

@@ -484,23 +484,31 @@
       btn.textContent = abstract.classList.contains("expanded") ? "Show less" : "Show more";
     });
 
-    // 3) Add to Library (localStorage stub)
-    container.addEventListener("click", function(e){
-      var btn = e.target.closest('[data-action="save-paper"]');
-      if (!btn) return;
-      var card = btn.closest(".paper-card");
-      if (!card) return;
-      var id = card.getAttribute("data-paper-id");
-      try{
-        var key = "se_library";
-        var cur = [];
-        try { cur = JSON.parse(localStorage.getItem(key) || "[]"); } catch(_){}
-        if (cur.indexOf(id) === -1) cur.push(id);
-        localStorage.setItem(key, JSON.stringify(cur));
-        btn.textContent = "Saved ✓";
-        setTimeout(function(){ btn.textContent = "Add to Library"; }, 1500);
-      }catch(_){}
-    });
+    // Inside your SE.components.enhancePaperCards(container) or similar initializer:
+(function () {
+  const root = container || document;
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest('[data-action="save-paper"]');
+    if (!btn) return;
+
+    // Find the nearest paper card with data attributes set by paper.js/buildActionsBar
+    const card = btn.closest(".paper-card, .header-card, .result-card, article");
+    if (!card) return;
+
+    // id/title are provided by paper.js buildActionsBar via data- attributes
+    const openAlexIdTail = card.getAttribute("data-paper-id");     // e.g. "W1234567890"
+    const title = card.getAttribute("data-cite-title") || card.querySelector(".paper-title")?.textContent?.trim();
+
+    if (!openAlexIdTail || !title) {
+      alert("Sorry, cannot determine paper id/title.");
+      return;
+    }
+
+    // Use the same id shape your paper pages use (they accept OpenAlex id tail)
+    const id = openAlexIdTail; // keep as tail (e.g. "W…"). If you use DOIs elsewhere, send that instead.
+    window.savePaper({ id, title });
+  }, { passive: true });
+})();
 
     // 4) Cite popover (open/close/copy)
     function closeAllPopovers(){
