@@ -2,8 +2,12 @@
   "name": "science-ecosystem",
   "private": true,
   "type": "module",
+  "version": "1.0.0",
   "scripts": {
     "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=18 <23"
   },
   "dependencies": {
     "better-sqlite3": "^9.0.0",
