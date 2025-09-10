@@ -20,7 +20,10 @@ const {
   ORCID_CLIENT_SECRET,
   ORCID_REDIRECT_URI,
   STATIC_DIR = "../",
-  NODE_ENV = "development"
+  NODE_ENV = "development",
+  // Optional: only set this if you do NOT redirect www -> apex
+  // e.g. COOKIE_DOMAIN=".scienceecosystem.org"
+  COOKIE_DOMAIN
 } = process.env;
 
 if (!ORCID_CLIENT_ID || !ORCID_CLIENT_SECRET || !ORCID_REDIRECT_URI) {
@@ -30,47 +33,24 @@ if (!ORCID_CLIENT_ID || !ORCID_CLIENT_SECRET || !ORCID_REDIRECT_URI) {
 
 const app = express();
 
-// If you're behind a proxy/edge TLS (most hosts), this lets Express see req.secure
+// Behind TLS/proxy (Render), let Express detect req.secure
 app.set("trust proxy", 1);
 
 app.use(express.json());
 app.use(cookieParser(SESSION_SECRET));
 
-// --- Very light session using a signed cookie containing a random session id mapped in-memory ---
-// For production you might use Redis; here we keep it simple.
-const sessions = new Map();
-function cookieOptions(req) {
-  return {
-    httpOnly: true,
-    sameSite: "lax",
-    signed: true,
-    // secure cookies in production; ok plain over http for local dev
-    secure: NODE_ENV === "production",
-  };
-}
-function setSession(req, res, data) {
-  const sid = crypto.randomBytes(24).toString("hex");
-  sessions.set(sid, { ...data, createdAt: Date.now() });
-  res.cookie("sid", sid, cookieOptions(req));
-}
-function getSession(req) {
-  const sid = req.signedCookies?.sid;
-  return sid ? sessions.get(sid) : null;
-}
-function clearSession(req, res) {
-  const sid = req.signedCookies?.sid;
-  if (sid) sessions.delete(sid);
-  res.clearCookie("sid", cookieOptions(req));
-}
-
-// --- SQLite setup (file scienceecosystem.sqlite in server folder) ---
+// ------------------------------
+// SQLite setup
+// ------------------------------
 const db = new Database(path.join(__dirname, "scienceecosystem.sqlite"));
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     orcid TEXT PRIMARY KEY,
     name TEXT,
     affiliation TEXT
   );
+
   CREATE TABLE IF NOT EXISTS library_items (
     orcid TEXT NOT NULL,
     id TEXT NOT NULL,
@@ -78,40 +58,92 @@ db.exec(`
     PRIMARY KEY (orcid, id),
     FOREIGN KEY(orcid) REFERENCES users(orcid) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    sid TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
 `);
 
-// Helpers
 const qUserUpsert = db.prepare(`
   INSERT INTO users (orcid, name, affiliation) VALUES (@orcid, @name, @affiliation)
   ON CONFLICT(orcid) DO UPDATE SET name=excluded.name, affiliation=excluded.affiliation
 `);
-const qLibList = db.prepare(`SELECT id, title FROM library_items WHERE orcid=? ORDER BY title`);
-const qLibAdd = db.prepare(`INSERT OR IGNORE INTO library_items (orcid, id, title) VALUES (?, ?, ?)`);
-const qLibDel = db.prepare(`DELETE FROM library_items WHERE orcid=? AND id=?`);
+const qLibList  = db.prepare(`SELECT id, title FROM library_items WHERE orcid=? ORDER BY title`);
+const qLibAdd   = db.prepare(`INSERT OR IGNORE INTO library_items (orcid, id, title) VALUES (?, ?, ?)`);
+const qLibDel   = db.prepare(`DELETE FROM library_items WHERE orcid=? AND id=?`);
 const qLibClear = db.prepare(`DELETE FROM library_items WHERE orcid=?`);
 
-// --- Health check (useful for uptime monitors) ---
+const qSessGet = db.prepare(`SELECT data, expires_at FROM sessions WHERE sid=?`);
+const qSessSet = db.prepare(`INSERT OR REPLACE INTO sessions (sid, data, expires_at) VALUES (?, ?, ?)`);
+const qSessDel = db.prepare(`DELETE FROM sessions WHERE sid=?`);
+const qSessGC  = db.prepare(`DELETE FROM sessions WHERE expires_at < ?`);
+
+// ------------------------------
+// Session helpers (persistent)
+// ------------------------------
+function cookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    signed: true,
+    secure: NODE_ENV === "production",
+    path: "/",
+    ...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
+    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+  };
+}
+function setSession(res, payload) {
+  const sid = crypto.randomBytes(24).toString("hex");
+  const data = JSON.stringify({ ...payload, createdAt: Date.now() });
+  const expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
+  qSessSet.run(sid, data, expires);
+  res.cookie("sid", sid, cookieOptions());
+}
+function getSession(req) {
+  const sid = req.signedCookies?.sid;
+  if (!sid) return null;
+  const row = qSessGet.get(sid);
+  if (!row) return null;
+  if (row.expires_at < Date.now()) { qSessDel.run(sid); return null; }
+  try { return JSON.parse(row.data); } catch { return null; }
+}
+function clearSession(req, res) {
+  const sid = req.signedCookies?.sid;
+  if (sid) qSessDel.run(sid);
+  res.clearCookie("sid", cookieOptions());
+}
+// Garbage-collect expired sessions periodically
+setInterval(() => qSessGC.run(Date.now()), 12 * 60 * 60 * 1000);
+
+// ------------------------------
+// Health check
+// ------------------------------
 app.get("/health", (_req, res) => res.type("text").send("ok"));
 
-// --- Static site (serve your HTML/CSS/JS) ---
+// ------------------------------
+// Static site
+// ------------------------------
 const staticRoot = path.resolve(__dirname, STATIC_DIR);
 app.use(express.static(staticRoot, {
-  extensions: ["html"], // so /about resolves to about.html if you like
+  extensions: ["html"],
   maxAge: NODE_ENV === "production" ? "1h" : 0
 }));
 
-// --- OAuth: start login ---
+// ------------------------------
+// ORCID OAuth
+// ------------------------------
 app.get("/auth/orcid/login", (req, res) => {
   const params = new URLSearchParams({
     client_id: ORCID_CLIENT_ID,
     response_type: "code",
-    scope: "/authenticate", // public scope for sign-in
+    scope: "/authenticate",
     redirect_uri: ORCID_REDIRECT_URI
   });
   return res.redirect(`${ORCID_BASE}/oauth/authorize?${params.toString()}`);
 });
 
-// --- OAuth: callback (server exchanges code for token) ---
 app.get("/auth/orcid/callback", async (req, res) => {
   const { code, error, error_description } = req.query;
   if (error) {
@@ -129,7 +161,10 @@ app.get("/auth/orcid/callback", async (req, res) => {
 
   const tokenRes = await fetch(`${ORCID_BASE}/oauth/token`, {
     method: "POST",
-    headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Accept": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
     body: form
   });
 
@@ -142,16 +177,14 @@ app.get("/auth/orcid/callback", async (req, res) => {
   const orcid = token.orcid;
   if (!orcid) return res.status(400).send("Token response missing ORCID iD");
 
-  // Fetch public profile data
+  // Fetch public profile (best-effort)
   let name = null, affiliation = null;
   try {
-    const recRes = await fetch(`${ORCID_API_BASE}/${orcid}/record`, {
-      headers: { Accept: "application/json" }
-    });
+    const recRes = await fetch(`${ORCID_API_BASE}/${orcid}/record`, { headers: { Accept: "application/json" } });
     if (recRes.ok) {
       const rec = await recRes.json();
       const person = rec?.person;
-      const given = person?.name?.["given-names"]?.value || "";
+      const given  = person?.name?.["given-names"]?.value || "";
       const family = person?.name?.["family-name"]?.value || "";
       const credit = person?.name?.["credit-name"]?.value || "";
       name = (credit || `${given} ${family}`).trim() || null;
@@ -163,20 +196,24 @@ app.get("/auth/orcid/callback", async (req, res) => {
 
   qUserUpsert.run({ orcid, name, affiliation });
 
-  // Minimal session
-  setSession(req, res, { orcid });
+  // Persist session (IMPORTANT: correct parameter order)
+  setSession(res, { orcid });
 
-  // Send back to profile page
+  // Redirect to profile
   res.redirect("/user-profile.html");
 });
 
-// --- Logout ---
+// ------------------------------
+// Auth: logout
+// ------------------------------
 app.post("/auth/logout", (req, res) => {
   clearSession(req, res);
   res.status(204).end();
 });
 
-// --- API: who am I ---
+// ------------------------------
+// API
+// ------------------------------
 app.get("/api/me", (req, res) => {
   const sess = getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
@@ -185,7 +222,6 @@ app.get("/api/me", (req, res) => {
   res.json(row);
 });
 
-// --- API: library list/add/remove/clear ---
 app.get("/api/library", (req, res) => {
   const sess = getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
@@ -215,7 +251,9 @@ app.delete("/api/library", (req, res) => {
   res.status(204).end();
 });
 
-// --- Fallback: serve index.html for unknown GET routes (SPA-friendly) ---
+// ------------------------------
+// SPA-friendly fallback
+// ------------------------------
 app.get("*", (req, res, next) => {
   if (req.method === "GET" && req.accepts("html")) {
     return res.sendFile(path.join(staticRoot, "index.html"));

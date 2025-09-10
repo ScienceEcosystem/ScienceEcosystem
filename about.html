@@ -28,13 +28,18 @@
       </div>
 
       <div class="nav-right">
-        <a class="nav-link" href="index.html">Home</a>
-        <a class="nav-link active" href="about.html" aria-current="page">About</a>
-        <a class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID">
-          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
-          <span>Login with ORCID</span>
-        </a>
-      </div>
+  <a class="nav-link" href="index.html">Home</a>
+  <a class="nav-link" href="about.html">About</a>
+
+  <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+
+  <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+    <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+    <span>Login with ORCID</span>
+  </a>
+
+  <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+</div>
     </div>
   </nav>
 
@@ -102,7 +107,7 @@
         <li><strong>Funders and partners</strong>: support work that becomes public infrastructure.</li>
       </ul>
       <p><a class="btn btn-link" href="https://forms.gle/LydXUFYSSe7o6Mf47" target="_blank" rel="noopener">Take the short survey</a></p>
-      <p>Contact us any time: <a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+      <p>Contact us any time: <a href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
     </section>
 
     <section class="panel">
@@ -123,6 +128,7 @@
   </footer>
 
   <script src="scripts/search.js"></script>
+  <script src="scripts/session.js" defer></script>
 </body>
 </html>
 

@@ -28,13 +28,18 @@
       </div>
 
       <div class="nav-right">
-        <a class="nav-link" href="index.html">Home</a>
-        <a class="nav-link" href="about.html">About</a>
-        <a class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID">
-          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
-          <span>Login with ORCID</span>
-        </a>
-      </div>
+  <a class="nav-link" href="index.html">Home</a>
+  <a class="nav-link" href="about.html">About</a>
+
+  <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+
+  <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+    <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+    <span>Login with ORCID</span>
+  </a>
+
+  <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+</div>
     </div>
   </nav>
 
@@ -143,6 +148,8 @@
 
 
 <script src="scripts/search.js" defer></script>
+<script src="scripts/session.js" defer></script>
+<script src="scripts/library.js" defer></script>
 <script src="scripts/components.js" defer></script>
 <script src="scripts/profile.js" defer></script>
 
