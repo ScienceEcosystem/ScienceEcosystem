@@ -64,6 +64,25 @@ db.exec(`
     data TEXT NOT NULL,
     expires_at INTEGER NOT NULL
   );
+
+
+CREATE TABLE IF NOT EXISTS claimed_authors (
+  orcid TEXT NOT NULL,
+  author_id TEXT NOT NULL,           -- OpenAlex author id tail, e.g. 'A1969205033'
+  verified INTEGER NOT NULL DEFAULT 0, -- 0=unverified, 1=verified (phase 2)
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+  PRIMARY KEY (orcid, author_id),
+  FOREIGN KEY(orcid) REFERENCES users(orcid) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS merged_claims (
+  orcid TEXT NOT NULL,
+  primary_author_id TEXT NOT NULL,    -- the “main” author id
+  merged_author_id  TEXT NOT NULL,    -- an extra author id merged under the main
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+  PRIMARY KEY (orcid, primary_author_id, merged_author_id),
+  FOREIGN KEY(orcid) REFERENCES users(orcid) ON DELETE CASCADE
+);
 `);
 
 const qUserUpsert = db.prepare(`
@@ -264,4 +283,65 @@ app.get("*", (req, res, next) => {
 app.listen(PORT, () => {
   const host = NODE_ENV === "production" ? "https://scienceecosystem.org" : `http://localhost:${PORT}`;
   console.log(`ScienceEcosystem server running at ${host}`);
+});
+
+
+const qClaimList = db.prepare(`SELECT author_id, verified, created_at FROM claimed_authors WHERE orcid=? ORDER BY created_at DESC`);
+const qClaimAdd  = db.prepare(`INSERT OR IGNORE INTO claimed_authors (orcid, author_id, verified) VALUES (?, ?, 0)`);
+const qClaimDel  = db.prepare(`DELETE FROM claimed_authors WHERE orcid=? AND author_id=?`);
+
+const qMergeList = db.prepare(`SELECT primary_author_id, merged_author_id, created_at FROM merged_claims WHERE orcid=? ORDER BY created_at DESC`);
+const qMergeAdd  = db.prepare(`INSERT OR IGNORE INTO merged_claims (orcid, primary_author_id, merged_author_id) VALUES (?, ?, ?)`);
+const qMergeDel  = db.prepare(`DELETE FROM merged_claims WHERE orcid=? AND primary_author_id=? AND merged_author_id=?`);
+
+// List my claims
+app.get("/api/claims", (req, res) => {
+  const sess = getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  res.json({
+    claims: qClaimList.all(sess.orcid),
+    merges: qMergeList.all(sess.orcid)
+  });
+});
+
+// Claim an OpenAlex author id
+app.post("/api/claims", (req, res) => {
+  const sess = getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const { author_id } = req.body || {};
+  if (!author_id || !/^A\d+$/.test(String(author_id))) {
+    return res.status(400).json({ error: "author_id must look like A123..." });
+  }
+  qClaimAdd.run(sess.orcid, String(author_id));
+  res.status(201).json({ ok: true });
+});
+
+// Remove a claimed author id
+app.delete("/api/claims/:author_id", (req, res) => {
+  const sess = getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  qClaimDel.run(sess.orcid, String(req.params.author_id));
+  res.status(204).end();
+});
+
+// Merge: attach another author id under a primary id
+app.post("/api/claims/merge", (req, res) => {
+  const sess = getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const { primary_author_id, merged_author_id } = req.body || {};
+  if (!/^A\d+$/.test(String(primary_author_id)) || !/^A\d+$/.test(String(merged_author_id))) {
+    return res.status(400).json({ error: "author ids must look like A123..." });
+  }
+  qMergeAdd.run(sess.orcid, String(primary_author_id), String(merged_author_id));
+  res.status(201).json({ ok: true });
+});
+
+// Unmerge
+app.delete("/api/claims/merge", (req, res) => {
+  const sess = getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const { primary_author_id, merged_author_id } = req.query || {};
+  if (!primary_author_id || !merged_author_id) return res.status(400).json({ error: "both ids required" });
+  qMergeDel.run(sess.orcid, String(primary_author_id), String(merged_author_id));
+  res.status(204).end();
 });

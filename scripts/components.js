@@ -447,8 +447,49 @@
   }
 
   // ---------- Enhance cards after insertion ----------
-  async function enhancePaperCards(container){
-    container = container || document;
+async function enhancePaperCards(container) {
+  const root = container || document;
+
+  // 1. Preload saved library IDs
+  await window.SE_LIB.loadLibraryOnce();
+
+  // 2. Mark all save buttons that already exist in the user’s library
+  root.querySelectorAll('[data-action="save-paper"]').forEach(btn => {
+    const card = btn.closest(".paper-card, .header-card, .result-card, article");
+    if (!card) return;
+    const id = card.getAttribute("data-paper-id");
+    if (id && window.SE_LIB.isSaved(id)) {
+      window.SE_LIB.markSavedButton(btn);
+    }
+  });
+
+  // 3. Handle save button clicks
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest('[data-action="save-paper"]');
+    if (!btn) return;
+
+    const card = btn.closest(".paper-card, .header-card, .result-card, article");
+    if (!card) return;
+
+    const id = card.getAttribute("data-paper-id");
+    const title = card.getAttribute("data-cite-title")
+               || card.querySelector(".paper-title")?.textContent?.trim()
+               || "Untitled";
+
+    if (!id) { alert("Cannot determine paper id."); return; }
+
+    // If already saved, just mark
+    if (window.SE_LIB.isSaved(id)) {
+      window.SE_LIB.markSavedButton(btn);
+      return;
+    }
+
+    // Call global savePaper with the button reference
+    window.savePaper({ id, title }, btn);
+  }, { passive: true });
+}
+
+
 
     // 1) Unpaywall PDF indicator
     var cards = Array.prototype.slice.call(container.querySelectorAll(".paper-card[data-doi]"));
@@ -615,10 +656,9 @@
     }, true);
   }
 
-  // expose
-  window.SE = window.SE || {};
-  window.SE.components = {
-    renderPaperCard: renderPaperCard,
-    enhancePaperCards: enhancePaperCards
-  };
-})();
+// expose
+window.SE = window.SE || {};
+window.SE.components = {
+  renderPaperCard: renderPaperCard,
+  enhancePaperCards: enhancePaperCards
+};
