@@ -447,69 +447,8 @@
   }
 
   // ---------- Enhance cards after insertion ----------
-// Defensive enhancer: works even if SE_LIB or savePaper aren't present yet
-async function enhancePaperCards(container) {
-  const root = container || document;
-
-  // Try to preload saved IDs if the helper exists, but don't crash if not.
-  try {
-    if (window.SE_LIB?.loadLibraryOnce) {
-      await window.SE_LIB.loadLibraryOnce();
-    }
-  } catch (e) {
-    console.warn("SE_LIB preload failed (continuing):", e);
-  }
-
-  // Mark already-saved buttons if helpers exist
-  try {
-    if (window.SE_LIB?.isSaved && window.SE_LIB?.markSavedButton) {
-      root.querySelectorAll('[data-action="save-paper"]').forEach(btn => {
-        const card = btn.closest(".paper-card, .header-card, .result-card, article");
-        if (!card) return;
-        const id = card.getAttribute("data-paper-id");
-        if (id && window.SE_LIB.isSaved(id)) {
-          window.SE_LIB.markSavedButton(btn);
-        }
-      });
-    }
-  } catch (e) {
-    console.warn("SE_LIB marking failed (continuing):", e);
-  }
-
-  // Click handler to save
-  root.addEventListener("click", (e) => {
-    const btn = e.target.closest('[data-action="save-paper"]');
-    if (!btn) return;
-
-    const card = btn.closest(".paper-card, .header-card, .result-card, article");
-    if (!card) return;
-
-    const id = card.getAttribute("data-paper-id");
-    const title =
-      card.getAttribute("data-cite-title") ||
-      card.querySelector(".paper-title")?.textContent?.trim() ||
-      "Untitled";
-
-    if (!id) { alert("Cannot determine paper id."); return; }
-
-    // If we have the SE_LIB cache and it's already saved, reflect state
-    if (window.SE_LIB?.isSaved && window.SE_LIB.isSaved(id)) {
-      window.SE_LIB?.markSavedButton?.(btn);
-      return;
-    }
-
-    // Use global savePaper when available; otherwise, no-op gracefully
-    if (typeof window.savePaper === "function") {
-      window.savePaper({ id, title }, btn);
-    } else {
-      console.warn("savePaper() not available; include scripts/library.js");
-      alert("Please sign in to save papers.");
-    }
-  }, { passive: true });
-}
-
-
-
+  async function enhancePaperCards(container){
+    container = container || document;
 
     // 1) Unpaywall PDF indicator
     var cards = Array.prototype.slice.call(container.querySelectorAll(".paper-card[data-doi]"));
@@ -676,8 +615,10 @@ async function enhancePaperCards(container) {
     }, true);
   }
 
-// expose
-(globalThis.SE ??= {}).components = {
-  renderPaperCard,
-  enhancePaperCards,
-})
+  // expose
+  window.SE = window.SE || {};
+  window.SE.components = {
+    renderPaperCard: renderPaperCard,
+    enhancePaperCards: enhancePaperCards
+  };
+})();
