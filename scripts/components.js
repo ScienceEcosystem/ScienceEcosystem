@@ -447,23 +447,36 @@
   }
 
   // ---------- Enhance cards after insertion ----------
+// Defensive enhancer: works even if SE_LIB or savePaper aren't present yet
 async function enhancePaperCards(container) {
   const root = container || document;
 
-  // 1. Preload saved library IDs
-  await window.SE_LIB.loadLibraryOnce();
-
-  // 2. Mark all save buttons that already exist in the user’s library
-  root.querySelectorAll('[data-action="save-paper"]').forEach(btn => {
-    const card = btn.closest(".paper-card, .header-card, .result-card, article");
-    if (!card) return;
-    const id = card.getAttribute("data-paper-id");
-    if (id && window.SE_LIB.isSaved(id)) {
-      window.SE_LIB.markSavedButton(btn);
+  // Try to preload saved IDs if the helper exists, but don't crash if not.
+  try {
+    if (window.SE_LIB?.loadLibraryOnce) {
+      await window.SE_LIB.loadLibraryOnce();
     }
-  });
+  } catch (e) {
+    console.warn("SE_LIB preload failed (continuing):", e);
+  }
 
-  // 3. Handle save button clicks
+  // Mark already-saved buttons if helpers exist
+  try {
+    if (window.SE_LIB?.isSaved && window.SE_LIB?.markSavedButton) {
+      root.querySelectorAll('[data-action="save-paper"]').forEach(btn => {
+        const card = btn.closest(".paper-card, .header-card, .result-card, article");
+        if (!card) return;
+        const id = card.getAttribute("data-paper-id");
+        if (id && window.SE_LIB.isSaved(id)) {
+          window.SE_LIB.markSavedButton(btn);
+        }
+      });
+    }
+  } catch (e) {
+    console.warn("SE_LIB marking failed (continuing):", e);
+  }
+
+  // Click handler to save
   root.addEventListener("click", (e) => {
     const btn = e.target.closest('[data-action="save-paper"]');
     if (!btn) return;
@@ -472,22 +485,29 @@ async function enhancePaperCards(container) {
     if (!card) return;
 
     const id = card.getAttribute("data-paper-id");
-    const title = card.getAttribute("data-cite-title")
-               || card.querySelector(".paper-title")?.textContent?.trim()
-               || "Untitled";
+    const title =
+      card.getAttribute("data-cite-title") ||
+      card.querySelector(".paper-title")?.textContent?.trim() ||
+      "Untitled";
 
     if (!id) { alert("Cannot determine paper id."); return; }
 
-    // If already saved, just mark
-    if (window.SE_LIB.isSaved(id)) {
-      window.SE_LIB.markSavedButton(btn);
+    // If we have the SE_LIB cache and it's already saved, reflect state
+    if (window.SE_LIB?.isSaved && window.SE_LIB.isSaved(id)) {
+      window.SE_LIB?.markSavedButton?.(btn);
       return;
     }
 
-    // Call global savePaper with the button reference
-    window.savePaper({ id, title }, btn);
+    // Use global savePaper when available; otherwise, no-op gracefully
+    if (typeof window.savePaper === "function") {
+      window.savePaper({ id, title }, btn);
+    } else {
+      console.warn("savePaper() not available; include scripts/library.js");
+      alert("Please sign in to save papers.");
+    }
   }, { passive: true });
 }
+
 
 
 
@@ -657,8 +677,7 @@ async function enhancePaperCards(container) {
   }
 
 // expose
-window.SE = window.SE || {};
-window.SE.components = {
-  renderPaperCard: renderPaperCard,
-  enhancePaperCards: enhancePaperCards
-};
+(globalThis.SE ??= {}).components = {
+  renderPaperCard,
+  enhancePaperCards,
+})
