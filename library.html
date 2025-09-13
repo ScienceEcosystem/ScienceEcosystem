@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>My Library | ScienceEcosystem</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="style.css" rel="stylesheet" />
+</head>
+<body data-page="library">
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html"><img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" /></a>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" style="display:inline-flex;">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container">
+    <section class="panel">
+      <h1>My Library</h1>
+      <div id="libControls" style="display:flex; gap:.5rem; align-items:center; margin:.5rem 0;">
+        <input id="libSearch" class="input" placeholder="Filter by title…" style="flex:1;">
+        <button id="libClear" class="btn">Clear All</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table" id="libTable">
+          <thead><tr><th>Title</th><th style="width:160px;">Actions</th></tr></thead>
+          <tbody id="libBody"><tr><td colspan="2">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+  <script src="scripts/library-page.js" defer></script>
+</body>
+</html>

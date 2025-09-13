@@ -820,3 +820,6 @@ body {
   .metrics .stats-grid{ justify-items: start !important; }
 }
 */
+
+.btn-success { background:#16a34a; color:#fff; border-color:#16a34a; }
+.btn-success:disabled { opacity:.9; cursor:default; }
