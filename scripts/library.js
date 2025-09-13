@@ -1,5 +1,5 @@
 // scripts/library.js
-let SE_LIB_MAP = null; // { [paperId]: true }
+let SE_LIB_MAP = null; // { [paperId: string]: true }
 
 async function seApi(path, opts = {}) {
   const res = await fetch(path, {
@@ -19,13 +19,16 @@ async function loadLibraryOnce() {
     SE_LIB_MAP = Object.create(null);
     for (const it of items) SE_LIB_MAP[String(it.id)] = true;
   } catch {
+    // Not signed in or server error → empty cache (don’t throw)
     SE_LIB_MAP = Object.create(null);
   }
   return SE_LIB_MAP;
 }
+
 function isSaved(id) {
   return !!(SE_LIB_MAP && SE_LIB_MAP[String(id)]);
 }
+
 function markSavedButton(btn) {
   if (!btn) return;
   btn.textContent = "Saved ✓";
@@ -33,21 +36,24 @@ function markSavedButton(btn) {
   btn.disabled = true;
 }
 
-// Exposed global helpers (no window warnings)
-(globalThis.SE_LIB ??= { loadLibraryOnce, isSaved, markSavedButton });
+// Ensure we always attach the helpers onto SE_LIB (even if it existed already)
+(globalThis.SE_LIB ??= {});
+Object.assign(globalThis.SE_LIB, { loadLibraryOnce, isSaved, markSavedButton });
 
 // Global save helper that can flip the clicked button
 globalThis.savePaper = async function savePaper(paper, btnEl) {
   if (!paper || !paper.id || !paper.title) {
-    alert("Missing paper id/title"); return;
+    alert("Missing paper id/title");
+    return;
   }
   try {
     await seApi("/api/library", {
       method: "POST",
       body: JSON.stringify({ id: String(paper.id), title: String(paper.title) }),
     });
-    // cache + UI
-    if (SE_LIB_MAP) SE_LIB_MAP[String(paper.id)] = true;
+    // update local cache + UI
+    (SE_LIB_MAP ??= Object.create(null));
+    SE_LIB_MAP[String(paper.id)] = true;
     if (btnEl) markSavedButton(btnEl);
     alert(`Saved "${paper.title}" to your library`);
   } catch (e) {

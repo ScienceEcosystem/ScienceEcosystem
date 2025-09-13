@@ -52,10 +52,7 @@ async function bootstrap() {
       <p><strong>ORCID ID:</strong> <a href="${orcidUrl}" target="_blank" rel="noopener">${me.orcid}</a></p>
       <p><strong>Affiliation:</strong> ${escapeHtml(me.affiliation || "—")}</p>
 
-      <section>
-        <h2>My Library</h2>
-        <ul id="userLibraryList" class="list-unstyled"></ul>
-      </section>
+      
 
       <section>
         <h2>My Topics</h2>

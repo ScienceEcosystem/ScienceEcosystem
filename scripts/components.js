@@ -1,28 +1,36 @@
 // scripts/components.js
 (function () {
-  // Expose under window.SE so all pages can reuse
-  if (window.SE && window.SE.components) return;
+  // Avoid redefining if included twice
+  if (globalThis.SE?.components) return;
 
-  var UNPAYWALL_EMAIL = "scienceecosystem@icloud.com"; // your email for Unpaywall compliance
+  var UNPAYWALL_EMAIL = "scienceecosystem@icloud.com"; // for Unpaywall compliance
 
   // ---------- helpers ----------
-  function escapeHtml(str){ str = (str==null?"":String(str)); return str.replace(/[&<>'"]/g, function(c){ return ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]; }); }
-  function get(obj, path, fb){ try{ var p=path.split("."), cur=obj; for(var i=0;i<p.length;i++){ if(cur==null) return fb; cur=cur[p[i]]; } return cur==null?fb:cur; } catch(e){ return fb; } }
+  function escapeHtml(str){
+    str = (str==null?"":String(str));
+    return str.replace(/[&<>'"]/g, function(c){
+      return ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c];
+    });
+  }
+  function get(obj, path, fb){
+    try{ var p=path.split("."), cur=obj;
+      for(var i=0;i<p.length;i++){ if(cur==null) return fb; cur=cur[p[i]]; }
+      return cur==null?fb:cur;
+    } catch(e){ return fb; }
+  }
   function idTailFrom(anyId){
     if (!anyId) return "";
-    var s = String(anyId);
-    return s.replace(/^https?:\/\/openalex\.org\//i,"");
+    return String(anyId).replace(/^https?:\/\/openalex\.org\//i,"");
   }
-  function doiFrom(work){
-    return work.doi || get(work,"ids.doi",null);
-  }
+  function doiFrom(work){ return work.doi || get(work,"ids.doi",null); }
   function doiUrl(doi){
     if (!doi) return null;
     var d = String(doi).replace(/^doi:/i,"");
     return (d.indexOf("http")===0) ? d : ("https://doi.org/" + d);
   }
   function journalFrom(work){
-    return get(work,"host_venue.display_name",null) || get(work,"primary_location.source.display_name","Unknown venue");
+    return get(work,"host_venue.display_name",null)
+        || get(work,"primary_location.source.display_name","Unknown venue");
   }
   function abstractTextFrom(work){
     var idx = work.abstract_inverted_index;
@@ -39,13 +47,9 @@
     var m = s.match(/[^.!?]*[.!?]/);
     return m ? m[0].trim() : s.trim();
   }
-
-  // ---- optional highlight passthrough from search.js ----
   function maybeHighlight(text, q){
     try{
-      if (window.SE && window.SE.search && typeof window.SE.search.highlight === "function") {
-        return window.SE.search.highlight(text, q);
-      }
+      if (globalThis.SE?.search?.highlight) return globalThis.SE.search.highlight(text, q);
     } catch(_){}
     return escapeHtml(text || "");
   }
@@ -55,17 +59,12 @@
     if (!full) return { given:"", family:"" };
     var parts = String(full).trim().split(/\s+/);
     if (parts.length === 1) return { given:"", family:parts[0] };
-    var family = parts.pop();
-    var given = parts.join(" ");
+    var family = parts.pop(); var given = parts.join(" ");
     return { given: given, family: family };
   }
   function initials(given){
     if (!given) return "";
-    return given
-      .split(/\s+/)
-      .filter(Boolean)
-      .map(function(p){ return p[0].toUpperCase() + "."; })
-      .join(" ");
+    return given.split(/\s+/).filter(Boolean).map(function(p){ return p[0].toUpperCase() + "."; }).join(" ");
   }
   function titleSentenceCase(t){
     try{
@@ -78,7 +77,7 @@
     }catch(_){ return t || ""; }
   }
 
-  // ---------- Collect per-work citation data from an OpenAlex work ----------
+  // ---------- Collect per-work citation data ----------
   function collectCiteData(work){
     var authors = (get(work,"authorships",[]) || [])
       .map(function(a){ return get(a,"author.display_name",""); })
@@ -107,7 +106,7 @@
     };
   }
 
-  // ---------- Formatters for styles ----------
+  // ---------- Formatters ----------
   function fmtAuthorsAPA(list){
     if (!list || !list.length) return "";
     var arr = list.map(function(full){
@@ -178,7 +177,6 @@
     if (v && i) return v + "(" + i + ")";
     return v || (i ? "(" + i + ")" : "");
   }
-
   function fmtAPA(d){
     var a = fmtAuthorsAPA(d.authors);
     var y = d.year || "n.d.";
@@ -308,27 +306,22 @@
     var authors = authorLinks(work.authorships, 10);
     var cited = get(work,"cited_by_count",0) || 0;
 
-    // Highlight title based on query if provided
     var title = opts.highlightQuery ? maybeHighlight(titleRaw, opts.highlightQuery) : escapeHtml(titleRaw);
 
-    // abstract (first sentence + full)
     var abs = abstractTextFrom(work);
     var shortRaw = firstSentence(abs);
     var short = opts.highlightQuery ? maybeHighlight(shortRaw, opts.highlightQuery) : escapeHtml(shortRaw);
     var full = escapeHtml(abs);
     var hasMore = !!abs && abs.length > shortRaw.length + 1;
 
-    // chips we know synchronously (OpenAlex, DOI if present)
     var chips = [];
     var doiHref = doiUrl(doi);
     if (doiHref) chips.push('<a class="badge" href="'+doiHref+'" target="_blank" rel="noopener">DOI</a>');
     if (work.id) chips.push('<a class="badge" href="'+work.id+'" target="_blank" rel="noopener">OpenAlex</a>');
 
-    // OA from OpenAlex fields (best_oa_location/open_access)
     var oaPDF = get(work,"best_oa_location.url_for_pdf",null) || get(work,"primary_location.pdf_url",null) || get(work,"open_access.oa_url",null);
     if (oaPDF) chips.unshift('<a class="badge badge-oa" href="'+oaPDF+'" target="_blank" rel="noopener">PDF</a>');
 
-    // ---- Citation data attributes (for popover generation) ----
     var citeData = collectCiteData(work);
     function attr(v){ return v ? escapeHtml(String(v)) : ""; }
 
@@ -365,7 +358,7 @@
     '</article>';
   }
 
-  // Build popover content
+  // ---------- Cite popover ----------
   function buildCitePopover(card){
     var getAttr = function(k){ return (card.getAttribute(k) || "").trim(); };
     var d = {
@@ -429,11 +422,10 @@
     return tpl;
   }
 
-  // Position popover near the Cite button within the card
   function positionPopover(card, popover, button){
     var btnRect = button.getBoundingClientRect();
     var cardRect = card.getBoundingClientRect();
-    var top = (btnRect.bottom - cardRect.top) + 8; // below the button
+    var top = (btnRect.bottom - cardRect.top) + 8;
     var left = (btnRect.left - cardRect.left);
     var maxLeft = card.clientWidth - popover.clientWidth - 8;
     if (left > maxLeft) left = Math.max(8, maxLeft);
@@ -446,12 +438,23 @@
     popover.style.top  = top + "px";
   }
 
-  // ---------- Enhance cards after insertion ----------
-  async function enhancePaperCards(container){
-    container = container || document;
+  // ---------- Add-to-Library helpers ----------
+  function markSavedButton(btn){
+    if (!btn) return;
+    btn.textContent = "Saved ✓";
+    btn.classList.add("btn-success");
+    btn.disabled = true;
+  }
 
-    // 1) Unpaywall PDF indicator
-    var cards = Array.prototype.slice.call(container.querySelectorAll(".paper-card[data-doi]"));
+  // ---------- Enhance after insertion ----------
+  async function enhancePaperCards(container){
+    var root = container || document;
+
+    // Try to build saved cache (non-fatal if not present)
+    try { await globalThis.SE_LIB?.loadLibraryOnce?.(); } catch(e){ console.warn("SE_LIB preload:", e); }
+
+    // 1) Add Unpaywall PDF chips asynchronously
+    var cards = Array.prototype.slice.call(root.querySelectorAll(".paper-card[data-doi]"));
     for (var i=0;i<cards.length;i++){
       (async function(card){
         var doi = card.getAttribute("data-doi");
@@ -474,56 +477,66 @@
       })(cards[i]);
     }
 
-    // 2) Expand/collapse abstract
-    container.addEventListener("click", function(e){
-      var btn = e.target.closest('[data-role="toggle-abs"]');
-      if (!btn) return;
-      var abstract = btn.closest(".abstract");
-      if (!abstract) return;
-      abstract.classList.toggle("expanded");
-      btn.textContent = abstract.classList.contains("expanded") ? "Show less" : "Show more";
+    // 2) If we have a cache, mark already-saved buttons
+    try {
+      if (globalThis.SE_LIB?.isSaved) {
+        root.querySelectorAll('[data-action="save-paper"]').forEach(function(btn){
+          var card = btn.closest(".paper-card, .header-card, .result-card, article");
+          var id = card?.getAttribute("data-paper-id");
+          if (id && globalThis.SE_LIB.isSaved(id)) markSavedButton(btn);
+        });
+      }
+    } catch(e){ console.warn("Mark saved failed:", e); }
+
+    // 3) Abstract expand/collapse
+    root.addEventListener("click", function(e){
+      var t = e.target.closest('[data-role="toggle-abs"]');
+      if (!t) return;
+      var abs = t.closest(".abstract");
+      if (!abs) return;
+      abs.classList.toggle("expanded");
+      t.textContent = abs.classList.contains("expanded") ? "Show less" : "Show more";
     });
 
-    // Inside your SE.components.enhancePaperCards(container) or similar initializer:
-(function () {
-  const root = container || document;
-  root.addEventListener("click", (e) => {
-    const btn = e.target.closest('[data-action="save-paper"]');
-    if (!btn) return;
+    // 4) Save button behavior
+    root.addEventListener("click", function(e){
+      var btn = e.target.closest('[data-action="save-paper"]');
+      if (!btn) return;
 
-    // Find the nearest paper card with data attributes set by paper.js/buildActionsBar
-    const card = btn.closest(".paper-card, .header-card, .result-card, article");
-    if (!card) return;
+      var card = btn.closest(".paper-card, .header-card, .result-card, article");
+      var id = card?.getAttribute("data-paper-id");
+      var title = card?.getAttribute("data-cite-title")
+              || card?.querySelector(".paper-title")?.textContent?.trim()
+              || card?.querySelector(".card-title")?.textContent?.trim()
+              || "Untitled";
 
-    // id/title are provided by paper.js buildActionsBar via data- attributes
-    const openAlexIdTail = card.getAttribute("data-paper-id");     // e.g. "W1234567890"
-    const title = card.getAttribute("data-cite-title") || card.querySelector(".paper-title")?.textContent?.trim();
+      if (!id){ alert("Cannot determine paper id."); return; }
 
-    if (!openAlexIdTail || !title) {
-      alert("Sorry, cannot determine paper id/title.");
-      return;
-    }
+      // Already saved? reflect and bail
+      if (globalThis.SE_LIB?.isSaved?.(id)) { markSavedButton(btn); return; }
 
-    // Use the same id shape your paper pages use (they accept OpenAlex id tail)
-    const id = openAlexIdTail; // keep as tail (e.g. "W…"). If you use DOIs elsewhere, send that instead.
-    window.savePaper({ id, title });
-  }, { passive: true });
-})();
+      if (typeof globalThis.savePaper === "function") {
+        globalThis.savePaper({ id, title }, btn);
+      } else {
+        console.warn("savePaper() missing. Include scripts/library.js first.");
+        alert("Please sign in to save papers.");
+      }
+    }, { passive: true });
 
-    // 4) Cite popover (open/close/copy)
+    // 5) Cite popover open/close/copy
     function closeAllPopovers(){
-      Array.prototype.forEach.call(container.querySelectorAll(".paper-card .cite-popover"), function(pop){
+      root.querySelectorAll(".paper-card .cite-popover").forEach(function(pop){
         pop.hidden = true;
-        var card = pop.closest(".paper-card");
+        var card = pop.closest(".paper-card, .header-card, .result-card, article");
         var openBtn = card && card.querySelector('[data-action="open-cite"]');
         if (openBtn) openBtn.setAttribute("aria-expanded","false");
       });
     }
 
-    container.addEventListener("click", function(e){
+    root.addEventListener("click", function(e){
       var open = e.target.closest('[data-action="open-cite"]');
       if (open){
-        var card = open.closest(".paper-card");
+        var card = open.closest(".paper-card, .header-card, .result-card, article");
         if (!card) return;
         var pop = card.querySelector(".cite-popover");
         if (!pop) return;
@@ -543,7 +556,7 @@
 
       var close = e.target.closest('[data-action="close-cite"]');
       if (close){
-        var cardC = close.closest(".paper-card");
+        var cardC = close.closest(".paper-card, .header-card, .result-card, article");
         var popC = cardC && cardC.querySelector(".cite-popover");
         if (popC){ popC.hidden = true; }
         var openBtn = cardC && cardC.querySelector('[data-action="open-cite"]');
@@ -556,7 +569,7 @@
         var row = copyBtn.closest(".cite-row");
         if (!row) return;
         var text = row.getAttribute("data-cite-text") || "";
-        if (navigator.clipboard && navigator.clipboard.writeText){
+        if (navigator.clipboard?.writeText){
           navigator.clipboard.writeText(text).then(function(){
             copyBtn.textContent = "Copied ✓";
             setTimeout(function(){ copyBtn.textContent = "Copy"; }, 1200);
@@ -580,12 +593,11 @@
 
       var copyAll = e.target.closest('[data-action="copy-all"]');
       if (copyAll){
-        var cardA = copyAll.closest(".paper-card");
+        var cardA = copyAll.closest(".paper-card, .header-card, .result-card, article");
         var popA = cardA && cardA.querySelector(".cite-popover");
         if (!popA) return;
         var parts = [];
-        var rows = popA.querySelectorAll(".cite-row");
-        rows.forEach(function(r){
+        popA.querySelectorAll(".cite-row").forEach(function(r){
           var labelEl = r.querySelector(".muted");
           var label = labelEl ? labelEl.textContent : "";
           var text = r.getAttribute("data-cite-text") || "";
@@ -594,7 +606,7 @@
         var bibTA = popA.querySelector(".cite-row-bibtex textarea");
         if (bibTA){ parts.push("BibTeX:\n" + bibTA.value); }
         var bundle = parts.join("\n\n");
-        if (navigator.clipboard && navigator.clipboard.writeText){
+        if (navigator.clipboard?.writeText){
           navigator.clipboard.writeText(bundle).then(function(){
             copyAll.textContent = "Copied ✓";
             setTimeout(function(){ copyAll.textContent = "Copy All"; }, 1200);
@@ -603,7 +615,7 @@
       }
     });
 
-    // 5) Close popovers on Escape / outside click
+    // 6) Close cite popovers on Escape / outside click
     document.addEventListener("keydown", function(e){
       if (e.key === "Escape") closeAllPopovers();
     });
@@ -615,9 +627,8 @@
     }, true);
   }
 
-  // expose
-  window.SE = window.SE || {};
-  window.SE.components = {
+  // ---------- export ----------
+  (globalThis.SE ??= {}).components = {
     renderPaperCard: renderPaperCard,
     enhancePaperCards: enhancePaperCards
   };
