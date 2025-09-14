@@ -1,42 +1,107 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>My Library | ScienceEcosystem</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="style.css" rel="stylesheet" />
+  <meta name="description" content="Library with collections, table view, and notes."/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body data-page="library">
+  <a class="skip-link" href="#main">Skip to content</a>
+
   <nav class="app-nav" role="navigation" aria-label="Primary">
     <div class="nav-inner container">
       <div class="logo">
-        <a href="index.html"><img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" /></a>
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
+      </div>
+      <div class="nav-center">
+        <div class="nav-search" style="display:flex; gap:.5rem;">
+          <input id="libFilter" class="input input-pill" placeholder="Filter in library…"/>
+          <button id="newCollectionBtn" class="btn btn-secondary">New collection</button>
+        </div>
       </div>
       <div class="nav-right">
         <a class="nav-link" href="index.html">Home</a>
         <a class="nav-link" href="about.html">About</a>
-        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
-        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" style="display:inline-flex;">
-          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+        <a class="btn btn-orcid" href="user-profile.html" aria-label="Login with ORCID">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt=""/>
           <span>Login with ORCID</span>
         </a>
-        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
       </div>
     </div>
   </nav>
 
-  <main class="container">
-    <section class="panel">
-      <h1>My Library</h1>
-      <div id="libControls" style="display:flex; gap:.5rem; align-items:center; margin:.5rem 0;">
-        <input id="libSearch" class="input" placeholder="Filter by title…" style="flex:1;">
-        <button id="libClear" class="btn">Clear All</button>
-      </div>
-      <div class="table-responsive">
-        <table class="table" id="libTable">
-          <thead><tr><th>Title</th><th style="width:160px;">Actions</th></tr></thead>
-          <tbody id="libBody"><tr><td colspan="2">Loading…</td></tr></tbody>
-        </table>
+  <main id="main" class="container">
+    <section class="panel" style="padding:0;">
+      <div class="lib-grid">
+        <!-- Left: collections -->
+        <aside class="lib-left">
+          <h3 class="lib-heading">Collections</h3>
+          <ul id="collectionsTree" class="tree"></ul>
+        </aside>
+
+        <!-- Middle: table -->
+        <section class="lib-center">
+          <div class="lib-toolbar">
+            <div class="cols-menu">
+              <label><input type="checkbox" data-col="authors" checked/> Authors</label>
+              <label><input type="checkbox" data-col="year" checked/> Year</label>
+              <label><input type="checkbox" data-col="venue" checked/> Venue</label>
+              <label><input type="checkbox" data-col="cited_by" checked/> Cited By</label>
+            </div>
+            <div class="sort-menu">
+              Sort:
+              <select id="sortBy">
+                <option value="title">Title</option>
+                <option value="year">Year</option>
+                <option value="venue">Venue</option>
+                <option value="cited_by">Cited by</option>
+              </select>
+              <select id="sortDir">
+                <option value="asc">Asc</option>
+                <option value="desc">Desc</option>
+              </select>
+            </div>
+          </div>
+          <table class="lib-table" id="itemsTable" aria-label="Library items">
+            <thead>
+              <tr>
+                <th data-k="title">Title</th>
+                <th data-k="authors">Authors</th>
+                <th data-k="year">Year</th>
+                <th data-k="venue">Venue</th>
+                <th data-k="cited_by">Cited by</th>
+              </tr>
+            </thead>
+            <tbody id="itemsTbody">
+              <tr><td colspan="5" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- Right: inspector -->
+        <aside class="lib-right">
+          <div id="inspector">
+            <h3 class="lib-heading">Details</h3>
+            <div id="inspectorBody" class="muted">Select an item…</div>
+
+            <h3 class="lib-heading" style="margin-top:1rem;">Notes</h3>
+            <div id="notesBlock">
+              <ul id="notesList" class="notes"></ul>
+              <div class="note-editor">
+                <textarea id="noteText" class="input" placeholder="Add a note…"></textarea>
+                <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
+                  <button id="addNoteBtn" class="btn btn-secondary">Add Note</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
     </section>
   </main>
@@ -44,7 +109,12 @@
   <footer class="site-footer">
     <div class="container">
       <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-      <p><a href="mailto:scienceecosystem@icloud.com">scienceecosystem@icloud.com</a></p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+      <div class="footer-socials" style="margin-top:.5rem; display:flex; gap:.75rem;">
+        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener">
+          <img src="assets/icons/linkedin.svg" alt="LinkedIn" style="height:24px; width:24px;">
+        </a>
+      </div>
       <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
     </div>
   </footer>
@@ -52,7 +122,7 @@
   <script src="scripts/search.js" defer></script>
   <script src="scripts/library.js" defer></script>
   <script src="scripts/components.js" defer></script>
-  <script src="scripts/session.js" defer></script>
   <script src="scripts/library-page.js" defer></script>
 </body>
 </html>
+
