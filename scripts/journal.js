@@ -166,7 +166,7 @@
       var parts = [];
       parts.push((src.display_name||"This journal")+" has "+(get(src,"works_count",0)||0).toLocaleString()+" works");
       var cit = get(src,"cited_by_count",0)||0;
-      if (cit) parts.push("and "+cit.toLocaleString()+" total citations");
+      if (cit) parts.push(" and "+cit.toLocaleString()+" total citations");
       parts.push(". Type: "+(type||"—")+".");
       if (oa) parts.push(" Open Access journal.");
       if (doaj) parts.push(" Indexed in DOAJ.");

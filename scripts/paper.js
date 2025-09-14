@@ -1097,7 +1097,66 @@
   }
 
   // ---------- Render ----------
+  // Keep a copy of the last rendered paper/source for header recovery
+  var __CURRENT_PAPER__ = null;
+  var __CURRENT_SOURCE__ = null;
+  var __HEADER_GUARD_INSTALLED__ = false;
+
+  function repopulateHeaderIfEmpty(){
+    try{
+      var hdr = $("paperHeaderMain");
+      if (!hdr) return;
+      var isEmpty = !hdr.firstElementChild && (hdr.textContent || "").trim() === "";
+      if (isEmpty && __CURRENT_PAPER__){
+        // Re-render the header trio
+        $("paperHeaderMain").innerHTML = buildHeaderMain(__CURRENT_PAPER__);
+        $("paperActions").innerHTML   = buildActionsBar(__CURRENT_PAPER__);
+        $("paperStats").innerHTML     = buildStatsHeader(__CURRENT_PAPER__);
+        wireHeaderToggles();
+        if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
+          SE.components.enhancePaperCards($("paperActions"));
+        }
+      }
+    }catch(e){
+      console.warn("Header repopulate failed:", e);
+    }
+  }
+
+  function installHeaderGuard(){
+    if (__HEADER_GUARD_INSTALLED__) return;
+    var hdr = $("paperHeaderMain");
+    if (!hdr) return;
+
+    // Watch the specific header node for unexpected clears
+    var mo = new MutationObserver(function(muts){
+      // If at any point it becomes empty, repopulate from cached data
+      repopulateHeaderIfEmpty();
+    });
+    mo.observe(hdr, { childList:true, subtree:false });
+
+    // Also watch for DOM moves/removals (fallback): observe the body for changes
+    var moBody = new MutationObserver(function(){
+      repopulateHeaderIfEmpty();
+    });
+    moBody.observe(document.body, { childList:true, subtree:true });
+
+    // Fallback: periodic sanity check during heavy graphing
+    var t0 = Date.now();
+    var tick = function(){
+      repopulateHeaderIfEmpty();
+      // Run a few times in the first ~15s when graphs typically stabilize
+      if (Date.now() - t0 < 15000) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+
+    __HEADER_GUARD_INSTALLED__ = true;
+  }
+
   function renderPaper(p, source){
+    // cache for recovery
+    __CURRENT_PAPER__ = p;
+    __CURRENT_SOURCE__ = source;
+
     $("paperHeaderMain").innerHTML = buildHeaderMain(p);
     $("paperActions").innerHTML   = buildActionsBar(p);
     $("paperStats").innerHTML     = buildStatsHeader(p);
@@ -1125,12 +1184,17 @@
 
     // Journal & Quality in sidebar
     renderJournalBlock(p, source);
+
+    // Install guard after first successful paint
+    installHeaderGuard();
   }
 
   // Render graphs (with toggle + filters)
   async function renderGraphs(main, cited, citing){
     // default to connected map renderer
     await renderConnectedGraph(main, cited, citing);
+    // Make sure header still present after heavy DOM ops
+    repopulateHeaderIfEmpty();
   }
 
   // ---------- Boot ----------
@@ -1170,6 +1234,10 @@
       if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
         SE.components.enhancePaperCards($("relatedBlock"));
       }
+
+      // Final sanity: ensure header is still there
+      repopulateHeaderIfEmpty();
+
     } catch (e) {
       console.error(e);
       $("paperHeaderMain").innerHTML = "<p class='muted'>Error loading paper details.</p>";
