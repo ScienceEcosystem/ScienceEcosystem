@@ -503,24 +503,47 @@ app.delete("/api/collections/:id/items/:paperId", async (req, res) => {
 /* ---------------------------
    NEW: Library full + membership
 ----------------------------*/
+// --- replace the whole /api/library/full handler with this ---
 app.get("/api/library/full", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
-  const list = await pool.query(
-    `SELECT id, title, openalex_id, openalex_url, doi, year, venue, authors, cited_by, abstract, pdf_url, meta_fresh
-     FROM library_items WHERE orcid=$1 ORDER BY title`,
-    [sess.orcid]
-  );
-  // attach collection_ids per item
-  const items = [];
-  for (const it of list.rows) {
-    const colRows = await pool.query(
-      `SELECT collection_id FROM collection_items WHERE orcid=$1 AND paper_id=$2`,
-      [sess.orcid, String(it.id)]
+
+  try {
+    // Single round-trip: items + aggregated collection_ids
+    const { rows } = await pool.query(
+      `
+      SELECT
+        li.id,
+        li.title,
+        li.openalex_id,
+        li.openalex_url,
+        li.doi,
+        li.year,
+        li.venue,
+        li.authors,
+        li.cited_by,
+        li.abstract,
+        li.pdf_url,
+        COALESCE(li.meta_fresh, FALSE) AS meta_fresh,
+        COALESCE(ARRAY_AGG(ci.collection_id) FILTER (WHERE ci.collection_id IS NOT NULL), '{}') AS collection_ids
+      FROM library_items li
+      LEFT JOIN collection_items ci
+        ON ci.orcid = li.orcid AND ci.paper_id = li.id
+      WHERE li.orcid = $1
+      GROUP BY
+        li.id, li.title, li.openalex_id, li.openalex_url, li.doi, li.year,
+        li.venue, li.authors, li.cited_by, li.abstract, li.pdf_url, li.meta_fresh
+      ORDER BY li.title;
+      `,
+      [sess.orcid]
     );
-    items.push({ ...it, collection_ids: colRows.rows.map(r => r.collection_id) });
+
+    res.json(rows);
+  } catch (e) {
+    console.error("GET /api/library/full failed:", e);
+    res.status(500).json({ error: String(e?.message || e) });
   }
-  res.json(items);
 });
+
 
 /* ---------------------------
    NEW: Refresh one item metadata
