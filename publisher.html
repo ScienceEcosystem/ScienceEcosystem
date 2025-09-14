@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Publisher | ScienceEcosystem</title>
+  <meta name="description" content="Publisher page with journals, publications, metrics, trends, and links from OpenAlex." />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-page="publisher">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
+      </div>
+
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" class="container">
+    <!-- TOP -->
+    <section class="panel profile-top">
+      <div class="profile-top-grid">
+        <div class="identity">
+          <div class="id-header">
+            <div class="journal-avatar" aria-hidden="true">🏢</div>
+            <div>
+              <h1 id="pubName">Loading...</h1>
+              <p class="muted" id="pubLinks"></p>
+            </div>
+          </div>
+
+          <section class="ai-bio" id="pubSummary">A short summary will appear here.</section>
+        </div>
+
+        <div class="metrics">
+          <div class="stats-grid">
+            <div class="stat" title="Total works under this publisher.">
+              <div class="stat-label">Works</div>
+              <div class="stat-value" id="totalWorks">0</div>
+            </div>
+            <div class="stat" title="Total citations to all works under this publisher.">
+              <div class="stat-label">Citations</div>
+              <div class="stat-value" id="totalCitations">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GRID -->
+    <div class="layout-grid">
+      <!-- Main -->
+      <section class="panel main-col">
+        <div class="pubs-header">
+          <h2>Recent Works</h2>
+          <div class="sort-controls">
+            <label for="pubSort">Sort by:</label>
+            <select id="pubSort">
+              <option value="date" selected>Date</option>
+              <option value="citations">Citations</option>
+            </select>
+          </div>
+        </div>
+        <div id="publicationsList" aria-live="polite">Loading works...</div>
+        <div id="pubsPagination" style="margin-top:1rem;"></div>
+      </section>
+
+      <!-- Sidebar -->
+      <aside class="side-col">
+        <section class="panel">
+          <h3>Trends</h3>
+          <div id="trendCharts" class="charts-wrap">Loading charts...</div>
+        </section>
+
+        <section class="panel">
+          <h3>Journals</h3>
+          <ul id="journalsList" class="list-reset">
+            <li class="muted">Loading journals…</li>
+          </ul>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/publisher.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+</body>
+</html>

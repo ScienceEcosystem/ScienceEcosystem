@@ -864,3 +864,24 @@ body {
 /* Saved button (used elsewhere too) */
 .btn-success { background:#16a34a; color:#fff; border-color:#15803d; }
 .btn-success:disabled { opacity:.9; cursor:default; }
+
+
+.site-footer .footer-socials {
+  margin-top: .5rem;
+  display: flex;
+  gap: .75rem;
+}
+
+.site-footer .footer-socials .social-icon {
+  display: inline-flex;
+  line-height: 0;
+  color: inherit;       /* makes SVGs match text color */
+  opacity: .9;
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.site-footer .footer-socials .social-icon:hover,
+.site-footer .footer-socials .social-icon:focus {
+  opacity: 1;
+  transform: translateY(-1px);
+}

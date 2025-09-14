@@ -27,6 +27,7 @@
   function getParam(name){ return new URLSearchParams(location.search).get(name); }
   function escapeHtml(str){ str = (str==null?"":String(str)); return str.replace(/[&<>'"]/g, function(c){ return ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"})[c]; }); }
   function get(obj, path, fb){ try{ var p=path.split("."), cur=obj; for(var i=0;i<p.length;i++){ if(cur==null) return fb; cur=cur[p[i]]; } return cur==null?fb:cur; } catch(e){ return fb; } }
+  function idTailFrom(anyId){ return anyId ? String(anyId).replace(/^https?:\/\/openalex\.org\//i,"") : ""; }
 
   function addMailto(u){
     var url = new URL(u, API);
@@ -363,11 +364,21 @@
     return { level: level, explain: parts.join(" · ") };
   }
 
+  // Helper: find source tail for journal link from a work
+  function sourceTailFromPaper(p){
+    var srcId = get(p, "host_venue.id", null) || get(p, "primary_location.source.id", null);
+    return srcId ? idTailFrom(srcId) : "";
+  }
+
   // ---------- Header content ----------
   function buildHeaderMain(p){
     var title = p.display_name || "Untitled";
     var year  = (p.publication_year != null ? p.publication_year : "n.d.");
     var venue = get(p, "host_venue.display_name", null) || get(p, "primary_location.source.display_name", null) || "Unknown venue";
+    var sourceTail = sourceTailFromPaper(p);
+    var venueHtml = sourceTail
+      ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'">'+escapeHtml(venue)+'</a>'
+      : escapeHtml(venue);
 
     var doiRaw = p.doi || get(p,"ids.doi",null);
     var doiUrl = doiRaw ? (String(doiRaw).indexOf("http")===0 ? doiRaw : ("https://doi.org/" + String(doiRaw).replace(/^doi:/i,""))) : null;
@@ -396,7 +407,7 @@
 
     return (
       '<h1 class="paper-title">'+escapeHtml(title)+'</h1>' +
-      '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+escapeHtml(venue)+'</p>' +
+      '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+venueHtml+'</p>' +
       '<p class="meta-row"><strong>Authors:</strong> ' +
         '<span class="wrap-text" id="authorsShort">'+aList.shortHtml+(aList.moreCount?(' <button class="link-btn" id="authorsShowMore">Show more</button>'):'')+'</span>' +
         '<span class="wrap-text" id="authorsFull" style="display:none;">'+aList.allHtml+' <button class="link-btn" id="authorsShowLess">Show less</button></span>' +
@@ -535,10 +546,16 @@
     var pm = riskLabel(pmScore);
     var exp = computeExpectedPaperQuality(source || {}, p || {});
 
+    // NEW: link to journal page when we have source tail
+    var sourceTail = source ? idTailFrom(source.id) : sourceTailFromPaper(p);
+    var journalLinkHtml = sourceTail
+      ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'">'+escapeHtml(journalName)+'</a>'
+      : escapeHtml(journalName);
+
     var lines = [];
     // Header
     lines.push(
-      '<p><strong>Journal:</strong> '+escapeHtml(journalName)
+      '<p><strong>Journal:</strong> '+journalLinkHtml
       + (homepage?(' · <a href="'+homepage+'" target="_blank" rel="noopener">Homepage</a>'):'')
       + (srcOpenAlex?(' · <a href="'+srcOpenAlex+'" target="_blank" rel="noopener">OpenAlex</a>'):'')
       + '</p>'
@@ -598,8 +615,8 @@
     );
 
     // Small footer note
-    var isPreprint = isPreprintVenue(journalName, venueType);
-    var peerReviewNote = isPreprint
+    var isPreprint2 = isPreprintVenue(journalName, venueType);
+    var peerReviewNote = isPreprint2
       ? 'Preprints are valuable for speed but typically lack formal peer review. Check PubPeer for discussion.'
       : (hasOpenPeerReview(journalName) ? 'This journal often exposes peer-review reports (open/transparent peer review).' : 'Peer-review details vary by journal.');
     lines.push('<p class="muted" style="margin-top:.25rem;">'+escapeHtml(peerReviewNote)+'</p>');
@@ -620,7 +637,6 @@
   }
 
   // ---------- Graph helpers (Connected-style) ----------
-
   function shortCitation(p){
     var first = get(p,"authorships.0.author.display_name","Unknown");
     var last = first.split(" ").slice(-1)[0] || first || "Unknown";

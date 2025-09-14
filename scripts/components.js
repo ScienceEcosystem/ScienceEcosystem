@@ -32,6 +32,19 @@
     return get(work,"host_venue.display_name",null)
         || get(work,"primary_location.source.display_name","Unknown venue");
   }
+  // NEW: resolve source tail and build a journal link HTML for cards (keeps old text helpers untouched)
+  function sourceTailFrom(work){
+    var srcId = get(work,"host_venue.id",null) || get(work,"primary_location.source.id",null);
+    return srcId ? idTailFrom(srcId) : "";
+  }
+  function journalLinkHTML(work){
+    var name = journalFrom(work) || "Unknown venue";
+    var tail = sourceTailFrom(work);
+    return tail
+      ? '<a href="journal.html?id='+encodeURIComponent(tail)+'">'+escapeHtml(name)+'</a>'
+      : escapeHtml(name);
+  }
+
   function abstractTextFrom(work){
     var idx = work.abstract_inverted_index;
     if (!idx || typeof idx !== "object") return "";
@@ -340,7 +353,7 @@
       'data-cite-url="'+attr(citeData.url)+'" '+
       'data-cite-authors="'+attr((citeData.authors||[]).join(' | '))+'">'+
       '<h3 class="card-title"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+title+'</a></h3>'+
-      '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+escapeHtml(venue)+
+      '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+journalLinkHTML(work)+
         ' · <span title="Times this work has been cited">Cited by '+escapeHtml(String(cited))+'</span></p>'+
       '<p class="authors"><strong>Authors:</strong> '+authors+'</p>'+
       '<p class="abstract">'+
