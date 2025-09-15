@@ -546,7 +546,7 @@
     var pm = riskLabel(pmScore);
     var exp = computeExpectedPaperQuality(source || {}, p || {});
 
-    // NEW: link to journal page when we have source tail
+    // Link to journal page when we have source tail
     var sourceTail = source ? idTailFrom(source.id) : sourceTailFromPaper(p);
     var journalLinkHtml = sourceTail
       ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'">'+escapeHtml(journalName)+'</a>'
@@ -675,6 +675,15 @@
     return uni ? inter / uni : 0;
   }
 
+  function refSetFromIds(idList){
+    var s = new Set();
+    for (var i=0;i<idList.length;i++){
+      var tail = String(idList[i]).split("/").pop();
+      if (tail) s.add(tail);
+    }
+    return s;
+  }
+
   async function fetchRefsFor(workIdTails){
     var out = Object.create(null);
     var idsToFetch = [];
@@ -722,7 +731,7 @@
     // Reference sets for candidates
     var refMap = await fetchRefsFor(candTails);
 
-    // Pairwise Jaccard on references
+    // Pairwise Jaccard on references (candidate-to-candidate)
     var edges = [];
     for (var i=0;i<candTails.length;i++){
       for (var j=i+1;j<candTails.length;j++){
@@ -735,6 +744,19 @@
         }
       }
     }
+
+    // ALSO connect seed to candidates (many users expect seed-centric maps)
+    var seedRefSet = refSetFromIds(refs);
+    for (var k=0;k<candTails.length;k++){
+      var t = candTails[k];
+      var sCand = refMap[t];
+      if (!sCand || seedRefSet.size === 0) continue;
+      var simSeed = jaccard(seedRefSet, sCand);
+      if (simSeed >= Math.max(0.04, THRESH * 0.6)){ // slightly easier threshold to ensure connectivity
+        edges.push({ a: idTailFrom(seed.id), b: t, w: simSeed });
+      }
+    }
+
     return { candidateIds: candTails, edges: edges };
   }
 
@@ -750,7 +772,7 @@
         for (var y=x+1;y<present.length;y++){
           var a = present[x], b = present[y];
           var key = a < b ? (a+"|"+b) : (b+"|"+a);
-          coCounts[key] = (coCounts[key]||0) + 1;
+          coCounts[key] = (coCounts[key] || 0) + 1;
         }
       }
     }
@@ -763,6 +785,35 @@
       return { a:e.a, b:e.b, w: (0.7*e.w + 0.3*co) };
     });
     return merged;
+  }
+
+  // Compute connected component reachable from seed id
+  function filterToSeedComponent(edgesWeighted, allNodeIds, seedIdFull){
+    var adj = Object.create(null);
+    allNodeIds.forEach(function(id){ adj[id] = []; });
+    edgesWeighted.forEach(function(e){
+      var a = "https://openalex.org/" + e.a;
+      var b = "https://openalex.org/" + e.b;
+      if (!adj[a]) adj[a] = [];
+      if (!adj[b]) adj[b] = [];
+      adj[a].push(b);
+      adj[b].push(a);
+    });
+    var visited = new Set();
+    var queue = [seedIdFull];
+    visited.add(seedIdFull);
+    while (queue.length){
+      var u = queue.shift();
+      var nbrs = adj[u] || [];
+      for (var i=0;i<nbrs.length;i++){
+        var v = nbrs[i];
+        if (!visited.has(v)){
+          visited.add(v);
+          queue.push(v);
+        }
+      }
+    }
+    return visited;
   }
 
   // Dijkstra shortest path on the current graph
@@ -817,8 +868,7 @@
     return path;
   }
 
-  // ---------- Graph renderers ----------
-
+  // ---------- Graph controls ----------
   function renderGraphControls(){
     var el = document.createElement("div");
     el.id = "graphControls";
@@ -834,7 +884,7 @@
           '</select>'+
         '</label>'+
         '<label style="display:flex; flex-direction:column; font-size:12px;">Min similarity'+
-          '<input id="minSim" type="number" step="0.01" min="0" max="1" value="0.08" />'+
+          '<input id="minSim" type="number" step="0.01" min="0" max="1" value="0.10" />'+
         '</label>'+
         '<label style="display:flex; flex-direction:column; font-size:12px;">Min citations'+
           '<input id="minCites" type="number" min="0" value="0" />'+
@@ -850,7 +900,7 @@
           '<input id="useCoCite" type="checkbox" />'+
           '<span>Co-citation boost</span>'+
         '</label>'+
-        '<button id="applyGraphFilters" class="btn btn-secondary">Apply</button>'+
+        '<button id="applyGraphFilters" class="btn btn-secondary" type="button">Apply</button>'+
         '<span class="muted" style="margin-left:auto;">Tip: double-click a node to expand its neighbors</span>'+
       '</div>';
     return el;
@@ -858,13 +908,14 @@
 
   function baseNetworkOptions(){
     return {
-      nodes: { shape:"dot", scaling:{min:4,max:28}, font:{size:14} },
+      nodes: { shape:"dot", scaling:{min:6,max:28}, font:{size:14} },
       edges: { smooth:true },
-      physics: { stabilization:true, barnesHut:{ gravitationalConstant:-6000 } },
+      physics: { stabilization:true, barnesHut:{ gravitationalConstant:-6500, springConstant:0.02, avoidOverlap:0.2 } },
       interaction: { hover:true }
     };
   }
 
+  // ---------- Graph renderers ----------
   async function renderCitationGraph(main, cited, citing){
     var block = $("graphBlock");
     block.innerHTML = '<h2>Connected Papers</h2>';
@@ -893,7 +944,7 @@
 
     var network = new vis.Network(graphDiv, { nodes:new vis.DataSet(nodes), edges:new vis.DataSet(edges) }, baseNetworkOptions());
 
-    // Click → navigate (keep original behavior)
+    // Click → navigate
     network.on("click", function (params) {
       if (!params.nodes || !params.nodes.length) return;
       var nodeId = params.nodes[0];
@@ -901,15 +952,18 @@
       window.location.href = "paper.html?id=" + encodeURIComponent(shortId);
     });
 
-    // Mode switch: rebuild as connected map if selected
-    $("#applyGraphFilters").onclick = async function(){
-      var mode = $("#graphMode").value;
-      if (mode === "connected"){
-        await renderConnectedGraph(main, cited, citing);
-      } else {
-        await renderCitationGraph(main, cited, citing); // re-render to clear filters
-      }
-    };
+    // Make Apply always respond
+    var applyBtn = $("#applyGraphFilters");
+    if (applyBtn){
+      applyBtn.onclick = async function(){
+        var mode = $("#graphMode").value;
+        if (mode === "connected"){
+          await renderConnectedGraph(main, cited, citing);
+        } else {
+          await renderCitationGraph(main, cited, citing);
+        }
+      };
+    }
   }
 
   async function renderConnectedGraph(main, cited, citing){
@@ -929,26 +983,44 @@
       return;
     }
 
-    // Read filter inputs
+    // Read filter inputs (after controls are in DOM)
     var minSimInput = $("#minSim");
     var minCitesInput = $("#minCites");
     var minYearInput = $("#minYear");
     var maxYearInput = $("#maxYear");
     var coCiteChk = $("#useCoCite");
-    if (minSimInput) minSimInput.value = minSimInput.value || "0.08";
+    if (minSimInput) minSimInput.value = minSimInput.value || "0.10";
 
-    var MIN_SIM = parseFloat(minSimInput ? (minSimInput.value || "0.08") : "0.08") || 0.08;
+    var MIN_SIM = parseFloat(minSimInput ? (minSimInput.value || "0.10") : "0.10") || 0.10;
     var MIN_CITES = parseInt(minCitesInput ? (minCitesInput.value || "0") : "0", 10) || 0;
     var MIN_YEAR = parseInt(minYearInput ? (minYearInput.value || "0") : "0", 10) || 0;
     var MAX_YEAR = parseInt(maxYearInput ? (maxYearInput.value || "0") : "0", 10) || 0;
     var USE_COCIT = !!(coCiteChk && coCiteChk.checked);
 
     // Build similarity graph
-    var base = await buildConnectedLikeGraph(main, cited, citing, { maxReferences:180, maxCiters:180, jaccardThreshold:MIN_SIM });
+    var base = await buildConnectedLikeGraph(main, cited, citing, { maxReferences:220, maxCiters:220, jaccardThreshold:Math.max(0.04, MIN_SIM) });
     var edgesWeighted = base.edges;
+
     if (USE_COCIT){
       edgesWeighted = await coCitationBoost(citing.slice(0,200), base.candidateIds, edgesWeighted);
     }
+
+    // Remove very weak edges; keep only top-K per node to avoid "stars everywhere"
+    var K_PER_NODE = 6;
+    var bucket = Object.create(null);
+    edgesWeighted.forEach(function(e){
+      var keyA = e.a; var keyB = e.b;
+      (bucket[keyA] = bucket[keyA] || []).push(e);
+      (bucket[keyB] = bucket[keyB] || []).push(e);
+    });
+    var keepEdgeSet = new Set();
+    Object.keys(bucket).forEach(function(node){
+      var arr = bucket[node].slice().sort(function(a,b){ return b.w - a.w; }).slice(0, K_PER_NODE);
+      arr.forEach(function(e){
+        keepEdgeSet.add(e.a+"|"+e.b);
+      });
+    });
+    edgesWeighted = edgesWeighted.filter(function(e){ return keepEdgeSet.has(e.a+"|"+e.b); });
 
     // Fetch metadata for candidates
     var candIdsFull = base.candidateIds.map(function(t){ return "https://openalex.org/"+t; });
@@ -966,9 +1038,9 @@
     var maxY = years.length ? Math.max.apply(null, years) : 0;
 
     var nodes = [];
-    var idToWork = Object.create(null);
-    var keepSet = new Set(); // ids kept after filters
-    // Seed forced in
+    var keepSet = new Set();
+
+    // Seed node
     nodes.push({
       id: main.id, label: shortCitation(main), title: main.display_name,
       group: "main", paperId: main.id,
@@ -977,7 +1049,16 @@
     });
     keepSet.add(String(main.id));
 
+    // Build a quick lookup from tail -> meta work
+    var metaByTail = Object.create(null);
     meta.forEach(function(w){
+      var tail = String(w.id).split("/").pop();
+      metaByTail[tail] = w;
+    });
+
+    // Candidate nodes (filtered by citations/year)
+    Object.keys(metaByTail).forEach(function(tail){
+      var w = metaByTail[tail];
       var yr = +get(w,"publication_year",0) || 0;
       var cites = +get(w,"cited_by_count",0) || 0;
       if (MIN_CITES && cites < MIN_CITES) return;
@@ -993,21 +1074,43 @@
         color: { background: colorHex, border: colorHex }
       });
       keepSet.add(String(w.id));
-      idToWork[String(w.id).split("/").pop()] = w;
     });
 
-    // Filter edges by kept nodes and min similarity
+    // Filter edges to those with both endpoints kept and above threshold
     var edges = [];
     edgesWeighted.forEach(function(e){
-      var a = "https://openalex.org/"+e.a;
-      var b = "https://openalex.org/"+e.b;
-      if (!keepSet.has(a) || !keepSet.has(b)) return;
+      var aFull = (e.a.indexOf("http") === 0) ? e.a : ("https://openalex.org/"+e.a);
+      var bFull = (e.b.indexOf("http") === 0) ? e.b : ("https://openalex.org/"+e.b);
+      if (!keepSet.has(aFull) || !keepSet.has(bFull)) return;
       if (e.w < MIN_SIM) return;
-      edges.push({ from:a, to:b, value:e.w, width: Math.max(1, 6*e.w) });
+      edges.push({ from:aFull, to:bFull, value:e.w, width: Math.max(1, 6*e.w) });
     });
 
-    var nodesDS = new vis.DataSet(nodes);
-    var edgesDS = new vis.DataSet(edges);
+    // If too sparse, keep top N edges overall to make a readable core
+    if (edges.length < 20 && edgesWeighted.length){
+      var top = edgesWeighted.slice().sort(function(a,b){ return b.w - a.w; }).slice(0, 30);
+      edges = top.map(function(e){
+        var aFull = (e.a.indexOf("http") === 0) ? e.a : ("https://openalex.org/"+e.a);
+        var bFull = (e.b.indexOf("http") === 0) ? e.b : ("https://openalex.org/"+e.b);
+        return { from:aFull, to:bFull, value:e.w, width: Math.max(1, 6*e.w) };
+      });
+    }
+
+    // Keep only the seed's connected component to avoid far-away islands
+    var allIds = nodes.map(function(n){ return String(n.id); });
+    var seedIdFull = String(main.id);
+    var reachable = filterToSeedComponent(edges.map(function(e){
+      // convert to tails for consistency with earlier function
+      return { a: idTailFrom(e.from), b: idTailFrom(e.to), w: e.value };
+    }), allIds, seedIdFull);
+
+    var nodesFiltered = nodes.filter(function(n){ return reachable.has(String(n.id)); });
+    var nodeIdsKept = new Set(nodesFiltered.map(function(n){ return String(n.id); }));
+    var edgesFiltered = edges.filter(function(e){ return nodeIdsKept.has(String(e.from)) && nodeIdsKept.has(String(e.to)); });
+
+    // Build network
+    var nodesDS = new vis.DataSet(nodesFiltered);
+    var edgesDS = new vis.DataSet(edgesFiltered);
     var network = new vis.Network(graphDiv, { nodes:nodesDS, edges:edgesDS }, baseNetworkOptions());
 
     // Click → navigate
@@ -1044,7 +1147,7 @@
     });
 
     // Progressive expansion on double-click
-    var knownIds = new Set(nodes.map(function(n){ return String(n.id).split("/").pop(); }));
+    var knownIds = new Set(nodesFiltered.map(function(n){ return String(n.id).split("/").pop(); }));
     network.on("doubleClick", async function(params){
       if (!params.nodes || !params.nodes.length) return;
       var nodeId = params.nodes[0];
@@ -1052,16 +1155,18 @@
       await expandNode(tail, network, knownIds);
     });
 
-    // Apply button re-renders with current selections
-    $("#applyGraphFilters").onclick = async function(){
-      var mode = $("#graphMode").value;
-      if (mode === "citation"){
-        await renderCitationGraph(main, cited, citing);
-      } else {
-        await renderConnectedGraph(main, cited, citing);
-      }
-    };
-    // Keep current mode in the selector
+    // Ensure Apply responds (attach AFTER controls exist)
+    var applyBtn = $("#applyGraphFilters");
+    if (applyBtn){
+      applyBtn.onclick = async function(){
+        var mode = $("#graphMode").value;
+        if (mode === "citation"){
+          await renderCitationGraph(main, cited, citing);
+        } else {
+          await renderConnectedGraph(main, cited, citing);
+        }
+      };
+    }
     $("#graphMode").value = "connected";
   }
 
@@ -1097,7 +1202,6 @@
   }
 
   // ---------- Render ----------
-  // Keep a copy of the last rendered paper/source for header recovery
   var __CURRENT_PAPER__ = null;
   var __CURRENT_SOURCE__ = null;
   var __HEADER_GUARD_INSTALLED__ = false;
@@ -1106,9 +1210,8 @@
     try{
       var hdr = $("paperHeaderMain");
       if (!hdr) return;
-      var isEmpty = !hdr.firstElementChild && (hdr.textContent || "").trim() === "";
-      if (isEmpty && __CURRENT_PAPER__){
-        // Re-render the header trio
+      var empty = (!hdr.firstElementChild && (hdr.textContent || "").trim() === "");
+      if (empty && __CURRENT_PAPER__){
         $("paperHeaderMain").innerHTML = buildHeaderMain(__CURRENT_PAPER__);
         $("paperActions").innerHTML   = buildActionsBar(__CURRENT_PAPER__);
         $("paperStats").innerHTML     = buildStatsHeader(__CURRENT_PAPER__);
@@ -1127,24 +1230,15 @@
     var hdr = $("paperHeaderMain");
     if (!hdr) return;
 
-    // Watch the specific header node for unexpected clears
-    var mo = new MutationObserver(function(muts){
-      // If at any point it becomes empty, repopulate from cached data
-      repopulateHeaderIfEmpty();
-    });
+    var mo = new MutationObserver(function(){ repopulateHeaderIfEmpty(); });
     mo.observe(hdr, { childList:true, subtree:false });
 
-    // Also watch for DOM moves/removals (fallback): observe the body for changes
-    var moBody = new MutationObserver(function(){
-      repopulateHeaderIfEmpty();
-    });
+    var moBody = new MutationObserver(function(){ repopulateHeaderIfEmpty(); });
     moBody.observe(document.body, { childList:true, subtree:true });
 
-    // Fallback: periodic sanity check during heavy graphing
     var t0 = Date.now();
     var tick = function(){
       repopulateHeaderIfEmpty();
-      // Run a few times in the first ~15s when graphs typically stabilize
       if (Date.now() - t0 < 15000) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -1153,7 +1247,6 @@
   }
 
   function renderPaper(p, source){
-    // cache for recovery
     __CURRENT_PAPER__ = p;
     __CURRENT_SOURCE__ = source;
 
@@ -1182,18 +1275,12 @@
     }
     $("objectsBlock").innerHTML = '<h2>Research Objects</h2>' + (items.length ? '<ul>'+items.join("")+'</ul>' : '<p class="muted">None listed.</p>');
 
-    // Journal & Quality in sidebar
     renderJournalBlock(p, source);
-
-    // Install guard after first successful paint
     installHeaderGuard();
   }
 
-  // Render graphs (with toggle + filters)
   async function renderGraphs(main, cited, citing){
-    // default to connected map renderer
     await renderConnectedGraph(main, cited, citing);
-    // Make sure header still present after heavy DOM ops
     repopulateHeaderIfEmpty();
   }
 
@@ -1214,10 +1301,8 @@
       try { cited = await fetchCitedPapers(paper.referenced_works || []); } catch(e){ console.warn("cited fetch failed:", e); }
       try { citing = await fetchCitingPapers(paper.id); } catch(e){ console.warn("citing fetch failed:", e); }
 
-      // Graphs (new connected-style with toggle)
       await renderGraphs(paper, cited, citing);
 
-      // Related block
       var relatedHtml = [];
       var joinFew = (cited.slice(0,8).concat(citing.slice(0,8))).slice(0,16);
       for (var i=0;i<joinFew.length;i++){
@@ -1234,8 +1319,6 @@
       if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
         SE.components.enhancePaperCards($("relatedBlock"));
       }
-
-      // Final sanity: ensure header is still there
       repopulateHeaderIfEmpty();
 
     } catch (e) {
