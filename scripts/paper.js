@@ -13,7 +13,7 @@
     "Royal Society Open Science",
     "BMJ",
     "BMC",                   // many BMC titles have open peer review
-    "Nature Communications", // some have open peer review or transparent peer review packages
+    "Nature Communications", // some have open or transparent peer review packages
     "PLOS ONE",
     "PLOS Biology"
   ];
@@ -194,28 +194,29 @@
   }
 
   // Put these near the top-level helpers (once)
-var __CURRENT_PAPER__ = null;
-var __HEADER_HTML_SNAPSHOT__ = null;
+  var __CURRENT_PAPER__ = null;
+  var __HEADER_HTML_SNAPSHOT__ = null;
+  // UPDATED: shared context for delegated handlers (prevents ReferenceError elsewhere)
+  // Always defined; renderers will keep it fresh.
+  window.__GRAPH_CTX__ = { main: null, cited: [], citing: [] }; // <-- UPDATED
 
-function restoreHeaderIfNeeded() {
-  var hdr = document.getElementById("paperHeaderMain");
-  if (!hdr) {
-    // container got removed: recreate and repopulate
-    var mount = document.getElementById("paperHeader"); // parent section you already have
-    if (!mount) return;
-    var newDiv = document.createElement("div");
-    newDiv.id = "paperHeaderMain";
-    mount.prepend(newDiv);
-    hdr = newDiv;
+  function restoreHeaderIfNeeded() {
+    var hdr = document.getElementById("paperHeaderMain");
+    if (!hdr) {
+      // container got removed: recreate and repopulate
+      var mount = document.getElementById("paperHeader"); // parent section you already have
+      if (!mount) return;
+      var newDiv = document.createElement("div");
+      newDiv.id = "paperHeaderMain";
+      mount.prepend(newDiv);
+      hdr = newDiv;
+    }
+    var isEmpty = !hdr.firstElementChild && (!hdr.textContent || hdr.textContent.trim()==="");
+    if (isEmpty && __HEADER_HTML_SNAPSHOT__) {
+      hdr.innerHTML = __HEADER_HTML_SNAPSHOT__;
+      wireHeaderToggles();
+    }
   }
-  var isEmpty = !hdr.firstElementChild && (!hdr.textContent || hdr.textContent.trim()==="");
-  if (isEmpty && __HEADER_HTML_SNAPSHOT__) {
-    hdr.innerHTML = __HEADER_HTML_SNAPSHOT__;
-    wireHeaderToggles();
-  }
-}
-
-
 
   // ---------- Quality helper utilities ----------
   function doiFromWork(p){
@@ -940,7 +941,13 @@ function restoreHeaderIfNeeded() {
   }
 
   // ---------- Graph renderers ----------
+  // Ensure a global graph context exists for delegated handlers
+  window.__GRAPH_CTX__ = window.__GRAPH_CTX__ || { main: null, cited: [], citing: [] };
+
   async function renderCitationGraph(main, cited, citing){
+    // keep global context updated so the delegated Apply handler works after re-renders
+    window.__GRAPH_CTX__ = { main: main, cited: cited, citing: citing };
+
     var block = $("graphBlock");
     block.innerHTML = '<h2>Connected Papers</h2>';
 
@@ -988,9 +995,19 @@ function restoreHeaderIfNeeded() {
         }
       };
     }
+    // Reflect current mode in the selector
+    var modeSel = $("#graphMode");
+    if (modeSel) modeSel.value = "citation";
+
+    // After render, make sure header is intact
+    repopulateHeaderIfEmpty();
+    restoreHeaderIfNeeded();
   }
 
   async function renderConnectedGraph(main, cited, citing){
+    // keep global context updated so the delegated Apply handler works after re-renders
+    window.__GRAPH_CTX__ = { main: main, cited: cited, citing: citing };
+
     var block = $("graphBlock");
     block.innerHTML = '<h2>Connected Papers</h2>';
 
@@ -1177,6 +1194,9 @@ function restoreHeaderIfNeeded() {
       var nodeId = params.nodes[0];
       var tail = String(nodeId).split("/").pop();
       await expandNode(tail, network, knownIds);
+      // Keep header safe during dynamic expansions
+      repopulateHeaderIfEmpty();
+      restoreHeaderIfNeeded();
     });
 
     // Ensure Apply responds (attach AFTER controls exist)
@@ -1192,6 +1212,10 @@ function restoreHeaderIfNeeded() {
       };
     }
     $("#graphMode").value = "connected";
+
+    // After render, make sure header is intact
+    repopulateHeaderIfEmpty();
+    restoreHeaderIfNeeded();
   }
 
   // Expand-on-click: fetch neighbors and add to graph incrementally (basic)
@@ -1271,23 +1295,23 @@ function restoreHeaderIfNeeded() {
   }
 
   function renderPaper(p, source){
-  __CURRENT_PAPER__ = p;
+    __CURRENT_PAPER__ = p;
 
-  $("paperHeaderMain").innerHTML = buildHeaderMain(p);
-  $("paperActions").innerHTML   = buildActionsBar(p);
-  $("paperStats").innerHTML     = buildStatsHeader(p);
+    $("paperHeaderMain").innerHTML = buildHeaderMain(p);
+    $("paperActions").innerHTML   = buildActionsBar(p);
+    $("paperStats").innerHTML     = buildStatsHeader(p);
 
-  // snapshot for restoration
-  __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
+    // snapshot for restoration
+    __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
 
-  wireHeaderToggles();
+    wireHeaderToggles();
 
-  // Guard the header aggressively for the next few seconds during graph init
-  let guardUntil = Date.now() + 15000;
-  (function loopGuard(){
-    restoreHeaderIfNeeded();
-    if (Date.now() < guardUntil) requestAnimationFrame(loopGuard);
-  })();
+    // Guard the header aggressively for the next few seconds during graph init
+    let guardUntil = Date.now() + 15000;
+    (function loopGuard(){
+      restoreHeaderIfNeeded();
+      if (Date.now() < guardUntil) requestAnimationFrame(loopGuard);
+    })();
 
     if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
       SE.components.enhancePaperCards($("paperActions"));
@@ -1313,8 +1337,10 @@ function restoreHeaderIfNeeded() {
   }
 
   async function renderGraphs(main, cited, citing){
+    // default to connected graph initially
     await renderConnectedGraph(main, cited, citing);
     repopulateHeaderIfEmpty();
+    restoreHeaderIfNeeded();
   }
 
   // ---------- Boot ----------
@@ -1333,6 +1359,9 @@ function restoreHeaderIfNeeded() {
       var cited=[], citing=[];
       try { cited = await fetchCitedPapers(paper.referenced_works || []); } catch(e){ console.warn("cited fetch failed:", e); }
       try { citing = await fetchCitingPapers(paper.id); } catch(e){ console.warn("citing fetch failed:", e); }
+
+      // Save context for global Apply handler and future re-renders
+      window.__GRAPH_CTX__ = { main: paper, cited: cited, citing: citing };
 
       await renderGraphs(paper, cited, citing);
 
@@ -1353,28 +1382,31 @@ function restoreHeaderIfNeeded() {
         SE.components.enhancePaperCards($("relatedBlock"));
       }
       repopulateHeaderIfEmpty();
+      restoreHeaderIfNeeded();
 
     } catch (e) {
       console.error(e);
       $("paperHeaderMain").innerHTML = "<p class='muted'>Error loading paper details.</p>";
+      restoreHeaderIfNeeded();
     }
-// Global delegated handler so it keeps working after re-renders
-document.addEventListener("click", function(e){
-  var btn = e.target.closest("#applyGraphFilters");
-  if (!btn) return;
-  e.preventDefault();
-  var modeSel = document.getElementById("graphMode");
-  var mode = modeSel ? modeSel.value : "connected";
-  if (__GRAPH_CTX__ && __GRAPH_CTX__.main) {
-    if (mode === "citation"){
-      renderCitationGraph(__GRAPH_CTX__.main, __GRAPH_CTX__.cited, __GRAPH_CTX__.citing);
-    } else {
-      renderConnectedGraph(__GRAPH_CTX__.main, __GRAPH_CTX__.cited, __GRAPH_CTX__.citing);
-    }
-  }
-});
 
+    // Global delegated handler so it keeps working after re-renders
+    document.addEventListener("click", function(e){
+      var btn = e.target.closest("#applyGraphFilters");
+      if (!btn) return;
+      e.preventDefault();
+      var modeSel = document.getElementById("graphMode");
+      var mode = modeSel ? modeSel.value : "connected";
+      if (window.__GRAPH_CTX__ && __GRAPH_CTX__.main) {
+        if (mode === "citation"){
+          renderCitationGraph(__GRAPH_CTX__.main, __GRAPH_CTX__.cited, __GRAPH_CTX__.citing);
+        } else {
+          renderConnectedGraph(__GRAPH_CTX__.main, __GRAPH_CTX__.cited, __GRAPH_CTX__.citing);
+        }
+      }
+    });
   }
 
   document.addEventListener("DOMContentLoaded", boot);
+
 })();
