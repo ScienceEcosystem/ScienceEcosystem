@@ -3,7 +3,7 @@
 
   // ---------- Constants & helpers ----------
   var API = "https://api.openalex.org";
-  var MAILTO = "scienceecosystem@icloud.com";
+  var MAILTO = "info@scienceecosystem.org";
 
   // Small allow-list of journals that publish open peer review routinely (you can tune this)
   var OPEN_PEER_REVIEW_JOURNALS = [

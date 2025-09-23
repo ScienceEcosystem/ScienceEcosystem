@@ -119,6 +119,41 @@ async function fetchTopics(query, signal) {
   }
 }
 
+/* ---------- NEW: institutions, journals, publishers ---------- */
+async function fetchInstitutions(query, signal) {
+  try {
+    const url = `${API_BASE}/institutions?search=${encodeURIComponent(query)}&per_page=5`;
+    const data = await fetchJSON(url, signal);
+    return data.results || [];
+  } catch (err) {
+    if (err.name !== "AbortError") console.error("Institution fetch failed", err);
+    return [];
+  }
+}
+
+async function fetchJournals(query, signal) {
+  try {
+    // Restrict to journals via filter
+    const url = `${API_BASE}/sources?search=${encodeURIComponent(query)}&filter=type:journal&per_page=5`;
+    const data = await fetchJSON(url, signal);
+    return data.results || [];
+  } catch (err) {
+    if (err.name !== "AbortError") console.error("Journal fetch failed", err);
+    return [];
+  }
+}
+
+async function fetchPublishers(query, signal) {
+  try {
+    const url = `${API_BASE}/publishers?search=${encodeURIComponent(query)}&per_page=5`;
+    const data = await fetchJSON(url, signal);
+    return data.results || [];
+  } catch (err) {
+    if (err.name !== "AbortError") console.error("Publisher fetch failed", err);
+    return [];
+  }
+}
+
 /* ---------- Render helpers ---------- */
 function provenanceChips(w) {
   const doi = w.doi ? `https://doi.org/${encodeURIComponent(w.doi)}` : null;
@@ -126,7 +161,7 @@ function provenanceChips(w) {
   const venueUrl = w.primary_location?.source?.homepage_url || w.primary_location?.landing_page_url || null;
 
   const parts = [];
-  if (doi) parts.push(`<a class="badge" href="${doi}" target="_blank" rel="noopener">DOI</a>`); // <-- fixed: added closing )
+  if (doi) parts.push(`<a class="badge" href="${doi}" target="_blank" rel="noopener">DOI</a>`);
   if (oaUrl) parts.push(`<a class="badge badge-oa" href="${oaUrl}" target="_blank" rel="noopener">Open access</a>`);
   if (venueUrl) parts.push(`<a class="badge" href="${venueUrl}" target="_blank" rel="noopener">Source</a>`);
   return parts.join(" ");
@@ -172,6 +207,64 @@ function renderTopics(topics) {
         `;
       }).join("")
     : `<li class="muted">No topics found.</li>`;
+}
+
+/* ---------- NEW: sidebar renders for institutions, journals, publishers ---------- */
+function renderInstitutions(items) {
+  const el = $("institutionList");
+  if (!el) return;
+  el.innerHTML = items.length
+    ? items.map(inst => {
+        const id = inst.id.split("/").pop();
+        const country = inst.country_code ? inst.country_code.toUpperCase() : null;
+        const works = Number.isFinite(inst.works_count) ? `${inst.works_count.toLocaleString()} works` : null;
+        const sub = [country, works].filter(Boolean).join(" · ") || "—";
+        return `
+          <li class="list-item list-card" onclick="location.href='institution.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(inst.display_name)}">
+            <div class="title">${escapeHtml(inst.display_name)}</div>
+            <div class="muted">${escapeHtml(sub)}</div>
+          </li>
+        `;
+      }).join("")
+    : `<li class="muted">No institutions found.</li>`;
+}
+
+function renderJournals(items) {
+  const el = $("journalList");
+  if (!el) return;
+  el.innerHTML = items.length
+    ? items.map(j => {
+        const id = j.id.split("/").pop();
+        const abbrev = j.abbreviated_title || null;
+        const works = Number.isFinite(j.works_count) ? `${j.works_count.toLocaleString()} works` : null;
+        const sub = [abbrev, works].filter(Boolean).join(" · ") || "Journal";
+        return `
+          <li class="list-item list-card" onclick="location.href='journal.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(j.display_name)}">
+            <div class="title">${escapeHtml(j.display_name)}</div>
+            <div class="muted">${escapeHtml(sub)}</div>
+          </li>
+        `;
+      }).join("")
+    : `<li class="muted">No journals found.</li>`;
+}
+
+function renderPublishers(items) {
+  const el = $("publisherList");
+  if (!el) return;
+  el.innerHTML = items.length
+    ? items.map(p => {
+        const id = p.id.split("/").pop();
+        const works = Number.isFinite(p.works_count) ? `${p.works_count.toLocaleString()} works` : null;
+        const sources = Number.isFinite(p.sources_count) ? `${p.sources_count.toLocaleString()} sources` : null;
+        const sub = [works, sources].filter(Boolean).join(" · ") || "Publisher";
+        return `
+          <li class="list-item list-card" onclick="location.href='publisher.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(p.display_name)}">
+            <div class="title">${escapeHtml(p.display_name)}</div>
+            <div class="muted">${escapeHtml(sub)}</div>
+          </li>
+        `;
+      }).join("")
+    : `<li class="muted">No publishers found.</li>`;
 }
 
 function skeletonBlock(){
@@ -327,25 +420,40 @@ async function runUnifiedSearch(){
   const results = $("unifiedSearchResults");
   const rList = $("researcherList");
   const tList = $("topicList");
+  const iList = $("institutionList");
+  const jList = $("journalList");
+  const pList = $("publisherList");
+
   if (results) results.innerHTML = skeletonBlock();
   if (rList) rList.innerHTML = `<li class="muted">Loading authors...</li>`;
   if (tList) tList.innerHTML = `<li class="muted">Loading topics...</li>`;
+  if (iList) iList.innerHTML = `<li class="muted">Loading institutions...</li>`;
+  if (jList) jList.innerHTML = `<li class="muted">Loading journals...</li>`;
+  if (pList) pList.innerHTML = `<li class="muted">Loading publishers...</li>`;
   setBusy(true);
 
   try {
-    const [authors, topics] = await Promise.all([
+    const [authors, topics, institutions, journals, publishers] = await Promise.all([
       fetchAuthors(query, searchAbort.signal),
       fetchTopics(query, searchAbort.signal),
+      fetchInstitutions(query, searchAbort.signal),
+      fetchJournals(query, searchAbort.signal),
+      fetchPublishers(query, searchAbort.signal),
     ]);
+
     renderAuthors(authors);
     renderTopics(topics);
+    renderInstitutions(institutions);
+    renderJournals(journals);
+    renderPublishers(publishers);
+
     currentAuthorIds = authors.map(a => a.id);
 
     const papers = await fetchPapers(query, currentAuthorIds, currentPage, searchAbort.signal);
     renderPapers(papers);
   } catch (e) {
     if (e.name === "AbortError") return; // superseded by a new search
-    results.innerHTML = `<p class="error">Couldn’t load results. Please try again.</p>`;
+    if (results) results.innerHTML = `<p class="error">Couldn’t load results. Please try again.</p>`;
   } finally {
     setBusy(false);
   }
