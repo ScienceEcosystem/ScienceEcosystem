@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://scienceecosystem.org/sitemap.xml

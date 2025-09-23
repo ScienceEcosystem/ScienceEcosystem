@@ -1,7 +1,7 @@
 // scripts/search.js
 const $ = (id) => document.getElementById(id);
 const API_BASE = "https://api.openalex.org";
-const OPENALEX_MAILTO = "scienceecosystem@icloud.com";
+const OPENALEX_MAILTO = "info@scienceecosystem.org";
 
 // State
 let currentPage = 1;

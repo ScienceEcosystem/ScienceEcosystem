@@ -3,7 +3,7 @@
   if (!document.body || document.body.dataset.page !== "journal") return;
 
   var API = "https://api.openalex.org";
-  var MAILTO = "scienceecosystem@icloud.com";
+  var MAILTO = "info@scienceecosystem.org";
   var PAGE_SIZE = 50;
 
   // ---- State ----

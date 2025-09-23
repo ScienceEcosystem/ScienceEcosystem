@@ -3,7 +3,7 @@
   if (!document.body || document.body.dataset.page !== "publisher") return;
 
   var API = "https://api.openalex.org";
-  var MAILTO = "scienceecosystem@icloud.com";
+  var MAILTO = "info@scienceecosystem.org";
   var PAGE_SIZE = 50;
 
   var worksApiBaseUrl = null;   // from publisher.works_api_url if present

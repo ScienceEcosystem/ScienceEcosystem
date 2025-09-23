@@ -193,6 +193,30 @@
     return '<a class="badge ' + (className||"") + '" href="'+href+'" target="_blank" rel="noopener">'+escapeHtml(text)+'</a>';
   }
 
+  // Put these near the top-level helpers (once)
+var __CURRENT_PAPER__ = null;
+var __HEADER_HTML_SNAPSHOT__ = null;
+
+function restoreHeaderIfNeeded() {
+  var hdr = document.getElementById("paperHeaderMain");
+  if (!hdr) {
+    // container got removed: recreate and repopulate
+    var mount = document.getElementById("paperHeader"); // parent section you already have
+    if (!mount) return;
+    var newDiv = document.createElement("div");
+    newDiv.id = "paperHeaderMain";
+    mount.prepend(newDiv);
+    hdr = newDiv;
+  }
+  var isEmpty = !hdr.firstElementChild && (!hdr.textContent || hdr.textContent.trim()==="");
+  if (isEmpty && __HEADER_HTML_SNAPSHOT__) {
+    hdr.innerHTML = __HEADER_HTML_SNAPSHOT__;
+    wireHeaderToggles();
+  }
+}
+
+
+
   // ---------- Quality helper utilities ----------
   function doiFromWork(p){
     var doiRaw = p.doi || get(p,"ids.doi",null);
@@ -1247,14 +1271,23 @@
   }
 
   function renderPaper(p, source){
-    __CURRENT_PAPER__ = p;
-    __CURRENT_SOURCE__ = source;
+  __CURRENT_PAPER__ = p;
 
-    $("paperHeaderMain").innerHTML = buildHeaderMain(p);
-    $("paperActions").innerHTML   = buildActionsBar(p);
-    $("paperStats").innerHTML     = buildStatsHeader(p);
+  $("paperHeaderMain").innerHTML = buildHeaderMain(p);
+  $("paperActions").innerHTML   = buildActionsBar(p);
+  $("paperStats").innerHTML     = buildStatsHeader(p);
 
-    wireHeaderToggles();
+  // snapshot for restoration
+  __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
+
+  wireHeaderToggles();
+
+  // Guard the header aggressively for the next few seconds during graph init
+  let guardUntil = Date.now() + 15000;
+  (function loopGuard(){
+    restoreHeaderIfNeeded();
+    if (Date.now() < guardUntil) requestAnimationFrame(loopGuard);
+  })();
 
     if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
       SE.components.enhancePaperCards($("paperActions"));
@@ -1325,6 +1358,22 @@
       console.error(e);
       $("paperHeaderMain").innerHTML = "<p class='muted'>Error loading paper details.</p>";
     }
+// Global delegated handler so it keeps working after re-renders
+document.addEventListener("click", function(e){
+  var btn = e.target.closest("#applyGraphFilters");
+  if (!btn) return;
+  e.preventDefault();
+  var modeSel = document.getElementById("graphMode");
+  var mode = modeSel ? modeSel.value : "connected";
+  if (__GRAPH_CTX__ && __GRAPH_CTX__.main) {
+    if (mode === "citation"){
+      renderCitationGraph(__GRAPH_CTX__.main, __GRAPH_CTX__.cited, __GRAPH_CTX__.citing);
+    } else {
+      renderConnectedGraph(__GRAPH_CTX__.main, __GRAPH_CTX__.cited, __GRAPH_CTX__.citing);
+    }
+  }
+});
+
   }
 
   document.addEventListener("DOMContentLoaded", boot);

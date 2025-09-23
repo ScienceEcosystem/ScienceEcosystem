@@ -3,7 +3,7 @@
   // Avoid redefining if included twice
   if (globalThis.SE?.components) return;
 
-  var UNPAYWALL_EMAIL = "scienceecosystem@icloud.com"; // for Unpaywall compliance
+  var UNPAYWALL_EMAIL = "info@scienceecosystem.org"; // for Unpaywall compliance
 
   // ---------- helpers ----------
   function escapeHtml(str){
