@@ -22,41 +22,39 @@
   let collections = [];           // flat list
   let items = [];                 // library items with cached meta
   let currentCollectionId = null; // null = “All Items”
-  let currentSelection = null;    // selected paper id (OpenAlex tail)
+  let currentSelection = null;    // selected paper id
   let openMenu = null;            // active context menu element
 
   // --- Bootstrap ---
   window.addEventListener("DOMContentLoaded", async () => {
-    // Header auth (kept from your previous logic, if present globally)
-    try {
-      if (globalThis.SE_SESSION?.syncHeader) await globalThis.SE_SESSION.syncHeader();
-    } catch {}
+    try { if (globalThis.SE_SESSION?.syncHeader) await globalThis.SE_SESSION.syncHeader(); } catch {}
 
-    try {
-      await globalThis.SE_LIB?.loadLibraryOnce?.(); // pre-warm saved cache
-    } catch {}
+    await safeRefreshCollections();
+    await safeRefreshItems();
 
-    await refreshCollections();   // ensure we have the latest collections
-    await refreshItems();         // ensure we have items
-    renderTree();                 // show collections
-    renderTable();                // show items
-    bindUI();                     // wire interactions
-
-    // Root kebab menu next to "Collections"
+    renderTree();
+    renderTable();
+    bindUI();
     setupRootKebab();
   });
 
   // --- Collections ---
-  async function refreshCollections(){
-    collections = await api("/api/collections");
-    // Sort by name for consistent menus (Zotero-like)
-    collections.sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+  async function safeRefreshCollections(){
+    try {
+      const data = await api("/api/collections");
+      collections = Array.isArray(data) ? data : (Array.isArray(data?.collections) ? data.collections : []);
+      // Zotero-like: sort by name
+      collections.sort((a,b) => (a?.name || "").localeCompare(b?.name || ""));
+    } catch (e) {
+      collections = [];
+      console.error("Collections load failed:", e);
+    }
   }
 
   function findChildrenMap(list){
     const byParent = new Map();
     for (const c of list) {
-      const k = c.parent_id == null ? "root" : String(c.parent_id);
+      const k = c?.parent_id == null ? "root" : String(c.parent_id);
       if (!byParent.has(k)) byParent.set(k, []);
       byParent.get(k).push(c);
     }
@@ -71,20 +69,18 @@
     document.body.appendChild(m);
 
     const rect = anchorEl.getBoundingClientRect();
-    // Ensure layout before measuring offsetWidth
     requestAnimationFrame(() => {
       const left = Math.min(rect.left, window.innerWidth - m.offsetWidth - 12);
       m.style.left = `${left}px`;
       m.style.top  = `${rect.bottom + 6}px`;
     });
 
-    const onClick = (ev) => {
+    m.addEventListener("click", (ev) => {
       const act = ev.target?.dataset?.act;
       if (!act) return;
       items.find(i => i.act === act)?.onClick?.();
       closeAnyMenu();
-    };
-    m.addEventListener("click", onClick);
+    });
 
     const dismiss = (ev) => { if (!m.contains(ev.target)) closeAnyMenu(); };
     const onEsc   = (ev) => { if (ev.key === "Escape") closeAnyMenu(); };
@@ -97,43 +93,36 @@
   }
 
   function closeAnyMenu(){
-    if (openMenu) {
-      openMenu.remove();
-      openMenu = null;
-    }
+    if (openMenu) { openMenu.remove(); openMenu = null; }
   }
 
   function buildMenuForCollection(c, anchorEl){
     const items = [
-      { act:"new", label:"New subcollection", onClick: async () => {
-          const nm = prompt("New subcollection name:");
-          if (!nm) return;
+      { act:"new",  label:"New subcollection", onClick: async () => {
+          const nm = prompt("New subcollection name:"); if (!nm) return;
           await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: c.id })});
-          await refreshCollections(); renderTree();
+          await safeRefreshCollections(); renderTree();
         }},
-      { act:"ren", label:"Rename", onClick: async () => {
-          const nm = prompt("Rename collection:", c.name);
-          if (!nm) return;
+      { act:"ren",  label:"Rename", onClick: async () => {
+          const nm = prompt("Rename collection:", c.name); if (!nm) return;
           await api(`/api/collections/${c.id}`, { method:"PATCH", body: JSON.stringify({ name:nm })});
-          await refreshCollections(); renderTree();
+          await safeRefreshCollections(); renderTree();
         }},
       { act:"move", label:"Move…", onClick: async () => {
           const listing = collections.map(cc => `${cc.id}: ${cc.name}`).join("\n");
           const input = prompt(`Move "${c.name}" under which parent?\n\nEnter parent ID (blank for root):\n\n${listing}`);
           if (input === null) return;
           const parent_id = input.trim() === "" ? null : Number(input.trim());
-          if (parent_id !== null && !collections.some(cc => cc.id === parent_id)) {
-            alert("Invalid parent id."); return;
-          }
+          if (parent_id !== null && !collections.some(cc => cc.id === parent_id)) { alert("Invalid parent id."); return; }
           if (parent_id === c.id) { alert("Cannot move a collection under itself."); return; }
           await api(`/api/collections/${c.id}`, { method:"PATCH", body: JSON.stringify({ parent_id })});
-          await refreshCollections(); renderTree();
+          await safeRefreshCollections(); renderTree();
         }},
-      { act:"del", label:"Delete collection", onClick: async () => {
+      { act:"del",  label:"Delete collection", onClick: async () => {
           if (!confirm(`Delete "${c.name}" (items stay in library)?`)) return;
           await api(`/api/collections/${c.id}`, { method:"DELETE" });
           if (currentCollectionId === c.id) currentCollectionId = null;
-          await refreshCollections(); renderTree(); renderTable();
+          await safeRefreshCollections(); renderTree(); renderTable();
         }},
     ];
     buildContextMenu(items, anchorEl);
@@ -146,10 +135,9 @@
       ev.stopPropagation();
       buildContextMenu([
         { act:"new-root", label:"New collection", onClick: async () => {
-            const nm = prompt("New collection name:");
-            if (!nm) return;
+            const nm = prompt("New collection name:"); if (!nm) return;
             await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: null })});
-            await refreshCollections(); renderTree();
+            await safeRefreshCollections(); renderTree();
           }},
       ], rootKebab);
     });
@@ -175,18 +163,17 @@
       ev.stopPropagation();
       buildContextMenu([
         { act:"new-root", label:"New collection", onClick: async () => {
-            const nm = prompt("New collection name:");
-            if (!nm) return;
+            const nm = prompt("New collection name:"); if (!nm) return;
             await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: null })});
-            await refreshCollections(); renderTree();
+            await safeRefreshCollections(); renderTree();
           }},
       ], ev.currentTarget);
     });
 
     allLi.addEventListener("click", () => { currentCollectionId = null; renderTree(); renderTable(); });
 
-    // Collections (recursive flat render, Zotero-style indent)
-    function renderBranch(parentKey, depth) {
+    // Collections recursive
+    (function renderBranch(parentKey, depth){
       const children = byParent.get(parentKey) || [];
       for (const c of children) {
         const li = document.createElement("li");
@@ -215,8 +202,8 @@
         ul.appendChild(li);
         renderBranch(String(c.id), depth+1);
       }
-    }
-    renderBranch("root", 0);
+    })("root", 0);
+
     return ul;
   }
 
@@ -226,23 +213,31 @@
     host.appendChild(buildTreeDom());
   }
 
-  // Both "New" buttons create a collection at the current level
+  // New collection buttons
   function bindNewCollectionButtons(){
-    const handlers = async () => {
-      const nm = prompt("New collection name:");
-      if (!nm) return;
+    const createAtCurrent = async () => {
+      const nm = prompt("New collection name:"); if (!nm) return;
       await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: currentCollectionId })});
-      await refreshCollections();
+      await safeRefreshCollections();
       renderTree();
     };
-    $("#newCollectionBtn")?.addEventListener("click", handlers);
-    $("#newCollectionBtnLeft")?.addEventListener("click", handlers);
+    $("#newCollectionBtn")?.addEventListener("click", createAtCurrent);
+    $("#newCollectionBtnLeft")?.addEventListener("click", createAtCurrent);
   }
 
   // --- Items ---
-  async function refreshItems(){
-    // includes cached metadata (title/authors/year/venue/cited_by/pdf_url)
-    items = await api("/api/library/full");
+  async function safeRefreshItems(){
+    try {
+      const data = await api("/api/library/full");
+      // Accept either plain array or an object wrapper
+      items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+    } catch (e) {
+      items = [];
+      console.error("Items load failed:", e);
+      // Show an inline error instead of hanging on "Loading…"
+      const tbody = $("#itemsTbody");
+      if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="muted">Could not load items.</td></tr>`;
+    }
   }
 
   function visibleColumns() {
@@ -253,42 +248,42 @@
 
   function renderTable(){
     const tbody = $("#itemsTbody");
+    if (!tbody) return;
+
     const filterQ = ($("#libFilter")?.value || "").trim().toLowerCase();
     const cols = visibleColumns();
-    const sortBy = $("#sortBy").value;
-    const sortDir = $("#sortDir").value;
+    const sortBy = $("#sortBy")?.value || "title";
+    const sortDir = $("#sortDir")?.value || "asc";
 
-    // filter by collection (client-side for now)
     let view = items.filter(it => {
       const inCol = currentCollectionId == null ? true : (it.collection_ids || []).includes(currentCollectionId);
       if (!inCol) return false;
       if (!filterQ) return true;
-      const hay = `${it.title} ${it.authors || ""} ${it.venue || ""}`.toLowerCase();
+      const hay = `${it.title||""} ${it.authors||""} ${it.venue||""}`.toLowerCase();
       return hay.includes(filterQ);
     });
 
-    // sort
     view.sort((a,b) => {
-      const A = (a[sortBy] ?? "").toString().toLowerCase();
-      const B = (b[sortBy] ?? "").toString().toLowerCase();
+      const A = (a?.[sortBy] ?? "").toString().toLowerCase();
+      const B = (b?.[sortBy] ?? "").toString().toLowerCase();
       if (A < B) return sortDir === "asc" ? -1 : 1;
       if (A > B) return sortDir === "asc" ? 1 : -1;
       return 0;
     });
 
-    // render
     if (!view.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="muted">No items</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="muted">${items.length ? "No items" : "No items yet"}</td></tr>`;
       return;
     }
+
     tbody.innerHTML = view.map(it => {
       const authors = cols.has("authors") ? `<td>${escapeHtml(it.authors || "—")}</td>` : "";
       const year    = cols.has("year")    ? `<td>${escapeHtml(it.year ?? "—")}</td>` : "";
       const venue   = cols.has("venue")   ? `<td>${escapeHtml(it.venue || "—")}</td>` : "";
       const cited   = cols.has("cited_by")? `<td>${escapeHtml(it.cited_by ?? "0")}</td>` : "";
       return `
-        <tr data-id="${escapeHtml(it.id)}">
-          <td>${escapeHtml(it.title)}</td>
+        <tr data-id="${escapeHtml(it.id ?? it.openalex_id ?? "")}">
+          <td>${escapeHtml(it.title || "—")}</td>
           ${authors}${year}${venue}${cited}
         </tr>
       `;
@@ -313,14 +308,14 @@
   // --- Inspector & Notes ---
   async function renderInspector(id){
     const host = $("#inspectorBody");
-    const item = items.find(x => String(x.id) === String(id));
+    const item = items.find(x => String(x.id ?? x.openalex_id) === String(id));
     if (!item){ host.innerHTML = `<p class="muted">Not found.</p>`; return; }
 
     // lazy-refresh metadata from server if missing
     if (!item.meta_fresh) {
       try {
         const ref = await api(`/api/items/${encodeURIComponent(id)}/refresh`, { method:"POST" });
-        Object.assign(item, ref.item);
+        if (ref?.item) Object.assign(item, ref.item);
       } catch(e) {}
     }
 
@@ -329,7 +324,7 @@
 
     host.innerHTML = `
       <div style="padding:.75rem;">
-        <h4 style="margin:0 0 .25rem 0;">${escapeHtml(item.title)}</h4>
+        <h4 style="margin:0 0 .25rem 0;">${escapeHtml(item.title || "—")}</h4>
         <p class="muted" style="margin:.25rem 0;">${escapeHtml(item.authors || "—")}</p>
         <p class="meta"><strong>${escapeHtml(item.year ?? "—")}</strong> · ${escapeHtml(item.venue || "—")}</p>
         <p class="chips" style="display:flex; gap:.5rem; flex-wrap:wrap;">
@@ -338,7 +333,7 @@
           ${chip(item.pdf_url, "PDF", "badge badge-oa")}
         </p>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.5rem 0;">
-          <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(item.openalex_id || item.id)}">Open paper page</a>
+          <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(item.openalex_id || item.id || "")}">Open paper page</a>
           ${item.pdf_url ? `<a class="btn btn-secondary" href="${item.pdf_url}" target="_blank" rel="noopener">Open PDF</a>` : ""}
           <button class="btn btn-secondary" id="addToCollectionBtn">Add to collection…</button>
           <button class="btn btn-secondary" id="removeFromLibraryBtn">Remove from library</button>
@@ -352,22 +347,22 @@
 
     $("#addToCollectionBtn").onclick = async () => {
       const names = collections.map(c => `${c.id}: ${c.name}`).join("\n");
-      const pick = prompt(`Add to which collection?\n${names}\n\nEnter ID:`);
-      if (!pick) return;
+      const pick = prompt(`Add to which collection?\n${names}\n\nEnter ID:`); if (!pick) return;
       const cid = Number(pick);
       if (!collections.some(c => c.id === cid)) { alert("Invalid collection id."); return; }
-      await api(`/api/collections/${cid}/items`, { method:"POST", body: JSON.stringify({ id }) });
-      await refreshItems();
+      await api(`/api/collections/${cid}/items`, { method:"POST", body: JSON.stringify({ id: id }) });
+      await safeRefreshItems();
       renderTable();
       alert("Added.");
     };
+
     $("#removeFromLibraryBtn").onclick = async () => {
       if (!confirm("Remove from library (notes stay but item is removed)?")) return;
       await api(`/api/library/${encodeURIComponent(id)}`, { method:"DELETE" });
-      items = items.filter(x => String(x.id) !== String(id));
+      items = items.filter(x => String(x.id ?? x.openalex_id) !== String(id));
       renderTable();
       $("#inspectorBody").innerHTML = `<p class="muted" style="padding:.75rem;">Select an item…</p>`;
-      await globalThis.SE_LIB?.loadLibraryOnce?.(); // refresh cache for Saved ✓
+      try { await globalThis.SE_LIB?.loadLibraryOnce?.(); } catch {}
     };
 
     await renderNotes(id);
@@ -376,16 +371,20 @@
   async function renderNotes(paperId){
     const list = $("#notesList");
     list.innerHTML = `<li class="muted" style="padding:.75rem;">Loading…</li>`;
-    const notes = await api(`/api/notes?paper_id=${encodeURIComponent(paperId)}`);
-    list.innerHTML = notes.length
-      ? notes.map(n => `
-        <li data-note="${n.id}">
-          <button class="del" title="Delete note">×</button>
-          <div style="white-space:pre-wrap; margin-top:.25rem;">${escapeHtml(n.text)}</div>
-          <div class="muted" style="font-size:.8rem; margin-top:.25rem;">${new Date(n.created_at).toLocaleString()}</div>
-        </li>
-      `).join("")
-      : `<li class="muted" style="padding:.75rem;">No notes yet.</li>`;
+    try {
+      const notes = await api(`/api/notes?paper_id=${encodeURIComponent(paperId)}`);
+      list.innerHTML = (Array.isArray(notes) && notes.length)
+        ? notes.map(n => `
+          <li data-note="${n.id}">
+            <button class="del" title="Delete note">×</button>
+            <div style="white-space:pre-wrap; margin-top:.25rem;">${escapeHtml(n.text)}</div>
+            <div class="muted" style="font-size:.8rem; margin-top:.25rem;">${new Date(n.created_at).toLocaleString()}</div>
+          </li>
+        `).join("")
+        : `<li class="muted" style="padding:.75rem;">No notes yet.</li>`;
+    } catch (e) {
+      list.innerHTML = `<li class="muted" style="padding:.75rem;">Could not load notes.</li>`;
+    }
 
     list.onclick = async (e) => {
       const b = e.target.closest(".del");
@@ -397,8 +396,7 @@
     };
 
     $("#addNoteBtn").onclick = async () => {
-      const txt = $("#noteText").value.trim();
-      if (!txt) return;
+      const txt = $("#noteText").value.trim(); if (!txt) return;
       await api("/api/notes", { method:"POST", body: JSON.stringify({ paper_id: paperId, text: txt }) });
       $("#noteText").value = "";
       await renderNotes(paperId);

@@ -13,10 +13,12 @@
   <style>
     /* Full-width working layout only on the Library page */
     body[data-page="library"] main.container {
-      max-width: 100%;
-      width: 100%;
-      padding-left: 1rem;
-      padding-right: 1rem;
+      max-width: none !important;
+      width: 100% !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
     }
 
     /* Panel: remove inner padding constraints so grid can stretch edge-to-edge */
@@ -24,8 +26,7 @@
       padding: 0 !important;
     }
 
-    /* Fluid, resizable 3-column grid
-       IMPORTANT: include resizer tracks to avoid empty gap */
+    /* Fluid, resizable 3-column grid with explicit resizer tracks (prevents gaps) */
     .lib-grid {
       display: grid;
       grid-template-columns:
@@ -35,8 +36,9 @@
       gap: 0;
       min-height: calc(100vh - 180px); /* account for nav/footer */
       border: 1px solid var(--border-color, #e6e6e6);
-      border-radius: 8px;
+      border-radius: 0; /* flush full-bleed look */
       overflow: hidden;
+      width: 100%;
     }
 
     /* Column panes */
@@ -90,10 +92,7 @@
       align-items: center;
       gap: .25rem;
     }
-    .lib-heading .kebab {
-      font-size: 18px;
-      padding: 0 .25rem;
-    }
+    .lib-heading .kebab { font-size: 18px; padding: 0 .25rem; }
 
     .tree {
       list-style: none;
@@ -110,152 +109,77 @@
       border-radius: 6px;
       user-select: none;
     }
-    .tree li.active > .row {
-      background: rgba(0,0,0,.04);
-    }
-    .tree li .row:hover {
-      background: rgba(0,0,0,.03);
-    }
+    .tree li.active > .row { background: rgba(0,0,0,.04); }
+    .tree li .row:hover { background: rgba(0,0,0,.03); }
     .tree li { margin: 0; }
     .tree li .row .name {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
 
-    /* Keep legacy action buttons (not removed) but keep them subtle */
-    .tree .btn-xs {
-      padding: 0 .35rem;
-      line-height: 1.4;
-      font-size: .75rem;
-    }
-
-    /* Kebab button */
     .kebab {
-      background: transparent;
-      border: none;
-      font-size: 18px;
-      line-height: 1;
-      cursor: pointer;
-      padding: 0 .25rem;
-      color: inherit;
+      background: transparent; border: none; font-size: 18px;
+      line-height: 1; cursor: pointer; padding: 0 .25rem; color: inherit;
     }
 
-    /* Context menu (Zotero-like simple menu) */
+    /* Context menu */
     .context-menu {
-      position: fixed;
-      z-index: 1000;
-      background: #fff;
+      position: fixed; z-index: 1000; background: #fff;
       border: 1px solid var(--border-color, #e6e6e6);
-      border-radius: 8px;
-      box-shadow: 0 6px 24px rgba(0,0,0,.08);
-      min-width: 220px;
-      overflow: hidden;
+      border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.08);
+      min-width: 220px; overflow: hidden;
     }
-    .context-menu ul {
-      list-style: none;
-      padding: .25rem 0;
-      margin: 0;
-    }
-    .context-menu li {
-      padding: .5rem .75rem;
-      cursor: pointer;
-      font-size: .92rem;
-    }
-    .context-menu li:hover {
-      background: rgba(0,0,0,.04);
-    }
+    .context-menu ul { list-style: none; padding: .25rem 0; margin: 0; }
+    .context-menu li { padding: .5rem .75rem; cursor: pointer; font-size: .92rem; }
+    .context-menu li:hover { background: rgba(0,0,0,.04); }
 
     /* Center: toolbar + table */
     .lib-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: .75rem 1rem;
-      align-items: center;
-      justify-content: space-between;
-      padding: .75rem 1rem;
-      border-bottom: 1px solid var(--border-color, #eee);
-      background: var(--subtle, #fafafa);
+      display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; justify-content: space-between;
+      padding: .75rem 1rem; border-bottom: 1px solid var(--border-color, #eee); background: var(--subtle, #fafafa);
     }
-    .cols-menu label {
-      margin-right: .75rem;
-      font-size: .9rem;
-    }
-    .lib-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .lib-table th, .lib-table td {
-      padding: .6rem .75rem;
-      border-bottom: 1px solid var(--border-color, #f0f0f0);
-      vertical-align: top;
-    }
+    .cols-menu label { margin-right: .75rem; font-size: .9rem; }
+    .lib-table { width: 100%; border-collapse: collapse; }
+    .lib-table th, .lib-table td { padding: .6rem .75rem; border-bottom: 1px solid var(--border-color, #f0f0f0); vertical-align: top; }
     .lib-table thead th {
-      text-align: left;
-      font-weight: 600;
-      font-size: .9rem;
-      background: #fff;
-      position: sticky;
-      top: 0;
-      z-index: 1;
+      text-align: left; font-weight: 600; font-size: .9rem; background: #fff;
+      position: sticky; top: 0; z-index: 1;
     }
     .muted { color: #666; }
 
     /* Right: inspector */
     #inspector { padding-bottom: 1rem; }
-    #inspector .panel {
-      border: 1px solid var(--border-color, #eee);
-      border-radius: 6px;
-      margin: .5rem 1rem;
-      background: #fff;
-    }
+    #inspector .panel { border: 1px solid var(--border-color, #eee); border-radius: 6px; margin: .5rem 1rem; background: #fff; }
     #inspector .panel strong { display: block; margin-bottom: .25rem; }
     #inspectorBody { padding: .75rem 1rem; }
     #notesBlock { padding: 0 1rem 1rem 1rem; }
     .notes { list-style: none; padding: 0; margin: .5rem 0 0 0; }
     .notes li { padding: .5rem; border: 1px solid var(--border-color, #eee); border-radius: 6px; margin-bottom: .5rem; position: relative; }
-    .notes li .del {
-      position: absolute; right: .35rem; top: .35rem;
-      border: none; background: transparent; cursor: pointer; font-size: 14px;
-    }
+    .notes li .del { position: absolute; right: .35rem; top: .35rem; border: none; background: transparent; cursor: pointer; font-size: 14px; }
     .note-editor textarea { width: 100%; min-height: 90px; }
   </style>
 </head>
-<body data-page="paper">
+<body data-page="library">
   <a class="skip-link" href="#main">Skip to content</a>
 
   <nav class="app-nav" role="navigation" aria-label="Primary">
     <div class="nav-inner container">
       <div class="logo">
         <a href="index.html" aria-label="ScienceEcosystem Home">
-          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
-        </a>
-      </div>
-
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" /></a></div>
       <div class="nav-center">
         <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
           <label class="visually-hidden" for="searchInput">Search</label>
-          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
-        </form>
-      </div>
-
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/></form></div>
       <div class="nav-right">
   <a class="nav-link" href="index.html">Home</a>
   <a class="nav-link" href="about.html">About</a>
-
   <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
-
   <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
     <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
-    <span>Login with ORCID</span>
-  </a>
+    <span>Login with ORCID</span></a>
+  <button id="logoutBtn" class="btn" style="display:none;">Logout</button></div></div>
+</nav>
 
-  <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
-</div>
-    </div>
-  </nav>
-
-  <!-- Kept the previous filter + 'New collection' in header (not removed) -->
   <header>
     <div class="nav-center">
       <div class="nav-search" style="display:flex; gap:.5rem;">
@@ -354,17 +278,14 @@
       <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
       <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
 
-      <!-- Social icons -->
       <div class="footer-socials">
         <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
-          <!-- LinkedIn -->
           <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
             <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
           </svg>
         </a>
 
         <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
-          <!-- GitHub -->
           <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
             <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98 .004 1.968 .132 2.893 .388 2.2-1.488 3.164-1.178 3.164-1.178 .63 1.584 .235 2.753 .116 3.043 .74 .804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67 .413 .357 .78 1.06 .78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307 .206 .663 .79 .55 A11.502 11.502 0 0 0 12 .5z"/>
           </svg>
@@ -376,7 +297,7 @@
   </footer>
 
   <script src="scripts/search.js" defer></script>
-  <script src="scripts/session.js" defer></script>   <!-- toggles nav state -->
+  <script src="scripts/session.js" defer></script>
   <script src="scripts/library.js" defer></script>
   <script src="scripts/components.js" defer></script>
   <script src="scripts/library-page.js" defer></script>
