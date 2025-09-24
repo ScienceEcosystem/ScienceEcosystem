@@ -9,153 +9,70 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 
-  <!-- Library page scoped overrides -->
   <style>
-    /* Full-width working layout only on the Library page */
-    body[data-page="library"] main.container {
-      max-width: none !important;
-      width: 100% !important;
-      padding-left: 0 !important;
-      padding-right: 0 !important;
-      margin-left: 0 !important;
-      margin-right: 0 !important;
-    }
+    /* Full-bleed working layout on Library page */
+    body[data-page="library"] main.container { max-width:none!important; width:100%!important; padding:0!important; margin:0!important; }
+    body[data-page="library"] .panel { padding:0!important; }
 
-    /* Panel: remove inner padding constraints so grid can stretch edge-to-edge */
-    body[data-page="library"] .panel {
-      padding: 0 !important;
+    /* 3-pane grid with explicit resizer tracks (prevents gaps) */
+    .lib-grid{
+      display:grid;
+      grid-template-columns: var(--lib-left,280px) 6px var(--lib-center,1fr) 6px var(--lib-right,360px);
+      gap:0; width:100%;
+      min-height:calc(100vh - 180px);
+      border:1px solid var(--border-color,#e6e6e6);
+      border-radius:0;
+      overflow:hidden;
     }
+    .lib-left,.lib-center,.lib-right{ min-width:160px; overflow:auto; background:#fff; }
+    .lib-left{ border-right:1px solid var(--border-color,#eee); }
+    .lib-right{ border-left:1px solid var(--border-color,#eee); }
 
-    /* Fluid, resizable 3-column grid with explicit resizer tracks (prevents gaps) */
-    .lib-grid {
-      display: grid;
-      grid-template-columns:
-        var(--lib-left, 280px) 6px
-        var(--lib-center, 1fr) 6px
-        var(--lib-right, 360px);
-      gap: 0;
-      min-height: calc(100vh - 180px); /* account for nav/footer */
-      border: 1px solid var(--border-color, #e6e6e6);
-      border-radius: 0; /* flush full-bleed look */
-      overflow: hidden;
-      width: 100%;
-    }
+    .lib-resizer{ width:6px; cursor:col-resize; position:relative; background:transparent; }
+    .lib-resizer::after{ content:""; position:absolute; inset:0 2px; background:var(--border-color,#eee); opacity:0; transition:opacity .15s; }
+    .lib-resizer:hover::after,.lib-resizer.dragging::after{ opacity:1; }
 
-    /* Column panes */
-    .lib-left, .lib-center, .lib-right {
-      min-width: 160px;
-      overflow: auto;
-      background: var(--panel-bg, #fff);
-    }
+    /* Collections */
+    .lib-heading{ font-size:.95rem; font-weight:600; padding:.75rem 1rem; margin:0; border-bottom:1px solid var(--border-color,#eee); background:var(--subtle,#fafafa); }
+    .lib-heading-bar{ display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+    .lib-heading-actions{ display:flex; align-items:center; gap:.25rem; }
+    .kebab{ background:transparent; border:0; font-size:18px; line-height:1; cursor:pointer; padding:0 .25rem; }
+    .tree{ list-style:none; margin:0; padding:.5rem 0; }
+    .tree .row{ display:grid; grid-template-columns:auto 1fr auto; gap:.5rem; align-items:center; padding:.4rem .75rem; border-radius:6px; user-select:none; }
+    .tree li.active>.row{ background:rgba(0,0,0,.04); }
+    .tree .row:hover{ background:rgba(0,0,0,.03); }
+    .tree .name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-    /* Subtle separators */
-    .lib-left { border-right: 1px solid var(--border-color, #eee); }
-    .lib-right { border-left: 1px solid var(--border-color, #eee); }
-
-    /* Resizer handles (placed in the dedicated 6px columns) */
-    .lib-resizer {
-      width: 6px;
-      cursor: col-resize;
-      background: transparent;
-      position: relative;
-    }
-    .lib-resizer::after {
-      content: "";
-      position: absolute;
-      top: 0; bottom: 0; left: 2px; right: 2px;
-      background: var(--border-color, #eee);
-      opacity: 0.0;
-      transition: opacity .15s ease;
-    }
-    .lib-resizer:hover::after,
-    .lib-resizer.dragging::after {
-      opacity: 1;
-    }
-
-    /* Left: Collections tree */
-    .lib-heading {
-      font-size: .95rem;
-      font-weight: 600;
-      padding: .75rem 1rem;
-      margin: 0;
-      border-bottom: 1px solid var(--border-color, #eee);
-      background: var(--subtle, #fafafa);
-    }
-    .lib-heading-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: .5rem;
-    }
-    .lib-heading-actions {
-      display: flex;
-      align-items: center;
-      gap: .25rem;
-    }
-    .lib-heading .kebab { font-size: 18px; padding: 0 .25rem; }
-
-    .tree {
-      list-style: none;
-      margin: 0;
-      padding: .5rem 0;
-    }
-    .tree > li > .row,
-    .tree li .row {
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      align-items: center;
-      gap: .5rem;
-      padding: .4rem .75rem;
-      border-radius: 6px;
-      user-select: none;
-    }
-    .tree li.active > .row { background: rgba(0,0,0,.04); }
-    .tree li .row:hover { background: rgba(0,0,0,.03); }
-    .tree li { margin: 0; }
-    .tree li .row .name {
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-
-    .kebab {
-      background: transparent; border: none; font-size: 18px;
-      line-height: 1; cursor: pointer; padding: 0 .25rem; color: inherit;
-    }
+    /* Virtual section headers (Duplicates / Trash / Smart) */
+    .tree .virtual-h{ font-size:.8rem; color:#666; padding:.5rem .75rem .25rem; text-transform:uppercase; letter-spacing:.04em; }
 
     /* Context menu */
-    .context-menu {
-      position: fixed; z-index: 1000; background: #fff;
-      border: 1px solid var(--border-color, #e6e6e6);
-      border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.08);
-      min-width: 220px; overflow: hidden;
-    }
-    .context-menu ul { list-style: none; padding: .25rem 0; margin: 0; }
-    .context-menu li { padding: .5rem .75rem; cursor: pointer; font-size: .92rem; }
-    .context-menu li:hover { background: rgba(0,0,0,.04); }
+    .context-menu{ position:fixed; z-index:1000; background:#fff; border:1px solid var(--border-color,#e6e6e6); border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,.08); min-width:220px; overflow:hidden; }
+    .context-menu ul{ list-style:none; margin:0; padding:.25rem 0; }
+    .context-menu li{ padding:.5rem .75rem; cursor:pointer; font-size:.92rem; }
+    .context-menu li:hover{ background:rgba(0,0,0,.04); }
 
-    /* Center: toolbar + table */
-    .lib-toolbar {
-      display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; justify-content: space-between;
-      padding: .75rem 1rem; border-bottom: 1px solid var(--border-color, #eee); background: var(--subtle, #fafafa);
-    }
-    .cols-menu label { margin-right: .75rem; font-size: .9rem; }
-    .lib-table { width: 100%; border-collapse: collapse; }
-    .lib-table th, .lib-table td { padding: .6rem .75rem; border-bottom: 1px solid var(--border-color, #f0f0f0); vertical-align: top; }
-    .lib-table thead th {
-      text-align: left; font-weight: 600; font-size: .9rem; background: #fff;
-      position: sticky; top: 0; z-index: 1;
-    }
-    .muted { color: #666; }
+    /* Toolbar + Tag filter */
+    .lib-toolbar{ display:flex; flex-wrap:wrap; gap:.75rem 1rem; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid var(--border-color,#eee); background:var(--subtle,#fafafa); }
+    .cols-menu label{ margin-right:.75rem; font-size:.9rem; }
+    .inline-filters{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .badge{ display:inline-block; padding:.15rem .45rem; border:1px solid #e5e7eb; border-radius:999px; font-size:.8rem; }
+    .badge-oa{ border-color:#d0e3ff; background:#f5faff; }
+    .muted{ color:#666; }
 
-    /* Right: inspector */
-    #inspector { padding-bottom: 1rem; }
-    #inspector .panel { border: 1px solid var(--border-color, #eee); border-radius: 6px; margin: .5rem 1rem; background: #fff; }
-    #inspector .panel strong { display: block; margin-bottom: .25rem; }
-    #inspectorBody { padding: .75rem 1rem; }
-    #notesBlock { padding: 0 1rem 1rem 1rem; }
-    .notes { list-style: none; padding: 0; margin: .5rem 0 0 0; }
-    .notes li { padding: .5rem; border: 1px solid var(--border-color, #eee); border-radius: 6px; margin-bottom: .5rem; position: relative; }
-    .notes li .del { position: absolute; right: .35rem; top: .35rem; border: none; background: transparent; cursor: pointer; font-size: 14px; }
-    .note-editor textarea { width: 100%; min-height: 90px; }
+    /* Table */
+    .lib-table{ width:100%; border-collapse:collapse; }
+    .lib-table th,.lib-table td{ padding:.6rem .75rem; border-bottom:1px solid var(--border-color,#f0f0f0); vertical-align:top; }
+    .lib-table thead th{ text-align:left; font-weight:600; font-size:.9rem; background:#fff; position:sticky; top:0; z-index:1; }
+    .tag-chip{ display:inline-block; padding:.15rem .4rem; border-radius:999px; border:1px solid #e5e7eb; font-size:.75rem; margin-right:.25rem; }
+
+    /* Inspector */
+    #inspector{ padding-bottom:1rem; }
+    #inspector .panel{ border:1px solid var(--border-color,#eee); border-radius:6px; margin:.5rem 1rem; background:#fff; }
+    #inspectorBody{ padding:.75rem 1rem; }
+    #relatedList{ list-style:none; margin:.25rem 0 0 0; padding:0; }
+    #relatedList li{ padding:.25rem 0; border-bottom:1px dashed #eee; }
+    .note-editor textarea{ width:100%; min-height:90px; }
   </style>
 </head>
 <body data-page="library">
@@ -190,9 +107,9 @@
   </header>
 
   <main id="main" class="container">
-    <section class="panel" style="padding:0;">
-      <div class="lib-grid" id="libGrid" style="--lib-left: 280px; --lib-center: 1fr; --lib-right: 360px;">
-        <!-- Left: collections -->
+    <section class="panel">
+      <div class="lib-grid" id="libGrid" style="--lib-left:280px; --lib-center:1fr; --lib-right:360px;">
+        <!-- Left: Collections -->
         <aside class="lib-left">
           <h3 class="lib-heading">
             <span class="lib-heading-bar">
@@ -206,10 +123,10 @@
           <ul id="collectionsTree" class="tree"></ul>
         </aside>
 
-        <!-- Resizer between left and center -->
-        <div class="lib-resizer" data-side="left" aria-hidden="true"></div>
+        <!-- Resizer -->
+        <div class="lib-resizer" aria-hidden="true"></div>
 
-        <!-- Middle: table -->
+        <!-- Center: Table -->
         <section class="lib-center">
           <div class="lib-toolbar">
             <div class="cols-menu">
@@ -218,8 +135,8 @@
               <label><input type="checkbox" data-col="venue" checked/> Venue</label>
               <label><input type="checkbox" data-col="cited_by" checked/> Cited By</label>
             </div>
-            <div class="sort-menu">
-              Sort:
+            <div class="inline-filters">
+              <input id="tagFilter" class="input input-pill" placeholder="Filter by tag (comma-separated)…"/>
               <select id="sortBy">
                 <option value="title">Title</option>
                 <option value="year">Year</option>
@@ -232,6 +149,7 @@
               </select>
             </div>
           </div>
+
           <table class="lib-table" id="itemsTable" aria-label="Library items">
             <thead>
               <tr>
@@ -248,14 +166,22 @@
           </table>
         </section>
 
-        <!-- Resizer between center and right -->
-        <div class="lib-resizer" data-side="right" aria-hidden="true"></div>
+        <!-- Resizer -->
+        <div class="lib-resizer" aria-hidden="true"></div>
 
-        <!-- Right: inspector -->
+        <!-- Right: Inspector -->
         <aside class="lib-right">
           <div id="inspector">
             <h3 class="lib-heading">Details</h3>
             <div id="inspectorBody" class="muted">Select an item…</div>
+
+            <h3 class="lib-heading" style="margin-top:1rem;">Related</h3>
+            <div class="panel">
+              <div style="padding:.75rem 1rem;">
+                <button id="addRelatedBtn" class="btn btn-secondary btn-sm">Add related…</button>
+                <ul id="relatedList"></ul>
+              </div>
+            </div>
 
             <h3 class="lib-heading" style="margin-top:1rem;">Notes</h3>
             <div id="notesBlock">
@@ -267,6 +193,7 @@
                 </div>
               </div>
             </div>
+
           </div>
         </aside>
       </div>
@@ -277,21 +204,14 @@
     <div class="container">
       <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
       <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
-
       <div class="footer-socials">
         <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-            <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
-          </svg>
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true"><path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
         </a>
-
         <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-            <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98 .004 1.968 .132 2.893 .388 2.2-1.488 3.164-1.178 3.164-1.178 .63 1.584 .235 2.753 .116 3.043 .74 .804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67 .413 .357 .78 1.06 .78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307 .206 .663 .79 .55 A11.502 11.502 0 0 0 12 .5z"/>
-          </svg>
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98 .004 1.968 .132 2.893 .388 2.2-1.488 3.164-1.178 3.164-1.178 .63 1.584 .235 2.753 .116 3.043 .74 .804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67 .413 .357 .78 1.06 .78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307 .206 .663 .79 .55 A11.502 11.502 0 0 0 12 .5z"/></svg>
         </a>
       </div>
-
       <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
     </div>
   </footer>
