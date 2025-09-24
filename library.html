@@ -24,10 +24,14 @@
       padding: 0 !important;
     }
 
-    /* Fluid, resizable 3-column grid */
+    /* Fluid, resizable 3-column grid
+       IMPORTANT: include resizer tracks to avoid empty gap */
     .lib-grid {
       display: grid;
-      grid-template-columns: var(--lib-left, 280px) var(--lib-center, 1fr) var(--lib-right, 360px);
+      grid-template-columns:
+        var(--lib-left, 280px) 6px
+        var(--lib-center, 1fr) 6px
+        var(--lib-right, 360px);
       gap: 0;
       min-height: calc(100vh - 180px); /* account for nav/footer */
       border: 1px solid var(--border-color, #e6e6e6);
@@ -46,7 +50,7 @@
     .lib-left { border-right: 1px solid var(--border-color, #eee); }
     .lib-right { border-left: 1px solid var(--border-color, #eee); }
 
-    /* Resizer handles */
+    /* Resizer handles (placed in the dedicated 6px columns) */
     .lib-resizer {
       width: 6px;
       cursor: col-resize;
@@ -75,6 +79,22 @@
       border-bottom: 1px solid var(--border-color, #eee);
       background: var(--subtle, #fafafa);
     }
+    .lib-heading-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .5rem;
+    }
+    .lib-heading-actions {
+      display: flex;
+      align-items: center;
+      gap: .25rem;
+    }
+    .lib-heading .kebab {
+      font-size: 18px;
+      padding: 0 .25rem;
+    }
+
     .tree {
       list-style: none;
       margin: 0;
@@ -110,7 +130,7 @@
       font-size: .75rem;
     }
 
-    /* New kebab button */
+    /* Kebab button */
     .kebab {
       background: transparent;
       border: none;
@@ -121,7 +141,7 @@
       color: inherit;
     }
 
-    /* Context menu */
+    /* Context menu (Zotero-like simple menu) */
     .context-menu {
       position: fixed;
       z-index: 1000;
@@ -129,7 +149,7 @@
       border: 1px solid var(--border-color, #e6e6e6);
       border-radius: 8px;
       box-shadow: 0 6px 24px rgba(0,0,0,.08);
-      min-width: 200px;
+      min-width: 220px;
       overflow: hidden;
     }
     .context-menu ul {
@@ -201,7 +221,7 @@
     .note-editor textarea { width: 100%; min-height: 90px; }
   </style>
 </head>
-<body data-page="library">
+<body data-page="paper">
   <a class="skip-link" href="#main">Skip to content</a>
 
   <nav class="app-nav" role="navigation" aria-label="Primary">
@@ -212,7 +232,12 @@
         </a>
       </div>
 
-      <div class="nav-center"></div>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
 
       <div class="nav-right">
   <a class="nav-link" href="index.html">Home</a>
@@ -222,31 +247,43 @@
 
   <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
     <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
-    <span>Login with ORCID</span></a> 
-   <button id="logoutBtn" class="btn" style="display:none;">Logout</button></div>    
-</div>
-</nav>
+    <span>Login with ORCID</span>
+  </a>
 
+  <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+</div>
+    </div>
+  </nav>
+
+  <!-- Kept the previous filter + 'New collection' in header (not removed) -->
   <header>
-  <div class="nav-center">
-        <div class="nav-search" style="display:flex; gap:.5rem;">
-          <input id="libFilter" class="input input-pill" placeholder="Filter in library…"/>
-          <button id="newCollectionBtn" class="btn btn-secondary">New collection</button>
-        </div>
+    <div class="nav-center">
+      <div class="nav-search" style="display:flex; gap:.5rem;">
+        <input id="libFilter" class="input input-pill" placeholder="Filter in library…"/>
+        <button id="newCollectionBtn" class="btn btn-secondary">New collection</button>
       </div>
-</header>
+    </div>
+  </header>
 
   <main id="main" class="container">
     <section class="panel" style="padding:0;">
       <div class="lib-grid" id="libGrid" style="--lib-left: 280px; --lib-center: 1fr; --lib-right: 360px;">
         <!-- Left: collections -->
         <aside class="lib-left">
-          <h3 class="lib-heading">Collections</h3>
+          <h3 class="lib-heading">
+            <span class="lib-heading-bar">
+              <span>Collections</span>
+              <span class="lib-heading-actions">
+                <button id="newCollectionBtnLeft" class="btn btn-secondary btn-xs" title="New collection">New</button>
+                <button id="rootKebab" class="kebab" title="Collections menu" aria-haspopup="menu">···</button>
+              </span>
+            </span>
+          </h3>
           <ul id="collectionsTree" class="tree"></ul>
         </aside>
 
         <!-- Resizer between left and center -->
-        <div class="lib-resizer" data-side="left"></div>
+        <div class="lib-resizer" data-side="left" aria-hidden="true"></div>
 
         <!-- Middle: table -->
         <section class="lib-center">
@@ -288,7 +325,7 @@
         </section>
 
         <!-- Resizer between center and right -->
-        <div class="lib-resizer" data-side="right"></div>
+        <div class="lib-resizer" data-side="right" aria-hidden="true"></div>
 
         <!-- Right: inspector -->
         <aside class="lib-right">
@@ -313,30 +350,30 @@
   </main>
 
   <footer class="site-footer">
-  <div class="container">
-    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-    <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
 
-    <!-- Social icons -->
-    <div class="footer-socials">
-      <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
-        <!-- LinkedIn -->
-        <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-          <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
-        </svg>
-      </a>
+      <!-- Social icons -->
+      <div class="footer-socials">
+        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
+          <!-- LinkedIn -->
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
+          </svg>
+        </a>
 
-      <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
-        <!-- GitHub -->
-        <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-          <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98 .004 1.968 .132 2.893 .388 2.2-1.488 3.164-1.178 3.164-1.178 .63 1.584 .235 2.753 .116 3.043 .74 .804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67 .413 .357 .78 1.06 .78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307 .206 .663 .79 .55 A11.502 11.502 0 0 0 12 .5z"/>
-        </svg>
-      </a>
+        <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
+          <!-- GitHub -->
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98 .004 1.968 .132 2.893 .388 2.2-1.488 3.164-1.178 3.164-1.178 .63 1.584 .235 2.753 .116 3.043 .74 .804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67 .413 .357 .78 1.06 .78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307 .206 .663 .79 .55 A11.502 11.502 0 0 0 12 .5z"/>
+          </svg>
+        </a>
+      </div>
+
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
     </div>
-
-    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
-  </div>
-</footer>
+  </footer>
 
   <script src="scripts/search.js" defer></script>
   <script src="scripts/session.js" defer></script>   <!-- toggles nav state -->

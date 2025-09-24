@@ -18,48 +18,6 @@
     return ct.includes("application/json") ? res.json() : res.text();
   }
 
-  // --- NEW: header auth swap (minimal, non-invasive) ---
-  async function syncAuthHeader() {
-    const slot = $("#authSlot");
-    if (!slot) return;
-
-    // If the global session helper exists, prefer it
-    try {
-      if (globalThis.SE_SESSION?.get) {
-        const s = await globalThis.SE_SESSION.get();
-        if (s?.logged_in) {
-          slot.innerHTML = renderLogoutBlock(s?.user);
-          return;
-        }
-        // not logged in -> keep default ORCID button as-is
-        return;
-      }
-    } catch (_) { /* fall through to local fetch */ }
-
-    // Fallback to direct session endpoint
-    try {
-      const s = await api("/api/session").catch(() => null);
-      if (s?.logged_in) {
-        slot.innerHTML = renderLogoutBlock(s?.user);
-      } // else leave default ORCID login as authored in HTML
-    } catch (_) {
-      // On error, don't break header; keep default
-    }
-  }
-
-  function renderLogoutBlock(user) {
-    const display = escapeHtml(user?.name || user?.orcid || "Profile");
-    // Keep links; show profile + POST logout for CSRF-safe servers; adjust action if your backend expects a GET.
-    return `
-      <span class="auth authed" style="display:flex; gap:.5rem; align-items:center;">
-        <a class="nav-link" href="user-profile.html" aria-label="Your profile">${display}</a>
-        <form action="/logout" method="POST" style="margin:0;">
-          <button type="submit" class="btn btn-secondary" aria-label="Log out">Log out</button>
-        </form>
-      </span>
-    `;
-  }
-
   // --- State ---
   let collections = [];           // flat list
   let items = [];                 // library items with cached meta
@@ -69,110 +27,73 @@
 
   // --- Bootstrap ---
   window.addEventListener("DOMContentLoaded", async () => {
-    // Ensure header shows correct auth state first
-    await syncAuthHeader();
+    // Header auth (kept from your previous logic, if present globally)
+    try {
+      if (globalThis.SE_SESSION?.syncHeader) await globalThis.SE_SESSION.syncHeader();
+    } catch {}
 
     try {
       await globalThis.SE_LIB?.loadLibraryOnce?.(); // pre-warm saved cache
     } catch {}
 
-    await refreshCollections();
-    await refreshItems();
-    renderTree();
-    renderTable();
-    bindUI();
+    await refreshCollections();   // ensure we have the latest collections
+    await refreshItems();         // ensure we have items
+    renderTree();                 // show collections
+    renderTable();                // show items
+    bindUI();                     // wire interactions
+
+    // Root kebab menu next to "Collections"
+    setupRootKebab();
   });
 
   // --- Collections ---
   async function refreshCollections(){
     collections = await api("/api/collections");
-    // Sort by name for consistent menus
+    // Sort by name for consistent menus (Zotero-like)
     collections.sort((a,b) => (a.name || "").localeCompare(b.name || ""));
   }
 
   function findChildrenMap(list){
     const byParent = new Map();
     for (const c of list) {
-      const k = c.parent_id || "root";
+      const k = c.parent_id == null ? "root" : String(c.parent_id);
       if (!byParent.has(k)) byParent.set(k, []);
       byParent.get(k).push(c);
     }
     return byParent;
   }
 
-  function buildMenuForCollection(c, anchorEl){
+  function buildContextMenu(items, anchorEl){
     closeAnyMenu();
-
     const m = document.createElement("div");
-    m.className = "menu";
-    m.innerHTML = `
-      <button data-act="new">New subfolder</button>
-      <button data-act="ren">Rename</button>
-      <button data-act="move">Move…</button>
-      <button data-act="del">Delete</button>
-    `;
+    m.className = "context-menu";
+    m.innerHTML = `<ul>${items.map(i=>`<li data-act="${i.act}">${escapeHtml(i.label)}</li>`).join("")}</ul>`;
     document.body.appendChild(m);
 
-    // Position near anchor
     const rect = anchorEl.getBoundingClientRect();
-    m.style.left = `${Math.min(rect.left, window.innerWidth - m.offsetWidth - 12)}px`;
-    m.style.top  = `${rect.bottom + 6}px`;
+    // Ensure layout before measuring offsetWidth
+    requestAnimationFrame(() => {
+      const left = Math.min(rect.left, window.innerWidth - m.offsetWidth - 12);
+      m.style.left = `${left}px`;
+      m.style.top  = `${rect.bottom + 6}px`;
+    });
 
-    const onClick = async (ev) => {
+    const onClick = (ev) => {
       const act = ev.target?.dataset?.act;
       if (!act) return;
-      ev.stopPropagation();
-
-      if (act === "new") {
-        const nm = prompt("New subfolder name:");
-        if (!nm) return;
-        await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: c.id })});
-        await refreshCollections();
-        renderTree();
-      } else if (act === "ren") {
-        const nm = prompt("Rename folder:", c.name);
-        if (!nm) return;
-        await api(`/api/collections/${c.id}`, { method:"PATCH", body: JSON.stringify({ name:nm })});
-        await refreshCollections();
-        renderTree();
-      } else if (act === "move") {
-        const listing = collections.map(cc => `${cc.id}: ${cc.name}`).join("\n");
-        const input = prompt(
-          `Move folder "${c.name}" under which parent?\n\nEnter parent ID (blank for root):\n\n${listing}`
-        );
-        if (input === null) return;
-        const parent_id = input.trim() === "" ? null : Number(input.trim());
-        if (parent_id !== null && !collections.some(cc => cc.id === parent_id)) {
-          alert("Invalid parent id.");
-          return;
-        }
-        if (parent_id === c.id) { alert("Cannot move a folder under itself."); return; }
-        await api(`/api/collections/${c.id}`, { method:"PATCH", body: JSON.stringify({ parent_id })});
-        await refreshCollections();
-        renderTree();
-      } else if (act === "del") {
-        if (!confirm(`Delete "${c.name}" (does not delete items)?`)) return;
-        await api(`/api/collections/${c.id}`, { method:"DELETE" });
-        if (currentCollectionId === c.id) currentCollectionId = null;
-        await refreshCollections();
-        renderTree();
-      }
-
+      items.find(i => i.act === act)?.onClick?.();
       closeAnyMenu();
     };
-
     m.addEventListener("click", onClick);
-    openMenu = m;
 
-    // Dismiss on outside click / escape
-    const dismiss = (ev) => {
-      if (!m.contains(ev.target)) closeAnyMenu();
-    };
-    const onEsc = (ev) => { if (ev.key === "Escape") closeAnyMenu(); };
+    const dismiss = (ev) => { if (!m.contains(ev.target)) closeAnyMenu(); };
+    const onEsc   = (ev) => { if (ev.key === "Escape") closeAnyMenu(); };
     setTimeout(() => {
       document.addEventListener("click", dismiss, { once: true });
       document.addEventListener("keydown", onEsc, { once: true });
     }, 0);
+
+    openMenu = m;
   }
 
   function closeAnyMenu(){
@@ -182,57 +103,99 @@
     }
   }
 
+  function buildMenuForCollection(c, anchorEl){
+    const items = [
+      { act:"new", label:"New subcollection", onClick: async () => {
+          const nm = prompt("New subcollection name:");
+          if (!nm) return;
+          await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: c.id })});
+          await refreshCollections(); renderTree();
+        }},
+      { act:"ren", label:"Rename", onClick: async () => {
+          const nm = prompt("Rename collection:", c.name);
+          if (!nm) return;
+          await api(`/api/collections/${c.id}`, { method:"PATCH", body: JSON.stringify({ name:nm })});
+          await refreshCollections(); renderTree();
+        }},
+      { act:"move", label:"Move…", onClick: async () => {
+          const listing = collections.map(cc => `${cc.id}: ${cc.name}`).join("\n");
+          const input = prompt(`Move "${c.name}" under which parent?\n\nEnter parent ID (blank for root):\n\n${listing}`);
+          if (input === null) return;
+          const parent_id = input.trim() === "" ? null : Number(input.trim());
+          if (parent_id !== null && !collections.some(cc => cc.id === parent_id)) {
+            alert("Invalid parent id."); return;
+          }
+          if (parent_id === c.id) { alert("Cannot move a collection under itself."); return; }
+          await api(`/api/collections/${c.id}`, { method:"PATCH", body: JSON.stringify({ parent_id })});
+          await refreshCollections(); renderTree();
+        }},
+      { act:"del", label:"Delete collection", onClick: async () => {
+          if (!confirm(`Delete "${c.name}" (items stay in library)?`)) return;
+          await api(`/api/collections/${c.id}`, { method:"DELETE" });
+          if (currentCollectionId === c.id) currentCollectionId = null;
+          await refreshCollections(); renderTree(); renderTable();
+        }},
+    ];
+    buildContextMenu(items, anchorEl);
+  }
+
+  function setupRootKebab(){
+    const rootKebab = $("#rootKebab");
+    if (!rootKebab) return;
+    rootKebab.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      buildContextMenu([
+        { act:"new-root", label:"New collection", onClick: async () => {
+            const nm = prompt("New collection name:");
+            if (!nm) return;
+            await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: null })});
+            await refreshCollections(); renderTree();
+          }},
+      ], rootKebab);
+    });
+  }
+
   function buildTreeDom() {
     const byParent = findChildrenMap(collections);
     const ul = document.createElement("ul");
     ul.className = "tree";
 
+    // Root "All Items"
     const allLi = document.createElement("li");
     if (currentCollectionId == null) allLi.classList.add("active");
     allLi.innerHTML = `
       <div class="row" data-root="1">
         <span style="width:.75rem; height:.75rem; border:1px solid var(--border,#e5e7eb); border-radius:3px; background:#f8fafc;"></span>
         <span class="name">All Items</span>
-        <button class="kebab" title="Folder options" aria-haspopup="menu">···</button>
+        <button class="kebab" title="Options" aria-haspopup="menu">···</button>
       </div>`;
     ul.appendChild(allLi);
 
-    // Kebab for root -> create child at root
     allLi.querySelector(".kebab").addEventListener("click", (ev) => {
       ev.stopPropagation();
-      closeAnyMenu();
-      const menu = document.createElement("div");
-      menu.className = "menu";
-      menu.innerHTML = `<button data-act="new-root">New folder</button>`;
-      document.body.appendChild(menu);
-      const rect = ev.currentTarget.getBoundingClientRect();
-      menu.style.left = `${rect.left}px`;
-      menu.style.top  = `${rect.bottom + 6}px`;
-      menu.addEventListener("click", async (e) => {
-        if (e.target?.dataset?.act === "new-root") {
-          const nm = prompt("New folder name:");
-          if (!nm) return;
-          await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: null })});
-          await refreshCollections();
-          renderTree();
-          closeAnyMenu();
-        }
-      });
-      openMenu = menu;
-      setTimeout(() => document.addEventListener("click", () => closeAnyMenu(), { once: true }), 0);
+      buildContextMenu([
+        { act:"new-root", label:"New collection", onClick: async () => {
+            const nm = prompt("New collection name:");
+            if (!nm) return;
+            await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: null })});
+            await refreshCollections(); renderTree();
+          }},
+      ], ev.currentTarget);
     });
 
     allLi.addEventListener("click", () => { currentCollectionId = null; renderTree(); renderTable(); });
 
-    function renderBranch(parentId, depth) {
-      for (const c of (byParent.get(parentId) || [])) {
+    // Collections (recursive flat render, Zotero-style indent)
+    function renderBranch(parentKey, depth) {
+      const children = byParent.get(parentKey) || [];
+      for (const c of children) {
         const li = document.createElement("li");
         if (currentCollectionId === c.id) li.classList.add("active");
         li.innerHTML =
           `<div class="row" data-id="${String(c.id)}" style="padding-left:${Math.max(0, depth)*12 + 8}px;">
              <span style="width:.5rem; height:.5rem; border:1px solid var(--border,#e5e7eb); border-radius:50%; background:#f8fafc;"></span>
              <span class="name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
-             <button class="kebab" title="Folder options" aria-haspopup="menu">···</button>
+             <button class="kebab" title="Collection options" aria-haspopup="menu">···</button>
            </div>`;
 
         const row = li.querySelector(".row");
@@ -250,10 +213,10 @@
         });
 
         ul.appendChild(li);
-        if (byParent.has(c.id)) renderBranch(c.id, depth+1);
+        renderBranch(String(c.id), depth+1);
       }
     }
-    renderBranch(null, 0);
+    renderBranch("root", 0);
     return ul;
   }
 
@@ -263,13 +226,18 @@
     host.appendChild(buildTreeDom());
   }
 
-  $("#newCollectionBtn")?.addEventListener("click", async () => {
-    const nm = prompt("New collection name:");
-    if (!nm) return;
-    await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: currentCollectionId })});
-    await refreshCollections();
-    renderTree();
-  });
+  // Both "New" buttons create a collection at the current level
+  function bindNewCollectionButtons(){
+    const handlers = async () => {
+      const nm = prompt("New collection name:");
+      if (!nm) return;
+      await api("/api/collections", { method:"POST", body: JSON.stringify({ name:nm, parent_id: currentCollectionId })});
+      await refreshCollections();
+      renderTree();
+    };
+    $("#newCollectionBtn")?.addEventListener("click", handlers);
+    $("#newCollectionBtnLeft")?.addEventListener("click", handlers);
+  }
 
   // --- Items ---
   async function refreshItems(){
@@ -381,6 +349,7 @@
         </div>
       </div>
     `;
+
     $("#addToCollectionBtn").onclick = async () => {
       const names = collections.map(c => `${c.id}: ${c.name}`).join("\n");
       const pick = prompt(`Add to which collection?\n${names}\n\nEnter ID:`);
@@ -447,5 +416,7 @@
     });
     if ($(".lib-left"))  observer.observe($(".lib-left"));
     if ($(".lib-right")) observer.observe($(".lib-right"));
+
+    bindNewCollectionButtons();
   }
 })();
