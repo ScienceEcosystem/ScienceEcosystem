@@ -1249,25 +1249,32 @@
     }
   }
 
-  // ---------- Render ----------
-  var __CURRENT_PAPER__ = null;
-  var __CURRENT_SOURCE__ = null;
-  var __HEADER_GUARD_INSTALLED__ = false;
+// ---------- Render ----------
+// NOTE: do NOT re-declare __CURRENT_PAPER__ here; it's defined once above.
+// var __CURRENT_PAPER__ = null;  // <-- remove this line
+var __CURRENT_SOURCE__ = null;
+var __HEADER_GUARD_INSTALLED__ = false;
 
   function repopulateHeaderIfEmpty(){
     try{
       var hdr = $("paperHeaderMain");
       if (!hdr) return;
       var empty = (!hdr.firstElementChild && (hdr.textContent || "").trim() === "");
-      if (empty && __CURRENT_PAPER__){
-        $("paperHeaderMain").innerHTML = buildHeaderMain(__CURRENT_PAPER__);
-        $("paperActions").innerHTML   = buildActionsBar(__CURRENT_PAPER__);
-        $("paperStats").innerHTML     = buildStatsHeader(__CURRENT_PAPER__);
-        wireHeaderToggles();
-        if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
-          SE.components.enhancePaperCards($("paperActions"));
-        }
-      }
+      if (empty){
+  if (__CURRENT_PAPER__){
+    $("paperHeaderMain").innerHTML = buildHeaderMain(__CURRENT_PAPER__);
+    $("paperActions").innerHTML    = buildActionsBar(__CURRENT_PAPER__);
+    $("paperStats").innerHTML      = buildStatsHeader(__CURRENT_PAPER__);
+    wireHeaderToggles();
+    if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
+      SE.components.enhancePaperCards($("paperActions"));
+    }
+  } else if (__HEADER_HTML_SNAPSHOT__) {
+    // Fallback: restore from the saved HTML snapshot
+    $("paperHeaderMain").innerHTML = __HEADER_HTML_SNAPSHOT__;
+    wireHeaderToggles();
+  }
+}
     }catch(e){
       console.warn("Header repopulate failed:", e);
     }

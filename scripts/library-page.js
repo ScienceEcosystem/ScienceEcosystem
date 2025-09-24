@@ -18,6 +18,48 @@
     return ct.includes("application/json") ? res.json() : res.text();
   }
 
+  // --- NEW: header auth swap (minimal, non-invasive) ---
+  async function syncAuthHeader() {
+    const slot = $("#authSlot");
+    if (!slot) return;
+
+    // If the global session helper exists, prefer it
+    try {
+      if (globalThis.SE_SESSION?.get) {
+        const s = await globalThis.SE_SESSION.get();
+        if (s?.logged_in) {
+          slot.innerHTML = renderLogoutBlock(s?.user);
+          return;
+        }
+        // not logged in -> keep default ORCID button as-is
+        return;
+      }
+    } catch (_) { /* fall through to local fetch */ }
+
+    // Fallback to direct session endpoint
+    try {
+      const s = await api("/api/session").catch(() => null);
+      if (s?.logged_in) {
+        slot.innerHTML = renderLogoutBlock(s?.user);
+      } // else leave default ORCID login as authored in HTML
+    } catch (_) {
+      // On error, don't break header; keep default
+    }
+  }
+
+  function renderLogoutBlock(user) {
+    const display = escapeHtml(user?.name || user?.orcid || "Profile");
+    // Keep links; show profile + POST logout for CSRF-safe servers; adjust action if your backend expects a GET.
+    return `
+      <span class="auth authed" style="display:flex; gap:.5rem; align-items:center;">
+        <a class="nav-link" href="user-profile.html" aria-label="Your profile">${display}</a>
+        <form action="/logout" method="POST" style="margin:0;">
+          <button type="submit" class="btn btn-secondary" aria-label="Log out">Log out</button>
+        </form>
+      </span>
+    `;
+  }
+
   // --- State ---
   let collections = [];           // flat list
   let items = [];                 // library items with cached meta
@@ -27,6 +69,9 @@
 
   // --- Bootstrap ---
   window.addEventListener("DOMContentLoaded", async () => {
+    // Ensure header shows correct auth state first
+    await syncAuthHeader();
+
     try {
       await globalThis.SE_LIB?.loadLibraryOnce?.(); // pre-warm saved cache
     } catch {}
@@ -336,8 +381,6 @@
         </div>
       </div>
     `;
-
-    // actions
     $("#addToCollectionBtn").onclick = async () => {
       const names = collections.map(c => `${c.id}: ${c.name}`).join("\n");
       const pick = prompt(`Add to which collection?\n${names}\n\nEnter ID:`);
@@ -358,7 +401,6 @@
       await globalThis.SE_LIB?.loadLibraryOnce?.(); // refresh cache for Saved ✓
     };
 
-    // notes
     await renderNotes(id);
   }
 
