@@ -352,11 +352,9 @@
         ? `<div>${it.tags.map(t=>`<span class="tag-chip">${esc(t)}</span>`).join("")}</div>` : "";
       const authors = cols.has("authors")?`<td>${esc(it.authors||"—")}${tagsHtml}</td>`:"";
       const year    = cols.has("year")   ?`<td>${esc(it.year??"—")}</td>`:"";
-      const venue   = cols.has("venue")  ?`<td>${esc(it.venue||"—")}</td>`:"";
-      const cited   = cols.has("cited_by")?`<td>${esc(it.cited_by??"0")}</td>`:"";
       return `<tr data-id="${esc(it.id)}">
         <td>${esc(it.title||"—")}</td>
-        ${authors}${year}${venue}${cited}
+        ${authors}${year}
       </tr>`;
     }).join("");
 

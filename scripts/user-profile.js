@@ -1,6 +1,6 @@
 // --- user-profile.js ---
-// Production-grade profile page using real ORCID OAuth (server handles the flow).
-// Preserves your layout and 'paper.html?id=...' links.
+// Researcher Home (post-ORCID). Adds dashboard + identity linking + projects/materials/groups.
+// Preserves existing behaviour (paper.html?id=...), nav, and claims/merge UI.
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -9,7 +9,8 @@ async function api(path, opts = {}) {
     ...opts,
   });
   if (!res.ok) {
-    const txt = await res.text().catch(() => "");
+    let txt = "";
+    try { txt = await res.text(); } catch {}
     throw new Error(`Request failed ${res.status}: ${txt}`);
   }
   const ct = res.headers.get("content-type") || "";
@@ -25,14 +26,40 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function badge(txt) {
+  return `<span class="badge" style="display:inline-block; padding:.1rem .4rem; border-radius:999px; background:#eef; color:#223;">${escapeHtml(txt)}</span>`;
+}
+
 async function bootstrap() {
+  const userHeader = document.getElementById("userHeader");
   const userMain   = document.getElementById("userMain");
-  const userSidebar= document.getElementById("userSidebar");
+  const sidebar    = document.getElementById("userSidebar");
   const loginBtn   = document.getElementById("orcidLoginBtn");
   const logoutBtn  = document.getElementById("logoutBtn");
 
+  // Sections
+  const todayList      = document.getElementById("todayList");
+  const activityList   = document.getElementById("activityList");
+  const activityScope  = document.getElementById("activityScope");
+  const refreshActBtn  = document.getElementById("refreshActivityBtn");
+  const projectsGrid   = document.getElementById("projectsGrid");
+  const materialsList  = document.getElementById("materialsList");
+  const libRecent      = document.getElementById("libRecent");
+  const libToRead      = document.getElementById("libToRead");
+  const libStarred     = document.getElementById("libStarred");
+  const libCountEl     = document.getElementById("libCount");
+  const clearBtn       = document.getElementById("clearLibBtn");
+  const identityBox    = document.getElementById("identityStatus");
+  const libraryList    = document.getElementById("userLibraryList");
+
   try {
-    // 1) Get current session + profile (throws if not signed in)
+    // --- Session ---
     const me = await api("/api/me");
 
     // Toggle login/logout UI
@@ -45,79 +72,200 @@ async function bootstrap() {
       };
     }
 
-    // Render main profile
-    const orcidUrl = `https://orcid.org/${me.orcid}`;
-    userMain.innerHTML = `
-      <h1>${escapeHtml(me.name || "Your Profile")}</h1>
-      <p><strong>ORCID ID:</strong> <a href="${orcidUrl}" target="_blank" rel="noopener">${me.orcid}</a></p>
-      <p><strong>Affiliation:</strong> ${escapeHtml(me.affiliation || "—")}</p>
-
-      
-
-      <section>
-        <h2>My Topics</h2>
-        <p id="userTopics">No topics yet.</p>
-      </section>
-
-      <section>
-        <h2>Analytics</h2>
-        <p id="userAnalytics">No analytics available yet.</p>
-      </section>
+    // --- Header ---
+    const orcidUrl = me?.orcid ? `https://orcid.org/${me.orcid}` : "#";
+    userHeader.innerHTML = `
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem;">
+        <div>
+          <h1 style="margin:.25rem 0 0;">${escapeHtml(me.name || "Your Home")}</h1>
+          <p style="margin:.25rem 0;">
+            <strong>ORCID:</strong> ${me.orcid ? `<a href="${orcidUrl}" target="_blank" rel="noopener">${me.orcid}</a>` : "—"}
+            &nbsp;&nbsp; ${me.affiliation ? `| <strong>Affiliation:</strong> ${escapeHtml(me.affiliation)}` : ""}
+          </p>
+          <p id="syncStatus" class="muted" style="margin:.25rem 0;">Synchronisation status: <span id="syncText">Loading…</span></p>
+        </div>
+        <div class="quick-actions" style="display:flex; gap:.5rem; flex-wrap:wrap;">
+          <a class="btn" href="library.html#add">Add to library</a>
+          <a class="btn" href="projects-new.html">New project</a>
+          <a class="btn" href="materials-new.html">Upload material</a>
+          <a class="btn" href="settings-identity.html">Link account</a>
+        </div>
+      </div>
     `;
 
-    // Sidebar: library stats
-    const lib = await api("/api/library");
-    userSidebar.innerHTML = `
-      <h3>Library Stats</h3>
-      <p><strong>Total Papers Saved:</strong> <span id="libCount">${lib.length}</span></p>
-      <button id="clearLibBtn" style="margin-top:.5rem;">Clear Library</button>
-    `;
+    // --- Identity / linking status ---
+    try {
+      const ident = await api("/api/identity/status"); // { orcid:true, github:false, scholar:false, osf:false, zenodo:false, last_sync:iso }
+      const bits = [];
+      bits.push(`${ident.orcid ? "✅" : "⚠️"} ORCID`);
+      if ("github" in ident)  bits.push(`${ident.github ? "✅" : "—"} GitHub`);
+      if ("scholar" in ident) bits.push(`${ident.scholar ? "✅" : "—"} Google Scholar`);
+      if ("osf" in ident)     bits.push(`${ident.osf ? "✅" : "—"} OSF`);
+      if ("zenodo" in ident)  bits.push(`${ident.zenodo ? "✅" : "—"} Zenodo`);
+      identityBox.innerHTML = `
+        <p style="margin:.25rem 0;">${bits.join(" &middot; ")}</p>
+        <p class="muted" style="margin:.25rem 0;">Last sync: ${fmtDate(ident.last_sync)}</p>
+      `;
+      const syncText = document.getElementById("syncText");
+      if (syncText) syncText.textContent = ident.last_sync ? fmtDate(ident.last_sync) : "never";
+    } catch {
+      identityBox.textContent = "Could not load identity status.";
+      const syncText = document.getElementById("syncText");
+      if (syncText) syncText.textContent = "unknown";
+    }
 
-    const libCountEl = document.getElementById("libCount");
-    const clearBtn = document.getElementById("clearLibBtn");
+    // --- Today / this week (actions & alerts) ---
+    try {
+      const due = await api("/api/alerts"); // [{id,type,title,due_at,link}]
+      renderSimpleList(todayList, due, (a) => `
+        <li>
+          <a href="${escapeHtml(a.link || '#')}">${escapeHtml(a.title || a.type || "Item")}</a>
+          <span class="muted"> · due ${fmtDate(a.due_at)}</span>
+        </li>
+      `, "Nothing scheduled.");
+    } catch { todayList.innerHTML = `<li class="muted">No items.</li>`; }
+
+    // --- Activity ---
+    async function loadActivity(scope = "all") {
+      try {
+        const items = await api(`/api/activity?scope=${encodeURIComponent(scope)}`); // [{id,verb,object,when,link}]
+        renderSimpleList(activityList, items, (ev) => `
+          <li>
+            <span>${escapeHtml(ev.verb || "Updated")} ${escapeHtml(ev.object || "")}</span>
+            ${ev.link ? ` · <a href="${escapeHtml(ev.link)}">open</a>` : ""}
+            <span class="muted"> · ${fmtDate(ev.when)}</span>
+          </li>
+        `, "No recent activity.");
+      } catch {
+        activityList.innerHTML = `<li class="muted">Could not load activity.</li>`;
+      }
+    }
+    activityScope?.addEventListener("change", (e) => loadActivity(e.target.value));
+    document.getElementById("refreshActivityBtn")?.addEventListener("click", () => loadActivity(activityScope?.value || "all"));
+    await loadActivity("all");
+
+    // --- Projects snapshot ---
+    try {
+      const projects = await api("/api/projects?limit=6"); // [{id,title,stage,open_tasks,last_active,summary}]
+      if (!projects || !projects.length) {
+        projectsGrid.innerHTML = `<p class="muted">No projects yet. <a href="projects-new.html">Create your first project</a>.</p>`;
+      } else {
+        projectsGrid.innerHTML = projects.map(p => `
+          <article class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+            <h3 style="margin-top:0;"><a href="project.html?id=${encodeURIComponent(p.id)}">${escapeHtml(p.title)}</a></h3>
+            <p class="muted" style="margin:.25rem 0;">${escapeHtml(p.summary || "")}</p>
+            <p style="margin:.25rem 0;">${p.stage ? badge(p.stage) : ""} ${typeof p.open_tasks === "number" ? badge(`${p.open_tasks} open tasks`) : ""}</p>
+            <p class="muted" style="margin:.25rem 0;">Last active: ${fmtDate(p.last_active)}</p>
+          </article>
+        `).join("");
+      }
+    } catch {
+      projectsGrid.innerHTML = `<p class="muted">Could not load projects.</p>`;
+    }
+
+    // --- Materials in progress ---
+    try {
+      const materials = await api("/api/materials?limit=8"); // [{id,type,title,status,updated_at,link}]
+      renderSimpleList(materialsList, materials, (m) => `
+        <li>
+          ${badge(m.type || "material")} <a href="${escapeHtml(m.link || `material.html?id=${encodeURIComponent(m.id)}`)}">${escapeHtml(m.title || "Untitled")}</a>
+          <span class="muted"> · ${escapeHtml(m.status || "draft")} · ${fmtDate(m.updated_at)}</span>
+        </li>
+      `, "No materials yet. Try <a href='materials-new.html'>uploading a file</a> or creating a draft.");
+    } catch {
+      materialsList.innerHTML = `<li class="muted">Could not load materials.</li>`;
+    }
+
+    // --- Library (quick access + stats + sidebar list preserves your remove flow) ---
+    let libItems = [];
+    try {
+      libItems = await api("/api/library"); // [{id,title,labels:["starred","to-read",...], saved_at}]
+    } catch {}
+    if (Array.isArray(libItems)) {
+      // Stats
+      if (libCountEl) libCountEl.textContent = String(libItems.length || 0);
+
+      // Quick access buckets
+      fillBucket(libRecent, sortByDate(libItems).slice(0, 6), "saved_at");
+      fillBucket(libToRead, libItems.filter(i => hasLabel(i, "to-read")).slice(0, 6));
+      fillBucket(libStarred, libItems.filter(i => hasLabel(i, "starred")).slice(0, 6));
+
+      // Sidebar detailed list (with remove buttons intact)
+      renderLibrarySidebar(libraryList, libItems, libCountEl);
+    }
+
     if (clearBtn) {
       clearBtn.onclick = async () => {
         if (!confirm("Remove all items from your library?")) return;
-        await api("/api/library", { method: "DELETE" });
-        renderLibrary([]);
-        if (libCountEl) libCountEl.textContent = "0";
+        try {
+          await api("/api/library", { method: "DELETE" });
+          [libRecent, libToRead, libStarred, libraryList].forEach(ul => { if (ul) ul.innerHTML = "<li>—</li>"; });
+          if (libCountEl) libCountEl.textContent = "0";
+        } catch { alert("Failed to clear library."); }
       };
     }
 
-    // Claims/Merge UI
+    // --- Claims / Merge UI (existing feature) ---
     await renderClaimsUI();
 
-    // Library list
-    renderLibrary(lib);
   } catch (e) {
-    // Not logged in yet or error: show login prompt
+    // Not logged in yet (or error): keep prior behaviour
     console.warn(e);
-    userMain.innerHTML = `
-      <h1>Sign in to view your profile</h1>
-      <p>Use the green ORCID button in the header.</p>
-    `;
-    userSidebar.innerHTML = `<p>Sign in to see your library stats.</p>`;
+    const userMain = document.getElementById("userMain");
+    const sidebar = document.getElementById("userSidebar");
+    const userHeader = document.getElementById("userHeader");
+    if (userHeader) userHeader.innerHTML = `<h1>Sign in to view your home</h1>`;
+    if (userMain) userMain.innerHTML = `
+      <section class="panel" style="background:#fff; padding:1rem; border-radius:10px;">
+        <p>Use the green ORCID button in the header.</p>
+      </section>`;
+    if (sidebar) sidebar.innerHTML = `<section class="panel" style="background:#fff; padding:1rem; border-radius:10px;"><p>Sign in to see your stats and tools.</p></section>`;
+    const loginBtn = document.getElementById("orcidLoginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
     if (loginBtn) loginBtn.style.display = "inline-flex";
     if (logoutBtn) logoutBtn.style.display = "none";
   }
 }
 
-function renderLibrary(items) {
-  const list = document.getElementById("userLibraryList");
-  const libCountEl = document.getElementById("libCount");
-  if (!list) return;
+// --- helpers ---
 
-  if (!items || items.length === 0) {
-    list.innerHTML = "<li>No papers saved yet.</li>";
+function renderSimpleList(ul, items, tpl, emptyMsg = "Nothing here.") {
+  if (!ul) return;
+  if (!items || !items.length) { ul.innerHTML = `<li class="muted">${emptyMsg}</li>`; return; }
+  ul.innerHTML = items.map(tpl).join("");
+}
+
+function sortByDate(arr, key = "saved_at") {
+  return [...(arr || [])].sort((a, b) => new Date(b[key] || 0) - new Date(a[key] || 0));
+}
+
+function hasLabel(item, label) {
+  return Array.isArray(item?.labels) && item.labels.includes(label);
+}
+
+function fillBucket(ul, items, dateKey) {
+  if (!ul) return;
+  if (!items || !items.length) { ul.innerHTML = `<li class="muted">—</li>`; return; }
+  ul.innerHTML = items.map(i => `
+    <li>
+      <a href="paper.html?id=${encodeURIComponent(i.id)}">${escapeHtml(i.title || "Untitled")}</a>
+      ${dateKey ? `<span class="muted"> · ${fmtDate(i[dateKey])}</span>` : ""}
+    </li>
+  `).join("");
+}
+
+// Sidebar library list with remove buttons (keeps your original behaviour)
+function renderLibrarySidebar(listEl, items, libCountEl) {
+  if (!listEl) return;
+  if (!items || !items.length) {
+    listEl.innerHTML = "<li>No papers saved yet.</li>";
     if (libCountEl) libCountEl.textContent = "0";
     return;
   }
-
-  list.innerHTML = items.map(p => `
+  listEl.innerHTML = items.slice(0, 10).map(p => `
     <li style="margin:.25rem 0; display:flex; justify-content:space-between; gap:.5rem;">
-      <span>${escapeHtml(p.title)}</span>
+      <span><a href="paper.html?id=${encodeURIComponent(p.id)}">${escapeHtml(p.title || "Untitled")}</a></span>
       <span>
-        <a href="paper.html?id=${encodeURIComponent(p.id)}">[View]</a>
         <button data-id="${encodeURIComponent(p.id)}" class="removeBtn" style="margin-left:.5rem;">Remove</button>
       </span>
     </li>
@@ -133,10 +281,9 @@ function renderLibrary(items) {
         await api(`/api/library/${encodeURIComponent(id)}`, { method: "DELETE" });
         const li = btn.closest("li");
         if (li) li.remove();
-        // Update count
         const remain = document.querySelectorAll("#userLibraryList li").length;
         if (libCountEl) libCountEl.textContent = String(remain);
-      } catch (err) {
+      } catch {
         alert("Failed to remove item.");
       } finally {
         busy = false;
@@ -147,20 +294,17 @@ function renderLibrary(items) {
 
 // ---- Claim / Merge UI (profile sidebar) ----
 async function renderClaimsUI() {
-  const sidebar = document.getElementById("userSidebar");
-  if (!sidebar) return;
+  const container = document.getElementById("claimsPanel");
+  if (!container) return;
 
-  const wrap = document.createElement("section");
-  wrap.className = "panel";
-  wrap.innerHTML = `
-    <h3>Claimed Profiles (OpenAlex)</h3>
+  container.innerHTML = `
     <div style="display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem;">
       <input id="claimAuthorId" class="input" placeholder="Enter OpenAlex Author ID, e.g., A1969205033" style="flex:1;">
       <button id="claimBtn" class="btn">Claim</button>
     </div>
     <div id="claimsList" class="muted">Loading…</div>
     <hr/>
-    <h4>Merge Profiles</h4>
+    <h4 style="margin:.5rem 0;">Merge profiles</h4>
     <div style="display:flex; gap:.5rem; align-items:center;">
       <select id="mergePrimary"></select>
       <select id="mergeSecondary"></select>
@@ -168,11 +312,8 @@ async function renderClaimsUI() {
     </div>
     <div id="mergesList" class="muted" style="margin-top:.5rem;"></div>
   `;
-  sidebar.appendChild(wrap);
 
-  async function safeJSON(res) {
-    try { return await res.json(); } catch { return {}; }
-  }
+  async function safeJSON(res) { try { return await res.json(); } catch { return {}; } }
 
   async function refreshClaims() {
     try {
@@ -180,8 +321,8 @@ async function renderClaimsUI() {
       if (!res.ok) throw new Error();
       const data = await safeJSON(res);
 
-      const claimsEl = wrap.querySelector("#claimsList");
-      const mergesEl = wrap.querySelector("#mergesList");
+      const claimsEl = container.querySelector("#claimsList");
+      const mergesEl = container.querySelector("#mergesList");
       if (!data.claims || !data.claims.length) {
         claimsEl.innerHTML = "<p class='muted'>No claimed profiles yet.</p>";
       } else {
@@ -193,8 +334,8 @@ async function renderClaimsUI() {
         ).join("");
 
         const opts = data.claims.map(c => `<option value="${c.author_id}">${c.author_id}</option>`).join("");
-        wrap.querySelector("#mergePrimary").innerHTML   = `<option value="">Primary…</option>${opts}`;
-        wrap.querySelector("#mergeSecondary").innerHTML = `<option value="">Secondary…</option>${opts}`;
+        container.querySelector("#mergePrimary").innerHTML   = `<option value="">Primary…</option>${opts}`;
+        container.querySelector("#mergeSecondary").innerHTML = `<option value="">Secondary…</option>${opts}`;
       }
 
       mergesEl.innerHTML = (data.merges && data.merges.length)
@@ -205,13 +346,13 @@ async function renderClaimsUI() {
           ).join("")
         : "<p class='muted'>No merges yet.</p>";
     } catch {
-      wrap.querySelector("#claimsList").innerHTML = "<p class='muted'>Could not load claimed profiles.</p>";
-      wrap.querySelector("#mergesList").innerHTML = "<p class='muted'>Could not load merges.</p>";
+      container.querySelector("#claimsList").innerHTML = "<p class='muted'>Could not load claimed profiles.</p>";
+      container.querySelector("#mergesList").innerHTML = "<p class='muted'>Could not load merges.</p>";
     }
   }
 
-  wrap.querySelector("#claimBtn").onclick = async () => {
-    const input = wrap.querySelector("#claimAuthorId");
+  container.querySelector("#claimBtn").onclick = async () => {
+    const input = container.querySelector("#claimAuthorId");
     const v = input.value.trim();
     if (!/^A\d+$/.test(v)) { alert("Please enter a valid OpenAlex Author ID, e.g., A1969205033"); return; }
     try {
@@ -228,7 +369,7 @@ async function renderClaimsUI() {
     }
   };
 
-  wrap.addEventListener("click", async (e) => {
+  container.addEventListener("click", async (e) => {
     const un = e.target.closest("[data-unclaim]");
     if (un) {
       const id = un.getAttribute("data-unclaim");
@@ -252,9 +393,9 @@ async function renderClaimsUI() {
     }
   });
 
-  wrap.querySelector("#mergeBtn").onclick = async () => {
-    const p = wrap.querySelector("#mergePrimary").value;
-    const s = wrap.querySelector("#mergeSecondary").value;
+  container.querySelector("#mergeBtn").onclick = async () => {
+    const p = container.querySelector("#mergePrimary").value;
+    const s = container.querySelector("#mergeSecondary").value;
     if (!p || !s || p === s) { alert("Pick two different claimed IDs."); return; }
     try {
       await fetch("/api/claims/merge", {

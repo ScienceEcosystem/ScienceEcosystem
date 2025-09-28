@@ -132,16 +132,12 @@
             <div class="cols-menu">
               <label><input type="checkbox" data-col="authors" checked/> Authors</label>
               <label><input type="checkbox" data-col="year" checked/> Year</label>
-              <label><input type="checkbox" data-col="venue" checked/> Venue</label>
-              <label><input type="checkbox" data-col="cited_by" checked/> Cited By</label>
             </div>
             <div class="inline-filters">
               <input id="tagFilter" class="input input-pill" placeholder="Filter by tag (comma-separated)…"/>
               <select id="sortBy">
                 <option value="title">Title</option>
                 <option value="year">Year</option>
-                <option value="venue">Venue</option>
-                <option value="cited_by">Cited by</option>
               </select>
               <select id="sortDir">
                 <option value="asc">Asc</option>
@@ -156,8 +152,6 @@
                 <th data-k="title">Title</th>
                 <th data-k="authors">Authors</th>
                 <th data-k="year">Year</th>
-                <th data-k="venue">Venue</th>
-                <th data-k="cited_by">Cited by</th>
               </tr>
             </thead>
             <tbody id="itemsTbody">

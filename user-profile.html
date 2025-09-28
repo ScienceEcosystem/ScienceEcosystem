@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Researcher Profile | ScienceEcosystem</title>
-  <meta name="description" content="Researcher profile on ScienceEcosystem with publications, topics, metrics, trends, and affiliations." />
+  <title>Researcher Home | ScienceEcosystem</title>
+  <meta name="description" content="Your ScienceEcosystem home: projects, materials, library, lab groups, activity, and identity linking." />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
@@ -28,64 +28,168 @@
       </div>
 
       <div class="nav-right">
-  <a class="nav-link" href="index.html">Home</a>
-  <a class="nav-link" href="about.html">About</a>
-  <a class="nav-link" href="library.html">My Library</a>
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="nav-link" href="library.html">My Library</a>
 
-  <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
-    <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
-    <span>Login with ORCID</span>
-  </a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
 
-  <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
-</div>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
     </div>
   </nav>
 
   <main id="main" class="container" style="padding:2rem 1rem;">
+    <!-- Page header (populated by JS) -->
+    <header id="userHeader" class="page-header" style="margin-bottom:1rem;">
+      <!-- JS will render name, ORCID, affiliation and quick actions -->
+    </header>
+
     <div id="userProfileLayout" style="display:flex; flex-wrap:wrap; gap:2rem;">
+      <!-- Main column -->
       <div id="userMain" style="flex:3; min-width:0;">
-        <p>Loading user profile...</p>
+        <!-- Today / This week -->
+        <section id="sectionToday" class="panel" aria-labelledby="h-today" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+            <h2 id="h-today" style="margin:0;">Today &amp; this week</h2>
+            <a class="link" href="projects.html">View all</a>
+          </div>
+          <ul id="todayList" class="list" style="margin-top:.5rem;"></ul>
+        </section>
+
+        <!-- Activity stream -->
+        <section id="sectionActivity" class="panel" aria-labelledby="h-activity" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+            <h2 id="h-activity" style="margin:0;">Activity</h2>
+            <div class="controls" style="display:flex; gap:.5rem;">
+              <select id="activityScope" class="input">
+                <option value="all">Everything</option>
+                <option value="projects">My projects</option>
+                <option value="groups">My groups</option>
+                <option value="library">Library</option>
+              </select>
+              <button id="refreshActivityBtn" class="btn btn-small">Refresh</button>
+            </div>
+          </div>
+          <ul id="activityList" class="timeline" style="margin-top:.5rem;"></ul>
+        </section>
+
+        <!-- Projects snapshot -->
+        <section id="sectionProjects" class="panel" aria-labelledby="h-projects" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+            <h2 id="h-projects" style="margin:0;">Projects</h2>
+            <a class="btn btn-small" href="projects.html">All projects</a>
+          </div>
+          <div id="projectsGrid" class="cards-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem;"></div>
+        </section>
+
+        <!-- Materials in progress -->
+        <section id="sectionMaterials" class="panel" aria-labelledby="h-materials" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+            <h2 id="h-materials" style="margin:0;">Materials you’re working on</h2>
+            <a class="btn btn-small" href="materials.html">All materials</a>
+          </div>
+          <ul id="materialsList" class="list" style="margin-top:.5rem;"></ul>
+        </section>
+
+        <!-- Library quick access -->
+        <section id="sectionLibrary" class="panel" aria-labelledby="h-library" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+            <h2 id="h-library" style="margin:0;">Library quick access</h2>
+            <a class="btn btn-small" href="library.html">Open library</a>
+          </div>
+          <div id="libraryQuick" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem;">
+            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+              <h3 style="margin-top:0;">Recently saved</h3>
+              <ul id="libRecent" class="list"></ul>
+            </div>
+            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+              <h3 style="margin-top:0;">To read</h3>
+              <ul id="libToRead" class="list"></ul>
+            </div>
+            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+              <h3 style="margin-top:0;">Starred</h3>
+              <ul id="libStarred" class="list"></ul>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <aside id="userSidebar" style="flex:1; min-width:300px; background:#fff; padding:1rem; border-radius:10px;">
-        <p>Loading sidebar...</p>
+      <!-- Sidebar -->
+      <aside id="userSidebar" style="flex:1; min-width:300px;">
+        <!-- Identity & quick actions -->
+        <section id="sectionIdentity" class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <h3 style="margin-top:0;">Identity &amp; linking</h3>
+          <div id="identityStatus" class="muted">Loading…</div>
+          <div style="display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.75rem;">
+            <a id="linkAccountsBtn" class="btn btn-small" href="settings-identity.html">Link accounts</a>
+            <a id="claimProfilesBtn" class="btn btn-small" href="#claimsPanel">Claim profiles</a>
+          </div>
+        </section>
+
+        <!-- Library stats -->
+        <section id="sectionLibStats" class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <h3 style="margin-top:0;">Library stats</h3>
+          <p><strong>Total items:</strong> <span id="libCount">0</span></p>
+          <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+            <a class="btn btn-small" href="library.html">Open library</a>
+            <button id="clearLibBtn" class="btn btn-small" type="button">Clear</button>
+          </div>
+          <ul id="userLibraryList" class="list" style="margin-top:.75rem;"></ul>
+        </section>
+
+        <!-- Claims / Merge (existing behaviour, now anchored) -->
+        <section id="claimsPanel" class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <h3 style="margin-top:0;">Claimed profiles (OpenAlex)</h3>
+          <!-- JS injects the full claim/merge UI here as before -->
+        </section>
+
+        <!-- Shortcuts -->
+        <section id="sectionShortcuts" class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <h3 style="margin-top:0;">Shortcuts</h3>
+          <ul class="list">
+            <li><a href="projects.html">Projects</a></li>
+            <li><a href="materials.html">Materials</a></li>
+            <li><a href="groups.html">Lab groups</a></li>
+            <li><a href="settings-profile.html">Profile settings</a></li>
+            <li><a href="settings-notifications.html">Notifications</a></li>
+            <li><a href="settings-privacy.html">Privacy</a></li>
+            <li><a href="integrations.html">Integrations</a></li>
+          </ul>
+        </section>
       </aside>
     </div>
   </main>
 
   <footer class="site-footer">
-  <div class="container">
-    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-    <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
 
-    <!-- Social icons -->
-    <div class="footer-socials">
-      <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
-        <!-- LinkedIn -->
-        <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-          <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
-        </svg>
-      </a>
+      <div class="footer-socials">
+        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
+          </svg>
+        </a>
+        <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/>
+          </svg>
+        </a>
+      </div>
 
-      <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
-        <!-- GitHub -->
-        <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-          <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/>
-        </svg>
-      </a>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
     </div>
+  </footer>
 
-    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
-  </div>
-</footer>
-
-<script src="scripts/search.js" defer></script>
-<script src="scripts/library.js" defer></script>   <!-- defines SE_LIB + savePaper -->
-<script src="scripts/components.js" defer></script> <!-- uses SE_LIB defensively -->
-<script src="scripts/user-profile.js" defer></script>
-<script src="scripts/session.js" defer></script>   <!-- toggles nav state -->
-
-
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/user-profile.js" defer></script>
+  <script src="scripts/session.js" defer></script>
 </body>
 </html>
