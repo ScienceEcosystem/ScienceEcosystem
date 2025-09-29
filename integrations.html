@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Integrations | ScienceEcosystem</title>
+  <meta name="description" content="Connect tools like Zotero, GitHub, OSF, Zenodo and cloud storage."/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body data-page="integrations">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem"/>
+        </a>
+      </div>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="nav-link" href="library.html">My Library</a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" style="display:inline-flex;">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt=""/>
+          <span>Login with ORCID</span>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" class="container" style="padding:2rem 1rem; max-width:1000px;">
+    <header class="page-header" style="margin-bottom:1rem;">
+      <h1 style="margin:0;">Integrations</h1>
+      <p class="muted" style="margin:.5rem 0 0;">Connect third-party tools and map them to your projects.</p>
+    </header>
+
+    <section class="panel" style="background:#fff; padding:1rem; border-radius:10px;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+          <h3 style="margin-top:0;">Zotero</h3>
+          <p class="muted">Sync selected collections into your Library.</p>
+          <div id="zoteroBox">Loading…</div>
+        </div>
+
+        <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+          <h3 style="margin-top:0;">GitHub</h3>
+          <p class="muted">Link repositories to projects and materials.</p>
+          <div id="ghBox">Loading…</div>
+        </div>
+
+        <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+          <h3 style="margin-top:0;">OSF</h3>
+          <p class="muted">Storage, registrations and components.</p>
+          <div id="osfBox">Loading…</div>
+        </div>
+
+        <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+          <h3 style="margin-top:0;">Zenodo</h3>
+          <p class="muted">Archive research objects and mint DOIs.</p>
+          <div id="zenBox">Loading…</div>
+        </div>
+
+        <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+          <h3 style="margin-top:0;">Cloud storage</h3>
+          <p class="muted">Mirror raw data to Drive/OneDrive.</p>
+          <div id="cloudBox">Loading…</div>
+        </div>
+      </div>
+
+      <hr style="margin:1rem 0;"/>
+
+      <h2 style="margin:.5rem 0;">Per-project mapping</h2>
+      <p class="muted" style="margin:.25rem 0 1rem;">Choose which repo/storage to attach to each project.</p>
+      <div id="projectMap" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:.75rem;"></div>
+      <p id="mapMsg" class="muted" style="margin-top:.5rem;"></p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+      <div class="footer-socials">
+        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
+        </a>
+        <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/></svg>
+        </a>
+      </div>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+  <script>
+    async function api(path,opts){const r=await fetch(path,{credentials:"include",...(opts||{})});if(!r.ok)throw new Error(await r.text());return r.json();}
+    function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");}
+    function mkBox(connected, connectUrl, disconnectUrl, note){
+      const status = connected ? "Connected ✅" : "Not connected";
+      const btn = connected ? `<button class="btn btn-small" data-disconnect="${disconnectUrl}">Disconnect</button>`
+                            : `<a class="btn btn-small" href="${connectUrl}">Connect</a>`;
+      return `<p><strong>${status}</strong></p>${btn}${note?`<p class="muted" style="margin-top:.5rem;">${note}</p>`:""}`;
+    }
+    async function load(){
+      // Top cards
+      let s; try{s=await api("/api/integrations/status");}catch{
+        document.getElementById("zoteroBox").textContent="Failed to load.";
+        document.getElementById("ghBox").textContent="Failed to load.";
+        document.getElementById("osfBox").textContent="Failed to load.";
+        document.getElementById("zenBox").textContent="Failed to load.";
+        document.getElementById("cloudBox").textContent="Failed to load.";
+        return;
+      }
+      document.getElementById("zoteroBox").innerHTML = mkBox(!!s.zotero,"/auth/zotero/login","/auth/zotero/disconnect","Map collections in Library.");
+      document.getElementById("ghBox").innerHTML     = mkBox(!!s.github,"/auth/github/login","/auth/github/disconnect","Attach repos to projects.");
+      document.getElementById("osfBox").innerHTML    = mkBox(!!s.osf,"/auth/osf/login","/auth/osf/disconnect","");
+      document.getElementById("zenBox").innerHTML    = mkBox(!!s.zenodo,"/auth/zenodo/login","/auth/zenodo/disconnect","For DOI deposits.");
+      document.getElementById("cloudBox").innerHTML  = mkBox(!!s.cloud,"/auth/cloud/login","/auth/cloud/disconnect","Drive/OneDrive");
+
+      document.addEventListener("click", async (e)=>{
+        const el=e.target.closest("[data-disconnect]");
+        if(!el) return;
+        const url=el.getAttribute("data-disconnect");
+        try{await fetch(url,{method:"POST",credentials:"include"}); location.reload();}catch{alert("Failed to disconnect.");}
+      });
+
+      // Per-project mapping
+      let projects=[]; try{projects=await api("/api/projects?limit=100");}catch{}
+      let repos=[]; try{repos=await api("/api/integrations/github/repos");}catch{}
+      let stores=[]; try{stores=await api("/api/integrations/cloud/stores");}catch{}
+      const wrap=document.getElementById("projectMap");
+      if(!projects.length){wrap.innerHTML="<p class='muted'>No projects yet.</p>"; return;}
+      wrap.innerHTML = projects.map(p=>`
+        <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+          <h3 style="margin-top:0;">${esc(p.title)}</h3>
+          <label class="label">GitHub repository</label>
+          <select class="input" data-project="${esc(p.id)}" data-kind="repo">
+            <option value="">—</option>
+            ${repos.map(r=>`<option value="${esc(r.full_name)}" ${p.repo===r.full_name?"selected":""}>${esc(r.full_name)}</option>`).join("")}
+          </select>
+          <label class="label" style="margin-top:.5rem;">Cloud folder</label>
+          <select class="input" data-project="${esc(p.id)}" data-kind="store">
+            <option value="">—</option>
+            ${stores.map(s=>`<option value="${esc(s.id)}" ${p.store_id===s.id?"selected":""}>${esc(s.name)}</option>`).join("")}
+          </select>
+        </div>
+      `).join("");
+
+      wrap.addEventListener("change", async (e)=>{
+        const sel=e.target.closest("select"); if(!sel) return;
+        const id=sel.getAttribute("data-project"); const kind=sel.getAttribute("data-kind"); const val=sel.value;
+        const msg=document.getElementById("mapMsg");
+        msg.textContent="Saving…";
+        try{
+          await api(`/api/integrations/map`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:id,[kind]:val})});
+          msg.textContent="Saved.";
+        }catch{msg.textContent="Failed to save mapping.";}
+      });
+    }
+    window.addEventListener("DOMContentLoaded", load);
+  </script>
+</body>
+</html>

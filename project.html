@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Project | ScienceEcosystem</title>
+  <meta name="description" content="Project overview, tasks, materials, team and activity."/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body data-page="project">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- Top Nav (preserved) -->
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem"/>
+        </a>
+      </div>
+
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="nav-link" href="library.html">My Library</a>
+
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" style="display:inline-flex;">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt=""/>
+          <span>Login with ORCID</span>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" class="container" style="padding:2rem 1rem;">
+    <!-- Header -->
+    <header class="page-header" style="margin-bottom:1rem;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+        <div>
+          <h1 id="projTitle" style="margin:0;">Loading project…</h1>
+          <p id="projMeta" class="muted" style="margin:.25rem 0 0;">—</p>
+        </div>
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+          <a class="btn" id="btnNewMaterial" href="materials-new.html">Add material</a>
+          <a class="btn" href="projects.html">All projects</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Two-column layout -->
+    <div style="display:flex; gap:2rem; flex-wrap:wrap;">
+      <!-- Main column -->
+      <div style="flex:2.2; min-width:300px;">
+        <!-- Overview -->
+        <section class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <h2 style="margin-top:0;">Overview</h2>
+          <div id="projDesc" class="prose">—</div>
+          <div id="aimsWrap" style="margin-top:1rem; display:none;">
+            <h3 style="margin:0 0 .5rem;">Aims</h3>
+            <ul id="projAims" class="list"></ul>
+          </div>
+        </section>
+
+        <!-- Tasks -->
+        <section class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
+            <h2 style="margin:0;">Tasks</h2>
+            <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+              <select id="taskFilter" class="input">
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="in-progress">In progress</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- New task form -->
+          <form id="newTaskForm" onsubmit="return false;" style="display:grid; grid-template-columns:1fr 140px 160px 120px auto; gap:.5rem; margin-top:.75rem;">
+            <input id="taskTitle" class="input" placeholder="New task title">
+            <select id="taskStatus" class="input">
+              <option value="open">Open</option>
+              <option value="in-progress">In progress</option>
+              <option value="done">Done</option>
+            </select>
+            <input id="taskAssignee" class="input" placeholder="Assignee email (optional)">
+            <input id="taskDue" class="input" type="date" placeholder="Due date">
+            <button id="taskCreateBtn" class="btn">Add task</button>
+          </form>
+
+          <ul id="taskList" class="list" style="margin-top:.75rem;"></ul>
+          <p id="taskEmpty" class="muted" style="display:none;">No tasks yet.</p>
+        </section>
+
+        <!-- Materials -->
+        <section class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
+            <h2 style="margin:0;">Materials</h2>
+            <a class="btn btn-small" href="materials.html">View all materials</a>
+          </div>
+          <ul id="matList" class="list" style="margin-top:.75rem;"></ul>
+          <p id="matEmpty" class="muted" style="display:none;">No materials linked to this project yet.</p>
+        </section>
+
+        <!-- Activity -->
+        <section class="panel" style="background:#fff; padding:1rem; border-radius:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem;">
+            <h2 style="margin:0;">Activity</h2>
+            <button id="refreshActivityBtn" class="btn btn-small">Refresh</button>
+          </div>
+          <ul id="activityList" class="timeline" style="margin-top:.75rem;"></ul>
+          <p id="actEmpty" class="muted" style="display:none;">No recent activity.</p>
+        </section>
+      </div>
+
+      <!-- Sidebar -->
+      <aside style="flex:1; min-width:280px;">
+        <!-- Meta -->
+        <section class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <h3 style="margin-top:0;">Project meta</h3>
+          <p id="projStage" style="margin:.25rem 0;">—</p>
+          <p class="muted" id="projTimes" style="margin:.25rem 0;">—</p>
+        </section>
+
+        <!-- Team -->
+        <section class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <h3 style="margin-top:0;">Team</h3>
+          <ul id="teamList" class="list"></ul>
+          <div style="display:flex; gap:.5rem; margin-top:.5rem;">
+            <input id="inviteEmail" class="input" placeholder="Invite via email">
+            <button id="inviteBtn" class="btn btn-small">Invite</button>
+          </div>
+          <p id="teamMsg" class="muted" style="margin-top:.5rem;"></p>
+        </section>
+
+        <!-- Integrations -->
+        <section class="panel" style="background:#fff; padding:1rem; border-radius:10px;">
+          <h3 style="margin-top:0;">Integrations</h3>
+          <p id="intRepo" class="muted" style="margin:.25rem 0;">GitHub: —</p>
+          <p id="intStore" class="muted" style="margin:.25rem 0;">Cloud folder: —</p>
+          <a class="btn btn-small" href="integrations.html">Manage mappings</a>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <!-- Footer (preserved) -->
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+
+      <div class="footer-socials">
+        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
+          </svg>
+        </a>
+
+        <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/>
+          </svg>
+        </a>
+      </div>
+
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <!-- Existing site scripts -->
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+
+  <!-- Page script -->
+  <script>
+    // --- small utilities ---
+    function qs(k){ return new URLSearchParams(location.search).get(k); }
+    function esc(s){ return String(s ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+    function fmtDate(iso){ if(!iso) return "—"; const d=new Date(iso); return d.toLocaleString(); }
+    function badge(txt){ return '<span class="badge" style="display:inline-block; padding:.1rem .4rem; border-radius:999px; background:#eef; color:#223;">'+esc(txt)+'</span>'; }
+    async function api(path,opts){
+      const r=await fetch(path,{credentials:"include", headers:{ "Content-Type":"application/json" }, ...(opts||{})});
+      if(!r.ok){ let t=""+r.status; try{t=await r.text();}catch{} throw new Error(t); }
+      const ct=r.headers.get("content-type")||""; return ct.includes("json")? r.json(): r.text();
+    }
+
+    // --- state ---
+    let PROJECT_ID = null;
+    let PROJECT = null;
+    let TASKS = [];
+    let MATERIALS = [];
+    let TEAM = [];
+
+    // --- renderers ---
+    function renderHeader(){
+      const t = PROJECT?.title || "Untitled project";
+      document.getElementById("projTitle").textContent = t;
+
+      const metaBits = [];
+      if (PROJECT?.stage) metaBits.push(badge(PROJECT.stage));
+      if (PROJECT?.open_tasks!=null) metaBits.push(badge(String(PROJECT.open_tasks)+' open tasks'));
+      document.getElementById("projMeta").innerHTML = metaBits.join(" ") || "—";
+
+      document.getElementById("projDesc").textContent = PROJECT?.summary || "No description yet.";
+
+      const aims = Array.isArray(PROJECT?.aims) ? PROJECT.aims.filter(Boolean) : [];
+      const aimsWrap = document.getElementById("aimsWrap");
+      if (aims.length){
+        aimsWrap.style.display = "block";
+        document.getElementById("projAims").innerHTML = aims.map(a=>'<li>'+esc(a)+'</li>').join("");
+      } else {
+        aimsWrap.style.display = "none";
+      }
+
+      document.getElementById("projStage").innerHTML = 'Stage: ' + (PROJECT?.stage ? "<strong>"+esc(PROJECT.stage)+"</strong>" : "—");
+      document.getElementById("projTimes").textContent = 'Created: ' + fmtDate(PROJECT?.created_at) + ' · Last active: ' + fmtDate(PROJECT?.last_active);
+
+      document.getElementById("intRepo").innerHTML  = 'GitHub: ' + (PROJECT?.repo ? '<a href="https://github.com/'+esc(PROJECT.repo)+'" target="_blank" rel="noopener">'+esc(PROJECT.repo)+'</a>' : '—');
+      document.getElementById("intStore").innerHTML = 'Cloud folder: ' + (PROJECT?.store_name ? esc(PROJECT.store_name) : '—');
+    }
+
+    function renderTasks(){
+      const list = document.getElementById("taskList");
+      const empty = document.getElementById("taskEmpty");
+      const filter = document.getElementById("taskFilter").value;
+      let items = TASKS || [];
+      if (filter !== "all") items = items.filter(t => (t.status||"open") === filter);
+      if (!items.length){ list.innerHTML = ""; empty.style.display = "block"; return; }
+      empty.style.display = "none";
+      list.innerHTML = items.map(t => {
+        const options = ["open","in-progress","done"].map(function(s){
+          const sel = ((t.status||"open")===s) ? " selected" : "";
+          return '<option value="'+s+'"'+sel+'>'+s+'</option>';
+        }).join("");
+        return (
+          '<li style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">' +
+            '<div style="min-width:0;">' +
+              '<strong>'+esc(t.title||"Task")+'</strong>' +
+              '<span class="muted"> · '+esc(t.assignee || "unassigned")+'</span>' +
+              '<span class="muted"> · due '+(t.due_at ? fmtDate(t.due_at) : "—")+'</span>' +
+            '</div>' +
+            '<div style="display:flex; gap:.5rem; align-items:center;">' +
+              '<select data-id="'+esc(t.id)+'" class="taskStatus input" style="min-width:140px;">' +
+                options +
+              '</select>' +
+              '<button class="btn btn-small" data-del="'+esc(t.id)+'">Delete</button>' +
+            '</div>' +
+          '</li>'
+        );
+      }).join("");
+    }
+
+    function renderMaterials(){
+      const list = document.getElementById("matList");
+      const empty = document.getElementById("matEmpty");
+      const items = MATERIALS || [];
+      if (!items.length){ list.innerHTML=""; empty.style.display="block"; return; }
+      empty.style.display="none";
+      list.innerHTML = items.map(function(m){
+        const link = m.link || 'material.html?id='+encodeURIComponent(m.id);
+        return '<li>'+badge(m.type || "material")+' <a href="'+link+'">'+esc(m.title || "Untitled")+
+               '</a><span class="muted"> · '+esc(m.status || "draft")+' · '+fmtDate(m.updated_at)+'</span></li>';
+      }).join("");
+    }
+
+    function renderTeam(){
+      const ul = document.getElementById("teamList");
+      const msg = document.getElementById("teamMsg");
+      if (!TEAM?.length){ ul.innerHTML = "<li class='muted'>No members yet.</li>"; return; }
+      ul.innerHTML = TEAM.map(m => '<li>'+esc(m.name || m.email || "Member")+' <span class="muted">· '+esc(m.role || "member")+'</span></li>').join("");
+      msg.textContent = "";
+    }
+
+    function renderActivity(items){
+      const ul = document.getElementById("activityList");
+      const empty = document.getElementById("actEmpty");
+      if (!items?.length){ ul.innerHTML=""; empty.style.display="block"; return; }
+      empty.style.display="none";
+      ul.innerHTML = items.map(function(ev){
+        var open = ev.link ? ' · <a href="'+esc(ev.link)+'">open</a>' : '';
+        return '<li><span>'+esc(ev.verb || "Updated")+' '+esc(ev.object || "")+'</span>'+open+
+               '<span class="muted"> · '+fmtDate(ev.when)+'</span></li>';
+      }).join("");
+    }
+
+    // --- data loading ---
+    async function loadProject(){
+      PROJECT_ID = qs("id");
+      if (!PROJECT_ID){ document.getElementById("projTitle").textContent = "Project not found"; return; }
+
+      // session toggles
+      const loginBtn=document.getElementById("orcidLoginBtn");
+      const logoutBtn=document.getElementById("logoutBtn");
+      try{
+        await api("/api/me");
+        if (loginBtn) loginBtn.style.display="none";
+        if (logoutBtn){ logoutBtn.style.display="inline-block"; logoutBtn.onclick=async ()=>{ try{await api("/auth/logout",{method:"POST"});}catch{} location.reload(); }; }
+      }catch{
+        if (loginBtn) loginBtn.style.display="inline-flex";
+        if (logoutBtn) logoutBtn.style.display="none";
+      }
+
+      // main project payload
+      try{
+        PROJECT = await api('/api/projects/'+encodeURIComponent(PROJECT_ID));
+      }catch{
+        document.getElementById("projTitle").textContent = "Failed to load project";
+        return;
+      }
+      renderHeader();
+
+      // tasks
+      try{ TASKS = await api('/api/projects/'+encodeURIComponent(PROJECT_ID)+'/tasks'); }catch{ TASKS = []; }
+      renderTasks();
+
+      // materials
+      try{ MATERIALS = await api('/api/projects/'+encodeURIComponent(PROJECT_ID)+'/materials'); }catch{ MATERIALS = []; }
+      renderMaterials();
+
+      // team
+      try{ TEAM = await api('/api/projects/'+encodeURIComponent(PROJECT_ID)+'/team'); }catch{ TEAM = []; }
+      renderTeam();
+
+      // activity
+      try{
+        const items = await api('/api/activity?scope=project&project_id='+encodeURIComponent(PROJECT_ID));
+        renderActivity(items);
+      }catch{
+        renderActivity([]);
+      }
+    }
+
+    // --- events ---
+    function wireEvents(){
+      // filter tasks
+      document.getElementById("taskFilter").addEventListener("change", renderTasks);
+
+      // create task
+      document.getElementById("taskCreateBtn").addEventListener("click", async function(){
+        const title = document.getElementById("taskTitle").value.trim();
+        const status = document.getElementById("taskStatus").value;
+        const assignee = document.getElementById("taskAssignee").value.trim();
+        const due = document.getElementById("taskDue").value || null;
+        if (!title) { alert("Please enter a task title."); return; }
+        try{
+          const t = await api('/api/projects/'+encodeURIComponent(PROJECT_ID)+'/tasks', {
+            method:"POST",
+            body: JSON.stringify({ title, status, assignee, due_at: due })
+          });
+          TASKS.unshift(t);
+          document.getElementById("taskTitle").value="";
+          document.getElementById("taskAssignee").value="";
+          document.getElementById("taskDue").value="";
+          document.getElementById("taskStatus").value="open";
+          renderTasks();
+        }catch{
+          alert("Failed to create task.");
+        }
+      });
+
+      // update/delete task (event delegation)
+      document.getElementById("taskList").addEventListener("change", async function(e){
+        const sel = e.target.closest(".taskStatus");
+        if (!sel) return;
+        const id = sel.getAttribute("data-id");
+        const newStatus = sel.value;
+        try{
+          await api('/api/projects/'+encodeURIComponent(PROJECT_ID)+'/tasks/'+encodeURIComponent(id), {
+            method:"PATCH",
+            body: JSON.stringify({ status: newStatus })
+          });
+          const t = TASKS.find(x=>String(x.id)===String(id));
+          if (t) t.status = newStatus;
+        }catch{
+          alert("Failed to update task status.");
+        }
+      });
+
+      document.getElementById("taskList").addEventListener("click", async function(e){
+        const btn = e.target.closest("[data-del]");
+        if (!btn) return;
+        const id = btn.getAttribute("data-del");
+        if (!confirm("Delete this task?")) return;
+        try{
+          await api('/api/projects/'+encodeURIComponent(PROJECT_ID)+'/tasks/'+encodeURIComponent(id), { method:"DELETE" });
+          TASKS = TASKS.filter(x => String(x.id)!==String(id));
+          renderTasks();
+        }catch{
+          alert("Failed to delete task.");
+        }
+      });
+
+      // invite
+      document.getElementById("inviteBtn").addEventListener("click", async function(){
+        const email = document.getElementById("inviteEmail").value.trim();
+        const msg = document.getElementById("teamMsg");
+        if (!email) { msg.textContent="Enter an email."; return; }
+        msg.textContent = "Inviting…";
+        try{
+          await api('/api/projects/'+encodeURIComponent(PROJECT_ID)+'/team', {
+            method:"POST", body: JSON.stringify({ email })
+          });
+          document.getElementById("inviteEmail").value="";
+          try{ TEAM = await api('/api/projects/'+encodeURIComponent(PROJECT_ID)+'/team'); }catch{}
+          renderTeam();
+          msg.textContent = "Invitation sent.";
+        }catch{
+          msg.textContent = "Failed to invite.";
+        }
+      });
+
+      // refresh activity
+      document.getElementById("refreshActivityBtn").addEventListener("click", async function(){
+        try{
+          const items = await api('/api/activity?scope=project&project_id='+encodeURIComponent(PROJECT_ID));
+          renderActivity(items);
+        }catch{
+          renderActivity([]);
+        }
+      });
+    }
+
+    // --- init ---
+    window.addEventListener("DOMContentLoaded", async function(){
+      await loadProject();
+      wireEvents();
+    });
+  </script>
+</body>
+</html>

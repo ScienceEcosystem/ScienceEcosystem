@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Profile Settings | ScienceEcosystem</title>
+  <meta name="description" content="Edit your profile information and links."/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body data-page="settings-profile">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem"/>
+        </a>
+      </div>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a class="nav-link" href="library.html">My Library</a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" style="display:inline-flex;">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt=""/>
+          <span>Login with ORCID</span>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" class="container" style="padding:2rem 1rem; max-width:960px;">
+    <header class="page-header" style="margin-bottom:1rem;">
+      <h1 style="margin:0;">Profile settings</h1>
+      <p class="muted" style="margin:.5rem 0 0;">Update your visible profile details.</p>
+    </header>
+
+    <section class="panel" style="background:#fff; padding:1rem; border-radius:10px;">
+      <form id="profileForm" onsubmit="return false;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+          <div>
+            <label class="label">Full name</label>
+            <input class="input" id="name" placeholder="Your name">
+          </div>
+          <div>
+            <label class="label">Affiliation</label>
+            <input class="input" id="affiliation" placeholder="e.g., University of …">
+          </div>
+          <div style="grid-column:1 / -1;">
+            <label class="label">Biography</label>
+            <textarea class="input" id="bio" rows="4" placeholder="Short bio…"></textarea>
+          </div>
+          <div>
+            <label class="label">Keywords (comma separated)</label>
+            <input class="input" id="keywords" placeholder="e.g., ecology, lakes, crayfish">
+          </div>
+          <div>
+            <label class="label">Languages</label>
+            <input class="input" id="languages" placeholder="e.g., English, Spanish">
+          </div>
+          <div style="grid-column:1 / -1;">
+            <label class="label">Links</label>
+            <textarea class="input" id="links" rows="3" placeholder="One URL per line (personal site, lab page, social, etc.)"></textarea>
+          </div>
+          <div>
+            <label class="label">Visibility</label>
+            <select class="input" id="visibility">
+              <option value="public">Public</option>
+              <option value="private">Private</option>
+              <option value="restricted">Restricted</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:.5rem; margin-top:1rem;">
+          <button id="saveBtn" class="btn">Save changes</button>
+          <a class="btn btn-secondary" href="user-profile.html">Back</a>
+        </div>
+        <p id="msg" class="muted" style="margin-top:.75rem;"></p>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+      <div class="footer-socials">
+        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
+        </a>
+        <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/></svg>
+        </a>
+      </div>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+  <script>
+    async function api(path,opts){const r=await fetch(path,{credentials:"include",...(opts||{})});if(!r.ok)throw new Error(await r.text());return r.json();}
+    function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");}
+    function linesToArray(text){return (text||"").split("\n").map(s=>s.trim()).filter(Boolean);}
+    function arrayToLines(arr){return (arr||[]).join("\n");}
+    async function load(){
+      let me;
+      try{me=await api("/api/me");}catch{document.getElementById("msg").textContent="Not signed in.";return;}
+      document.getElementById("name").value = me.name||"";
+      document.getElementById("affiliation").value = me.affiliation||"";
+      document.getElementById("bio").value = me.bio||"";
+      document.getElementById("keywords").value = (me.keywords||[]).join(", ");
+      document.getElementById("languages").value = (me.languages||[]).join(", ");
+      document.getElementById("links").value = arrayToLines(me.links||[]);
+      document.getElementById("visibility").value = me.visibility||"public";
+    }
+    async function save(){
+      const msg=document.getElementById("msg");
+      msg.textContent="Saving…";
+      const body={
+        name: document.getElementById("name").value.trim(),
+        affiliation: document.getElementById("affiliation").value.trim(),
+        bio: document.getElementById("bio").value.trim(),
+        keywords: document.getElementById("keywords").value.split(",").map(s=>s.trim()).filter(Boolean),
+        languages: document.getElementById("languages").value.split(",").map(s=>s.trim()).filter(Boolean),
+        links: linesToArray(document.getElementById("links").value),
+        visibility: document.getElementById("visibility").value
+      };
+      try{
+        await api("/api/settings/profile",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+        msg.textContent="Saved.";
+      }catch{msg.textContent="Failed to save.";}
+    }
+    window.addEventListener("DOMContentLoaded", ()=>{
+      load();
+      document.getElementById("saveBtn").addEventListener("click", save);
+    });
+  </script>
+</body>
+</html>
