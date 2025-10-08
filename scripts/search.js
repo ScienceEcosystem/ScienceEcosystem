@@ -7,9 +7,9 @@ const OPENALEX_MAILTO = "info@scienceecosystem.org";
 let currentPage = 1;
 let currentQuery = "";
 let currentAuthorIds = [];
-let currentInstitutionIds = [];   // NEW
-let currentJournalIds = [];       // NEW (Sources of type: journal)
-let currentPublisherIds = [];     // NEW
+let currentInstitutionIds = [];   // entity filters
+let currentJournalIds = [];
+let currentPublisherIds = [];
 let totalResults = 0;
 let currentFilter = "relevance"; // relevance | citations | year
 let searchAbort = null;
@@ -74,66 +74,62 @@ function serverSortParam(){
   return ""; // relevance = default
 }
 
-/* ---------- Papers fetching (now also by institutions, journals, publishers) ---------- */
-async function fetchPapers(query, authorIds = [], institutionIds = [], journalIds = [], publisherIds = [], page = 1, signal) {
-  let works = [];
+/* ---------- Papers fetching (robust + union by entity) ---------- */
+async function safeWorksCall(filterExpr, page, signal){
+  if (!filterExpr) return [];
+  const url = `${API_BASE}/works?filter=${encodeURIComponent(filterExpr)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
   try {
-    // 1) Author-constrained works
-    for (const authorId of authorIds) {
-      const urlA = `${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
-      const data = await fetchJSON(urlA, signal);
-      works = works.concat(data.results || []);
-    }
-
-    // 2) Institution-constrained works (authorships.institutions.id alias institutions.id)
-    for (const instId of institutionIds) {
-      const urlI = `${API_BASE}/works?filter=institutions.id:${encodeURIComponent(instId)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
-      const data = await fetchJSON(urlI, signal);
-      works = works.concat(data.results || []);
-    }
-
-    // 3) Journal-constrained works (convenience filter: journal:<sourceId>)
-    for (const srcId of journalIds) {
-      const urlJ = `${API_BASE}/works?filter=journal:${encodeURIComponent(srcId)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
-      const data = await fetchJSON(urlJ, signal);
-      works = works.concat(data.results || []);
-    }
-
-    // 4) Publisher-constrained works (primary_location.source.publisher_lineage)
-    for (const pubId of publisherIds) {
-      const urlP = `${API_BASE}/works?filter=primary_location.source.publisher_lineage:${encodeURIComponent(pubId)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
-      const data = await fetchJSON(urlP, signal);
-      works = works.concat(data.results || []);
-    }
-
-    // 5) General keyword search (always include so relevant papers match the free-text query)
-    const urlG = `${API_BASE}/works?search=${encodeURIComponent(query)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
-    const dataG = await fetchJSON(urlG, signal);
-    const generalWorks = dataG.results || [];
-
-    if (page === 1) totalResults = dataG.meta?.count || generalWorks.length;
-
-    // Deduplicate by OpenAlex id/doi/title fallback
-    const seen = new Set();
-    const merged = [...works, ...generalWorks].filter(w => {
-      const id = w.id || w.doi || w.display_name;
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
-
-    // Client-side sort if needed (keeps behaviour identical)
-    if (currentFilter === "citations") merged.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
-    else if (currentFilter === "year") merged.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
-
-    return merged;
+    const data = await fetchJSON(url, signal);
+    return data.results || [];
   } catch (err) {
-    if (err.name !== "AbortError") console.error("Paper fetch failed", err);
-    return [];
+    if (err.name !== "AbortError") console.warn("Works sub-fetch failed:", filterExpr, err.message);
+    return []; // never abort overall flow
   }
 }
 
-/* ---------- Concepts / Topics ---------- */
+async function fetchPapers(query, authorIds = [], institutionIds = [], journalIds = [], publisherIds = [], page = 1, signal) {
+  // Build OR-joined filters (OpenAlex uses | for OR)
+  const authorFilter      = authorIds.length      ? `author.id:${authorIds.join("|")}` : "";
+  const institutionFilter = institutionIds.length ? `institutions.id:${institutionIds.join("|")}` : "";
+  const journalFilter     = journalIds.length     ? `journal:${journalIds.join("|")}` : "";
+  const publisherFilter   = publisherIds.length   ? `primary_location.source.publisher_lineage:${publisherIds.join("|")}` : "";
+
+  // Parallel constrained pulls; each is resilient
+  const [byAuthors, byInstitutions, byJournals, byPublishers] = await Promise.all([
+    safeWorksCall(authorFilter, page, signal),
+    safeWorksCall(institutionFilter, page, signal),
+    safeWorksCall(journalFilter, page, signal),
+    safeWorksCall(publisherFilter, page, signal),
+  ]);
+
+  // Always run general keyword search (backstop to ensure papers show)
+  let generalWorks = [];
+  try {
+    const urlG = `${API_BASE}/works?search=${encodeURIComponent(query)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
+    const dataG = await fetchJSON(urlG, signal);
+    generalWorks = dataG.results || [];
+    if (page === 1) totalResults = dataG.meta?.count || generalWorks.length;
+  } catch (err) {
+    if (err.name !== "AbortError") console.error("General works search failed", err);
+  }
+
+  // Merge + de-dup
+  const seen = new Set();
+  const merged = [...byAuthors, ...byInstitutions, ...byJournals, ...byPublishers, ...generalWorks].filter(w => {
+    const id = w.id || w.doi || w.display_name;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  // Client-side sort if needed
+  if (currentFilter === "citations") merged.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
+  else if (currentFilter === "year") merged.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
+
+  return merged;
+}
+
+/* ---------- Topics ---------- */
 async function fetchTopics(query, signal) {
   try {
     const url = `${API_BASE}/concepts?search=${encodeURIComponent(query)}&per_page=5`;
@@ -145,7 +141,7 @@ async function fetchTopics(query, signal) {
   }
 }
 
-/* ---------- NEW: institutions, journals, publishers ---------- */
+/* ---------- Entities: institutions, journals, publishers ---------- */
 async function fetchInstitutions(query, signal) {
   try {
     const url = `${API_BASE}/institutions?search=${encodeURIComponent(query)}&per_page=5`;
@@ -159,7 +155,6 @@ async function fetchInstitutions(query, signal) {
 
 async function fetchJournals(query, signal) {
   try {
-    // Restrict to journals via filter
     const url = `${API_BASE}/sources?search=${encodeURIComponent(query)}&filter=type:journal&per_page=5`;
     const data = await fetchJSON(url, signal);
     return data.results || [];
@@ -235,7 +230,7 @@ function renderTopics(topics) {
     : `<li class="muted">No topics found.</li>`;
 }
 
-/* ---------- NEW: sidebar renders for institutions, journals, publishers ---------- */
+/* ---------- Sidebar: institutions, journals, publishers ---------- */
 function renderInstitutions(items) {
   const el = $("institutionList");
   if (!el) return;
@@ -263,9 +258,9 @@ function renderJournals(items) {
         const srcId = j.id.split("/").pop();
         const abbrev = j.abbreviated_title || null;
         const works = Number.isFinite(j.works_count) ? `${j.works_count.toLocaleString()} works` : null;
-        const pubIdFull = j.host_organization || null;            // Publisher OpenAlex ID (full URL)
+        const pubIdFull = j.host_organization || null;
         const pubId = pubIdFull ? pubIdFull.split("/").pop() : null;
-        const pubName = j.host_organization_name || null;         // Publisher display name when available
+        const pubName = j.host_organization_name || j.host_organization_lineage?.[0]?.display_name || null;
         const subLeft = [abbrev, works].filter(Boolean).join(" · ") || "Journal";
         const pubLink = (pubId && pubName)
           ? `<a href="publisher.html?id=${pubId}" class="muted" onclick="event.stopPropagation();" aria-label="Go to publisher ${escapeHtml(pubName)}">Publisher: ${escapeHtml(pubName)}</a>`
@@ -489,11 +484,11 @@ async function runUnifiedSearch(){
     renderJournals(journals);
     renderPublishers(publishers);
 
-    // Save IDs for constrained works searches
-    currentAuthorIds = authors.map(a => a.id);
+    // Save IDs for constrained works searches (OpenAlex accepts full URLs here)
+    currentAuthorIds      = authors.map(a => a.id);
     currentInstitutionIds = institutions.map(i => i.id);
-    currentJournalIds = journals.map(j => j.id);       // Source IDs
-    currentPublisherIds = publishers.map(p => p.id);   // Publisher IDs
+    currentJournalIds     = journals.map(j => j.id);       // Source IDs
+    currentPublisherIds   = publishers.map(p => p.id);     // Publisher IDs
 
     const papers = await fetchPapers(
       query,
