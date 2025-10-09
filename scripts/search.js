@@ -7,9 +7,9 @@ const OPENALEX_MAILTO = "info@scienceecosystem.org";
 let currentPage = 1;
 let currentQuery = "";
 let currentAuthorIds = [];
-let currentInstitutionIds = [];
-let currentJournalIds = [];     // sources (journals)
-let currentPublisherIds = [];
+let currentInstitutionIds = [];  // kept for sidebar; not used to filter works (for now)
+let currentJournalIds = [];      // kept for sidebar; not used to filter works (for now)
+let currentPublisherIds = [];    // kept for sidebar; not used to filter works (for now)
 let totalResults = 0;
 let currentFilter = "relevance"; // relevance | citations | year
 let searchAbort = null;
@@ -50,19 +50,12 @@ async function fetchJSON(url, signal){
 }
 
 /* ---------- Filters ---------- */
-/* Build a SINGLE &filter= param combining facet filters + any additional filters */
-function filterCSV(additionalParts = []) {
+function filterCSV() {
   const parts = [];
-
-  // Additional (entity) filters go in as-is (e.g., "author.id:A|B")
-  for (const p of additionalParts) if (p) parts.push(String(p));
-
-  // Facets
   if (facet.oa) parts.push("is_oa:true");
   if (facet.types.size) parts.push("type:" + Array.from(facet.types).join("|"));
   if (facet.yearMin) parts.push(`from_publication_date:${facet.yearMin}-01-01`);
   if (facet.yearMax) parts.push(`to_publication_date:${facet.yearMax}-12-31`);
-
   return parts.length ? `&filter=${encodeURIComponent(parts.join(","))}` : "";
 }
 
@@ -128,67 +121,43 @@ async function fetchPublishers(query, signal) {
   }
 }
 
-/* ---------- Papers fetching (robust + correct single filter param) ---------- */
-async function safeWorksCall(entityFilterCSV, page, signal){
-  const url = `${API_BASE}/works?per_page=100&page=${page}${serverSortParam()}${filterCSV(entityFilterCSV ? [entityFilterCSV] : [])}`;
+/* ---------- Papers fetching (known-good: authors + general search only) ---------- */
+async function fetchPapers(query, authorIds = [], page = 1, signal) {
+  let works = [];
   try {
-    const data = await fetchJSON(url, signal);
-    return data.results || [];
-  } catch (err) {
-    if (err.name !== "AbortError") console.warn("Works sub-fetch failed:", entityFilterCSV, err.message);
-    return []; // never abort overall flow
-  }
-}
+    // Author-constrained works (merge results)
+    const aIds = (authorIds || []).map(toId);
+    if (aIds.length) {
+      const urlA = `${API_BASE}/works?filter=${encodeURIComponent(`author.id:${aIds.join("|")}`)}${filterCSV()}&per_page=100&page=${page}${serverSortParam()}`;
+      const dataA = await fetchJSON(urlA, signal);
+      works = works.concat(dataA.results || []);
+    }
 
-async function fetchPapers(query, authorIds = [], institutionIds = [], journalIds = [], publisherIds = [], page = 1, signal) {
-  // Use SHORT IDs for filters
-  const aIds = authorIds.map(toId);
-  const iIds = institutionIds.map(toId);
-  const sIds = journalIds.map(toId);     // sources (journals)
-  const pIds = publisherIds.map(toId);
-
-  // Entity filters (joined with | for OR)
-  const fAuthors      = aIds.length ? `author.id:${aIds.join("|")}` : "";
-  const fInstitutions = iIds.length ? `institutions.id:${iIds.join("|")}` : "";
-  const fJournals     = sIds.length ? `primary_location.source.id:${sIds.join("|")}` : "";
-  // Publishers can be expressed via lineage or host_organization; use both and merge
-  const fPubLineage   = pIds.length ? `primary_location.source.publisher_lineage:${pIds.join("|")}` : "";
-  const fPubHostOrg   = pIds.length ? `primary_location.source.host_organization:${pIds.join("|")}` : "";
-
-  // Parallel constrained pulls (each with ONE filter= param that includes facets too)
-  const [byAuthors, byInstitutions, byJournals, byPublishers1, byPublishers2] = await Promise.all([
-    safeWorksCall(fAuthors, page, signal),
-    safeWorksCall(fInstitutions, page, signal),
-    safeWorksCall(fJournals, page, signal),
-    safeWorksCall(fPubLineage, page, signal),
-    safeWorksCall(fPubHostOrg, page, signal),
-  ]);
-
-  // Always run general keyword search (backstop)
-  let generalWorks = [];
-  try {
-    const urlG = `${API_BASE}/works?search=${encodeURIComponent(query)}&per_page=100&page=${page}${serverSortParam()}${filterCSV()}`;
+    // General search (always)
+    const urlG = `${API_BASE}/works?search=${encodeURIComponent(query)}${filterCSV()}&per_page=100&page=${page}${serverSortParam()}`;
     const dataG = await fetchJSON(urlG, signal);
-    generalWorks = dataG.results || [];
+    const generalWorks = dataG.results || [];
+
     if (page === 1) totalResults = dataG.meta?.count ?? generalWorks.length ?? 0;
+
+    // De-dup (OpenAlex id/doi/title fallback)
+    const seen = new Set();
+    const merged = [...works, ...generalWorks].filter(w => {
+      const id = w.id || w.doi || w.display_name;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+
+    // Client-side sort if needed
+    if (currentFilter === "citations") merged.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
+    else if (currentFilter === "year") merged.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
+
+    return merged;
   } catch (err) {
-    if (err.name !== "AbortError") console.error("General works search failed", err);
+    if (err.name !== "AbortError") console.error("Paper fetch failed", err);
+    return [];
   }
-
-  // Merge + de-dup
-  const seen = new Set();
-  const merged = [...byAuthors, ...byInstitutions, ...byJournals, ...byPublishers1, ...byPublishers2, ...generalWorks].filter(w => {
-    const id = w.id || w.doi || w.display_name;
-    if (seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
-
-  // Client-side sort if needed
-  if (currentFilter === "citations") merged.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
-  else if (currentFilter === "year") merged.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
-
-  return merged;
 }
 
 /* ---------- Render helpers ---------- */
@@ -204,7 +173,7 @@ function provenanceChips(w) {
   return parts.join(" ");
 }
 
-// Fallback paper card (if SE.components is not ready)
+// Fallback paper card (if SE.components isn’t ready)
 function fallbackPaperCard(w){
   const title = escapeHtml(w.display_name || "Untitled");
   const year = w.publication_year ? ` (${w.publication_year})` : "";
@@ -220,7 +189,7 @@ function fallbackPaperCard(w){
   `;
 }
 
-// Query highlighting (for components if used)
+// Highlight for components (if used)
 function highlight(text, q){
   if (!text || !q) return escapeHtml(text||"");
   const terms = q.split(/\s+/).filter(Boolean).map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
@@ -235,7 +204,7 @@ function renderAuthors(authors) {
   if (!el) return;
   el.innerHTML = authors.length
     ? authors.map(a => {
-        const id = a.id.split("/").pop();
+        const id = toId(a.id);
         const inst = a.last_known_institution?.display_name || "No affiliation";
         return `
           <li class="list-item list-card" onclick="location.href='profile.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(a.display_name)}">
@@ -252,7 +221,7 @@ function renderTopics(topics) {
   if (!el) return;
   el.innerHTML = topics.length
     ? topics.map(t => {
-        const id = t.id.split("/").pop();
+        const id = toId(t.id);
         return `
           <li class="list-item list-card" onclick="location.href='topic.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(t.display_name)}">
             ${escapeHtml(t.display_name)}
@@ -262,13 +231,12 @@ function renderTopics(topics) {
     : `<li class="muted">No topics found.</li>`;
 }
 
-/* Sidebar: institutions, journals, publishers */
 function renderInstitutions(items) {
   const el = $("institutionList");
   if (!el) return;
   el.innerHTML = items.length
     ? items.map(inst => {
-        const id = inst.id.split("/").pop();
+        const id = toId(inst.id);
         const country = inst.country_code ? inst.country_code.toUpperCase() : null;
         const works = Number.isFinite(inst.works_count) ? `${inst.works_count.toLocaleString()} works` : null;
         const sub = [country, works].filter(Boolean).join(" · ") || "—";
@@ -287,11 +255,11 @@ function renderJournals(items) {
   if (!el) return;
   el.innerHTML = items.length
     ? items.map(j => {
-        const srcId = j.id.split("/").pop();
+        const srcId = toId(j.id);
         const abbrev = j.abbreviated_title || null;
         const works = Number.isFinite(j.works_count) ? `${j.works_count.toLocaleString()} works` : null;
         const pubIdFull = j.host_organization || null;
-        const pubId = pubIdFull ? pubIdFull.split("/").pop() : null;
+        const pubId = pubIdFull ? toId(pubIdFull) : null;
         const pubName = j.host_organization_name || j.host_organization_lineage?.[0]?.display_name || null;
         const subLeft = [abbrev, works].filter(Boolean).join(" · ") || "Journal";
         const pubLink = (pubId && pubName)
@@ -314,7 +282,7 @@ function renderPublishers(items) {
   if (!el) return;
   el.innerHTML = items.length
     ? items.map(p => {
-        const id = p.id.split("/").pop();
+        const id = toId(p.id);
         const works = Number.isFinite(p.works_count) ? `${p.works_count.toLocaleString()} works` : null;
         const sources = Number.isFinite(p.sources_count) ? `${p.sources_count.toLocaleString()} sources` : null;
         const sub = [works, sources].filter(Boolean).join(" · ") || "Publisher";
@@ -411,9 +379,6 @@ function renderPapers(works, append = false) {
         const more = await fetchPapers(
           currentQuery,
           currentAuthorIds,
-          currentInstitutionIds,
-          currentJournalIds,
-          currentPublisherIds,
           currentPage,
           searchAbort?.signal
         );
@@ -523,6 +488,7 @@ async function runUnifiedSearch(){
     renderJournals(journals);
     renderPublishers(publishers);
 
+    // Store IDs (authors used for works; others for sidebar only for now)
     currentAuthorIds      = authors.map(a => a.id);
     currentInstitutionIds = institutions.map(i => i.id);
     currentJournalIds     = journals.map(j => j.id);
@@ -531,10 +497,7 @@ async function runUnifiedSearch(){
     const papers = await fetchPapers(
       query,
       currentAuthorIds,
-      currentInstitutionIds,
-      currentJournalIds,
-      currentPublisherIds,
-      currentPage,
+      1,
       searchAbort.signal
     );
     renderPapers(papers);
