@@ -1,3 +1,4 @@
+
 (function () {
   if (!document.body || document.body.dataset.page !== "paper") return;
 
@@ -36,7 +37,8 @@
   }
 
   async function getJSON(url){
-    var withMt = addMailto(url);
+    // addMailto only for OpenAlex; other domains pass through
+    var withMt = url.indexOf(API) === 0 ? addMailto(url) : url;
     for (var attempt = 1; attempt <= 2; attempt++){
       try {
         var res = await fetch(withMt, { headers: { "Accept": "application/json" } });
@@ -49,6 +51,7 @@
         return await res.json();
       } catch (e) {
         if (attempt === 2) throw e;
+        await new Promise(function(r){ setTimeout(r, 500); });
       }
     }
     throw new Error("Unreachable");
@@ -70,6 +73,14 @@
     if (/^doi:/i.test(s)) return s;
     if (/^10\.\d{4,9}\/\S+/i.test(s)) return "doi:" + s;
     return s;
+  }
+
+  function normalizeDOI(input){
+    if (!input) return "";
+    var x = String(input).trim();
+    x = x.replace(/^https?:\/\/(dx\.)?doi\.org\//i,"");
+    x = x.replace(/^doi:/i,"");
+    return x;
   }
 
   // ---------- Tiny cache (localStorage) ----------
@@ -126,6 +137,201 @@
     var tail = srcId.split("/").pop();
     var url = API + "/sources/" + encodeURIComponent(tail);
     try { return await getJSON(url); } catch(e){ console.warn("source fetch failed", e); return null; }
+  }
+
+  // ---------- Phase 1: Deterministic Research-Object harvesters ----------
+  // Crossref → relations from the paper DOI itself
+  async function fetchCrossrefRelations(doi){
+    if (!doi) return [];
+    var url = "https://api.crossref.org/works/" + encodeURIComponent(doi);
+    try{
+      var data = await getJSON(url);
+      var rel = get(data, "message.relation", {}) || {};
+      // Flatten relation map to array
+      var out = [];
+      Object.keys(rel).forEach(function(k){
+        var arr = Array.isArray(rel[k]) ? rel[k] : [];
+        arr.forEach(function(r){
+          out.push({
+            provenance: "Crossref",
+            relationType: k,
+            id: get(r,"id", null) || get(r,"id-type", null) || null,
+            "id-type": get(r,"id-type", null) || null,
+            "asserted-by": get(r,"asserted-by", null) || null,
+            "DOI": get(r,"DOI", null) || null,
+            "url": get(r,"url", null) || null
+          });
+        });
+      });
+      return out;
+    }catch(e){
+      console.warn("Crossref failed", e);
+      return [];
+    }
+  }
+
+  // DataCite → any Dataset/Software that has relatedIdentifiers = this paper DOI
+  async function fetchDataCiteBacklinks(doi){
+    if (!doi) return [];
+    var q = 'relatedIdentifiers.identifier:"' + doi.replace(/"/g,'\\"') + '"';
+    var url = "https://api.datacite.org/works?query=" + encodeURIComponent(q) + "&page[size]=100";
+    try{
+      var data = await getJSON(url);
+      var hits = Array.isArray(get(data,"data",[])) ? data.data : [];
+      return hits.map(function(rec){
+        var attrs = rec.attributes || {};
+        var typeGen = get(attrs,"types.resourceTypeGeneral","") || "";
+        var title = (Array.isArray(attrs.titles) && attrs.titles[0] && attrs.titles[0].title) ? attrs.titles[0].title : (attrs.title || "Untitled");
+        var doiR = attrs.doi || attrs.identifier || "";
+        var urlR = attrs.url || (attrs.doi ? ("https://doi.org/"+attrs.doi) : "");
+        return {
+          provenance: "DataCite",
+          type: typeGen,
+          title: title,
+          doi: doiR,
+          url: urlR,
+          repository: (attrs.publisher || attrs.container || get(attrs,"container.title","") || "").toString()
+        };
+      });
+    }catch(e){
+      console.warn("DataCite failed", e);
+      return [];
+    }
+  }
+
+  // Zenodo → records that cite this paper DOI in related_identifiers
+  async function fetchZenodoBacklinks(doi){
+    if (!doi) return [];
+    var es = 'related.identifiers.identifier:"' + doi.replace(/"/g,'\\"') + '"';
+    var url1 = "https://zenodo.org/api/records/?q=" + encodeURIComponent(es) + "&size=100";
+    var url2 = "https://zenodo.org/api/records/?q=" + encodeURIComponent('metadata.related_identifiers.identifier:"'+doi.replace(/"/g,'\\"')+'"') + "&size=100";
+    try{
+      var a = await getJSON(url1);
+      var hits = Array.isArray(a.hits && a.hits.hits) ? a.hits.hits : [];
+      if (!hits.length){
+        var b = await getJSON(url2);
+        hits = Array.isArray(b.hits && b.hits.hits) ? b.hits.hits : [];
+      }
+      return hits.map(function(h){
+        var md = h.metadata || {};
+        var typeGen = (get(md,"resource_type.type","") || "").toLowerCase();
+        var guessType = typeGen.includes("software") ? "Software" : (typeGen.includes("dataset") ? "Dataset" : (get(md,"resource_type.title","") || "Other"));
+        var title = md.title || "Untitled";
+        var doiZ = md.doi || (h.doi) || "";
+        var urlZ = h.links && h.links.html ? h.links.html : (doiZ ? "https://doi.org/"+doiZ : "");
+        return {
+          provenance: "Zenodo",
+          type: guessType,
+          title: title,
+          doi: doiZ || "",
+          url: urlZ,
+          repository: "Zenodo",
+          version: md.version || "",
+          licence: (md.license && (md.license.id || md.license)) || ""
+        };
+      });
+    }catch(e){
+      console.warn("Zenodo failed", e);
+      return [];
+    }
+  }
+
+  function classifyROKind(str){
+    var s = String(str||"").toLowerCase();
+    if (s.includes("software")) return "Software";
+    if (s.includes("code")) return "Software";
+    if (s.includes("dataset")) return "Dataset";
+    if (s.includes("data")) return "Dataset";
+    return "Other";
+  }
+
+  function uniqueByKey(arr, keyFn){
+    var seen = Object.create(null);
+    var out = [];
+    for (var i=0;i<arr.length;i++){
+      var k = keyFn(arr[i]);
+      if (!k || seen[k]) continue;
+      seen[k] = true;
+      out.push(arr[i]);
+    }
+    return out;
+  }
+
+  async function harvestDeterministicResearchObjects(paper){
+    var doi = normalizeDOI(paper.doi || get(paper,"ids.doi",""));
+    if (!doi) return { items: [], errors: [] };
+
+    var errors = [];
+    var all = [];
+
+    try{
+      var cr = await fetchCrossrefRelations(doi);
+      // Extract only clear dataset/software relations
+      cr.forEach(function(r){
+        var rid = r.DOI || r.id || "";
+        var url = r.url || (rid ? ("https://doi.org/"+rid) : "");
+        var kind = classifyROKind(r.relationType || r["id-type"] || "");
+        if (!rid && !url) return;
+        all.push({
+          provenance: "Crossref",
+          type: kind,
+          title: rid || (r.relationType+" item"),
+          doi: rid || "",
+          url: url || "",
+          repository: "",
+          relationType: r.relationType
+        });
+      });
+    }catch(e){ errors.push("Crossref: "+e.message); }
+
+    try{
+      var dc = await fetchDataCiteBacklinks(doi);
+      dc.forEach(function(r){
+        all.push({
+          provenance: r.provenance,
+          type: classifyROKind(r.type),
+          title: r.title,
+          doi: r.doi || "",
+          url: r.url || (r.doi ? "https://doi.org/"+r.doi : ""),
+          repository: r.repository || "DataCite"
+        });
+      });
+    }catch(e){ errors.push("DataCite: "+e.message); }
+
+    try{
+      var z = await fetchZenodoBacklinks(doi);
+      z.forEach(function(r){
+        all.push({
+          provenance: r.provenance,
+          type: classifyROKind(r.type),
+          title: r.title,
+          doi: r.doi || "",
+          url: r.url || (r.doi ? "https://doi.org/"+r.doi : ""),
+          repository: r.repository || "Zenodo",
+          version: r.version || "",
+          licence: r.licence || ""
+        });
+      });
+    }catch(e){ errors.push("Zenodo: "+e.message); }
+
+    // Deduplicate primarily by DOI, then by (title+url)
+    var dedup = uniqueByKey(all, function(x){
+      return (x.doi && x.doi.toLowerCase()) || (x.title.toLowerCase()+"|"+(x.url||"").toLowerCase());
+    });
+
+    // Sort: explicit Dataset/Software first, then by provenance priority
+    var provRank = { DataCite: 3, Zenodo: 2, Crossref: 1 };
+    dedup.sort(function(a,b){
+      var ta = (a.type==="Dataset"||a.type==="Software") ? 1 : 0;
+      var tb = (b.type==="Dataset"||b.type==="Software") ? 1 : 0;
+      if (ta!==tb) return tb - ta;
+      var pa = provRank[a.provenance] || 0;
+      var pb = provRank[b.provenance] || 0;
+      if (pa!==pb) return pb - pa;
+      return (a.title||"").localeCompare(b.title||"");
+    });
+
+    return { items: dedup, errors: errors };
   }
 
   // ---------- Formatting helpers ----------
@@ -208,6 +414,7 @@
       if (!mount) return;
       var newDiv = document.createElement("div");
       newDiv.id = "paperHeaderMain";
+      // make sure header is not a child of graph block by mistake
       mount.prepend(newDiv);
       hdr = newDiv;
     }
@@ -317,7 +524,7 @@
   function riskLabel(score){
     if (score >= 4) return { text: "High (heuristic)", cls: "risk-high" };
     if (score >= 2) return { text: "Medium (heuristic)", cls: "risk-med" };
-    return { text: "Low (heuristic)", cls: "risk-low" };
+    return { text: "Low (heuristic)" , cls: "risk-low" };
   }
   function computeExpectedPaperQuality(source, p){
     var isRetracted = !!get(p, "is_retracted", false);
@@ -1249,11 +1456,9 @@
     }
   }
 
-// ---------- Render ----------
-// NOTE: do NOT re-declare __CURRENT_PAPER__ here; it's defined once above.
-// var __CURRENT_PAPER__ = null;  // <-- remove this line
-var __CURRENT_SOURCE__ = null;
-var __HEADER_GUARD_INSTALLED__ = false;
+  // ---------- Render ----------
+  var __CURRENT_SOURCE__ = null;
+  var __HEADER_GUARD_INSTALLED__ = false;
 
   function repopulateHeaderIfEmpty(){
     try{
@@ -1261,20 +1466,19 @@ var __HEADER_GUARD_INSTALLED__ = false;
       if (!hdr) return;
       var empty = (!hdr.firstElementChild && (hdr.textContent || "").trim() === "");
       if (empty){
-  if (__CURRENT_PAPER__){
-    $("paperHeaderMain").innerHTML = buildHeaderMain(__CURRENT_PAPER__);
-    $("paperActions").innerHTML    = buildActionsBar(__CURRENT_PAPER__);
-    $("paperStats").innerHTML      = buildStatsHeader(__CURRENT_PAPER__);
-    wireHeaderToggles();
-    if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
-      SE.components.enhancePaperCards($("paperActions"));
-    }
-  } else if (__HEADER_HTML_SNAPSHOT__) {
-    // Fallback: restore from the saved HTML snapshot
-    $("paperHeaderMain").innerHTML = __HEADER_HTML_SNAPSHOT__;
-    wireHeaderToggles();
-  }
-}
+        if (__CURRENT_PAPER__){
+          $("paperHeaderMain").innerHTML = buildHeaderMain(__CURRENT_PAPER__);
+          $("paperActions").innerHTML    = buildActionsBar(__CURRENT_PAPER__);
+          $("paperStats").innerHTML      = buildStatsHeader(__CURRENT_PAPER__);
+          wireHeaderToggles();
+          if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
+            SE.components.enhancePaperCards($("paperActions"));
+          }
+        } else if (__HEADER_HTML_SNAPSHOT__) {
+          $("paperHeaderMain").innerHTML = __HEADER_HTML_SNAPSHOT__;
+          wireHeaderToggles();
+        }
+      }
     }catch(e){
       console.warn("Header repopulate failed:", e);
     }
@@ -1285,10 +1489,18 @@ var __HEADER_GUARD_INSTALLED__ = false;
     var hdr = $("paperHeaderMain");
     if (!hdr) return;
 
+    // Keep the header stable even if any library/me 401 scripts hiccup elsewhere
+    hdr.setAttribute("data-sticky-header","true");
+
     var mo = new MutationObserver(function(){ repopulateHeaderIfEmpty(); });
     mo.observe(hdr, { childList:true, subtree:false });
 
-    var moBody = new MutationObserver(function(){ repopulateHeaderIfEmpty(); });
+    var moBody = new MutationObserver(function(muts){
+      // If some script accidentally removed the header node, bring it back
+      var stillThere = document.getElementById("paperHeaderMain");
+      if (!stillThere) restoreHeaderIfNeeded();
+      repopulateHeaderIfEmpty();
+    });
     moBody.observe(document.body, { childList:true, subtree:true });
 
     var t0 = Date.now();
@@ -1301,7 +1513,25 @@ var __HEADER_GUARD_INSTALLED__ = false;
     __HEADER_GUARD_INSTALLED__ = true;
   }
 
-  function renderPaper(p, source){
+  function renderResearchObjectsUI(items, errors){
+    if (!Array.isArray(items) || !items.length){
+      $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">None listed via Crossref/DataCite/Zenodo.</p>';
+      return;
+    }
+    var rows = items.map(function(x){
+      var prov = x.provenance ? ('<span class="badge badge-neutral" title="Source">'+escapeHtml(x.provenance)+'</span>') : '';
+      var typ  = x.type ? ('<span class="badge">'+escapeHtml(x.type)+'</span>') : '';
+      var repo = x.repository ? ('<span class="muted" style="margin-left:.25rem;">'+escapeHtml(x.repository)+'</span>') : '';
+      var doi  = x.doi ? (' · <a href="https://doi.org/'+escapeHtml(x.doi)+'" target="_blank" rel="noopener">DOI</a>') : '';
+      var ver  = x.version ? (' <span class="muted">v'+escapeHtml(x.version)+'</span>') : '';
+      var lic  = x.licence ? (' <span class="muted">('+escapeHtml(x.licence)+')</span>') : '';
+      var url  = x.url || (x.doi ? ("https://doi.org/"+x.doi) : "");
+      return '<li class="ro-item">'+typ+' <a href="'+escapeHtml(url)+'" target="_blank" rel="noopener">'+escapeHtml(x.title || x.doi || "Item")+'</a>'+ver+lic+doi+' '+prov+repo+'</li>';
+    });
+    $("objectsBlock").innerHTML = '<h2>Research Objects</h2><ul>'+rows.join("")+'</ul>';
+  }
+
+  async function renderPaper(p, source){
     __CURRENT_PAPER__ = p;
 
     $("paperHeaderMain").innerHTML = buildHeaderMain(p);
@@ -1326,18 +1556,15 @@ var __HEADER_GUARD_INSTALLED__ = false;
 
     $("abstractBlock").innerHTML = '<h2>Abstract</h2><p>' + formatAbstract(p.abstract_inverted_index) + '</p>';
 
-    // Research objects (datasets/software)
-    var items = [];
-    var locs = Array.isArray(p.locations) ? p.locations : [];
-    for (var i=0;i<locs.length;i++){
-      var type = get(locs[i], "source.type", "") || get(locs[i], "type", "");
-      var url = get(locs[i], "landing_page_url", null) || get(locs[i], "pdf_url", null);
-      var label = get(locs[i], "source.display_name", null) || type || "Link";
-      if (type && (type.toLowerCase().includes("dataset") || type.toLowerCase().includes("software")) && url){
-        items.push('<li><a href="'+url+'" target="_blank" rel="noopener">'+escapeHtml(label)+'</a></li>');
-      }
+    // --- Phase 1: Deterministic RO linking (Crossref + DataCite + Zenodo) ---
+    try{
+      $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">Looking for code & data…</p>';
+      var ro = await harvestDeterministicResearchObjects(p);
+      renderResearchObjectsUI(ro.items, ro.errors || []);
+    }catch(e){
+      console.warn("RO harvest failed", e);
+      $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">Could not retrieve links.</p>';
     }
-    $("objectsBlock").innerHTML = '<h2>Research Objects</h2>' + (items.length ? '<ul>'+items.join("")+'</ul>' : '<p class="muted">None listed.</p>');
 
     renderJournalBlock(p, source);
     installHeaderGuard();
@@ -1417,3 +1644,4 @@ var __HEADER_GUARD_INSTALLED__ = false;
   document.addEventListener("DOMContentLoaded", boot);
 
 })();
+
