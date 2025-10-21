@@ -37,14 +37,12 @@ async function fetchJSON(url, signal, { maxRetries = 4 } = {}) {
       res = await fetch(u.toString(), { signal });
     } catch (err) {
       if (err.name === "AbortError") throw err;
-      // transient network error — small backoff and retry
       if (attempt++ < maxRetries) { await sleep(300 * attempt); continue; }
       throw err;
     }
 
     if (res.ok) return res.json();
 
-    // 429: too many requests -> respect Retry-After or exponential backoff
     if (res.status === 429 && attempt < maxRetries) {
       const ra = getRetryAfterSeconds(res);
       await sleep((ra ? ra * 1000 : 500 * (attempt + 1)) + Math.floor(Math.random() * 200));
@@ -52,21 +50,18 @@ async function fetchJSON(url, signal, { maxRetries = 4 } = {}) {
       continue;
     }
 
-    // 5xx: transient server issues — retry
     if (res.status >= 500 && res.status < 600 && attempt < maxRetries) {
       await sleep(400 * (attempt + 1));
       attempt++;
       continue;
     }
 
-    // 401: Unauthorized — often due to aggressive bursting; slow down and one retry
     if (res.status === 401 && attempt < maxRetries) {
       await sleep(800 * (attempt + 1));
       attempt++;
       continue;
     }
 
-    // Non-retryable
     throw new Error(`${res.status} ${res.statusText}`);
   }
 }
@@ -159,6 +154,18 @@ async function fetchPublishers(query, signal) {
   }
 }
 
+/* NEW: Funders */
+async function fetchFunders(query, signal) {
+  try {
+    const url = `${API_BASE}/funders?search=${encodeURIComponent(query)}&per_page=5`;
+    const data = await fetchJSON(url, signal);
+    return data.results || [];
+  } catch (err) {
+    if (err.name !== "AbortError") console.warn("Funder fetch failed", err.message);
+    return [];
+  }
+}
+
 /* ---------- Filters ---------- */
 function buildFilter(){
   const parts = [];
@@ -179,21 +186,18 @@ function serverSortParam(){
 async function fetchPapers(query, authorIds = [], page = 1, signal) {
   let works = [];
   try {
-    // Author-constrained works (merged). Throttled + retry via fetchJSON.
     for (const authorId of authorIds) {
       const urlA = `${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
       const dataA = await fetchJSON(urlA, signal);
       works = works.concat(dataA.results || []);
     }
 
-    // General search (always include to guarantee papers for the keyword)
     const urlG = `${API_BASE}/works?search=${encodeURIComponent(query)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
     const dataG = await fetchJSON(urlG, signal);
     const generalWorks = dataG.results || [];
 
     if (page === 1) totalResults = dataG.meta?.count || generalWorks.length || 0;
 
-    // Deduplicate by OpenAlex id/doi/title fallback
     const seen = new Set();
     const merged = [...works, ...generalWorks].filter(w => {
       const id = w.id || w.doi || w.display_name;
@@ -202,7 +206,6 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
       return true;
     });
 
-    // Client-side sort if needed (keeps behavior identical)
     if (currentFilter === "citations") merged.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
     else if (currentFilter === "year") merged.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
 
@@ -226,7 +229,6 @@ function provenanceChips(w) {
   return parts.join(" ");
 }
 
-// Fallback paper card (if SE.components has issues)
 function fallbackPaperCard(w){
   const title = escapeHtml(w.display_name || "Untitled");
   const year = w.publication_year ? ` (${w.publication_year})` : "";
@@ -348,6 +350,27 @@ function renderPublishers(items) {
     : `<li class="muted">No publishers found.</li>`;
 }
 
+/* NEW: Funders renderer */
+function renderFunders(items) {
+  const el = $("funders-list");
+  if (!el) return;
+  el.innerHTML = items.length
+    ? items.map(f => {
+        const id = f.id.split("/").pop(); // e.g., F4320301738
+        const country = f.country_code ? f.country_code.toUpperCase() : null;
+        const ftype = f.type || null;
+        const works = Number.isFinite(f.works_count) ? `${f.works_count.toLocaleString()} works` : null;
+        const sub = [country, ftype, works].filter(Boolean).join(" · ") || "Funder";
+        return `
+          <li class="list-item list-card" onclick="location.href='funders.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(f.display_name)}">
+            <div class="title">${escapeHtml(f.display_name)}</div>
+            <div class="muted">${escapeHtml(sub)}</div>
+          </li>
+        `;
+      }).join("")
+    : `<li class="muted">No funders found.</li>`;
+}
+
 function skeletonBlock(){
   return `
     <div class="result-card">
@@ -424,7 +447,6 @@ function renderPapers(works, append = false) {
     console.warn("enhancePaperCards failed:", err);
   }
 
-  // Pagination & Infinite Scroll
   const pagination = $("pagination");
   const resultsShown = currentPage * 100;
   if (pagination) {
@@ -455,7 +477,6 @@ function renderPapers(works, append = false) {
     }
   }
 
-  // Facet handlers
   const chips = document.getElementById("facetChips");
   if (chips) {
     chips.onclick = (e)=>{
@@ -516,6 +537,7 @@ async function runUnifiedSearch(){
   const iList = $("institutionList");
   const jList = $("journalList");
   const pList = $("publisherList");
+  const fList = $("funders-list");
 
   if (results) results.innerHTML = skeletonBlock();
   if (rList) rList.innerHTML = `<li class="muted">Loading authors...</li>`;
@@ -523,19 +545,19 @@ async function runUnifiedSearch(){
   if (iList) iList.innerHTML = `<li class="muted">Loading institutions...</li>`;
   if (jList) jList.innerHTML = `<li class="muted">Loading journals...</li>`;
   if (pList) pList.innerHTML = `<li class="muted">Loading publishers...</li>`;
+  if (fList) fList.innerHTML = `<li class="muted">Loading funders...</li>`;
   setBusy(true);
 
   try {
-    /* 1) Fetch authors to bias papers (throttled) */
+    // 1) Authors (for bias) → Papers
     const authors = await fetchAuthors(query, searchAbort.signal);
     renderAuthors(authors);
     currentAuthorIds = authors.map(a => a.id);
 
-    /* 2) Fetch PAPERS immediately (users see results fast, fewer concurrent calls) */
     const papers = await fetchPapers(query, currentAuthorIds, currentPage, searchAbort.signal);
     renderPapers(papers);
 
-    /* 3) Fetch the rest SEQUENTIALLY to avoid bursts -> no 429s */
+    // 2) The rest — sequential to avoid burst 429s
     const topics = await fetchTopics(query, searchAbort.signal);
     renderTopics(topics);
 
@@ -547,6 +569,9 @@ async function runUnifiedSearch(){
 
     const publishers = await fetchPublishers(query, searchAbort.signal);
     renderPublishers(publishers);
+
+    const funders = await fetchFunders(query, searchAbort.signal);
+    renderFunders(funders);
 
   } catch (e) {
     if (e.name === "AbortError") return;

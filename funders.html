@@ -1,121 +1,147 @@
 <!DOCTYPE html>
-<html lang="en" data-page="funder">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Funder | ScienceEcosystem</title>
-  <meta name="description" content="Explore funders, their grants and funded outputs on ScienceEcosystem." />
+  <meta name="description" content="Funder page with funded works, metrics, trends, and links from OpenAlex." />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles/main.css" />
-  <link rel="icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body data-page="funder">
-  <!-- Site header (reuse your existing header include if you have one) -->
-  <header id="site-header" class="se-header">
-    <a class="se-logo" href="/index.html" aria-label="ScienceEcosystem Home">ScienceEcosystem</a>
-    <nav class="se-nav" aria-label="Primary">
-      <a href="/search.html">Search</a>
-      <a href="/researchers.html">Researchers</a>
-      <a href="/institutions.html">Institutions</a>
-      <a href="/journals.html">Journals</a>
-      <a href="/publishers.html">Publishers</a>
-      <a href="/funders.html" aria-current="page">Funders</a>
-    </nav>
-    <div id="auth-slot"></div>
-  </header>
+  <a class="skip-link" href="#main">Skip to content</a>
 
-  <main class="se-container">
-    <!-- Query bar -->
-    <section class="se-card se-stack" aria-labelledby="funder-query">
-      <h1 id="funder-query" class="se-h1">Funder</h1>
-      <form id="funder-form" class="se-row se-gap">
-        <input id="funder-input" class="se-input" type="text" placeholder="Search funders (e.g., European Research Council) or paste an OpenAlex ID" aria-label="Search funders" />
-        <button id="funder-search" class="se-btn" type="submit">Search</button>
-      </form>
-      <p class="se-muted">Tip: paste an OpenAlex Funder ID like <code>F4320301738</code>.</p>
-    </section>
-
-    <!-- Funder header -->
-    <section id="funder-header" class="se-card se-stack" hidden>
-      <div class="se-row se-between se-center">
-        <div class="se-stack">
-          <h2 id="funder-name" class="se-h2"></h2>
-          <div id="funder-meta" class="se-muted"></div>
-        </div>
-        <img id="funder-logo" alt="" class="se-logo-img" hidden />
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
       </div>
-      <div id="funder-links" class="se-row se-wrap se-gap"></div>
-    </section>
 
-    <!-- Analytics quick stats -->
-    <section id="funder-stats" class="se-card se-grid se-grid-3" hidden>
-      <div class="se-stat">
-        <div class="se-stat-label">Works</div>
-        <div id="stat-works" class="se-stat-value">–</div>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
       </div>
-      <div class="se-stat">
-        <div class="se-stat-label">Cited by</div>
-        <div id="stat-cited" class="se-stat-value">–</div>
-      </div>
-      <div class="se-stat">
-        <div class="se-stat-label">H-Index (approx.)</div>
-        <div id="stat-h" class="se-stat-value">–</div>
-      </div>
-    </section>
 
-    <!-- Tabs -->
-    <section class="se-tabs">
-      <nav class="se-tabbar" role="tablist" aria-label="Funder tabs">
-        <button class="se-tab is-active" role="tab" aria-selected="true" aria-controls="tab-works" id="tabbtn-works">Works</button>
-        <button class="se-tab" role="tab" aria-selected="false" aria-controls="tab-researchers" id="tabbtn-researchers">Top Researchers</button>
-        <button class="se-tab" role="tab" aria-selected="false" aria-controls="tab-institutions" id="tabbtn-institutions">Top Institutions</button>
-        <button class="se-tab" role="tab" aria-selected="false" aria-controls="tab-topics" id="tabbtn-topics">Topics</button>
-      </nav>
+      <div class="nav-right">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
 
-      <div id="tab-works" role="tabpanel" aria-labelledby="tabbtn-works" class="se-card se-stack">
-        <div class="se-row se-between se-center">
-          <div class="se-row se-gap">
-            <label class="se-select">
-              <span class="se-label">Sort</span>
-              <select id="works-sort">
-                <option value="relevance_score:desc">Relevance</option>
-                <option value="cited_by_count:desc">Citations</option>
-                <option value="publication_year:desc">Year (newest)</option>
-                <option value="publication_year:asc">Year (oldest)</option>
-              </select>
-            </label>
+  <main id="main" class="container">
+    <!-- TOP -->
+    <section class="panel profile-top">
+      <div class="profile-top-grid">
+        <div class="identity">
+          <div class="id-header">
+            <div class="journal-avatar" aria-hidden="true"></div>
+            <div>
+              <h1 id="funderName">Loading...</h1>
+              <p class="muted" id="funderLinks"></p>
+            </div>
           </div>
-          <div id="works-count" class="se-muted"></div>
+
+          <section class="ai-bio" id="funderSummary">A short summary will appear here.</section>
         </div>
-        <ol id="works-list" class="se-list"></ol>
-        <div class="se-row se-center se-gap">
-          <button id="works-prev" class="se-btn se-btn-secondary" disabled>Previous</button>
-          <button id="works-next" class="se-btn" disabled>Next</button>
+
+        <div class="metrics">
+          <div class="stats-grid">
+            <div class="stat" title="Total works acknowledged as funded by this funder.">
+              <div class="stat-label">Works</div>
+              <div class="stat-value" id="totalWorks">0</div>
+            </div>
+            <div class="stat" title="Total citations to funded works.">
+              <div class="stat-label">Citations</div>
+              <div class="stat-value" id="totalCitations">0</div>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div id="tab-researchers" role="tabpanel" aria-labelledby="tabbtn-researchers" class="se-card se-stack" hidden>
-        <ol id="researchers-list" class="se-list"></ol>
-      </div>
-
-      <div id="tab-institutions" role="tabpanel" aria-labelledby="tabbtn-institutions" class="se-card se-stack" hidden>
-        <ol id="institutions-list" class="se-list"></ol>
-      </div>
-
-      <div id="tab-topics" role="tabpanel" aria-labelledby="tabbtn-topics" class="se-card se-stack" hidden>
-        <ol id="topics-list" class="se-chiplist"></ol>
       </div>
     </section>
+
+    <!-- GRID -->
+    <div class="layout-grid">
+      <!-- Main -->
+      <section class="panel main-col">
+        <div class="pubs-header">
+          <h2>Recent Funded Works</h2>
+          <div class="sort-controls">
+            <label for="workSort">Sort by:</label>
+            <select id="workSort">
+              <option value="publication_year:desc" selected>Year (newest)</option>
+              <option value="cited_by_count:desc">Citations</option>
+              <option value="relevance_score:desc">Relevance</option>
+              <option value="publication_year:asc">Year (oldest)</option>
+            </select>
+          </div>
+        </div>
+        <div id="worksList" aria-live="polite">Loading works...</div>
+        <div id="worksPagination" style="margin-top:1rem;"></div>
+      </section>
+
+      <!-- Sidebar -->
+      <aside class="side-col">
+        <section class="panel">
+          <h3>Trends</h3>
+          <div id="trendCharts" class="charts-wrap">Loading charts...</div>
+        </section>
+
+        <section class="panel">
+          <h3>Top Researchers</h3>
+          <ul id="topResearchers" class="list-reset">
+            <li class="muted">Loading…</li>
+          </ul>
+        </section>
+
+        <section class="panel">
+          <h3>Top Institutions</h3>
+          <ul id="topInstitutions" class="list-reset">
+            <li class="muted">Loading…</li>
+          </ul>
+        </section>
+      </aside>
+    </div>
   </main>
 
-  <footer class="se-footer">
-    <p>© <span id="year"></span> ScienceEcosystem</p>
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+
+      <div class="footer-socials">
+        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
+          </svg>
+        </a>
+
+        <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/>
+          </svg>
+        </a>
+      </div>
+
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
   </footer>
 
-  <script src="/scripts/funder.js" defer></script>
-  <script>
-    document.getElementById('year').textContent = new Date().getFullYear();
-  </script>
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/funder.js" defer></script>
+  <script src="scripts/session.js" defer></script>
 </body>
 </html>

@@ -1,411 +1,243 @@
-/* globals window, document, fetch, URLSearchParams, AbortController */
+/* scripts/funder.js */
 (function () {
   if (!document.body || document.body.dataset.page !== "funder") return;
 
-  // ---------- Constants ----------
   const API = "https://api.openalex.org";
-  const MAILTO = "info@scienceecosystem.org"; // keep this to avoid 401/429
+  const MAILTO = "info@scienceecosystem.org";
   const UAQS = `mailto=${encodeURIComponent(MAILTO)}`;
 
-  // Basic retry helper for 429s
-  async function fetchJson(url, { signal } = {}) {
-    let attempt = 0;
-    let lastErr;
-    while (attempt < 4) {
-      try {
-        const res = await fetch(url + (url.includes("?") ? "&" : "?") + UAQS, { signal });
-        if (res.status === 429) {
-          const wait = Math.min(2000 * (attempt + 1), 8000);
-          await new Promise(r => setTimeout(r, wait));
-          attempt++;
-          continue;
-        }
-        if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-        return await res.json();
-      } catch (e) {
-        lastErr = e;
-        if (e.name === "AbortError") throw e;
-        attempt++;
-        await new Promise(r => setTimeout(r, 500 * attempt));
-      }
-    }
-    throw lastErr || new Error("Network error");
-  }
+  // Elements
+  const nameEl = document.getElementById("funderName");
+  const linksEl = document.getElementById("funderLinks");
+  const summaryEl = document.getElementById("funderSummary");
+  const totalWorksEl = document.getElementById("totalWorks");
+  const totalCitesEl = document.getElementById("totalCitations");
 
-  // ---------- Elements ----------
-  const form = document.getElementById("funder-form");
-  const input = document.getElementById("funder-input");
-  const header = document.getElementById("funder-header");
-  const nameEl = document.getElementById("funder-name");
-  const metaEl = document.getElementById("funder-meta");
-  const logoEl = document.getElementById("funder-logo");
-  const linksEl = document.getElementById("funder-links");
+  const worksListEl = document.getElementById("worksList");
+  const worksPaginationEl = document.getElementById("worksPagination");
+  const workSortEl = document.getElementById("workSort");
 
-  const stats = document.getElementById("funder-stats");
-  const statWorks = document.getElementById("stat-works");
-  const statCited = document.getElementById("stat-cited");
-  const statH = document.getElementById("stat-h");
+  const trendChartsEl = document.getElementById("trendCharts");
+  const topResearchersEl = document.getElementById("topResearchers");
+  const topInstitutionsEl = document.getElementById("topInstitutions");
 
-  const tabBtns = {
-    works: document.getElementById("tabbtn-works"),
-    researchers: document.getElementById("tabbtn-researchers"),
-    institutions: document.getElementById("tabbtn-institutions"),
-    topics: document.getElementById("tabbtn-topics"),
-  };
-  const tabs = {
-    works: document.getElementById("tab-works"),
-    researchers: document.getElementById("tab-researchers"),
-    institutions: document.getElementById("tab-institutions"),
-    topics: document.getElementById("tab-topics"),
-  };
-
-  const worksList = document.getElementById("works-list");
-  const worksCount = document.getElementById("works-count");
-  const worksSort = document.getElementById("works-sort");
-  const worksPrev = document.getElementById("works-prev");
-  const worksNext = document.getElementById("works-next");
-
-  // ---------- State ----------
   let currentFunder = null;
-  let worksCursor = { page: 1, perPage: 25, nextCursor: null, prevStack: [] };
-  let controller = null;
+  let cursor = "*";
+  let nextCursor = null;
+  const perPage = 25;
 
-  // ---------- Helpers ----------
-  function setHidden(el, hidden) {
-    if (!el) return;
-    el.hidden = !!hidden;
+  // Helpers
+  function withMailto(url) {
+    return url + (url.includes("?") ? "&" : "?") + UAQS;
   }
-  function clear(el) {
-    while (el.firstChild) el.removeChild(el.firstChild);
+  async function fetchJson(url, { signal } = {}) {
+    let tries = 0;
+    while (tries < 4) {
+      const res = await fetch(withMailto(url), { signal });
+      if (res.status === 429) {
+        await new Promise(r => setTimeout(r, 1000 * (tries + 1)));
+        tries++; continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+      return res.json();
+    }
+    throw new Error("Too many retries");
   }
-  function formatInt(n) {
-    return (n ?? 0).toLocaleString();
+  function qsParam(name) {
+    const u = new URL(window.location.href);
+    return u.searchParams.get(name);
   }
+  function linkify(url, text) {
+    if (!url) return "";
+    return `<a href="${url}" target="_blank" rel="noopener">${text || url}</a>`;
+  }
+  function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+  function fmtInt(n) { return (n ?? 0).toLocaleString(); }
 
-  function switchTab(key) {
-    Object.keys(tabs).forEach(k => {
-      const btn = tabBtns[k];
-      const panel = tabs[k];
-      const active = k === key;
-      btn.classList.toggle("is-active", active);
-      btn.setAttribute("aria-selected", String(active));
-      setHidden(panel, !active);
-    });
-  }
-
-  function parseIdOrQuery(str) {
-    const s = (str || "").trim();
-    // Accept OpenAlex id forms: F#### or https://openalex.org/F####
-    const match = s.match(/(?:openalex\.org\/)?(F\d{6,})$/i);
-    return match ? { id: match[1] } : { q: s };
-  }
-
-  function chip(text, href) {
-    const a = document.createElement("a");
-    a.className = "se-chip";
-    a.textContent = text;
-    if (href) a.href = href;
-    a.target = "_blank";
-    a.rel = "noopener";
-    return a;
-  }
-
-  function authorList(authorships) {
-    const names = (authorships || []).map(a => a.author?.display_name).filter(Boolean);
-    return names.slice(0, 6).join(", ") + (names.length > 6 ? " et al." : "");
-  }
-
-  // ---------- Rendering ----------
-  function renderFunderHeader(f) {
-    currentFunder = f;
-    nameEl.textContent = f.display_name || "Unnamed funder";
+  function renderLinks(f) {
     const parts = [];
-    if (f.country_code) parts.push(f.country_code);
-    if (f.type) parts.push(f.type);
-    metaEl.textContent = parts.join(" · ");
-
-    clear(linksEl);
-    if (f.homepage_url) linksEl.appendChild(chip("Website", f.homepage_url));
-    if (f.ror) linksEl.appendChild(chip("ROR", `https://ror.org/${f.ror.replace(/^https?:\/\/ror\.org\//, "")}`));
-    if (f.id) linksEl.appendChild(chip("OpenAlex", `https://openalex.org/${f.id}`));
-
-    if (f.image_url) {
-      logoEl.src = f.image_url;
-      logoEl.alt = `${f.display_name} logo`;
-      setHidden(logoEl, false);
-    } else {
-      setHidden(logoEl, true);
+    if (f.homepage_url) parts.push(linkify(f.homepage_url, "Website"));
+    if (f.ror) {
+      const rid = f.ror.replace(/^https?:\/\/ror\.org\//, "");
+      parts.push(`<a href="https://ror.org/${rid}" target="_blank" rel="noopener">ROR</a>`);
     }
-
-    setHidden(header, false);
+    parts.push(`<a href="https://openalex.org/${f.id}" target="_blank" rel="noopener">OpenAlex</a>`);
+    linksEl.innerHTML = parts.join(" · ");
   }
 
-  function renderStats(f) {
-    setHidden(stats, false);
-    statWorks.textContent = formatInt(f.works_count);
-    statCited.textContent = formatInt(f.cited_by_count);
-    // quick & dirty h-index estimate √(citations)
-    const h = Math.round(Math.sqrt(f.cited_by_count || 0));
-    statH.textContent = isFinite(h) ? h : "–";
+  function renderSummary(f) {
+    const bits = [];
+    if (f.display_name) bits.push(`<strong>${f.display_name}</strong>`);
+    const meta = [f.type, f.country_code].filter(Boolean).join(" · ");
+    if (meta) bits.push(`<span class="muted">${meta}</span>`);
+    summaryEl.innerHTML = bits.join("<br/>") || "No summary available.";
   }
 
-  function renderWorksList(results, meta) {
-    clear(worksList);
-    worksCount.textContent = `${formatInt(meta.count)} results`;
-    for (const w of results) {
-      const li = document.createElement("li");
-      li.className = "se-list-item";
-      const title = w.display_name || "(Untitled)";
-      const venue = w.host_venue?.display_name || w.primary_location?.source?.display_name || "";
-      const year = w.publication_year || "";
-      const citations = w.cited_by_count ?? 0;
+  function workCard(w) {
+    const title = w.display_name || "(Untitled)";
+    const venue = w.host_venue?.display_name || w.primary_location?.source?.display_name || "";
+    const year = w.publication_year || "";
+    const cites = w.cited_by_count ?? 0;
+    const authors = (w.authorships || []).map(a => a.author?.display_name).filter(Boolean).slice(0, 6).join(", ") + ((w.authorships?.length || 0) > 6 ? " et al." : "");
 
-      const a = document.createElement("a");
-      a.href = `/paper.html?id=${encodeURIComponent(w.id)}`;
-      a.textContent = title;
-      a.className = "se-link-strong";
+    const aHref = `paper.html?id=${encodeURIComponent(w.id)}`;
+    return `
+      <article class="pub-card">
+        <h3 class="pub-title"><a href="${aHref}">${title}</a></h3>
+        <p class="pub-meta muted">${[venue, year && `(${year})`, `${cites} citations`].filter(Boolean).join(" · ")}</p>
+        ${authors ? `<p class="pub-authors">${authors}</p>` : ""}
+      </article>
+    `;
+  }
 
-      const meta = document.createElement("div");
-      meta.className = "se-muted";
-      meta.textContent = [venue, year ? `(${year})` : "", `${citations} citations`].filter(Boolean).join(" · ");
+  function renderWorks(list, meta) {
+    worksListEl.innerHTML = list.map(workCard).join("") || `<p class="muted">No works found.</p>`;
+    // Pagination (cursor-based; show a simple "Next" button)
+    clear(worksPaginationEl);
+    const controls = document.createElement("div");
+    controls.className = "pager";
+    const nextBtn = document.createElement("button");
+    nextBtn.className = "btn";
+    nextBtn.textContent = "Next";
+    nextBtn.disabled = !meta?.next_cursor;
+    nextBtn.addEventListener("click", async () => {
+      await loadWorks(currentFunder.id, { sort: workSortEl.value, cursor: nextCursor || meta.next_cursor });
+    });
+    controls.appendChild(nextBtn);
+    worksPaginationEl.appendChild(controls);
+  }
 
-      const authors = document.createElement("div");
-      authors.className = "se-small";
-      authors.textContent = authorList(w.authorships);
-
-      li.appendChild(a);
-      li.appendChild(meta);
-      if (authors.textContent) li.appendChild(authors);
-      worksList.appendChild(li);
+  async function loadFunder(idOrQuery) {
+    // If an ID is provided, fetch directly; else search
+    if (/^F\d{6,}$/i.test(idOrQuery)) {
+      const f = await fetchJson(`${API}/funders/${idOrQuery}`);
+      return f;
     }
-
-    // pagination
-    worksPrev.disabled = worksCursor.page <= 1 || worksCursor.prevStack.length === 0;
-    worksNext.disabled = !worksCursor.nextCursor;
+    const res = await fetchJson(`${API}/funders?search=${encodeURIComponent(idOrQuery)}&per_page=1`);
+    return (res.results || [])[0] || null;
   }
 
-  function renderPeople(list, target) {
-    clear(target);
-    for (const a of list) {
-      const li = document.createElement("li");
-      li.className = "se-list-item";
-      const link = document.createElement("a");
-      link.href = `/researcher.html?id=${encodeURIComponent(a.id)}`;
-      link.textContent = a.display_name || "Unknown";
-      link.className = "se-link-strong";
-      const meta = document.createElement("div");
-      meta.className = "se-muted";
-      meta.textContent = `${formatInt(a.works_count)} works · ${formatInt(a.cited_by_count)} citations`;
-      li.appendChild(link);
-      li.appendChild(meta);
-      target.appendChild(li);
-    }
-  }
-
-  function renderInstitutions(list, target) {
-    clear(target);
-    for (const org of list) {
-      const li = document.createElement("li");
-      li.className = "se-list-item";
-      const link = document.createElement("a");
-      link.href = `/institution.html?id=${encodeURIComponent(org.id)}`;
-      link.textContent = org.display_name || "Unknown";
-      link.className = "se-link-strong";
-      const meta = document.createElement("div");
-      meta.className = "se-muted";
-      meta.textContent = `${org.country_code || ""} · ${formatInt(org.works_count)} works`;
-      li.appendChild(link);
-      li.appendChild(meta);
-      target.appendChild(li);
-    }
-  }
-
-  function renderTopics(list, target) {
-    clear(target);
-    for (const t of list) {
-      const li = document.createElement("li");
-      li.className = "se-chip-item";
-      const a = document.createElement("a");
-      a.className = "se-chip";
-      a.href = `/search.html?q=${encodeURIComponent(`topic.id:${t.id}`)}`;
-      a.textContent = `${t.display_name} (${formatInt(t.works_count)})`;
-      li.appendChild(a);
-      target.appendChild(li);
-    }
-  }
-
-  // ---------- Data loaders ----------
-  async function loadFunderById(id, { signal }) {
-    return await fetchJson(`${API}/funders/${id}`, { signal });
-  }
-
-  async function searchFunders(q, { signal }) {
-    // prefer exact name match first
-    return await fetchJson(`${API}/funders?search=${encodeURIComponent(q)}&per_page=1`, { signal });
-  }
-
-  async function loadWorksForFunder(id, { sort, cursor, perPage = 25, signal }) {
+  async function loadWorks(fid, { sort, cursor: cur }) {
     const url = new URL(`${API}/works`);
-    url.searchParams.set("filter", `funder:${id}`);
+    url.searchParams.set("filter", `funder:${fid}`);
     url.searchParams.set("per_page", String(perPage));
-    url.searchParams.set("sort", sort || "relevance_score:desc");
-    if (cursor) url.searchParams.set("cursor", cursor);
-    return await fetchJson(url.toString(), { signal });
+    url.searchParams.set("sort", sort || "publication_year:desc");
+    url.searchParams.set("cursor", cur || "*");
+    const data = await fetchJson(url.toString());
+    nextCursor = data.meta?.next_cursor || null;
+    renderWorks(data.results || [], data.meta || {});
   }
 
-  async function topEntitiesForFunder(id, { groupBy, perPage = 10, signal }) {
-    // Use group_by to aggregate top authors/institutions/topics where possible
+  async function groupTop(fid, groupBy, limit, hydrateEndpoint) {
+    // group_by first to get IDs, then hydrate details
     const url = new URL(`${API}/works`);
-    url.searchParams.set("filter", `funder:${id}`);
+    url.searchParams.set("filter", `funder:${fid}`);
     url.searchParams.set("per_page", "1");
     url.searchParams.set("group_by", groupBy);
     url.searchParams.set("sort", "count:desc");
-    // OpenAlex group_by returns buckets with ids; we'll follow-up with /authors or /institutions hydrate
-    const grouped = await fetchJson(url.toString(), { signal });
-    const ids = (grouped.group_by || []).map(g => g.key).filter(Boolean).slice(0, perPage);
-    if (ids.length === 0) return [];
-
-    const endpoint = groupBy === "authorships.author.id" ? "authors"
-                    : groupBy === "institutions.id" ? "institutions"
-                    : groupBy === "topics.id" ? "topics"
-                    : null;
-    if (!endpoint) return [];
-
-    // batch fetch
+    const grouped = await fetchJson(url.toString());
+    const ids = (grouped.group_by || []).map(g => g.key).filter(Boolean).slice(0, limit);
+    if (!ids.length) return [];
     const idsParam = ids.map(encodeURIComponent).join("|");
-    const data = await fetchJson(`${API}/${endpoint}?filter=id.search:${idsParam}&per_page=${perPage}`, { signal });
-    return data.results || [];
+    const detail = await fetchJson(`${API}/${hydrateEndpoint}?filter=id.search:${idsParam}&per_page=${limit}`);
+    return detail.results || [];
   }
 
-  // ---------- Controller ----------
-  async function showFunder(source) {
-    controller?.abort();
-    controller = new AbortController();
-    const { signal } = controller;
-
-    try {
-      setHidden(header, true);
-      setHidden(stats, true);
-      clear(worksList);
-      worksCount.textContent = "";
-      worksPrev.disabled = true;
-      worksNext.disabled = true;
-
-      let f;
-      if (source.id) {
-        f = await loadFunderById(source.id, { signal });
-      } else if (source.q) {
-        const res = await searchFunders(source.q, { signal });
-        f = (res.results || [])[0];
-        if (!f) throw new Error("No funder found for that query.");
-      } else {
-        throw new Error("Please enter a funder name or ID.");
-      }
-
-      renderFunderHeader(f);
-      renderStats(f);
-
-      // Works (first page)
-      worksCursor = { page: 1, perPage: 25, nextCursor: null, prevStack: [] };
-      const works = await loadWorksForFunder(f.id, { sort: worksSort.value, cursor: "*", perPage: worksCursor.perPage, signal });
-      worksCursor.nextCursor = works.meta?.next_cursor || null;
-      renderWorksList(works.results || [], works.meta || { count: 0 });
-
-      // Side tabs
-      switchTab("works");
-      // Top researchers
-      topEntitiesForFunder(f.id, { groupBy: "authorships.author.id", signal }).then(list => {
-        renderPeople(list, document.getElementById("researchers-list"));
-      }).catch(()=>{});
-      // Top institutions
-      topEntitiesForFunder(f.id, { groupBy: "institutions.id", signal }).then(list => {
-        renderInstitutions(list, document.getElementById("institutions-list"));
-      }).catch(()=>{});
-      // Topics
-      topEntitiesForFunder(f.id, { groupBy: "topics.id", signal }).then(list => {
-        renderTopics(list, document.getElementById("topics-list"));
-      }).catch(()=>{});
-
-      // update URL
-      const url = new URL(window.location.href);
-      url.searchParams.set("id", f.id);
-      history.replaceState(null, "", url.toString());
-    } catch (e) {
-      console.error(e);
-      alert(e.message || "Failed to load funder.");
+  function renderTopList(items, targetEl, type) {
+    clear(targetEl);
+    if (!items.length) {
+      targetEl.innerHTML = `<li class="muted">No data.</li>`;
+      return;
+    }
+    for (const it of items) {
+      const li = document.createElement("li");
+      li.className = "list-item";
+      const a = document.createElement("a");
+      if (type === "author") a.href = `researcher.html?id=${encodeURIComponent(it.id)}`;
+      if (type === "institution") a.href = `institution.html?id=${encodeURIComponent(it.id)}`;
+      a.textContent = it.display_name || "Unknown";
+      const meta = document.createElement("div");
+      meta.className = "muted";
+      meta.textContent = `${fmtInt(it.works_count)} works · ${fmtInt(it.cited_by_count)} citations`;
+      li.appendChild(a);
+      li.appendChild(meta);
+      targetEl.appendChild(li);
     }
   }
 
-  // ---------- Events ----------
-  form.addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const src = parseIdOrQuery(input.value);
-    showFunder(src);
-  });
+  function renderTrends(fid) {
+    // Minimal placeholder (keeps parity with publisher page layout).
+    // You can later replace with real charts; this shows year buckets.
+    trendChartsEl.innerHTML = `<p class="muted">Loading yearly trend…</p>`;
+    (async () => {
+      try {
+        const url = new URL(`${API}/works`);
+        url.searchParams.set("filter", `funder:${fid}`);
+        url.searchParams.set("per_page", "1");
+        url.searchParams.set("group_by", "publication_year");
+        url.searchParams.set("sort", "key:asc");
+        const data = await fetchJson(url.toString());
+        const points = (data.group_by || []).map(g => ({ year: g.key_display || g.key, count: g.count }));
+        if (!points.length) {
+          trendChartsEl.innerHTML = `<p class="muted">No trend data.</p>`;
+          return;
+        }
+        const rows = points.map(p => `<div class="trend-row"><span>${p.year}</span><div class="trend-bar" style="width:${Math.min(100, Math.round((p.count / points[points.length-1].count) * 100))}%"></div><span class="muted">${fmtInt(p.count)}</span></div>`).join("");
+        trendChartsEl.innerHTML = `<div class="trend-list">${rows}</div>`;
+      } catch (e) {
+        trendChartsEl.innerHTML = `<p class="muted">Trend unavailable.</p>`;
+      }
+    })();
+  }
 
-  worksSort.addEventListener("change", async () => {
+  async function init() {
+    const id = qsParam("id");
+    const q = qsParam("q");
+    const src = id || q;
+    if (!src) {
+      nameEl.textContent = "Enter a funder via search";
+      worksListEl.innerHTML = `<p class="muted">Open this page from search or supply <code>?id=F########</code> or <code>?q=</code> in the URL.</p>`;
+      return;
+    }
+    const funder = await loadFunder(src);
+    if (!funder) {
+      nameEl.textContent = "Funder not found";
+      worksListEl.innerHTML = `<p class="muted">No matching funder.</p>`;
+      return;
+    }
+    currentFunder = funder;
+
+    // Header
+    nameEl.textContent = funder.display_name || "Unnamed funder";
+    renderLinks(funder);
+    renderSummary(funder);
+    totalWorksEl.textContent = fmtInt(funder.works_count);
+    totalCitesEl.textContent = fmtInt(funder.cited_by_count);
+
+    // Lists
+    await loadWorks(funder.id, { sort: workSortEl.value, cursor: "*" });
+    renderTrends(funder.id);
+
+    // Sidebars
+    groupTop(funder.id, "authorships.author.id", 10, "authors")
+      .then(list => renderTopList(list, topResearchersEl, "author"))
+      .catch(() => { topResearchersEl.innerHTML = `<li class="muted">Unavailable.</li>`; });
+
+    groupTop(funder.id, "institutions.id", 10, "institutions")
+      .then(list => renderTopList(list, topInstitutionsEl, "institution"))
+      .catch(() => { topInstitutionsEl.innerHTML = `<li class="muted">Unavailable.</li>`; });
+  }
+
+  // Events
+  workSortEl.addEventListener("change", () => {
     if (!currentFunder) return;
-    const { signal } = controller || {};
-    try {
-      const works = await loadWorksForFunder(currentFunder.id, { sort: worksSort.value, cursor: "*", perPage: worksCursor.perPage, signal });
-      worksCursor = { page: 1, perPage: worksCursor.perPage, nextCursor: works.meta?.next_cursor || null, prevStack: [] };
-      renderWorksList(works.results || [], works.meta || { count: 0 });
-    } catch (e) {
-      console.error(e);
-    }
+    loadWorks(currentFunder.id, { sort: workSortEl.value, cursor: "*" });
   });
 
-  worksNext.addEventListener("click", async () => {
-    if (!currentFunder || !worksCursor.nextCursor) return;
-    const { signal } = controller || {};
-    const prevCursor = worksCursor.nextCursor;
-    try {
-      const works = await loadWorksForFunder(currentFunder.id, { sort: worksSort.value, cursor: worksCursor.nextCursor, perPage: worksCursor.perPage, signal });
-      worksCursor.prevStack.push(prevCursor);
-      worksCursor.page += 1;
-      worksCursor.nextCursor = works.meta?.next_cursor || null;
-      renderWorksList(works.results || [], works.meta || { count: 0 });
-    } catch (e) {
-      console.error(e);
-    }
+  // Kick off
+  init().catch(err => {
+    console.error(err);
+    nameEl.textContent = "Error loading funder";
+    worksListEl.innerHTML = `<p class="muted">Please try again later.</p>`;
   });
-
-  worksPrev.addEventListener("click", async () => {
-    if (!currentFunder || worksCursor.prevStack.length === 0) return;
-    const { signal } = controller || {};
-    const prev = worksCursor.prevStack.pop();
-    // OpenAlex cursor is forward-only; to paginate back we restart and step to page-1
-    try {
-      let cursor = "*";
-      let next = null;
-      let pageResults = null;
-      for (let i = 1; i < worksCursor.page; i++) {
-        const resp = await loadWorksForFunder(currentFunder.id, { sort: worksSort.value, cursor, perPage: worksCursor.perPage, signal });
-        cursor = resp.meta?.next_cursor || null;
-        next = cursor;
-        pageResults = resp;
-      }
-      worksCursor.page -= 1;
-      worksCursor.nextCursor = next;
-      renderWorksList(pageResults?.results || [], pageResults?.meta || { count: 0 });
-    } catch (e) {
-      console.error(e);
-    }
-  });
-
-  // Tab switching
-  Object.keys(tabBtns).forEach(k => {
-    tabBtns[k].addEventListener("click", () => switchTab(k));
-  });
-
-  // Load from URL if id or query present
-  (function initFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("id");
-    const q = params.get("q");
-    if (id || q) {
-      input.value = id || q || "";
-      showFunder(id ? { id } : { q });
-    }
-  })();
 })();

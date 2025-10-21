@@ -4,11 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>About | ScienceEcosystem</title>
-  <meta name="description" content="ScienceEcosystem is an open, trusted infrastructure for research. Built with the community. Useful from day one." />
+  <meta name="description" content="ScienceEcosystem is an open, trusted infrastructure for global research—connecting papers, data, code, and funding into one transparent network." />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
 
@@ -23,132 +24,131 @@
       <div class="nav-center">
         <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
           <label class="visually-hidden" for="searchInput">Search</label>
-          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')" />
         </form>
       </div>
 
       <div class="nav-right">
-  <a class="nav-link" href="index.html">Home</a>
-  <a class="nav-link" href="about.html">About</a>
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="about.html">About</a>
 
-  <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
 
-  <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
-    <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
-    <span>Login with ORCID</span>
-  </a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
 
-  <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
-</div>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
     </div>
   </nav>
 
   <main id="main" class="container">
     <header class="hero">
       <h1>About ScienceEcosystem</h1>
-      <p class="lead">An open home for research that people can trust and use every day.</p>
+      <p class="lead">An open infrastructure connecting research, data, and people — transparent, reliable, and built to last.</p>
     </header>
 
     <section class="panel">
       <h2>What is ScienceEcosystem</h2>
       <p>
-        ScienceEcosystem is a single place to find, save, and understand research. It brings papers, data, code, peer review, and funding into one connected space. It shows where information comes from and links back to the original sources.
+        <strong>ScienceEcosystem</strong> is an independent, open-source platform designed to bring together the essential parts of research — papers, datasets, code, peer review, and funding — in one connected environment.  
+        It makes research discoverable, verifiable, and useful to everyone while respecting provenance and authorship.
       </p>
     </section>
 
     <section class="panel">
-      <h2>Why ScienceEcosystem</h2>
+      <h2>Why it matters</h2>
       <p>
-        The current system slows people down. Paywalls hide knowledge, tools are scattered, and rewards favor journals instead of good work. ScienceEcosystem focuses on clarity, access, and accountability so that scientists can spend more time doing science.
+        Scientific information is fragmented. Paywalls limit access, research outputs are scattered across multiple systems, and the value of work is often measured by where it is published rather than what it contributes.  
+        ScienceEcosystem addresses these problems by focusing on <strong>clarity, transparency, and open access</strong> — allowing researchers to build upon each other’s work without barriers.
       </p>
     </section>
 
     <section class="panel">
       <h2>How it works today</h2>
       <ul>
-        <li><strong>Search like Scholar</strong>. Find works, people, and institutions with clean provenance. We use open data and show links back to it.</li>
-        <li><strong>Built‑in library</strong>. Save items to personal collections. Import and export with common reference managers.</li>
-        <li><strong>Profiles for researchers</strong>. Public pages that bring together outputs, topics, and affiliations.</li>
-        <li><strong>Open access first</strong>. When there is a free version, we surface it clearly.</li>
+        <li><strong>Unified search.</strong> Discover works, authors, and institutions using clean metadata sourced from open APIs such as OpenAlex, with direct links to original data.</li>
+        <li><strong>Personal library.</strong> Save and organise papers, export to reference managers, and build private or public collections.</li>
+        <li><strong>Researcher profiles.</strong> Automatically generated public pages highlighting outputs, topics, and affiliations.</li>
+        <li><strong>Open access first.</strong> If a free version exists, ScienceEcosystem makes it visible by default.</li>
       </ul>
     </section>
 
     <section class="panel">
       <h2>Who it is for</h2>
       <p>
-        Researchers, students, educators, funders, and anyone curious. If you care about reliable knowledge, ScienceEcosystem is for you.
+        ScienceEcosystem serves researchers, students, educators, institutions, funders, and anyone seeking trustworthy scientific knowledge.  
+        Whether you publish, fund, or simply read research, this platform helps you connect the dots.
       </p>
     </section>
 
     <section class="panel">
-      <h2>Principles</h2>
+      <h2>Core principles</h2>
       <ul>
-        <li><strong>Open by default</strong>. Data and methods should be easy to access and reuse.</li>
-        <li><strong>Integrity</strong>. Always show the source and the status of a work, including retractions and versions.</li>
-        <li><strong>Useful first</strong>. Every feature should save time and reduce friction.</li>
-        <li><strong>Community owned</strong>. ScienceEcosystem is built with and for the people who use it.</li>
+        <li><strong>Open by design.</strong> Every layer of ScienceEcosystem is built on open standards, open data, and open collaboration.</li>
+        <li><strong>Integrity and provenance.</strong> Each record links back to its verified source, including retractions, versions, and datasets.</li>
+        <li><strong>Practical innovation.</strong> Features are developed to solve real researcher needs, not to chase trends.</li>
+        <li><strong>Community stewardship.</strong> ScienceEcosystem is built with and for the global research community, ensuring long-term independence.</li>
       </ul>
     </section>
 
     <section class="panel">
       <h2>Roadmap</h2>
       <ul>
-        <li><strong>Now</strong>: search, profiles, and a basic library you can trust.</li>
-        <li><strong>Next</strong>: open peer review and lightweight collaboration tools.</li>
-        <li><strong>Later</strong>: funding tools and reproducible workspaces at scale.</li>
+        <li><strong>Phase 1 – Foundation:</strong> Search, researcher profiles, and personal libraries (active now).</li>
+        <li><strong>Phase 2 – Collaboration:</strong> Open peer review, working-group projects, and shared research materials.</li>
+        <li><strong>Phase 3 – Infrastructure:</strong> Integrated funding records, provenance graphs, and reproducible research workspaces.</li>
       </ul>
+      <p>The roadmap evolves with input from users and partners. Each phase aims to strengthen open science infrastructure at a global scale.</p>
     </section>
 
     <section class="panel">
       <h2>Get involved</h2>
       <ul>
-        <li><strong>Researchers</strong>: try the search and tell us what is missing.</li>
-        <li><strong>Developers</strong>: help build small, reliable pieces that others can reuse.</li>
-        <li><strong>Funders and partners</strong>: support work that becomes public infrastructure.</li>
+        <li><strong>Researchers:</strong> Explore the platform and share feedback — what works, what doesn’t, what you need next.</li>
+        <li><strong>Developers:</strong> Contribute to open-source components that make ScienceEcosystem stronger for everyone.</li>
+        <li><strong>Institutions and funders:</strong> Support sustainable, public infrastructure for open knowledge.</li>
       </ul>
-      <p><a class="btn btn-link" href="https://forms.gle/LydXUFYSSe7o6Mf47" target="_blank" rel="noopener">Take the short survey</a></p>
-      <p>Contact us any time: <a href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+      <p>For partnerships or enquiries: <a href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
     </section>
 
     <section class="panel">
-      <h2>Business plan</h2>
+      <h2>Open planning</h2>
       <p>
-        We keep our planning open. Read the current version here:
-        <a class="btn btn-link" href="https://www.overleaf.com/read/xyzyqvjmpdjh#75b02a" target="_blank" rel="noopener">Open the plan</a>
+        Transparency is at the heart of ScienceEcosystem. Our ongoing strategy and financial roadmap are publicly available:
       </p>
+      <p><a class="btn btn-link" href="https://www.overleaf.com/read/xyzyqvjmpdjh#75b02a" target="_blank" rel="noopener">Read the business plan</a></p>
     </section>
   </main>
 
   <footer class="site-footer">
-  <div class="container">
-    <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
-    <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+    <div class="container">
+      <p>&copy; 2025 ScienceEcosystem. All rights reserved.</p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
 
-    <!-- Social icons -->
-    <div class="footer-socials">
-      <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
-        <!-- LinkedIn -->
-        <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-          <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
-        </svg>
-      </a>
+      <div class="footer-socials">
+        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
+          </svg>
+        </a>
 
-      <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
-        <!-- GitHub -->
-        <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-          <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/>
-        </svg>
-      </a>
+        <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/>
+          </svg>
+        </a>
+      </div>
+
+      <p class="footer-tagline">Open science, reimagined for the next generation of research.</p>
     </div>
-
-    <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
-  </div>
-</footer>
+  </footer>
 
   <script src="scripts/search.js" defer></script>
-<script src="scripts/library.js" defer></script>   <!-- defines SE_LIB + savePaper -->
-<script src="scripts/components.js" defer></script> <!-- uses SE_LIB defensively -->
-<script src="scripts/session.js" defer></script>   <!-- toggles nav state -->
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/session.js" defer></script>
 </body>
 </html>
-
