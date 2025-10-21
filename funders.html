@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" data-page="funder">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Funder | ScienceEcosystem</title>
+  <meta name="description" content="Explore funders, their grants and funded outputs on ScienceEcosystem." />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/main.css" />
+  <link rel="icon" href="/favicon.ico" />
+</head>
+<body data-page="funder">
+  <!-- Site header (reuse your existing header include if you have one) -->
+  <header id="site-header" class="se-header">
+    <a class="se-logo" href="/index.html" aria-label="ScienceEcosystem Home">ScienceEcosystem</a>
+    <nav class="se-nav" aria-label="Primary">
+      <a href="/search.html">Search</a>
+      <a href="/researchers.html">Researchers</a>
+      <a href="/institutions.html">Institutions</a>
+      <a href="/journals.html">Journals</a>
+      <a href="/publishers.html">Publishers</a>
+      <a href="/funders.html" aria-current="page">Funders</a>
+    </nav>
+    <div id="auth-slot"></div>
+  </header>
+
+  <main class="se-container">
+    <!-- Query bar -->
+    <section class="se-card se-stack" aria-labelledby="funder-query">
+      <h1 id="funder-query" class="se-h1">Funder</h1>
+      <form id="funder-form" class="se-row se-gap">
+        <input id="funder-input" class="se-input" type="text" placeholder="Search funders (e.g., European Research Council) or paste an OpenAlex ID" aria-label="Search funders" />
+        <button id="funder-search" class="se-btn" type="submit">Search</button>
+      </form>
+      <p class="se-muted">Tip: paste an OpenAlex Funder ID like <code>F4320301738</code>.</p>
+    </section>
+
+    <!-- Funder header -->
+    <section id="funder-header" class="se-card se-stack" hidden>
+      <div class="se-row se-between se-center">
+        <div class="se-stack">
+          <h2 id="funder-name" class="se-h2"></h2>
+          <div id="funder-meta" class="se-muted"></div>
+        </div>
+        <img id="funder-logo" alt="" class="se-logo-img" hidden />
+      </div>
+      <div id="funder-links" class="se-row se-wrap se-gap"></div>
+    </section>
+
+    <!-- Analytics quick stats -->
+    <section id="funder-stats" class="se-card se-grid se-grid-3" hidden>
+      <div class="se-stat">
+        <div class="se-stat-label">Works</div>
+        <div id="stat-works" class="se-stat-value">–</div>
+      </div>
+      <div class="se-stat">
+        <div class="se-stat-label">Cited by</div>
+        <div id="stat-cited" class="se-stat-value">–</div>
+      </div>
+      <div class="se-stat">
+        <div class="se-stat-label">H-Index (approx.)</div>
+        <div id="stat-h" class="se-stat-value">–</div>
+      </div>
+    </section>
+
+    <!-- Tabs -->
+    <section class="se-tabs">
+      <nav class="se-tabbar" role="tablist" aria-label="Funder tabs">
+        <button class="se-tab is-active" role="tab" aria-selected="true" aria-controls="tab-works" id="tabbtn-works">Works</button>
+        <button class="se-tab" role="tab" aria-selected="false" aria-controls="tab-researchers" id="tabbtn-researchers">Top Researchers</button>
+        <button class="se-tab" role="tab" aria-selected="false" aria-controls="tab-institutions" id="tabbtn-institutions">Top Institutions</button>
+        <button class="se-tab" role="tab" aria-selected="false" aria-controls="tab-topics" id="tabbtn-topics">Topics</button>
+      </nav>
+
+      <div id="tab-works" role="tabpanel" aria-labelledby="tabbtn-works" class="se-card se-stack">
+        <div class="se-row se-between se-center">
+          <div class="se-row se-gap">
+            <label class="se-select">
+              <span class="se-label">Sort</span>
+              <select id="works-sort">
+                <option value="relevance_score:desc">Relevance</option>
+                <option value="cited_by_count:desc">Citations</option>
+                <option value="publication_year:desc">Year (newest)</option>
+                <option value="publication_year:asc">Year (oldest)</option>
+              </select>
+            </label>
+          </div>
+          <div id="works-count" class="se-muted"></div>
+        </div>
+        <ol id="works-list" class="se-list"></ol>
+        <div class="se-row se-center se-gap">
+          <button id="works-prev" class="se-btn se-btn-secondary" disabled>Previous</button>
+          <button id="works-next" class="se-btn" disabled>Next</button>
+        </div>
+      </div>
+
+      <div id="tab-researchers" role="tabpanel" aria-labelledby="tabbtn-researchers" class="se-card se-stack" hidden>
+        <ol id="researchers-list" class="se-list"></ol>
+      </div>
+
+      <div id="tab-institutions" role="tabpanel" aria-labelledby="tabbtn-institutions" class="se-card se-stack" hidden>
+        <ol id="institutions-list" class="se-list"></ol>
+      </div>
+
+      <div id="tab-topics" role="tabpanel" aria-labelledby="tabbtn-topics" class="se-card se-stack" hidden>
+        <ol id="topics-list" class="se-chiplist"></ol>
+      </div>
+    </section>
+  </main>
+
+  <footer class="se-footer">
+    <p>© <span id="year"></span> ScienceEcosystem</p>
+  </footer>
+
+  <script src="/scripts/funder.js" defer></script>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
