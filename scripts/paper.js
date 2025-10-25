@@ -1,10 +1,10 @@
 /* scripts/paper.js — ScienceEcosystem (paper page)
-   Implements:
-   - Funding integration
-   - Header stability (no disappearance during graph render)
-   - Simplified Journal & Quality (stars + venue + peer review/preprint)
-   - Research Objects filtering (only relevant, via DOI/title match)
-   - Below-graph lists: Referenced vs Cited-by papers
+   - Funding integration (links to funders.html + award IDs)
+   - Stable header guards
+   - Simplified Journal & Quality (stars + venue + peer-review/preprint)
+   - PubPeer + Retraction Watch links (by DOI)
+   - Research Objects: Crossref/DataCite/Zenodo harvested and filtered (title/DOI match)
+   - Graph (Connected/Citation) + below-graph Referenced vs Cited-by lists
 */
 (function () {
   if (!document.body || document.body.dataset.page !== "paper") return;
@@ -13,30 +13,39 @@
   var API = "https://api.openalex.org";
   var MAILTO = "info@scienceecosystem.org";
 
-  // Heuristics
   var OPEN_PEER_REVIEW_JOURNALS = [
     "eLife","F1000Research","PeerJ","Royal Society Open Science","BMJ","BMC","Nature Communications","PLOS ONE","PLOS Biology"
   ];
   var PREPRINT_VENUES = [
-    "arXiv", "bioRxiv", "medRxiv", "ChemRxiv", "SSRN", "OSF Preprints", "PsyArXiv", "EarthArXiv", "Research Square"
+    "arXiv","bioRxiv","medRxiv","ChemRxiv","SSRN","OSF Preprints","PsyArXiv","EarthArXiv","Research Square"
   ];
 
-  // Globals (used to keep header/graph robust)
+  // ---------- Globals ----------
   var __CURRENT_PAPER__ = null;
   var __HEADER_HTML_SNAPSHOT__ = null;
   window.__GRAPH_CTX__ = { main: null, cited: [], citing: [] };
 
-  // ---------- Tiny helpers ----------
+  // ---------- Helpers ----------
   function $(id){ return document.getElementById(id); }
   function getParam(name){ return new URLSearchParams(location.search).get(name); }
-  function escapeHtml(str){ str = (str==null?"":String(str)); return str.replace(/[&<>'"]/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"})[c]); }
-  function get(obj, path, fb){ try{ var p=path.split("."), cur=obj; for(var i=0;i<p.length;i++){ if(cur==null) return fb; cur=cur[p[i]]; } return cur==null?fb:cur; } catch(e){ return fb; } }
+  function escapeHtml(str){
+    str = (str==null?"":String(str));
+    return str.replace(/[&<>'"]/g, function(c){
+      return ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"})[c];
+    });
+  }
+  function get(obj, path, fb){
+    try{ var p=path.split("."), cur=obj; for(var i=0;i<p.length;i++){ if(cur==null) return fb; cur=cur[p[i]]; } return cur==null?fb:cur; }
+    catch(e){ return fb; }
+  }
   function idTailFrom(anyId){ return anyId ? String(anyId).replace(/^https?:\/\/openalex\.org\//i,"") : ""; }
+
   function addMailto(u){
     var url = new URL(u, API);
     if (!url.searchParams.get("mailto")) url.searchParams.set("mailto", MAILTO);
     return url.toString();
   }
+
   async function getJSON(url){
     var withMt = url.indexOf(API) === 0 ? addMailto(url) : url;
     for (var attempt = 1; attempt <= 4; attempt++){
@@ -61,7 +70,6 @@
     throw new Error("Unreachable");
   }
 
-  // ---------- Domain helpers ----------
   function normalizePaperId(raw){
     if (!raw) return "";
     var s = raw;
@@ -83,6 +91,11 @@
     x = x.replace(/^https?:\/\/(dx\.)?doi\.org\//i,"");
     x = x.replace(/^doi:/i,"");
     return x;
+  }
+  function doiFromWork(p){
+    var doiRaw = p.doi || get(p,"ids.doi",null);
+    if (!doiRaw) return null;
+    return String(doiRaw).replace(/^doi:/i,"");
   }
 
   // ---------- Fetchers ----------
@@ -114,8 +127,7 @@
     return Array.isArray(data.results) ? data.results : [];
   }
 
-  // ---------- Research Objects (tight matching) ----------
-  // Deterministic sources: Crossref / DataCite / Zenodo — then filter by DOI/title similarity
+  // ---------- Research Objects ----------
   async function fetchCrossrefRelations(doi){
     if (!doi) return [];
     try{
@@ -125,8 +137,8 @@
       Object.keys(rel).forEach(function(k){
         var arr = Array.isArray(rel[k]) ? rel[k] : [];
         arr.forEach(function(r){
-          const rid = r.DOI || r.id || "";
-          const url = r.url || (rid ? ("https://doi.org/"+rid) : "");
+          var rid = r.DOI || r.id || "";
+          var url = r.url || (rid ? ("https://doi.org/"+rid) : "");
           out.push({
             provenance: "Crossref",
             typeHint: k || "",
@@ -167,7 +179,6 @@
       var q1 = 'related.identifiers.identifier:"' + doi.replace(/"/g,'\\"') + '"';
       var a = await getJSON("https://zenodo.org/api/records/?q="+encodeURIComponent(q1)+"&size=200");
       var hits = Array.isArray(a.hits && a.hits.hits) ? a.hits.hits : [];
-      // fallback query
       if (!hits.length){
         var q2 = 'metadata.related_identifiers.identifier:"' + doi.replace(/"/g,'\\"') + '"';
         var b = await getJSON("https://zenodo.org/api/records/?q="+encodeURIComponent(q2)+"&size=200");
@@ -194,17 +205,12 @@
     }catch(e){ return []; }
   }
   function tokenize(s){
-    return String(s||"")
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g," ")
-      .split(/\s+/)
-      .filter(Boolean);
+    return String(s||"").toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(Boolean);
   }
   function jaccardTokens(a, b){
     var A = new Set(tokenize(a));
     var B = new Set(tokenize(b));
-    var inter = 0;
-    A.forEach(x=>{ if (B.has(x)) inter++; });
+    var inter = 0; A.forEach(function(x){ if (B.has(x)) inter++; });
     var uni = A.size + B.size - inter;
     return uni ? inter/uni : 0;
   }
@@ -228,8 +234,7 @@
     var doi = normalizeDOI(paper.doi || get(paper,"ids.doi",""));
     var title = paper.display_name || "";
     var all = [];
-    // harvest
-    try { (await fetchCrossrefRelations(doi)).forEach(r=>{
+    try { (await fetchCrossrefRelations(doi)).forEach(function(r){
       all.push({
         provenance:"Crossref",
         type: classifyROKind(r.typeHint || ""),
@@ -238,24 +243,21 @@
         url: r.url || (r.doi ? ("https://doi.org/"+r.doi) : "")
       });
     }); } catch(e){}
-    try { (await fetchDataCiteBacklinks(doi)).forEach(r=>all.push(r)); } catch(e){}
-    try { (await fetchZenodoBacklinks(doi)).forEach(r=>all.push(r)); } catch(e){}
+    try { (await fetchDataCiteBacklinks(doi)).forEach(function(r){ all.push(r); }); } catch(e){}
+    try { (await fetchZenodoBacklinks(doi)).forEach(function(r){ all.push(r); }); } catch(e){}
 
-    // dedupe
     var dedup = uniqueByKey(all, function(x){
-      return (x.doi && x.doi.toLowerCase()) || (x.title.toLowerCase()+"|"+(x.url||"").toLowerCase());
+      return (x.doi && x.doi.toLowerCase()) || (String(x.title||"").toLowerCase()+"|"+String(x.url||"").toLowerCase());
     });
 
-    // filter: must match DOI (strong) OR title similarity >= 0.18
     var filtered = dedup.filter(function(x){
       if (!x) return false;
       if (x.doi && doi && normalizeDOI(x.doi) === doi) return true;
       var sim = jaccardTokens(title, x.title || "");
-      if (x.type === "Other") return sim >= 0.28; // be stricter for "Other"
+      if (x.type === "Other") return sim >= 0.28;
       return sim >= 0.18;
     });
 
-    // sort: Dataset/Software first, then provenance priority, then title
     var provRank = { DataCite:3, Zenodo:2, Crossref:1 };
     filtered.sort(function(a,b){
       var ta = (a.type==="Dataset"||a.type==="Software") ? 1 : 0;
@@ -270,10 +272,10 @@
     return filtered;
   }
 
-  // ---------- Header pieces ----------
+  // ---------- Header & Funding ----------
   function badge(href, text, className){
     if (!href) return "";
-    return '<a class="badge ' + (className||"") + '" href="'+href+'" target="_blank" rel="noopener">'+escapeHtml(text)+'</a>';
+    return '<a class="badge ' + (className||"") + '" href="'+escapeHtml(href)+'" target="_blank" rel="noopener">'+escapeHtml(text)+'</a>';
   }
   function authorLinksList(authorships){
     if (!Array.isArray(authorships) || !authorships.length) return { allHtml:"Unknown authors", shortHtml:"Unknown authors", moreCount:0 };
@@ -283,14 +285,13 @@
       var name = escapeHtml(get(authorships[i],"author.display_name","Unknown"));
       if (!id) { out.push(name); continue; }
       var aid = id.split("/").pop();
-      out.push('<a href="profile.html?id='+aid+'">'+name+'</a>');
+      out.push('<a href="profile.html?id='+encodeURIComponent(aid)+'">'+name+'</a>');
     }
     var short = out.slice(0,8);
     return { allHtml: out.join(", "), shortHtml: short.join(", "), moreCount: Math.max(0, out.length - short.length) };
   }
   function collectInstitutions(authorships){
-    var map = Object.create(null);
-    var out = [];
+    var map = Object.create(null), out = [];
     if (!Array.isArray(authorships)) return out;
     for (var i=0;i<authorships.length;i++){
       var insts = Array.isArray(authorships[i].institutions) ? authorships[i].institutions : [];
@@ -319,7 +320,6 @@
     var full  = list.map(render).join(", ");
     return { shortHtml: short, allHtml: full, moreCount: Math.max(0, list.length - 8) };
   }
-
   function sourceTailFromPaper(p){
     var srcId = get(p, "host_venue.id", null) || get(p, "primary_location.source.id", null);
     return srcId ? idTailFrom(srcId) : "";
@@ -340,8 +340,6 @@
     }
     return false;
   }
-
-  // Simple 1–5 journal star score (conservative)
   function computeJournalScore(src){
     var score = 3;
     if (get(src, "is_in_doaj", false)) score += 1;
@@ -354,35 +352,27 @@
     return Math.max(1, Math.min(5, score));
   }
 
-  function doiFromWork(p){
-    var doiRaw = p.doi || get(p,"ids.doi",null);
-    if (!doiRaw) return null;
-    return String(doiRaw).replace(/^doi:/i,"");
-  }
-
-  // Funding row builder
   function buildFundingRow(p){
-    // OpenAlex works often have "grants": [{funder, funder_display_name, award_id}]
     var grants = Array.isArray(p.grants) ? p.grants : [];
     var funderNames = Array.isArray(p.funder_display_names) ? p.funder_display_names : [];
     var items = [];
 
     if (grants.length){
-      grants.forEach(function(g){
+      for (var i=0;i<grants.length;i++){
+        var g = grants[i];
         var fIdTail = g.funder ? idTailFrom(g.funder) : "";
         var name = g.funder_display_name || (fIdTail ? fIdTail : "Funder");
         var label = escapeHtml(name) + (g.award_id ? (" — " + escapeHtml(g.award_id)) : "");
-        if (fIdTail) {
-          items.push('<a href="funders.html?id='+encodeURIComponent(fIdTail)+'">'+label+'</a>');
-        } else {
-          items.push(label);
-        }
-      });
+        if (fIdTail) items.push('<a href="funders.html?id='+encodeURIComponent(fIdTail)+'">'+label+'</a>');
+        else items.push(label);
+      }
     } else if (funderNames.length){
-      items = funderNames.map(function(n){ return escapeHtml(n); });
+      for (var j=0;j<funderNames.length;j++){
+        items.push(escapeHtml(funderNames[j]));
+      }
     }
 
-    if (!items.length) return ""; // don't render row if nothing
+    if (!items.length) return "";
     return '<p class="meta-row"><strong>Funding:</strong> <span class="wrap-text">'+ items.join(" · ") +'</span></p>';
   }
 
@@ -412,20 +402,19 @@
     var affList = institutionsLinksHTML(p.authorships);
     var fundingRow = buildFundingRow(p);
 
-    return (
-      '<h1 class="paper-title">'+escapeHtml(title)+'</h1>' +
-      '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+venueHtml+'</p>' +
-      '<p class="meta-row"><strong>Authors:</strong> ' +
-        '<span class="wrap-text" id="authorsShort">'+aList.shortHtml+(aList.moreCount?(' <button class="link-btn" id="authorsShowMore">Show more</button>'):'')+'</span>' +
-        '<span class="wrap-text" id="authorsFull" style="display:none;">'+aList.allHtml+' <button class="link-btn" id="authorsShowLess">Show less</button></span>' +
-      '</p>' +
-      '<p class="meta-row"><strong>Affiliations:</strong> ' +
-        '<span class="wrap-text" id="affShort">'+affList.shortHtml+(affList.moreCount?(' <button class="link-btn" id="affShowMore">Show more</button>'):'')+'</span>' +
-        '<span class="wrap-text" id="affFull" style="display:none;">'+affList.allHtml+' <button class="link-btn" id="affShowLess">Show less</button></span>' +
-      '</p>' +
-      (fundingRow || "") +
-      '<p class="chips">'+chips.filter(Boolean).join(" ")+'</p>'
-    );
+    return ''
+      + '<h1 class="paper-title">'+escapeHtml(title)+'</h1>'
+      + '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+venueHtml+'</p>'
+      + '<p class="meta-row"><strong>Authors:</strong> '
+        + '<span class="wrap-text" id="authorsShort">'+aList.shortHtml+(aList.moreCount?(' <button class="link-btn" id="authorsShowMore">Show more</button>'):'')+'</span>'
+        + '<span class="wrap-text" id="authorsFull" style="display:none;">'+aList.allHtml+' <button class="link-btn" id="authorsShowLess">Show less</button></span>'
+      + '</p>'
+      + '<p class="meta-row"><strong>Affiliations:</strong> '
+        + '<span class="wrap-text" id="affShort">'+affList.shortHtml+(affList.moreCount?(' <button class="link-btn" id="affShowMore">Show more</button>'):'')+'</span>'
+        + '<span class="wrap-text" id="affFull" style="display:none;">'+affList.allHtml+' <button class="link-btn" id="affShowLess">Show less</button></span>'
+      + '</p>'
+      + (fundingRow || "")
+      + '<p class="chips">'+chips.filter(Boolean).join(" ")+'</p>';
   }
   function wireHeaderToggles(){
     var asMore = $("authorsShowMore"), asLess = $("authorsShowLess");
@@ -445,29 +434,37 @@
     var last_page  = get(work,"biblio.last_page","") || "";
     var pages = (first_page && last_page) ? (first_page + "-" + last_page) : (first_page || last_page || "");
     var authors = (get(work,"authorships",[])||[]).map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean);
-    return { title: work.display_name || "Untitled", year: (work.publication_year != null ? String(work.publication_year) : "n.d."),
-      venue: venue, volume: get(work,"biblio.volume","") || "", issue: get(work,"biblio.issue","") || "", pages: pages,
-      doi: doiClean, doi_url: doiHref, url: get(work,"primary_location.landing_page_url","") || doiHref || (work.id || ""), authors: authors };
+    return {
+      title: work.display_name || "Untitled",
+      year: (work.publication_year != null ? String(work.publication_year) : "n.d."),
+      venue: venue,
+      volume: get(work,"biblio.volume","") || "",
+      issue: get(work,"biblio.issue","") || "",
+      pages: pages,
+      doi: doiClean,
+      doi_url: doiHref,
+      url: get(work,"primary_location.landing_page_url","") || doiHref || (work.id || ""),
+      authors: authors
+    };
   }
-
   function buildActionsBar(p){
     var idTail = String(p.id||"").replace(/^https?:\/\/openalex\.org\//i,"");
     var doi = p.doi || get(p,"ids.doi",null) || "";
-    var citeData = collectCiteDataForHeader(p);
+    var cite = collectCiteDataForHeader(p);
     function attr(v){ return v ? escapeHtml(String(v)) : ""; }
-    return ''+
-      '<article class="paper-card header-card" data-paper-id="'+attr(idTail)+'" '+(doi ? 'data-doi="'+attr(String(doi).replace(/^doi:/i,""))+'"' : '')+
-      ' data-cite-title="'+attr(citeData.title)+'" data-cite-year="'+attr(citeData.year)+'" data-cite-venue="'+attr(citeData.venue)+'" '+
-      ' data-cite-volume="'+attr(citeData.volume)+'" data-cite-issue="'+attr(citeData.issue)+'" data-cite-pages="'+attr(citeData.pages)+'" '+
-      ' data-cite-doi="'+attr(citeData.doi)+'" data-cite-doiurl="'+attr(citeData.doi_url)+'" data-cite-url="'+attr(citeData.url)+'" '+
-      ' data-cite-authors="'+attr((citeData.authors||[]).join(" | "))+'">'+
-        '<div class="header-actions-inner">'+
-          '<button class="btn btn-secondary btn-save" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
-          '<button class="btn btn-secondary btn-cite" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'+
-          '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '+
-            'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+
-        '</div>'+
-      '</article>';
+    return ''
+      + '<article class="paper-card header-card" data-paper-id="'+attr(idTail)+'" '+(doi ? 'data-doi="'+attr(String(doi).replace(/^doi:/i,""))+'"' : '')+''
+      + ' data-cite-title="'+attr(cite.title)+'" data-cite-year="'+attr(cite.year)+'" data-cite-venue="'+attr(cite.venue)+'"'
+      + ' data-cite-volume="'+attr(cite.volume)+'" data-cite-issue="'+attr(cite.issue)+'" data-cite-pages="'+attr(cite.pages)+'"'
+      + ' data-cite-doi="'+attr(cite.doi)+'" data-cite-doiurl="'+attr(cite.doi_url)+'" data-cite-url="'+attr(cite.url)+'"'
+      + ' data-cite-authors="'+attr((cite.authors||[]).join(" | "))+'">'
+        + '<div class="header-actions-inner">'
+          + '<button class="btn btn-secondary btn-save" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'
+          + '<button class="btn btn-secondary btn-cite" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'
+          + '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '
+            + 'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'
+        + '</div>'
+      + '</article>';
   }
   function buildStatsHeader(p){
     var citedBy = get(p,'cited_by_count',0) || 0;
@@ -478,7 +475,7 @@
     return stat('Cited by', citedBy) + stat('References used', refCount) + stat('Altmetric', '—');
   }
 
-  // ---------- Journal & Quality (simplified) ----------
+  // ---------- Journal & Quality (simplified + PubPeer/RW) ----------
   function renderJournalBlockSimple(p, source){
     var journalName = get(source, 'display_name', null) || get(p, 'host_venue.display_name', null) || get(p, 'primary_location.source.display_name', '—');
     var venueType  = get(source, 'type', get(p, 'primary_location.source.type', '—'));
@@ -494,32 +491,40 @@
     var stars = computeJournalScore(source || {});
     var starStr = "★".repeat(stars) + "☆".repeat(5 - stars);
 
+    var doi = doiFromWork(p);
+    var pubpeerHref = doi ? ("https://pubpeer.com/search?q=" + encodeURIComponent(doi)) : "";
+    var rwHrefTitle = "https://retractionwatch.com/?s=" + encodeURIComponent(p.display_name || "");
+
+    var checks = '';
+    checks += '<div class="panel light" style="margin-top:.5rem;">';
+    checks += '<strong>Quality checks:</strong> ';
+    if (pubpeerHref) checks += '<a href="'+escapeHtml(pubpeerHref)+'" target="_blank" rel="noopener">PubPeer</a>';
+    else checks += '<span class="muted">PubPeer (no DOI)</span>';
+    checks += ' · <a href="'+escapeHtml(rwHrefTitle)+'" target="_blank" rel="noopener">Retraction Watch</a>';
+    checks += '</div>';
+
     $("journalBlock").innerHTML =
       '<p><strong>Published in:</strong> '+journalLinkHtml+'</p>' +
       '<p class="meta"><strong>Peer review:</strong> '+escapeHtml(peerText)+'</p>' +
       '<div class="panel light" style="margin-top:.5rem;"><strong>Journal rating:</strong> '+
         '<span aria-label="Journal rating">'+starStr+'</span> <span class="muted">('+stars+'/5)</span>'+
-      '</div>';
-      
-      <div class="panel light" style="margin-top:.5rem;">
-  <strong>Quality checks:</strong>
-  <a href="https://pubpeer.com/publications/DOI" target="_blank" rel="noopener">PubPeer</a> ·
-  <a href="https://retractionwatch.com/retracted/" target="_blank" rel="noopener">Retraction Watch</a>
-</div>
+      '</div>' +
+      checks;
   }
 
   // ---------- Abstract ----------
   function formatAbstract(idx){
     if (!idx || typeof idx !== "object") return "<em>No abstract available.</em>";
     var words = [];
-    Object.keys(idx).forEach(function(word){
-      var positions = idx[word] || [];
-      for (var i=0;i<positions.length;i++){ words[positions[i]] = word; }
-    });
+    var keys = Object.keys(idx);
+    for (var i=0;i<keys.length;i++){
+      var word = keys[i], positions = idx[word] || [];
+      for (var j=0;j<positions.length;j++) words[positions[j]] = word;
+    }
     return escapeHtml(words.join(" ") || "");
   }
 
-  // ---------- Graph (Connected/Citation) ----------
+  // ---------- Graph ----------
   function shortCitation(p){
     var first = get(p,"authorships.0.author.display_name","Unknown");
     var last = first.split(" ").slice(-1)[0] || first || "Unknown";
@@ -546,7 +551,6 @@
     return hsvToHex(h, 0.55, 0.95);
   }
 
-  // Minimal "connected map" based on shared references among candidates around the seed
   function refSetFromIds(idList){
     var s = new Set();
     for (var i=0;i<idList.length;i++){
@@ -585,19 +589,20 @@
       var slice = idsToFetch.slice(j, j+BATCH);
       var ids = slice.map(function(t){ return "https://openalex.org/" + t; }).join("|");
       var data = await getJSON(API + "/works?filter=ids.openalex:" + encodeURIComponent(ids) + "&per_page=" + slice.length);
-      (data.results||[]).forEach(function(w){
-        var tail = String(w.id).split("/").pop();
+      var results = data && Array.isArray(data.results) ? data.results : [];
+      for (var k=0;k<results.length;k++){
+        var w = results[k];
+        var tailW = String(w.id).split("/").pop();
         var refs = Array.isArray(w.referenced_works) ? w.referenced_works.map(function(r){ return String(r).split("/").pop(); }) : [];
         var set = new Set(refs);
-        out[tail] = set;
-        cacheSet(tail, set);
-      });
+        out[tailW] = set;
+        cacheSet(tailW, set);
+      }
     }
     return out;
   }
   function jaccardSets(aSet, bSet){
-    var inter = 0;
-    aSet.forEach(x => { if (bSet.has(x)) inter++; });
+    var inter = 0; aSet.forEach(function(x){ if (bSet.has(x)) inter++; });
     var uni = aSet.size + bSet.size - inter;
     return uni ? inter/uni : 0;
   }
@@ -608,28 +613,28 @@
     var THRESH = opts.jaccardThreshold || 0.08;
 
     var refs = Array.isArray(seed.referenced_works) ? seed.referenced_works.slice(0, MAX_REF) : [];
-    var candTails = refs.map(x=>String(x).split("/").pop());
+    var candTails = refs.map(function(x){ return String(x).split("/").pop(); });
 
-    (citing||[]).slice(0, MAX_CIT).forEach(function(w){
-      var tail = String(w.id||"").split("/").pop();
+    var citingTrim = (citing||[]).slice(0, MAX_CIT);
+    for (var i=0;i<citingTrim.length;i++){
+      var tail = String(citingTrim[i].id||"").split("/").pop();
       if (tail && candTails.indexOf(tail) === -1) candTails.push(tail);
-    });
+    }
 
     var refMap = await fetchRefsFor(candTails);
     var edges = [];
-    for (var i=0;i<candTails.length;i++){
-      for (var j=i+1;j<candTails.length;j++){
-        var a = candTails[i], b = candTails[j];
-        var sA = refMap[a], sB = refMap[b];
+    for (var a=0;a<candTails.length;a++){
+      for (var b=a+1;b<candTails.length;b++){
+        var A = candTails[a], B = candTails[b];
+        var sA = refMap[A], sB = refMap[B];
         if (!sA || !sB) continue;
         var sim = jaccardSets(sA, sB);
-        if (sim >= THRESH) edges.push({ a:a, b:b, w:sim });
+        if (sim >= THRESH) edges.push({ a:A, b:B, w:sim });
       }
     }
-    // connect seed to candidates (looser threshold)
     var seedRefSet = refSetFromIds(refs);
-    for (var k=0;k<candTails.length;k++){
-      var t = candTails[k];
+    for (var c=0;c<candTails.length;c++){
+      var t = candTails[c];
       var sCand = refMap[t];
       if (!sCand || seedRefSet.size === 0) continue;
       var simSeed = jaccardSets(seedRefSet, sCand);
@@ -639,22 +644,21 @@
   }
   function filterToSeedComponent(edgesWeighted, allNodeIds, seedIdFull){
     var adj = Object.create(null);
-    allNodeIds.forEach(function(id){ adj[id] = []; });
-    edgesWeighted.forEach(function(e){
+    for (var i=0;i<allNodeIds.length;i++){ adj[allNodeIds[i]] = []; }
+    for (var j=0;j<edgesWeighted.length;j++){
+      var e = edgesWeighted[j];
       var a = "https://openalex.org/" + e.a;
       var b = "https://openalex.org/" + e.b;
-      if (!adj[a]) adj[a] = [];
-      if (!adj[b]) adj[b] = [];
-      adj[a].push(b);
-      adj[b].push(a);
-    });
+      (adj[a] = adj[a] || []).push(b);
+      (adj[b] = adj[b] || []).push(a);
+    }
     var visited = new Set([seedIdFull]);
     var queue = [seedIdFull];
     while (queue.length){
       var u = queue.shift();
       var nbrs = adj[u] || [];
-      for (var i=0;i<nbrs.length;i++){
-        var v = nbrs[i];
+      for (var k=0;k<nbrs.length;k++){
+        var v = nbrs[k];
         if (!visited.has(v)){ visited.add(v); queue.push(v); }
       }
     }
@@ -670,36 +674,35 @@
     };
   }
 
-  // ------- Graph renderers + controls -------
   function renderGraphControls(){
     var el = document.createElement("div");
     el.id = "graphControls";
     el.className = "panel light";
     el.style.marginBottom = "8px";
     el.style.padding = "10px";
-    el.innerHTML = ''+
-      '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:end;">'+
-        '<label style="display:flex; flex-direction:column; font-size:12px;">Mode'+
-          '<select id="graphMode" style="min-width:180px;">'+
-            '<option value="connected">Connected Map (similarity)</option>'+
-            '<option value="citation">Cited/Citing</option>'+
-          '</select>'+
-        '</label>'+
-        '<label style="display:flex; flex-direction:column; font-size:12px;">Min similarity'+
-          '<input id="minSim" type="number" step="0.01" min="0" max="1" value="0.10" />'+
-        '</label>'+
-        '<label style="display:flex; flex-direction:column; font-size:12px;">Min citations'+
-          '<input id="minCites" type="number" min="0" value="0" />'+
-        '</label>'+
-        '<label style="display:flex; flex-direction:column; font-size:12px;">Year range'+
-          '<div style="display:flex; gap:6px; align-items:center;">'+
-            '<input id="minYear" type="number" placeholder="min" style="width:90px;" />'+
-            '<span>–</span>'+
-            '<input id="maxYear" type="number" placeholder="max" style="width:90px;" />'+
-          '</div>'+
-        '</label>'+
-        '<button id="applyGraphFilters" class="btn btn-secondary" type="button">Apply</button>'+
-      '</div>';
+    el.innerHTML = ''
+      + '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:end;">'
+        + '<label style="display:flex; flex-direction:column; font-size:12px;">Mode'
+          + '<select id="graphMode" style="min-width:180px;">'
+            + '<option value="connected">Connected Map (similarity)</option>'
+            + '<option value="citation">Cited/Citing</option>'
+          + '</select>'
+        + '</label>'
+        + '<label style="display:flex; flex-direction:column; font-size:12px;">Min similarity'
+          + '<input id="minSim" type="number" step="0.01" min="0" max="1" value="0.10" />'
+        + '</label>'
+        + '<label style="display:flex; flex-direction:column; font-size:12px;">Min citations'
+          + '<input id="minCites" type="number" min="0" value="0" />'
+        + '</label>'
+        + '<label style="display:flex; flex-direction:column; font-size:12px;">Year range'
+          + '<div style="display:flex; gap:6px; align-items:center;">'
+            + '<input id="minYear" type="number" placeholder="min" style="width:90px;" />'
+            + '<span>–</span>'
+            + '<input id="maxYear" type="number" placeholder="max" style="width:90px;" />'
+          + '</div>'
+        + '</label>'
+        + '<button id="applyGraphFilters" class="btn btn-secondary" type="button">Apply</button>'
+      + '</div>';
     return el;
   }
 
@@ -720,15 +723,14 @@
     }
 
     var nodes = [{ id: main.id, label: shortCitation(main), title: main.display_name, group: "main", paperId: main.id }];
-    for (var i=0;i<cited.length;i++)  nodes.push({ id: cited[i].id,  label: shortCitation(cited[i]),  title: cited[i].display_name,  group: "cited",  paperId: cited[i].id });
-    for (var j=0;j<citing.length;j++) nodes.push({ id: citing[j].id, label: shortCitation(citing[j]), title: citing[j].display_name, group: "citing", paperId: citing[j].id });
+    for (var i=0;i<cited.length;i++){ nodes.push({ id: cited[i].id,  label: shortCitation(cited[i]),  title: cited[i].display_name,  group: "cited",  paperId: cited[i].id }); }
+    for (var j=0;j<citing.length;j++){ nodes.push({ id: citing[j].id, label: shortCitation(citing[j]), title: citing[j].display_name, group: "citing", paperId: citing[j].id }); }
 
     var edges = [];
-    for (var k=0;k<cited.length;k++)  edges.push({ from: main.id, to: cited[k].id, value: 1, width: 1 });
-    for (var m=0;m<citing.length;m++) edges.push({ from: citing[m].id, to: main.id, value: 1, width: 1 });
+    for (var k=0;k<cited.length;k++){ edges.push({ from: main.id, to: cited[k].id, value: 1, width: 1 }); }
+    for (var m=0;m<citing.length;m++){ edges.push({ from: citing[m].id, to: main.id, value: 1, width: 1 }); }
 
     var network = new vis.Network(graphDiv, { nodes:new vis.DataSet(nodes), edges:new vis.DataSet(edges) }, baseNetworkOptions());
-
     network.on("click", function (params) {
       if (!params.nodes || !params.nodes.length) return;
       var nodeId = params.nodes[0];
@@ -774,17 +776,17 @@
 
     var base = await buildConnectedLikeGraph(main, cited, citing, { maxReferences:220, maxCiters:220, jaccardThreshold:Math.max(0.04, MIN_SIM) });
 
-    // fetch meta for candidates
-    var candIdsFull = base.candidateIds.map(t=>"https://openalex.org/"+t);
+    var candIdsFull = base.candidateIds.map(function(t){ return "https://openalex.org/"+t; });
     var meta = [];
     for (var i=0;i<candIdsFull.length;i+=50){
       var chunk = candIdsFull.slice(i, i+50).join("|");
       var data = await getJSON(API + "/works?filter=ids.openalex:" + encodeURIComponent(chunk) + "&per_page=50");
-      meta = meta.concat(data.results || []);
+      if (data && Array.isArray(data.results)) meta = meta.concat(data.results);
     }
 
     var all = [main].concat(meta);
-    var years = all.map(w=> +get(w,"publication_year",0) || 0).filter(Boolean);
+    var years = [];
+    for (var y=0;y<all.length;y++){ var py = +get(all[y],"publication_year",0) || 0; if (py) years.push(py); }
     var minY = years.length ? Math.min.apply(null, years) : 0;
     var maxY = years.length ? Math.max.apply(null, years) : 0;
 
@@ -796,50 +798,54 @@
     keepSet.add(String(main.id));
 
     var metaByTail = Object.create(null);
-    meta.forEach(function(w){ metaByTail[String(w.id).split("/").pop()] = w; });
+    for (var mb=0;mb<meta.length;mb++){ metaByTail[String(meta[mb].id).split("/").pop()] = meta[mb]; }
 
-    Object.keys(metaByTail).forEach(function(tail){
-      var w = metaByTail[tail];
+    var tails = Object.keys(metaByTail);
+    for (var t=0;t<tails.length;t++){
+      var tail = tails[t], w = metaByTail[tail];
       var yr = +get(w,"publication_year",0) || 0;
       var cites = +get(w,"cited_by_count",0) || 0;
-      if (MIN_CITES && cites < MIN_CITES) return;
-      if (MIN_YEAR && yr && yr < MIN_YEAR) return;
-      if (MAX_YEAR && yr && yr > MAX_YEAR) return;
+      if (MIN_CITES && cites < MIN_CITES) continue;
+      if (MIN_YEAR && yr && yr < MIN_YEAR) continue;
+      if (MAX_YEAR && yr && yr > MAX_YEAR) continue;
       var colorHex = yearColor(yr || minY, MIN_YEAR||minY, MAX_YEAR||maxY || maxY);
       nodes.push({ id:w.id, label:shortCitation(w), title:w.display_name, group:"candidate", paperId:w.id, value:Math.max(1,cites),
         year:yr, color:{ background:colorHex, border:colorHex } });
       keepSet.add(String(w.id));
-    });
-
-    var edges = [];
-    base.edges.forEach(function(e){
-      var aFull = e.a.indexOf("http")===0 ? e.a : ("https://openalex.org/"+e.a);
-      var bFull = e.b.indexOf("http")===0 ? e.b : ("https://openalex.org/"+e.b);
-      if (!keepSet.has(aFull) || !keepSet.has(bFull)) return;
-      if (e.w < MIN_SIM) return;
-      edges.push({ from:aFull, to:bFull, value:e.w, width: Math.max(1, 6*e.w) });
-    });
-
-    // If too sparse, keep a stronger core
-    if (edges.length < 20 && base.edges.length){
-      var top = base.edges.slice().sort((a,b)=>b.w-a.w).slice(0, 30);
-      edges = top.map(function(e){
-        var aFull = e.a.indexOf("http")===0 ? e.a : ("https://openalex.org/"+e.a);
-        var bFull = e.b.indexOf("http")===0 ? e.b : ("https://openalex.org/"+e.b);
-        return { from:aFull, to:bFull, value:e.w, width: Math.max(1, 6*e.w) };
-      });
     }
 
-    var allIds = nodes.map(n=>String(n.id));
+    var edges = [];
+    for (var e=0;e<base.edges.length;e++){
+      var E = base.edges[e];
+      var aFull = E.a.indexOf("http")===0 ? E.a : ("https://openalex.org/"+E.a);
+      var bFull = E.b.indexOf("http")===0 ? E.b : ("https://openalex.org/"+E.b);
+      if (!keepSet.has(aFull) || !keepSet.has(bFull)) continue;
+      if (E.w < MIN_SIM) continue;
+      edges.push({ from:aFull, to:bFull, value:E.w, width: Math.max(1, 6*E.w) });
+    }
+
+    if (edges.length < 20 && base.edges.length){
+      var top = base.edges.slice().sort(function(a,b){ return b.w - a.w; }).slice(0, 30);
+      edges = [];
+      for (var q=0;q<top.length;q++){
+        var EE = top[q];
+        var aF = EE.a.indexOf("http")===0 ? EE.a : ("https://openalex.org/"+EE.a);
+        var bF = EE.b.indexOf("http")===0 ? EE.b : ("https://openalex.org/"+EE.b);
+        edges.push({ from:aF, to:bF, value:EE.w, width: Math.max(1, 6*EE.w) });
+      }
+    }
+
+    var allIds = [];
+    for (var n=0;n<nodes.length;n++){ allIds.push(String(nodes[n].id)); }
     var reachable = filterToSeedComponent(
-      edges.map(e=>({ a: idTailFrom(e.from), b: idTailFrom(e.to), w:e.value })), allIds, String(main.id)
+      base.edges.map(function(eX){ return { a: idTailFrom(eX.a.indexOf("http")===0 ? eX.a : ("https://openalex.org/"+eX.a)), b: idTailFrom(eX.b.indexOf("http")===0 ? eX.b : ("https://openalex.org/"+eX.b)), w:eX.w }; }),
+      allIds, String(main.id)
     );
-    var nodesFiltered = nodes.filter(n=> reachable.has(String(n.id)));
-    var nodeIdsKept = new Set(nodesFiltered.map(n=>String(n.id)));
-    var edgesFiltered = edges.filter(e=> nodeIdsKept.has(String(e.from)) && nodeIdsKept.has(String(e.to)));
+    var nodesFiltered = nodes.filter(function(n){ return reachable.has(String(n.id)); });
+    var nodeIdsKept = new Set(nodesFiltered.map(function(n){ return String(n.id); }));
+    var edgesFiltered = edges.filter(function(ed){ return nodeIdsKept.has(String(ed.from)) && nodeIdsKept.has(String(ed.to)); });
 
     var network = new vis.Network(graphDiv, { nodes:new vis.DataSet(nodesFiltered), edges:new vis.DataSet(edgesFiltered) }, baseNetworkOptions());
-
     network.on("click", function (params) {
       if (!params.nodes || !params.nodes.length) return;
       var nodeId = params.nodes[0];
@@ -855,7 +861,7 @@
         else await renderConnectedGraph(main, cited, citing);
       };
     }
-    $("#graphMode").value = "connected";
+    var gm = $("#graphMode"); if (gm) gm.value = "connected";
 
     repopulateHeaderIfEmpty(); restoreHeaderIfNeeded();
     renderBelowGraphLists(cited, citing);
@@ -863,49 +869,43 @@
 
   // ---------- Below-graph lists ----------
   function paperCardCompact(w, badgeText){
-    const title = escapeHtml(w.display_name || "Untitled");
-    const idTail = String(w.id || "").replace(/^https?:\/\/openalex\.org\//i, "");
-    const yr = w.publication_year != null ? " ("+w.publication_year+")" : "";
-    const venue = w.host_venue?.display_name || w.primary_location?.source?.display_name || "";
-    const authors = (w.authorships||[]).map(a=>a.author?.display_name).filter(Boolean).slice(0,6).join(", ");
-    const badge = badgeText ? `<span class="badge">${escapeHtml(badgeText)}</span>` : "";
-    return `
-      <article class="result-card">
-        <h3 class="result-title"><a href="paper.html?id=${encodeURIComponent(idTail)}">${title}</a>${yr}</h3>
-        <p class="muted">${escapeHtml(authors)}${authors && venue ? " — " : ""}${escapeHtml(venue)}</p>
-        <p class="chips">${badge}</p>
-      </article>
-    `;
+    var title = escapeHtml(w.display_name || "Untitled");
+    var idTail = String(w.id || "").replace(/^https?:\/\/openalex\.org\//i, "");
+    var yr = (w.publication_year != null ? " ("+w.publication_year+")" : "");
+    var venue = get(w,"host_venue.display_name", get(w,"primary_location.source.display_name","")) || "";
+    var authors = ((w.authorships||[]).map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean).slice(0,6).join(", "));
+    var badge = badgeText ? ('<span class="badge">'+escapeHtml(badgeText)+'</span>') : '';
+    return ''
+      + '<article class="result-card">'
+        + '<h3 class="result-title"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+title+'</a>'+yr+'</h3>'
+        + '<p class="muted">'+escapeHtml(authors)+(authors && venue ? " — " : "")+escapeHtml(venue)+'</p>'
+        + '<p class="chips">'+badge+'</p>'
+      + '</article>';
   }
   function renderBelowGraphLists(citedPapers, citingPapers){
     var block = $("relatedBlock");
     var parts = [];
     parts.push('<h2>References & Citations</h2>');
-
-    // Referenced by this publication
     parts.push('<section class="panel light" style="margin-bottom:12px;">');
     parts.push('<h3>Papers this work <em>cites</em></h3>');
     if (Array.isArray(citedPapers) && citedPapers.length){
-      parts.push(citedPapers.map(w=>paperCardCompact(w, "Referenced")).join(""));
+      for (var i=0;i<citedPapers.length;i++){ parts.push(paperCardCompact(citedPapers[i], "Referenced")); }
     } else {
       parts.push('<p class="muted">No referenced papers found.</p>');
     }
     parts.push('</section>');
-
-    // Cited by others
     parts.push('<section class="panel light">');
     parts.push('<h3>Papers that <em>cite</em> this work</h3>');
     if (Array.isArray(citingPapers) && citingPapers.length){
-      parts.push(citingPapers.map(w=>paperCardCompact(w, "Cited-by")).join(""));
+      for (var j=0;j<citingPapers.length;j++){ parts.push(paperCardCompact(citingPapers[j], "Cited-by")); }
     } else {
       parts.push('<p class="muted">No citing papers found.</p>');
     }
     parts.push('</section>');
-
     block.innerHTML = parts.join("");
   }
 
-  // ---------- Header stability guards ----------
+  // ---------- Header guards ----------
   function repopulateHeaderIfEmpty(){
     try{
       var hdr = $("paperHeaderMain");
@@ -930,11 +930,11 @@
   function restoreHeaderIfNeeded() {
     var hdr = document.getElementById("paperHeaderMain");
     if (!hdr) {
-      var panel = document.querySelector(".paper-header-grid");
-      if (!panel) return;
+      var grid = document.querySelector(".paper-header-grid");
+      if (!grid) return;
       var newDiv = document.createElement("div");
       newDiv.id = "paperHeaderMain";
-      panel.prepend(newDiv);
+      grid.prepend(newDiv);
       hdr = newDiv;
     }
     var isEmpty = !hdr.firstElementChild && (!hdr.textContent || hdr.textContent.trim()==="");
@@ -944,13 +944,15 @@
     }
   }
 
-  // ---------- Render pipeline ----------
+  // ---------- Research Objects UI ----------
   function renderResearchObjectsUI(items){
     if (!Array.isArray(items) || !items.length){
       $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">No code/data records matched this paper.</p>';
       return;
     }
-    var rows = items.map(function(x){
+    var rows = [];
+    for (var i=0;i<items.length;i++){
+      var x = items[i];
       var prov = x.provenance ? ('<span class="badge badge-neutral" title="Source">'+escapeHtml(x.provenance)+'</span>') : '';
       var typ  = x.type ? ('<span class="badge">'+escapeHtml(x.type)+'</span>') : '';
       var repo = x.repository ? ('<span class="muted" style="margin-left:.25rem;">'+escapeHtml(x.repository)+'</span>') : '';
@@ -958,11 +960,12 @@
       var ver  = x.version ? (' <span class="muted">v'+escapeHtml(x.version)+'</span>') : '';
       var lic  = x.licence ? (' <span class="muted">('+escapeHtml(x.licence)+')</span>') : '';
       var url  = x.url || (x.doi ? ("https://doi.org/"+x.doi) : "");
-      return '<li class="ro-item">'+typ+' <a href="'+escapeHtml(url)+'" target="_blank" rel="noopener">'+escapeHtml(x.title || x.doi || "Item")+'</a>'+ver+lic+doi+' '+prov+repo+'</li>';
-    });
+      rows.push('<li class="ro-item">'+typ+' <a href="'+escapeHtml(url)+'" target="_blank" rel="noopener">'+escapeHtml(x.title || x.doi || "Item")+'</a>'+ver+lic+doi+' '+prov+repo+'</li>');
+    }
     $("objectsBlock").innerHTML = '<h2>Research Objects</h2><ul>'+rows.join("")+'</ul>';
   }
 
+  // ---------- Render pipeline ----------
   async function renderPaper(p, source){
     __CURRENT_PAPER__ = p;
 
@@ -972,8 +975,7 @@
     __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
     wireHeaderToggles();
 
-    // keep header safe while graph mounts
-    let guardUntil = Date.now() + 15000;
+    var guardUntil = Date.now() + 15000;
     (function loopGuard(){
       restoreHeaderIfNeeded();
       if (Date.now() < guardUntil) requestAnimationFrame(loopGuard);
@@ -985,7 +987,6 @@
 
     $("abstractBlock").innerHTML = '<h2>Abstract</h2><p>' + formatAbstract(p.abstract_inverted_index) + '</p>';
 
-    // Research Objects
     $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">Looking for code & data…</p>';
     try{
       var ros = await harvestAndFilterResearchObjects(p);
@@ -994,7 +995,6 @@
       $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">Could not retrieve links.</p>';
     }
 
-    // Journal & Quality (simplified)
     renderJournalBlockSimple(p, source);
   }
 
@@ -1022,7 +1022,6 @@
       try { citing = await fetchCitingPapers(paper.id); } catch(e){}
 
       window.__GRAPH_CTX__ = { main: paper, cited: cited, citing: citing };
-
       await renderGraphs(paper, cited, citing);
 
     } catch (e) {
@@ -1031,7 +1030,7 @@
       restoreHeaderIfNeeded();
     }
 
-    // Make the Apply button resilient across re-renders
+    // Keep "Apply" working across re-renders
     document.addEventListener("click", function(e){
       var btn = e.target.closest("#applyGraphFilters");
       if (!btn) return;
