@@ -5,40 +5,37 @@
   // ---------- Constants ----------
   const API_OA = "https://api.openalex.org";
   const API_WIKI_REST = "https://en.wikipedia.org/api/rest_v1";
-  const API_WIKI_ACTION = "https://en.wikipedia.org/w/api.php"; // add origin=*
+  const API_WIKI_ACTION = "https://en.wikipedia.org/w/api.php";
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
   // ---------- DOM ----------
-  const el = (id) => document.getElementById(id);
-  const topicHeader = el("topicHeader");
-  const topicTitle = el("topicTitle");
-  const topicSubtitle = el("topicSubtitle");
-  const topicMeta = el("topicMeta");
-  const wikiBlock = el("wikiBlock");
-  const wikiArticle = el("wikiArticle");
-  const wikiAttribution = el("wikiAttribution");
-  const tocBlock = el("tocBlock");
-  const tocNav = el("tocNav");
-  const referencesList = el("referencesList");
-  const referencesWhy = el("referencesWhy");
-  const papersCards = el("papersCards");
-  const infoboxDom = el("infobox");
-  const topicPeople = el("topicPeople");
-  const relatedBlock = el("relatedBlock");
-  const trendSparkline = el("trendSparkline");
+  const $ = (id) => document.getElementById(id);
+  const topicTitle = $("topicTitle");
+  const topicSubtitle = $("topicSubtitle");
+  const topicMeta = $("topicMeta");
+  const wikiArticle = $("wikiArticle");
+  const wikiAttribution = $("wikiAttribution");
+  const tocBlock = $("tocBlock");
+  const tocNav = $("tocNav");
+  const referencesList = $("referencesList");
+  const referencesWhy = $("referencesWhy");
+  const papersCards = $("papersCards");
+  const infoboxDom = $("infobox");
+  const topicPeople = $("topicPeople");
+  const relatedBlock = $("relatedBlock");
+  const trendSparkline = $("trendSparkline");
 
   // ---------- Utils ----------
   const getParam = (name) => new URLSearchParams(location.search).get(name);
   const tail = (id) => id ? String(id).replace(/^https?:\/\/openalex\.org\//i, "") : "";
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
   function escapeHtml(str){
     str = (str==null?"":String(str));
     return str.replace(/[&<>'"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;" }[c]));
   }
 
   async function fetchJSON(url, opts){
-    const res = await fetch(url, Object.assign({ headers: { "Accept": "application/json" } }, opts || {}));
+    const res = await fetch(url, Object.assign({ headers: { "Accept":"application/json" }}, opts||{}));
     if (!res.ok) throw new Error(res.status + " " + res.statusText + " — " + url);
     return await res.json();
   }
@@ -55,18 +52,15 @@
     }catch(_){ return null; }
   }
   function cacheWrite(topicId, key, value){
-    try{
-      localStorage.setItem(cacheKey(topicId, key), JSON.stringify({ t: Date.now(), v: value }));
-    }catch(_){}
+    try{ localStorage.setItem(cacheKey(topicId, key), JSON.stringify({ t: Date.now(), v: value })); }catch(_){}
   }
 
-  // ---------- Wikipedia: fetch full mobile HTML + last revision ----------
+  // ---------- Wikipedia fetch (mobile-html) ----------
   async function loadWikipediaArticle(title){
     const url = `${API_WIKI_REST}/page/mobile-html/${encodeURIComponent(title)}`;
     const res = await fetch(url, { headers: { "Accept": "text/html" }});
     if(!res.ok) throw new Error(`Wikipedia mobile-html failed: ${res.status}`);
-    const html = await res.text();
-    return html;
+    return await res.text();
   }
   async function loadWikipediaRevisionMeta(title){
     const u = new URL(API_WIKI_ACTION);
@@ -86,14 +80,102 @@
     return { lastRev: ts, url: fullurl };
   }
 
+  // ---------- Sanitiser: keep SE look, strip Wikipedia styles ----------
+  const ALLOWED_TAGS = new Set([
+    "P","H2","H3","H4","UL","OL","LI","B","STRONG","I","EM","A","IMG",
+    "BLOCKQUOTE","CODE","PRE","TABLE","THEAD","TBODY","TR","TH","TD","SUP","SUB"
+  ]);
+  function makeIdFromText(t){
+    return "sec-" + t.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,64);
+  }
+  function sanitiseWikipediaHTML(html){
+    const src = document.createElement("div");
+    src.innerHTML = html;
+
+    // Remove all styles/scripts/links that would restyle the page
+    src.querySelectorAll("style, link, script, noscript").forEach(n => n.remove());
+
+    // Find main content container candidates; fallback to entire html
+    // Mobile HTML often uses sections; we’ll take the whole body content
+    const contentRoot = src;
+
+    const out = document.createElement("div");
+    out.className = "se-wiki-clean";
+
+    function cloneNodeSafe(node){
+      if (node.nodeType === Node.TEXT_NODE) {
+        return document.createTextNode(node.nodeValue);
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return null;
+      const tag = node.tagName;
+      if (!ALLOWED_TAGS.has(tag)) {
+        // Recurse into children for unsupported wrappers
+        const frag = document.createDocumentFragment();
+        node.childNodes.forEach(ch => {
+          const c = cloneNodeSafe(ch);
+          if (c) frag.appendChild(c);
+        });
+        return frag;
+      }
+      const el = document.createElement(tag.toLowerCase());
+
+      // Allowed attributes per tag
+      if (tag === "A") {
+        const href = node.getAttribute("href") || "";
+        if (href && /^https?:\/\//i.test(href)) {
+          el.setAttribute("href", href);
+          el.setAttribute("target","_blank");
+          el.setAttribute("rel","noopener");
+        }
+      } else if (tag === "IMG") {
+        // Keep only safe images (Wikimedia uploads); downscale via width
+        let srcAttr = node.getAttribute("src") || "";
+        if (/^https?:\/\/upload\.wikimedia\.org\//i.test(srcAttr)) {
+          el.setAttribute("src", srcAttr);
+          const alt = node.getAttribute("alt") || "";
+          if (alt) el.setAttribute("alt", alt);
+          el.setAttribute("loading","lazy");
+          el.style.maxWidth = "100%";
+          el.style.height = "auto";
+        } else {
+          // skip non-wikimedia images
+          return document.createTextNode(""); 
+        }
+      }
+      // Never copy class/style/id from Wikipedia
+      node.childNodes.forEach(ch => {
+        const c = cloneNodeSafe(ch);
+        if (c) el.appendChild(c);
+      });
+      return el;
+    }
+
+    // Build output: only the sequence of allowed content nodes (no site chrome)
+    contentRoot.childNodes.forEach(n => {
+      const c = cloneNodeSafe(n);
+      if (c) out.appendChild(c);
+    });
+
+    // Assign stable ids to headings we keep
+    out.querySelectorAll("h2, h3, h4").forEach(h => {
+      if (!h.id || /^sec-\d+/.test(h.id)) {
+        const txt = h.textContent || "";
+        const gen = makeIdFromText(txt) || ("sec-" + Math.random().toString(36).slice(2,8));
+        h.id = gen;
+      }
+    });
+
+    return out;
+  }
+
+  // ---------- ToC ----------
   function buildTOC(container){
     const headings = container.querySelectorAll("h2, h3");
     if (!headings.length) { tocBlock.style.display = "none"; return; }
     const items = [];
-    headings.forEach((h, idx) => {
-      if (!h.id) h.id = `sec-${idx+1}`;
+    headings.forEach((h) => {
       const level = h.tagName.toLowerCase() === "h2" ? 2 : 3;
-      items.push({ id: h.id, text: h.textContent.trim(), level });
+      items.push({ id: h.id, text: (h.textContent||"").trim(), level });
     });
     tocNav.innerHTML = items.map(it => {
       const pad = it.level === 3 ? ' style="padding-left:1rem;"' : "";
@@ -102,32 +184,26 @@
     tocBlock.style.display = "";
   }
 
-  // ---------- References from OpenAlex ----------
+  // ---------- OpenAlex helpers ----------
   async function fetchOpenAlexJSON(url, retries=2){
     for (let i=0;i<=retries;i++){
       const res = await fetch(url);
       if (res.ok) return await res.json();
-      if (res.status === 429 && i < retries) {
-        await sleep(500 * (i+1));
-        continue;
-      }
+      if (res.status === 429 && i < retries) { await sleep(500*(i+1)); continue; }
       throw new Error(`OpenAlex error ${res.status}: ${url}`);
     }
   }
-
-  function pickYear(dateStr){
-    if (!dateStr) return null;
-    const m = String(dateStr).match(/^(\d{4})/);
+  function pickYear(val){
+    if (!val) return null;
+    const m = String(val).match(/^(\d{4})/);
     return m ? m[1] : null;
   }
-
   function formatAuthors(authors){
     if (!authors || !authors.length) return "";
-    const names = authors.slice(0,3).map(a => a?.author?.display_name || a?.author?.id || "").filter(Boolean);
+    const names = authors.slice(0,3).map(a => a?.author?.display_name || "").filter(Boolean);
     if (authors.length > 3) names.push("et al.");
     return names.join(", ");
   }
-
   function citeLine(w){
     const authors = formatAuthors(w.authorships || []);
     const year = pickYear(w.publication_year || w.published_date || w.from_publication_date);
@@ -143,58 +219,42 @@
     if (doiHref) parts.push(`<a href="${doiHref}" target="_blank" rel="noopener">${doi ? "https://doi.org/" + escapeHtml(doi) : "Link"}</a>`);
     return parts.join(" ");
   }
-
   function dedupByDOI(arr){
-    const seen = new Set();
-    const out = [];
+    const seen = new Set(); const out = [];
     for (const w of arr){
       const key = (w.doi || w.id || "").toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key); out.push(w);
+      if (seen.has(key)) continue; seen.add(key); out.push(w);
     }
     return out;
   }
 
+  // ---------- Load sections ----------
   async function loadReferences(conceptIdTail){
-    const now = new Date();
-    const fromYear = now.getUTCFullYear() - 2;
+    const nowY = new Date().getUTCFullYear();
     const reviewURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},type:review&sort=cited_by_count:desc&per_page=10`;
-    const recentURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},from_publication_date:${fromYear}-01-01&sort=cited_by_count:desc&per_page=10`;
-    const [rev, rec] = await Promise.all([
-      fetchOpenAlexJSON(reviewURL),
-      fetchOpenAlexJSON(recentURL)
-    ]);
-    const works = dedupByDOI([...(rev.results||[]), ...(rec.results||[])]).slice(0, 15);
-    referencesList.innerHTML = works.map(w => `<li>${citeLine(w)}</li>`).join("") || `<p class="muted">No references available.</p>`;
+    const recentURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},from_publication_date:${nowY-2}-01-01&sort=cited_by_count:desc&per_page=10`;
+    const [rev, rec] = await Promise.all([ fetchOpenAlexJSON(reviewURL), fetchOpenAlexJSON(recentURL) ]);
+    const works = dedupByDOI([...(rev.results||[]), ...(rec.results||[])]).slice(0,15);
+    referencesList.innerHTML = works.length ? works.map(w => `<li>${citeLine(w)}</li>`).join("") : `<p class="muted">No references available.</p>`;
     referencesWhy.textContent = "Selected via OpenAlex: citation impact (reviews) and recent influential works (last two years).";
-    return works;
   }
 
-  // ---------- Influential papers cards (reuse your components if present) ----------
   async function loadTopPapers(conceptIdTail){
-    try {
-      const worksResp = await fetch(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&sort=cited_by_count:desc&per_page=12`);
-      const data = await worksResp.json();
+    try{
+      const data = await fetchOpenAlexJSON(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&sort=cited_by_count:desc&per_page=12`);
       const works = Array.isArray(data.results) ? data.results : [];
-      if (!works.length) {
-        papersCards.innerHTML = '<p class="muted">No papers found.</p>';
-        return;
-      }
-      if (window.SE && window.SE.components && typeof SE.components.renderPaperCard === "function") {
+      if (!works.length) { papersCards.innerHTML = '<p class="muted">No papers found.</p>'; return; }
+      if (window.SE?.components?.renderPaperCard) {
         papersCards.innerHTML = works.map(w => SE.components.renderPaperCard(w, { compact: true })).join("");
-        if (typeof SE.components.enhancePaperCards === "function") SE.components.enhancePaperCards(papersCards);
+        if (SE.components.enhancePaperCards) SE.components.enhancePaperCards(papersCards);
       } else {
-        // Fallback minimal list
         papersCards.innerHTML = `<ul class="list-reset">${works.map(w =>
           `<li class="list-item"><a href="paper.html?id=${encodeURIComponent(tail(w.id))}">${escapeHtml(w.title || "Untitled")}</a></li>`
         ).join("")}</ul>`;
       }
-    } catch(e){
-      papersCards.innerHTML = '<p class="muted">Failed to load papers.</p>';
-    }
+    }catch(_){ papersCards.innerHTML = '<p class="muted">Failed to load papers.</p>'; }
   }
 
-  // ---------- People (top authors) ----------
   async function loadTopAuthors(conceptIdTail){
     try{
       const u = new URL(`${API_OA}/authors`);
@@ -209,16 +269,13 @@
         const name = a.display_name || "Unknown";
         const cits = a.cited_by_count || 0;
         return `<li class="list-item list-card" style="display:flex;justify-content:space-between;align-items:center;">
-                  <a href="profile.html?id=${encodeURIComponent(idT)}">${escapeHtml(name)}</a>
-                  <span class="badge" title="Total citations">${cits.toLocaleString()}</span>
-                </li>`;
+          <a href="profile.html?id=${encodeURIComponent(idT)}">${escapeHtml(name)}</a>
+          <span class="badge" title="Total citations">${cits.toLocaleString()}</span>
+        </li>`;
       }).join("");
-    }catch(_){
-      topicPeople.innerHTML = '<li class="muted">No people listed</li>';
-    }
+    }catch(_){ topicPeople.innerHTML = '<li class="muted">No people listed</li>'; }
   }
 
-  // ---------- Related topics ----------
   function renderRelated(concept){
     const rel = Array.isArray(concept.related_concepts) ? concept.related_concepts.slice(0, 12) : [];
     relatedBlock.innerHTML = rel.length
@@ -226,19 +283,13 @@
       : '<li class="muted">No related topics.</li>';
   }
 
-  // ---------- Wikidata lite infobox ----------
-  // We keep lightweight: show label/description, image (P18) if quickly available via OpenAlex.wikipedia or Wikidata sitelink
-  async function loadWikidataInfobox(topic){
-    // If topic has wikipedia_url, try a quick image via Wikimedia API from title
-    const wp = topic.wikipedia || topic.wikipedia_url || topic?.ids?.wikipedia || null;
+  async function loadInfobox(topic){
     let html = "";
-    // Title & description
     html += `<div class="stat"><div class="stat-value" style="font-weight:700;">${escapeHtml(topic.display_name || "—")}</div></div>`;
     if (topic.description) html += `<div class="muted" style="margin-top:.25rem;">${escapeHtml(topic.description)}</div>`;
-
-    // You already had a richer infobox before; to keep zero-cost/time we display identifiers quickly
     const links = [];
     if (topic.id) links.push(`<a href="${topic.id}" target="_blank" rel="noopener">OpenAlex</a>`);
+    const wp = topic.wikipedia || topic.wikipedia_url || topic?.ids?.wikipedia || null;
     if (wp) links.push(`<a href="${wp}" target="_blank" rel="noopener">Wikipedia</a>`);
     if (topic.wikidata || topic.wikidata_id) {
       const wd = String(topic.wikidata || topic.wikidata_id);
@@ -248,8 +299,7 @@
     infoboxDom.innerHTML = html;
   }
 
-  // ---------- Trend sparkline ----------
-  function renderSparkline(points){ // points: [{year, count}]
+  function renderSparkline(points){
     if (!points.length) { trendSparkline.innerHTML = '<div class="muted">No data.</div>'; return; }
     const w = trendSparkline.clientWidth || 260;
     const h = trendSparkline.clientHeight || 56;
@@ -270,7 +320,6 @@
       </svg>
     `;
   }
-
   async function loadTrend(conceptIdTail){
     try{
       const url = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&group_by=publication_year&per_page=200`;
@@ -278,29 +327,26 @@
       const byYear = Array.isArray(data.group_by) ? data.group_by.map(g => ({ year: Number(g.key), count: g.count })) : [];
       byYear.sort((a,b)=>a.year-b.year);
       renderSparkline(byYear);
-    }catch(_){
-      trendSparkline.innerHTML = '<div class="muted">No data.</div>';
-    }
+    }catch(_){ trendSparkline.innerHTML = '<div class="muted">No data.</div>'; }
   }
 
-  // ---------- Main loader ----------
+  // ---------- Main ----------
   async function loadTopic(){
     const idParam = getParam("id");
     if(!idParam) { topicTitle.textContent = "Missing topic ID."; return; }
     const idTail = idParam.includes("openalex.org") ? idParam.split("/").pop() : idParam;
 
     try {
-      // 1) OpenAlex concept
+      // OpenAlex concept
       const topicCache = cacheRead(idTail, "concept");
       const topic = topicCache || await (await fetch(`${API_OA}/concepts/${encodeURIComponent(idTail)}`)).json();
       if (!topicCache) cacheWrite(idTail, "concept", topic);
 
       document.title = `${topic.display_name} | Topic | ScienceEcosystem`;
       topicTitle.textContent = topic.display_name || "Topic";
-      topicSubtitle.textContent = "A neutral, research-grounded overview.";
       topicMeta.textContent = "Loading article…";
 
-      // 2) Wikipedia article (mobile-html) + last revision
+      // Wikipedia article (full), sanitised to keep SE look
       const wpTitle = (topic?.display_name || "").trim();
       let articleHTML = cacheRead(idTail, "wp_html");
       let revMeta = cacheRead(idTail, "wp_rev");
@@ -313,41 +359,27 @@
         cacheWrite(idTail, "wp_rev", revMeta);
       }
 
-      // Insert article
-      const container = document.createElement("div");
-      container.className = "wiki-article";
-      container.innerHTML = articleHTML;
-      // Wikipedia mobile HTML includes lead sections; remove edit icons if present
-      container.querySelectorAll('.pcs-edit-section-title, .mwe-math-fallback-image-inline').forEach(n => n.remove());
-
-      // Build ToC
-      buildTOC(container);
-
-      // Mount article
+      // Sanitise & mount
+      const clean = sanitiseWikipediaHTML(articleHTML);
       wikiArticle.innerHTML = "";
-      wikiArticle.appendChild(container);
+      wikiArticle.appendChild(clean);
 
-      // Attribution & meta
+      // ToC from cleaned headings
+      buildTOC(clean);
+
+      // Attribution/meta (keeps SE branding)
       const lastUpdated = revMeta?.lastRev ? new Date(revMeta.lastRev) : null;
       const updatedStr = lastUpdated ? lastUpdated.toISOString().slice(0,10) : "unknown";
-      topicMeta.textContent = `Wikipedia-sourced overview • Last revision: ${updatedStr}`;
+      topicMeta.textContent = `Overview sourced from Wikipedia • Last revision: ${updatedStr}`;
       const wpURL = revMeta?.url ? `<a href="${revMeta.url}" target="_blank" rel="noopener">Wikipedia article & history</a>` : "Wikipedia";
       wikiAttribution.innerHTML = `Text in this section is from ${wpURL} and is available under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Images may have separate licences.`;
 
-      // 3) Related topics
+      // Related topics, References, Top papers, People, Infobox, Trend
       renderRelated(topic);
-
-      // 4) References (OpenAlex)
       await loadReferences(idTail);
-
-      // 5) Influential papers (cards)
       await loadTopPapers(idTail);
-
-      // 6) People (top authors)
       await loadTopAuthors(idTail);
-
-      // 7) Infobox (lite) and trend sparkline
-      await loadWikidataInfobox(topic);
+      await loadInfobox(topic);
       await loadTrend(idTail);
 
     } catch (e){
