@@ -43,34 +43,31 @@
     <!-- Topic Header -->
     <section class="panel" id="topicHeader">
       <h1 id="topicTitle">Loading…</h1>
-      <p id="topicSubtitle" class="muted" style="margin:.25rem 0 0;">A neutral, research-grounded overview.</p>
-      <div id="topicMeta" class="muted" style="font-size:.9rem;margin-top:.35rem;">—</div>
+      <!-- Wikipedia lead paragraphs injected here -->
+      <div id="topicSubtitle" style="margin-top:.35rem;"></div>
+      <div id="topicMeta" class="muted" style="font-size:.9rem;margin-top:.5rem;">—</div>
     </section>
 
     <div class="layout-grid">
       <!-- Main Column -->
       <section class="panel main-col" id="topicMain">
-        <!-- Table of contents -->
         <section class="topic-section" id="tocBlock" aria-label="Table of contents" style="display:none;">
           <h2>Contents</h2>
           <nav id="tocNav" class="toc"></nav>
         </section>
 
-        <!-- Wikipedia-style body (sanitised to keep SE look) -->
         <section class="topic-section" id="wikiBlock">
           <h2>Overview</h2>
           <div id="wikiArticle" class="se-wiki-article">Loading article…</div>
           <div id="wikiAttribution" class="muted" style="font-size:.85rem;margin-top:.75rem;"></div>
         </section>
 
-        <!-- References (OpenAlex-derived) -->
         <section class="topic-section" id="referencesBlock">
           <h2>References</h2>
           <ol id="referencesList" class="refs-list"></ol>
           <p id="referencesWhy" class="muted" style="font-size:.85rem;"></p>
         </section>
 
-        <!-- Influential papers (existing cards) -->
         <section class="topic-section" id="topPapersBlock">
           <h2>Influential papers</h2>
           <div id="papersCards"></div>
@@ -123,7 +120,7 @@
   <script src="scripts/library.js" defer></script>
   <script src="scripts/components.js" defer></script>
   <script src="scripts/session.js" defer></script>
-  <script src="scripts/topic.js?v=4.1" defer></script>
+  <script src="scripts/topic.js?v=4.3" defer></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 </body>
 </html>

@@ -5,7 +5,7 @@
   // ---------- Constants ----------
   const API_OA = "https://api.openalex.org";
   const API_WIKI_REST = "https://en.wikipedia.org/api/rest_v1";
-  const API_WIKI_ACTION = "https://en.wikipedia.org/w/api.php";
+  const API_WIKI_ACTION = "https://www.wikipedia.org/w/api.php"; // use language-agnostic gateway
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
   // ---------- DOM ----------
@@ -33,7 +33,6 @@
     str = (str==null?"":String(str));
     return str.replace(/[&<>'"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;" }[c]));
   }
-
   async function fetchJSON(url, opts){
     const res = await fetch(url, Object.assign({ headers: { "Accept":"application/json" }}, opts||{}));
     if (!res.ok) throw new Error(res.status + " " + res.statusText + " — " + url);
@@ -55,14 +54,16 @@
     try{ localStorage.setItem(cacheKey(topicId, key), JSON.stringify({ t: Date.now(), v: value })); }catch(_){}
   }
 
-  // ---------- Wikipedia fetch (mobile-html) ----------
+  // ---------- Wikipedia fetch ----------
   async function loadWikipediaArticle(title){
+    // Use REST mobile-html for structured article
     const url = `${API_WIKI_REST}/page/mobile-html/${encodeURIComponent(title)}`;
     const res = await fetch(url, { headers: { "Accept": "text/html" }});
     if(!res.ok) throw new Error(`Wikipedia mobile-html failed: ${res.status}`);
     return await res.text();
   }
   async function loadWikipediaRevisionMeta(title){
+    // language-agnostic API gateway
     const u = new URL(API_WIKI_ACTION);
     u.searchParams.set("action","query");
     u.searchParams.set("prop","revisions|info");
@@ -80,7 +81,7 @@
     return { lastRev: ts, url: fullurl };
   }
 
-  // ---------- Sanitiser: keep SE look, strip Wikipedia styles ----------
+  // ---------- Sanitiser (keep SUP/A so [1] citations work) ----------
   const ALLOWED_TAGS = new Set([
     "P","H2","H3","H4","UL","OL","LI","B","STRONG","I","EM","A","IMG",
     "BLOCKQUOTE","CODE","PRE","TABLE","THEAD","TBODY","TR","TH","TD","SUP","SUB"
@@ -91,44 +92,29 @@
   function sanitiseWikipediaHTML(html){
     const src = document.createElement("div");
     src.innerHTML = html;
-
-    // Remove all styles/scripts/links that would restyle the page
     src.querySelectorAll("style, link, script, noscript").forEach(n => n.remove());
-
-    // Find main content container candidates; fallback to entire html
-    // Mobile HTML often uses sections; we’ll take the whole body content
-    const contentRoot = src;
 
     const out = document.createElement("div");
     out.className = "se-wiki-clean";
 
     function cloneNodeSafe(node){
-      if (node.nodeType === Node.TEXT_NODE) {
-        return document.createTextNode(node.nodeValue);
-      }
+      if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.nodeValue);
       if (node.nodeType !== Node.ELEMENT_NODE) return null;
       const tag = node.tagName;
       if (!ALLOWED_TAGS.has(tag)) {
-        // Recurse into children for unsupported wrappers
         const frag = document.createDocumentFragment();
-        node.childNodes.forEach(ch => {
-          const c = cloneNodeSafe(ch);
-          if (c) frag.appendChild(c);
-        });
+        node.childNodes.forEach(ch => { const c = cloneNodeSafe(ch); if (c) frag.appendChild(c); });
         return frag;
       }
       const el = document.createElement(tag.toLowerCase());
-
-      // Allowed attributes per tag
       if (tag === "A") {
         const href = node.getAttribute("href") || "";
-        if (href && /^https?:\/\//i.test(href)) {
+        // allow fragment links for references (#cite_note…) + external http(s)
+        if (/^#/.test(href) || /^https?:\/\//i.test(href)) {
           el.setAttribute("href", href);
-          el.setAttribute("target","_blank");
-          el.setAttribute("rel","noopener");
+          if (!/^#/.test(href)) { el.setAttribute("target","_blank"); el.setAttribute("rel","noopener"); }
         }
       } else if (tag === "IMG") {
-        // Keep only safe images (Wikimedia uploads); downscale via width
         let srcAttr = node.getAttribute("src") || "";
         if (/^https?:\/\/upload\.wikimedia\.org\//i.test(srcAttr)) {
           el.setAttribute("src", srcAttr);
@@ -138,34 +124,77 @@
           el.style.maxWidth = "100%";
           el.style.height = "auto";
         } else {
-          // skip non-wikimedia images
-          return document.createTextNode(""); 
+          return document.createTextNode("");
         }
       }
-      // Never copy class/style/id from Wikipedia
-      node.childNodes.forEach(ch => {
-        const c = cloneNodeSafe(ch);
-        if (c) el.appendChild(c);
-      });
+      node.childNodes.forEach(ch => { const c = cloneNodeSafe(ch); if (c) el.appendChild(c); });
       return el;
     }
 
-    // Build output: only the sequence of allowed content nodes (no site chrome)
-    contentRoot.childNodes.forEach(n => {
-      const c = cloneNodeSafe(n);
-      if (c) out.appendChild(c);
-    });
+    src.childNodes.forEach(n => { const c = cloneNodeSafe(n); if (c) out.appendChild(c); });
 
-    // Assign stable ids to headings we keep
+    // Heading IDs for ToC
     out.querySelectorAll("h2, h3, h4").forEach(h => {
-      if (!h.id || /^sec-\d+/.test(h.id)) {
-        const txt = h.textContent || "";
-        const gen = makeIdFromText(txt) || ("sec-" + Math.random().toString(36).slice(2,8));
-        h.id = gen;
-      }
+      if (!h.id) h.id = makeIdFromText(h.textContent || "");
     });
 
     return out;
+  }
+
+  // ---------- Internal linkification (blue words -> SE topic pages) ----------
+  function buildLinkPairsFromConcept(concept){
+    const pairs = [];
+    const seen = new Set();
+    function add(name, id){
+      if (!name || !id) return;
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      pairs.push({ term: name, idTail: tail(id) });
+    }
+    (concept.ancestors || []).forEach(a => add(a.display_name, a.id));
+    (concept.related_concepts || []).forEach(r => add(r.display_name, r.id));
+    return pairs;
+  }
+  function linkifyContainer(container, linkPairs){
+    if (!linkPairs.length) return;
+    const sorted = linkPairs.slice().sort((a,b) => b.term.length - a.term.length);
+    const pattern = "\\b(" + sorted.map(p => p.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join("|") + ")\\b";
+    const rx = new RegExp(pattern, "gi");
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode(node){
+        const parent = node.parentElement;
+        if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        if (parent && (parent.closest("a") || parent.closest("sup"))) return NodeFilter.FILTER_REJECT; // don’t touch links or citation numbers
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+
+    const nodes = [];
+    let n; while ((n = walker.nextNode())) nodes.push(n);
+
+    nodes.forEach(node => {
+      const txt = node.nodeValue;
+      if (!rx.test(txt)) return;
+      rx.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      txt.replace(rx, (match, p1, idx) => {
+        const pre = txt.slice(last, idx);
+        if (pre) frag.appendChild(document.createTextNode(pre));
+        const found = sorted.find(p => p.term.toLowerCase() === p1.toLowerCase());
+        const a = document.createElement("a");
+        a.href = "topic.html?id=" + encodeURIComponent(found.idTail);
+        a.textContent = p1;
+        frag.appendChild(a);
+        last = idx + p1.length;
+        return p1;
+      });
+      const rest = txt.slice(last);
+      if (rest) frag.appendChild(document.createTextNode(rest));
+      node.parentNode.replaceChild(frag, node);
+    });
   }
 
   // ---------- ToC ----------
@@ -193,30 +222,30 @@
       throw new Error(`OpenAlex error ${res.status}: ${url}`);
     }
   }
-  function pickYear(val){
-    if (!val) return null;
-    const m = String(val).match(/^(\d{4})/);
-    return m ? m[1] : null;
-  }
+  function pickYear(val){ const m = val ? String(val).match(/^(\d{4})/) : null; return m ? m[1] : null; }
   function formatAuthors(authors){
     if (!authors || !authors.length) return "";
     const names = authors.slice(0,3).map(a => a?.author?.display_name || "").filter(Boolean);
     if (authors.length > 3) names.push("et al.");
     return names.join(", ");
   }
-  function citeLine(w){
+  function citeLine(w, i){
     const authors = formatAuthors(w.authorships || []);
     const year = pickYear(w.publication_year || w.published_date || w.from_publication_date);
     const title = w.title || "Untitled";
     const venue = w.host_venue?.display_name || w.primary_location?.source?.display_name || "";
     const doi = w.doi ? w.doi.replace(/^https?:\/\/doi\.org\//i,"") : null;
     const doiHref = doi ? `https://doi.org/${encodeURIComponent(doi)}` : (w.primary_location?.landing_page_url || w.id);
+    const workIdTail = tail(w.id);
     const parts = [];
+    // Number anchor for deep linking
+    parts.push(`<a id="se-ref-${i}" class="ref-anchor"></a>`);
     if (authors) parts.push(`${escapeHtml(authors)}`);
     if (year) parts.push(`(${year})`);
     parts.push(`${escapeHtml(title)}.`);
     if (venue) parts.push(`<i>${escapeHtml(venue)}</i>.`);
     if (doiHref) parts.push(`<a href="${doiHref}" target="_blank" rel="noopener">${doi ? "https://doi.org/" + escapeHtml(doi) : "Link"}</a>`);
+    if (workIdTail) parts.push(` · <a href="paper.html?id=${encodeURIComponent(workIdTail)}">SE paper page</a>`);
     return parts.join(" ");
   }
   function dedupByDOI(arr){
@@ -228,14 +257,16 @@
     return out;
   }
 
-  // ---------- Load sections ----------
+  // ---------- Sections ----------
   async function loadReferences(conceptIdTail){
     const nowY = new Date().getUTCFullYear();
     const reviewURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},type:review&sort=cited_by_count:desc&per_page=10`;
     const recentURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},from_publication_date:${nowY-2}-01-01&sort=cited_by_count:desc&per_page=10`;
     const [rev, rec] = await Promise.all([ fetchOpenAlexJSON(reviewURL), fetchOpenAlexJSON(recentURL) ]);
     const works = dedupByDOI([...(rev.results||[]), ...(rec.results||[])]).slice(0,15);
-    referencesList.innerHTML = works.length ? works.map(w => `<li>${citeLine(w)}</li>`).join("") : `<p class="muted">No references available.</p>`;
+    referencesList.innerHTML = works.length
+      ? works.map((w, i) => `<li>${citeLine(w, i+1)}</li>`).join("")
+      : `<p class="muted">No references available.</p>`;
     referencesWhy.textContent = "Selected via OpenAlex: citation impact (reviews) and recent influential works (last two years).";
   }
 
@@ -346,45 +377,68 @@
       topicTitle.textContent = topic.display_name || "Topic";
       topicMeta.textContent = "Loading article…";
 
-      // Wikipedia article (full), sanitised to keep SE look
+      // Wikipedia article & revision
       const wpTitle = (topic?.display_name || "").trim();
       let articleHTML = cacheRead(idTail, "wp_html");
       let revMeta = cacheRead(idTail, "wp_rev");
-      if (!articleHTML) {
-        articleHTML = await loadWikipediaArticle(wpTitle);
-        cacheWrite(idTail, "wp_html", articleHTML);
-      }
-      if (!revMeta) {
-        revMeta = await loadWikipediaRevisionMeta(wpTitle);
-        cacheWrite(idTail, "wp_rev", revMeta);
-      }
+      if (!articleHTML) { articleHTML = await loadWikipediaArticle(wpTitle); cacheWrite(idTail, "wp_html", articleHTML); }
+      if (!revMeta) { revMeta = await loadWikipediaRevisionMeta(wpTitle); cacheWrite(idTail, "wp_rev", revMeta); }
 
-      // Sanitise & mount
+      // Sanitise & split lead vs rest
       const clean = sanitiseWikipediaHTML(articleHTML);
-      wikiArticle.innerHTML = "";
-      wikiArticle.appendChild(clean);
+      const firstHeading = clean.querySelector("h2, h3, h4");
+      const leadNodes = [];
+      const restNodes = [];
+      let node = clean.firstChild;
+      while (node) {
+        if (node === firstHeading) break;
+        // keep only <p> as lead paragraphs
+        if (node.nodeType === 1 && node.tagName === "P") leadNodes.push(node.cloneNode(true));
+        node = node.nextSibling;
+      }
+      // collect rest
+      while (node) {
+        restNodes.push(node.cloneNode(true));
+        node = node.nextSibling;
+      }
 
-      // ToC from cleaned headings
-      buildTOC(clean);
+      // Build containers
+      const leadWrap = document.createElement("div");
+      leadNodes.forEach(n => leadWrap.appendChild(n));
+      const bodyWrap = document.createElement("div");
+      restNodes.forEach(n => bodyWrap.appendChild(n));
 
-      // Attribution/meta (keeps SE branding)
+      // Internal linkify (blue words) for both lead and body
+      const linkPairs = buildLinkPairsFromConcept(topic);
+      linkifyContainer(leadWrap, linkPairs);
+      linkifyContainer(bodyWrap, linkPairs);
+
+      // Mount into header + overview
+      topicSubtitle.innerHTML = leadNodes.length ? leadWrap.innerHTML : `<p>${escapeHtml(topic.description || "No summary available.")}</p>`;
+      wikiArticle.innerHTML = bodyWrap.innerHTML || "<p>No further details available.</p>";
+
+      // ToC (from body only)
+      buildTOC(bodyWrap);
+
+      // Attribution/meta
       const lastUpdated = revMeta?.lastRev ? new Date(revMeta.lastRev) : null;
       const updatedStr = lastUpdated ? lastUpdated.toISOString().slice(0,10) : "unknown";
       topicMeta.textContent = `Overview sourced from Wikipedia • Last revision: ${updatedStr}`;
       const wpURL = revMeta?.url ? `<a href="${revMeta.url}" target="_blank" rel="noopener">Wikipedia article & history</a>` : "Wikipedia";
-      wikiAttribution.innerHTML = `Text in this section is from ${wpURL} and is available under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Images may have separate licences.`;
+      wikiAttribution.innerHTML = `Text in this section is from ${wpURL} and is available under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>.`;
 
-      // Related topics, References, Top papers, People, Infobox, Trend
-      renderRelated(topic);
-      await loadReferences(idTail);
-      await loadTopPapers(idTail);
-      await loadTopAuthors(idTail);
-      await loadInfobox(topic);
-      await loadTrend(idTail);
+      // SE sections
+      renderRelated(topic);               // See also → links to topic.html
+      await loadReferences(idTail);       // References → DOI + SE paper page links
+      await loadTopPapers(idTail);        // Cards
+      await loadTopAuthors(idTail);       // People
+      await loadInfobox(topic);           // Infobox links
+      await loadTrend(idTail);            // Sparkline
 
     } catch (e){
       console.error(e);
       topicTitle.textContent = "Error loading topic";
+      topicSubtitle.textContent = "";
       wikiArticle.innerHTML = "<p class='muted'>We could not load the article at this time.</p>";
       referencesList.innerHTML = "";
       topicPeople.innerHTML = '<li class="muted">—</li>';
