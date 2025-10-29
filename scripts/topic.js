@@ -1,422 +1,200 @@
 // scripts/topic.js
-(function(){
+(function () {
   if (!document.body || document.body.dataset.page !== "topic") return;
 
+  // ---------- Constants ----------
   const API_OA = "https://api.openalex.org";
-  const API_WD = "https://www.wikidata.org/w/api.php"; // wbgetentities
-  const API_WD_ENTITY = "https://www.wikidata.org/wiki/Special:EntityData"; // JSON per entity
-  const OAUTH = {}; // kept for future; all endpoints used here are open
+  const API_WIKI_REST = "https://en.wikipedia.org/api/rest_v1";
+  const API_WIKI_ACTION = "https://en.wikipedia.org/w/api.php"; // add origin=*
+  const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
-  // ---- DOM ----
-  const topicHeader    = document.getElementById("topicHeader");
-  const wikiBlock      = document.getElementById("wikiBlock");
-  const resourcesBlock = document.getElementById("resourcesBlock");
-  const topPapersBlock = document.getElementById("topPapersBlock");
-  const infoboxPanel   = document.getElementById("infoboxPanel");
-  const infoboxDom     = document.getElementById("infobox");
-  const topicPeople    = document.getElementById("topicPeople");
+  // ---------- DOM ----------
+  const el = (id) => document.getElementById(id);
+  const topicHeader = el("topicHeader");
+  const topicTitle = el("topicTitle");
+  const topicSubtitle = el("topicSubtitle");
+  const topicMeta = el("topicMeta");
+  const wikiBlock = el("wikiBlock");
+  const wikiArticle = el("wikiArticle");
+  const wikiAttribution = el("wikiAttribution");
+  const tocBlock = el("tocBlock");
+  const tocNav = el("tocNav");
+  const referencesList = el("referencesList");
+  const referencesWhy = el("referencesWhy");
+  const papersCards = el("papersCards");
+  const infoboxDom = el("infobox");
+  const topicPeople = el("topicPeople");
+  const relatedBlock = el("relatedBlock");
+  const trendSparkline = el("trendSparkline");
 
-  // ---- Utils ----
+  // ---------- Utils ----------
   const getParam = (name) => new URLSearchParams(location.search).get(name);
   const tail = (id) => id ? String(id).replace(/^https?:\/\/openalex\.org\//i, "") : "";
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
   function escapeHtml(str){
     str = (str==null?"":String(str));
     return str.replace(/[&<>'"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;" }[c]));
   }
-  function get(obj, path, fb){
-    try{
-      const p = path.split(".");
-      let cur = obj;
-      for (let i=0;i<p.length;i++){ if(cur==null) return fb; cur = cur[p[i]]; }
-      return cur==null ? fb : cur;
-    }catch(e){ return fb; }
-  }
 
-  // ---- Networking helpers with CORS ----
-  async function fetchJSON(url){
-    const res = await fetch(url, { headers: { "Accept":"application/json" }});
-    if (!res.ok) throw new Error(res.status + " " + res.statusText);
+  async function fetchJSON(url, opts){
+    const res = await fetch(url, Object.assign({ headers: { "Accept": "application/json" } }, opts || {}));
+    if (!res.ok) throw new Error(res.status + " " + res.statusText + " — " + url);
     return await res.json();
   }
-  function wdURL(params){
-    const u = new URL(API_WD);
-    Object.keys(params).forEach(k => u.searchParams.set(k, params[k]));
-    // CORS for wikidata
-    u.searchParams.set("origin", "*");
-    return u.toString();
+
+  // ---------- Local cache ----------
+  function cacheKey(topicId, key){ return `topic:${topicId}:${key}`; }
+  function cacheRead(topicId, key){
+    try{
+      const raw = localStorage.getItem(cacheKey(topicId, key));
+      if(!raw) return null;
+      const { t, v } = JSON.parse(raw);
+      if (Date.now() - t > CACHE_TTL_MS) return null;
+      return v;
+    }catch(_){ return null; }
+  }
+  function cacheWrite(topicId, key, value){
+    try{
+      localStorage.setItem(cacheKey(topicId, key), JSON.stringify({ t: Date.now(), v: value }));
+    }catch(_){}
   }
 
-  // ---- Wikipedia ----
-  async function getWikipediaExtract(title){
-    try {
-      const resp = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
-      if(!resp.ok) throw new Error("Wikipedia fetch failed");
-      const data = await resp.json();
-      return { html: data.extract_html, url: data.content_urls?.desktop?.page, lang: data.lang || "en" };
-    } catch(e){
-      return { html: null, url: null, lang: "en" };
-    }
+  // ---------- Wikipedia: fetch full mobile HTML + last revision ----------
+  async function loadWikipediaArticle(title){
+    const url = `${API_WIKI_REST}/page/mobile-html/${encodeURIComponent(title)}`;
+    const res = await fetch(url, { headers: { "Accept": "text/html" }});
+    if(!res.ok) throw new Error(`Wikipedia mobile-html failed: ${res.status}`);
+    const html = await res.text();
+    return html;
+  }
+  async function loadWikipediaRevisionMeta(title){
+    const u = new URL(API_WIKI_ACTION);
+    u.searchParams.set("action","query");
+    u.searchParams.set("prop","revisions|info");
+    u.searchParams.set("rvprop","ids|timestamp");
+    u.searchParams.set("inprop","url");
+    u.searchParams.set("titles", title);
+    u.searchParams.set("format","json");
+    u.searchParams.set("origin","*");
+    const data = await fetchJSON(u.toString());
+    const pages = data?.query?.pages || {};
+    const first = Object.values(pages)[0];
+    const rev = first?.revisions?.[0];
+    const ts = rev?.timestamp ? new Date(rev.timestamp) : null;
+    const fullurl = first?.fullurl || null;
+    return { lastRev: ts, url: fullurl };
   }
 
-  // ---- Wikidata lookup ----
-  function qFromAny(wdField){
-    if (!wdField) return null;
-    const m = String(wdField).match(/Q\d+/i);
-    return m ? m[0] : null;
-  }
-
-  async function getQidFromConcept(concept){
-    // prefer concept.wikidata / wikidata_id
-    const direct = qFromAny(concept.wikidata || concept.wikidata_id);
-    if (direct) return direct;
-
-    // try via Wikipedia sitelink if present
-    const wp = concept.wikipedia || concept.wikipedia_url || get(concept, "ids.wikipedia", null);
-    if (wp){
-      try{
-        // Extract title and site (assume English if not obvious)
-        const match = String(wp).match(/https?:\/\/([a-z\-]+)\.wikipedia\.org\/wiki\/(.+)$/i);
-        const site = match ? (match[1] + "wiki") : "enwiki";
-        const title = match ? decodeURIComponent(match[2]) : concept.display_name;
-        const url = wdURL({
-          action: "wbgetentities",
-          sites: site,
-          titles: title,
-          format: "json",
-          props: "info"
-        });
-        const data = await fetchJSON(url);
-        const ids = Object.keys(data.entities || {}).filter(k => k !== "undefined");
-        return ids.length ? ids[0] : null;
-      }catch(_){}
-    }
-    return null;
-  }
-
-  async function fetchWikidataEntity(qid, props){
-    const url = wdURL({
-      action: "wbgetentities",
-      ids: qid,
-      format: "json",
-      props: props || "labels|descriptions|claims|sitelinks|aliases|datatype"
+  function buildTOC(container){
+    const headings = container.querySelectorAll("h2, h3");
+    if (!headings.length) { tocBlock.style.display = "none"; return; }
+    const items = [];
+    headings.forEach((h, idx) => {
+      if (!h.id) h.id = `sec-${idx+1}`;
+      const level = h.tagName.toLowerCase() === "h2" ? 2 : 3;
+      items.push({ id: h.id, text: h.textContent.trim(), level });
     });
-    const data = await fetchJSON(url);
-    return data.entities && data.entities[qid] ? data.entities[qid] : null;
+    tocNav.innerHTML = items.map(it => {
+      const pad = it.level === 3 ? ' style="padding-left:1rem;"' : "";
+      return `<div class="toc-item"${pad}><a href="#${escapeHtml(it.id)}">${escapeHtml(it.text)}</a></div>`;
+    }).join("");
+    tocBlock.style.display = "";
   }
 
-  async function fetchWikidataProperties(propIds){
-    if (!propIds.length) return {};
-    const url = wdURL({
-      action: "wbgetentities",
-      ids: propIds.join("|"),
-      format: "json",
-      props: "labels|claims|datatype"
-    });
-    const data = await fetchJSON(url);
-    return data.entities || {};
-  }
-
-  // ---- Class inference from Wikidata (P31/P279) ----
-  const CLASS_Q = {
-    TAXON: "Q16521",            // taxon
-    CHEMICAL: "Q11173",         // chemical compound
-    DISEASE: "Q12136",          // disease
-    ORG: "Q43229",              // organization
-    UNIVERSITY: "Q3918",        // university
-    DATASET: "Q1172284",        // dataset
-    ALGORITHM: "Q8366",         // algorithm
-    STANDARD: "Q21502408"       // standard
-  };
-
-  function hasQ(entities, qid){
-    return entities.some(e => e?.mainsnak?.datavalue?.value?.id === qid);
-  }
-
-  function inferClass(entity){
-    const P31 = get(entity, "claims.P31", []);
-    const P279 = get(entity, "claims.P279", []);
-    const tags = [];
-
-    if (hasQ(P31, CLASS_Q.TAXON) || hasQ(P279, CLASS_Q.TAXON)) tags.push("taxon");
-    if (hasQ(P31, CLASS_Q.CHEMICAL) || hasQ(P279, CLASS_Q.CHEMICAL)) tags.push("chemical");
-    if (hasQ(P31, CLASS_Q.DISEASE) || hasQ(P279, CLASS_Q.DISEASE)) tags.push("disease");
-    if (hasQ(P31, CLASS_Q.DATASET) || hasQ(P279, CLASS_Q.DATASET)) tags.push("dataset");
-    if (hasQ(P31, CLASS_Q.ALGORITHM) || hasQ(P279, CLASS_Q.ALGORITHM)) tags.push("algorithm");
-    if (hasQ(P31, CLASS_Q.STANDARD) || hasQ(P279, CLASS_Q.STANDARD)) tags.push("standard");
-    if (hasQ(P31, CLASS_Q.UNIVERSITY)) tags.push("university");
-    if (hasQ(P31, CLASS_Q.ORG) || hasQ(P279, CLASS_Q.ORG)) tags.push("organization");
-
-    if (!tags.length) tags.push("generic");
-    return tags;
-  }
-
-  // ---- External identifiers (generic, using formatter URL P1630) ----
-  function collectExternalIdClaims(entity){
-    const claims = entity.claims || {};
-    const out = []; // { pid, value }
-    for (const pid in claims){
-      const rows = claims[pid] || [];
-      for (let i=0;i<rows.length;i++){
-        const snak = rows[i].mainsnak;
-        const dt = snak?.datavalue?.type;
-        if (dt === "string"){
-          const val = snak.datavalue.value;
-          out.push({ pid, value: String(val) });
-        }
+  // ---------- References from OpenAlex ----------
+  async function fetchOpenAlexJSON(url, retries=2){
+    for (let i=0;i<=retries;i++){
+      const res = await fetch(url);
+      if (res.ok) return await res.json();
+      if (res.status === 429 && i < retries) {
+        await sleep(500 * (i+1));
+        continue;
       }
+      throw new Error(`OpenAlex error ${res.status}: ${url}`);
+    }
+  }
+
+  function pickYear(dateStr){
+    if (!dateStr) return null;
+    const m = String(dateStr).match(/^(\d{4})/);
+    return m ? m[1] : null;
+  }
+
+  function formatAuthors(authors){
+    if (!authors || !authors.length) return "";
+    const names = authors.slice(0,3).map(a => a?.author?.display_name || a?.author?.id || "").filter(Boolean);
+    if (authors.length > 3) names.push("et al.");
+    return names.join(", ");
+  }
+
+  function citeLine(w){
+    const authors = formatAuthors(w.authorships || []);
+    const year = pickYear(w.publication_year || w.published_date || w.from_publication_date);
+    const title = w.title || "Untitled";
+    const venue = w.host_venue?.display_name || w.primary_location?.source?.display_name || "";
+    const doi = w.doi ? w.doi.replace(/^https?:\/\/doi\.org\//i,"") : null;
+    const doiHref = doi ? `https://doi.org/${encodeURIComponent(doi)}` : (w.primary_location?.landing_page_url || w.id);
+    const parts = [];
+    if (authors) parts.push(`${escapeHtml(authors)}`);
+    if (year) parts.push(`(${year})`);
+    parts.push(`${escapeHtml(title)}.`);
+    if (venue) parts.push(`<i>${escapeHtml(venue)}</i>.`);
+    if (doiHref) parts.push(`<a href="${doiHref}" target="_blank" rel="noopener">${doi ? "https://doi.org/" + escapeHtml(doi) : "Link"}</a>`);
+    return parts.join(" ");
+  }
+
+  function dedupByDOI(arr){
+    const seen = new Set();
+    const out = [];
+    for (const w of arr){
+      const key = (w.doi || w.id || "").toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key); out.push(w);
     }
     return out;
   }
 
-  async function buildAuthorityList(entity){
-    const ids = collectExternalIdClaims(entity);
-    if (!ids.length) return '<p class="muted">No identifiers found.</p>';
+  async function loadReferences(conceptIdTail){
+    const now = new Date();
+    const fromYear = now.getUTCFullYear() - 2;
+    const reviewURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},type:review&sort=cited_by_count:desc&per_page=10`;
+    const recentURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},from_publication_date:${fromYear}-01-01&sort=cited_by_count:desc&per_page=10`;
+    const [rev, rec] = await Promise.all([
+      fetchOpenAlexJSON(reviewURL),
+      fetchOpenAlexJSON(recentURL)
+    ]);
+    const works = dedupByDOI([...(rev.results||[]), ...(rec.results||[])]).slice(0, 15);
+    referencesList.innerHTML = works.map(w => `<li>${citeLine(w)}</li>`).join("") || `<p class="muted">No references available.</p>`;
+    referencesWhy.textContent = "Selected via OpenAlex: citation impact (reviews) and recent influential works (last two years).";
+    return works;
+  }
 
-    // unique properties
-    const pids = Array.from(new Set(ids.map(i => i.pid)));
-    const propEntities = await fetchWikidataProperties(pids);
-
-    // Group by property label + formatter URL
-    const items = [];
-    for (const it of ids){
-      const prop = propEntities[it.pid];
-      if (!prop) continue;
-      const label = get(prop, "labels.en.value", it.pid);
-      let link = null;
-
-      // find formatter URL P1630 on property
-      const fmts = get(prop, "claims.P1630", []);
-      if (fmts.length){
-        const fmt = fmts[0]?.mainsnak?.datavalue?.value;
-        if (fmt && typeof fmt === "string"){
-          link = fmt.replace("$1", encodeURIComponent(it.value));
-        }
+  // ---------- Influential papers cards (reuse your components if present) ----------
+  async function loadTopPapers(conceptIdTail){
+    try {
+      const worksResp = await fetch(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&sort=cited_by_count:desc&per_page=12`);
+      const data = await worksResp.json();
+      const works = Array.isArray(data.results) ? data.results : [];
+      if (!works.length) {
+        papersCards.innerHTML = '<p class="muted">No papers found.</p>';
+        return;
       }
-      // Make list item
-      items.push(
-        `<li><strong>${escapeHtml(label)}:</strong> ${
-          link ? `<a href="${link}" target="_blank" rel="noopener">${escapeHtml(it.value)}</a>` : escapeHtml(it.value)
-        }</li>`
-      );
-    }
-
-    // De-duplicate visually by label+value (some props repeat)
-    const seen = new Set();
-    const unique = items.filter(li => {
-      const key = li.replace(/<[^>]+>/g,"");
-      if (seen.has(key)) return false;
-      seen.add(key); return true;
-    });
-
-    return `<ul class="list-reset" style="margin:0; padding-left:0.9rem;">${unique.join("")}</ul>`;
-  }
-
-  // ---- Typed infobox fields (pull from Wikidata claims) ----
-  function pickItemLabel(snak, entitiesCache){
-    const id = snak?.mainsnak?.datavalue?.value?.id;
-    if (!id) return null;
-    const lbl = get(entitiesCache[id], "labels.en.value", null);
-    return { id, label: lbl || id };
-  }
-
-  function claimValString(claim){
-    return claim?.mainsnak?.datavalue?.value || null;
-  }
-
-  async function buildInfobox(entity, classTags){
-    // For any wikibase-item values we want labels -> include the item entities
-    // We can re-use the "Special:EntityData" which returns all linked entities too,
-    // but to keep requests small we’ll just render IDs if labels aren’t available.
-    // For compactness, we rely on labels present in this entity’s sitelinks/labels where possible.
-
-    const claims = entity.claims || {};
-    const labelOf = (id) => get(entity, "labels.en.value", null) && id; // (We keep generic; we only need this entity's own label for header)
-
-    const rows = [];
-    function addRow(key, valueHTML){
-      if (!valueHTML) return;
-      rows.push(`<div class="stat" style="min-width:140px;max-width:220px;padding:.55rem .7rem;border:1px solid #e5e7eb;border-radius:9px;margin:.25rem 0;">
-        <div class="stat-label" style="font-size:.8rem;color:#475569;">${escapeHtml(key)}</div>
-        <div class="stat-value" style="font-weight:700;">${valueHTML}</div>
-      </div>`);
-    }
-
-    // Helpers for common property IDs
-    const P = (pid) => get(claims, pid + ".0", null);      // take first claim
-    const PV = (pid) => claimValString(P(pid));             // string datavalue
-    const PITEM = (pid) => P(pid)?.mainsnak?.datavalue?.value?.id || null;
-
-    // TAXON fields
-    if (classTags.includes("taxon")){
-      const rank = PITEM("P105");         // taxon rank
-      const parent = PITEM("P171");       // parent taxon
-      const iucn = PITEM("P141");         // IUCN status
-      const commonNames = (claims["P1843"] || []).slice(0,3).map(c => claimValString(c)).filter(Boolean); // taxon common name
-      addRow("Rank", rank ? `<a href="topic.html?id=${encodeURIComponent(rank)}">${escapeHtml(rank)}</a>` : null);
-      addRow("Parent taxon", parent ? `<a href="topic.html?id=${encodeURIComponent(parent)}">${escapeHtml(parent)}</a>` : null);
-      addRow("IUCN status", iucn ? escapeHtml(iucn) : null);
-      if (commonNames.length) addRow("Common names", commonNames.map(escapeHtml).join(", "));
-    }
-
-    // CHEMICAL fields
-    if (classTags.includes("chemical")){
-      const formula = PV("P274");         // chemical formula
-      const cas = PV("P231");             // CAS
-      const inchi = PV("P234");           // InChI
-      const inchikey = PV("P235");        // InChIKey
-      addRow("Formula", formula);
-      addRow("CAS", cas);
-      addRow("InChI", inchi);
-      addRow("InChIKey", inchikey);
-    }
-
-    // DISEASE fields (best-effort)
-    if (classTags.includes("disease")){
-      const cause = PITEM("P828");         // has cause
-      const symptom = PITEM("P780");       // symptoms (first)
-      addRow("Cause", cause ? escapeHtml(cause) : null);
-      addRow("Common symptom", symptom ? escapeHtml(symptom) : null);
-    }
-
-    // ORGANIZATION / UNIVERSITY fields
-    if (classTags.includes("university") || classTags.includes("organization")){
-      const country = PITEM("P17");        // country
-      const city = PITEM("P131");          // located in the admin. territorial entity
-      addRow("Type", classTags.includes("university") ? "University" : "Organization");
-      addRow("Country", country ? escapeHtml(country) : null);
-      addRow("Location", city ? escapeHtml(city) : null);
-    }
-
-    // DATASET fields
-    if (classTags.includes("dataset")){
-      const license = PITEM("P275");       // license
-      const doi = PV("P356");              // DOI (also in OpenAlex)
-      addRow("License", license ? escapeHtml(license) : null);
-      addRow("DOI", doi ? `<a href="https://doi.org/${encodeURIComponent(doi)}" target="_blank" rel="noopener">${escapeHtml(doi)}</a>` : null);
-    }
-
-    // STANDARD fields
-    if (classTags.includes("standard")){
-      const version = PV("P348");          // version
-      const developer = PITEM("P178");     // developer(s)
-      addRow("Version", version);
-      addRow("Developer", developer ? escapeHtml(developer) : null);
-    }
-
-    // Fallback: show instance-of
-    if (!rows.length){
-      const inst = PITEM("P31");
-      if (inst) addRow("Instance of", escapeHtml(inst));
-    }
-
-    // Authority control / identifiers
-    const idsList = await buildAuthorityList(entity);
-
-    return `
-      <div class="header-stats stats-grid" style="display:grid;grid-template-columns:1fr;justify-items:end;gap:.5rem;">
-        ${rows.join("") || '<div class="muted">No key facts available.</div>'}
-      </div>
-      <hr style="border:none;border-top:1px solid #e5e7eb;margin:.75rem 0;" />
-      <h4 style="margin:.25rem 0 .25rem;">Identifiers</h4>
-      ${idsList}
-    `;
-  }
-
-  // ---- Auto-linking (ancestors + related + frequent concepts from top works) ----
-  function regexEscape(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-
-  function buildLinkMapFromConcept(concept, extraTerms){
-    const pairs = [];
-    const seen = Object.create(null);
-    function add(name, id){
-      if (!name || !id) return;
-      const key = name.toLowerCase();
-      if (seen[key]) return;
-      seen[key] = true;
-      const t = tail(id);
-      if (!t) return;
-      pairs.push({ term: name, idTail: t });
-    }
-    (Array.isArray(concept.ancestors) ? concept.ancestors : []).forEach(a => add(a.display_name, a.id));
-    (Array.isArray(concept.related_concepts) ? concept.related_concepts : []).forEach(r => add(r.display_name, r.id));
-    (extraTerms || []).forEach(x => add(x.name, x.id));
-    // don't self-link
-    return pairs.filter(p => p.term.toLowerCase() !== String(concept.display_name||"").toLowerCase());
-  }
-
-  function linkifyHTML(htmlString, linkPairs){
-    if (!htmlString || !linkPairs.length) return htmlString;
-    const sorted = linkPairs.slice().sort((a,b)=> b.term.length - a.term.length);
-    const pattern = "\\b(" + sorted.map(p => regexEscape(p.term)).join("|") + ")\\b";
-    const rx = new RegExp(pattern, "gi");
-
-    const container = document.createElement("div");
-    container.innerHTML = htmlString;
-
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
-      acceptNode(node){
-        if (node.parentElement && node.parentElement.closest("a")) return NodeFilter.FILTER_REJECT;
-        if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
+      if (window.SE && window.SE.components && typeof SE.components.renderPaperCard === "function") {
+        papersCards.innerHTML = works.map(w => SE.components.renderPaperCard(w, { compact: true })).join("");
+        if (typeof SE.components.enhancePaperCards === "function") SE.components.enhancePaperCards(papersCards);
+      } else {
+        // Fallback minimal list
+        papersCards.innerHTML = `<ul class="list-reset">${works.map(w =>
+          `<li class="list-item"><a href="paper.html?id=${encodeURIComponent(tail(w.id))}">${escapeHtml(w.title || "Untitled")}</a></li>`
+        ).join("")}</ul>`;
       }
-    });
-
-    const nodes = [];
-    let n; while ((n = walker.nextNode())) nodes.push(n);
-
-    nodes.forEach(node => {
-      const txt = node.nodeValue;
-      if (!rx.test(txt)) return;
-      rx.lastIndex = 0;
-      const frag = document.createDocumentFragment();
-      let last = 0;
-      txt.replace(rx, (match, p1, idx) => {
-        const pre = txt.slice(last, idx);
-        if (pre) frag.appendChild(document.createTextNode(pre));
-        const found = sorted.find(p => p.term.toLowerCase() === p1.toLowerCase());
-        const a = document.createElement("a");
-        a.href = "topic.html?id=" + encodeURIComponent(found.idTail);
-        a.textContent = p1;
-        frag.appendChild(a);
-        last = idx + p1.length;
-        return p1;
-      });
-      const rest = txt.slice(last);
-      if (rest) frag.appendChild(document.createTextNode(rest));
-      node.parentNode.replaceChild(frag, node);
-    });
-
-    return container.innerHTML;
+    } catch(e){
+      papersCards.innerHTML = '<p class="muted">Failed to load papers.</p>';
+    }
   }
 
-  async function frequentConceptsFromTopWorks(conceptIdTail){
-    try{
-      const u = new URL(`${API_OA}/works`);
-      u.searchParams.set("filter", `concepts.id:${conceptIdTail}`);
-      u.searchParams.set("sort", "cited_by_count:desc");
-      u.searchParams.set("per_page", "50");
-      const data = await fetchJSON(u.toString());
-      const results = Array.isArray(data.results) ? data.results : [];
-      const counts = Object.create(null);
-      results.forEach(w => {
-        (w.concepts || []).forEach(c => {
-          const name = c.display_name;
-          const id = c.id;
-          const idTail = tail(id);
-          if (!name || !idTail) return;
-          if (idTail === conceptIdTail) return; // skip self
-          const key = idTail;
-          counts[key] = counts[key] || { name, id, n: 0 };
-          counts[key].n += 1;
-        });
-      });
-      const arr = Object.keys(counts).map(k => counts[k]);
-      arr.sort((a,b)=> b.n - a.n);
-      return arr.slice(0, 20);
-    }catch(_){ return []; }
-  }
-
-  // ---- People (top authors) ----
+  // ---------- People (top authors) ----------
   async function loadTopAuthors(conceptIdTail){
     try{
       const u = new URL(`${API_OA}/authors`);
@@ -425,9 +203,8 @@
       u.searchParams.set("per_page", "10");
       const data = await fetchJSON(u.toString());
       const results = Array.isArray(data.results) ? data.results : [];
-      if (!results.length) return '<li class="muted">No people listed</li>';
-
-      return results.map(a => {
+      if (!results.length) { topicPeople.innerHTML = '<li class="muted">No people listed</li>'; return; }
+      topicPeople.innerHTML = results.map(a => {
         const idT = tail(a.id);
         const name = a.display_name || "Unknown";
         const cits = a.cited_by_count || 0;
@@ -436,108 +213,152 @@
                   <span class="badge" title="Total citations">${cits.toLocaleString()}</span>
                 </li>`;
       }).join("");
-    }catch(e){
-      return '<li class="muted">No people listed</li>';
+    }catch(_){
+      topicPeople.innerHTML = '<li class="muted">No people listed</li>';
     }
   }
 
-  // ---- Top papers as shared cards ----
-  async function loadTopPapers(conceptIdTail){
-    const worksResp = await fetch(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&sort=cited_by_count:desc&per_page=12`);
-    const works = (await worksResp.json()).results || [];
-    if (!works.length) return '<p class="muted">No papers found.</p>';
-    const html = works.map(w => SE.components.renderPaperCard(w, { compact: true })).join("");
-    return html;
+  // ---------- Related topics ----------
+  function renderRelated(concept){
+    const rel = Array.isArray(concept.related_concepts) ? concept.related_concepts.slice(0, 12) : [];
+    relatedBlock.innerHTML = rel.length
+      ? rel.map(r => `<li class="list-item"><a href="topic.html?id=${encodeURIComponent(tail(r.id))}">${escapeHtml(r.display_name)}</a></li>`).join("")
+      : '<li class="muted">No related topics.</li>';
   }
 
-  function buildResources(concept, wikiURL){
-    const bits = [];
-    const openalexURL = concept.id || "";
-    const wikidata = concept.wikidata || concept.wikidata_id || null;
-    if (wikiURL)    bits.push(`<li><a href="${wikiURL}" target="_blank" rel="noopener">Wikipedia article</a></li>`);
-    if (wikidata)   bits.push(`<li><a href="${String(wikidata).startsWith("http") ? wikidata : "https://www.wikidata.org/wiki/"+wikidata}" target="_blank" rel="noopener">Wikidata item</a></li>`);
-    if (openalexURL)bits.push(`<li><a href="${openalexURL}" target="_blank" rel="noopener">OpenAlex concept</a></li>`);
-    if (!bits.length) return '<p class="muted">No external resources.</p>';
-    return `<ul class="list-reset">${bits.join("")}</ul>`;
+  // ---------- Wikidata lite infobox ----------
+  // We keep lightweight: show label/description, image (P18) if quickly available via OpenAlex.wikipedia or Wikidata sitelink
+  async function loadWikidataInfobox(topic){
+    // If topic has wikipedia_url, try a quick image via Wikimedia API from title
+    const wp = topic.wikipedia || topic.wikipedia_url || topic?.ids?.wikipedia || null;
+    let html = "";
+    // Title & description
+    html += `<div class="stat"><div class="stat-value" style="font-weight:700;">${escapeHtml(topic.display_name || "—")}</div></div>`;
+    if (topic.description) html += `<div class="muted" style="margin-top:.25rem;">${escapeHtml(topic.description)}</div>`;
+
+    // You already had a richer infobox before; to keep zero-cost/time we display identifiers quickly
+    const links = [];
+    if (topic.id) links.push(`<a href="${topic.id}" target="_blank" rel="noopener">OpenAlex</a>`);
+    if (wp) links.push(`<a href="${wp}" target="_blank" rel="noopener">Wikipedia</a>`);
+    if (topic.wikidata || topic.wikidata_id) {
+      const wd = String(topic.wikidata || topic.wikidata_id);
+      links.push(`<a href="${wd.startsWith('http') ? wd : 'https://www.wikidata.org/wiki/'+wd}" target="_blank" rel="noopener">Wikidata</a>`);
+    }
+    if (links.length) html += `<div style="margin-top:.5rem;">${links.join(" · ")}</div>`;
+    infoboxDom.innerHTML = html;
   }
 
-  // ---- Main loader ----
+  // ---------- Trend sparkline ----------
+  function renderSparkline(points){ // points: [{year, count}]
+    if (!points.length) { trendSparkline.innerHTML = '<div class="muted">No data.</div>'; return; }
+    const w = trendSparkline.clientWidth || 260;
+    const h = trendSparkline.clientHeight || 56;
+    const pad = 6;
+    const ys = points.map(p => p.count);
+    const maxY = Math.max(1, ...ys);
+    const minYear = Math.min(...points.map(p=>p.year));
+    const maxYear = Math.max(...points.map(p=>p.year));
+    const span = Math.max(1, maxYear - minYear);
+    const xy = points.map(p => {
+      const x = pad + (w - 2*pad) * (span ? (p.year - minYear) / span : 0);
+      const y = h - pad - (h - 2*pad) * (p.count / maxY);
+      return `${Math.round(x)},${Math.round(y)}`;
+    }).join(" ");
+    trendSparkline.innerHTML = `
+      <svg width="${w}" height="${h}" role="img" aria-label="Papers per year">
+        <polyline points="${xy}" fill="none" stroke="currentColor" stroke-width="2" />
+      </svg>
+    `;
+  }
+
+  async function loadTrend(conceptIdTail){
+    try{
+      const url = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&group_by=publication_year&per_page=200`;
+      const data = await fetchOpenAlexJSON(url);
+      const byYear = Array.isArray(data.group_by) ? data.group_by.map(g => ({ year: Number(g.key), count: g.count })) : [];
+      byYear.sort((a,b)=>a.year-b.year);
+      renderSparkline(byYear);
+    }catch(_){
+      trendSparkline.innerHTML = '<div class="muted">No data.</div>';
+    }
+  }
+
+  // ---------- Main loader ----------
   async function loadTopic(){
     const idParam = getParam("id");
-    if(!idParam) { topicHeader.innerHTML = "<p>Missing topic ID.</p>"; return; }
+    if(!idParam) { topicTitle.textContent = "Missing topic ID."; return; }
     const idTail = idParam.includes("openalex.org") ? idParam.split("/").pop() : idParam;
+
     try {
-      // OpenAlex concept
-      const topic = await (await fetch(`${API_OA}/concepts/${idTail}`)).json();
+      // 1) OpenAlex concept
+      const topicCache = cacheRead(idTail, "concept");
+      const topic = topicCache || await (await fetch(`${API_OA}/concepts/${encodeURIComponent(idTail)}`)).json();
+      if (!topicCache) cacheWrite(idTail, "concept", topic);
+
       document.title = `${topic.display_name} | Topic | ScienceEcosystem`;
-      const yearEl = document.getElementById("year");
-      if (yearEl) yearEl.textContent = new Date().getFullYear();
+      topicTitle.textContent = topic.display_name || "Topic";
+      topicSubtitle.textContent = "A neutral, research-grounded overview.";
+      topicMeta.textContent = "Loading article…";
 
-      // Wikipedia lead
-      const { html: wikiHTML, url: wikiURL } = await getWikipediaExtract(topic.display_name);
-
-      // Frequent concepts from top works (for better auto-linking)
-      const extraLinkTerms = await frequentConceptsFromTopWorks(idTail);
-
-      // Link map & linked overview
-      const linkPairs = buildLinkMapFromConcept(topic, extraLinkTerms.map(x => ({ name: x.name, id: x.id })));
-      const baseIntro = wikiHTML || `<p>${escapeHtml(topic.description || "No description available.")}</p>`;
-      const linkedIntro = linkPairs.length ? linkifyHTML(baseIntro, linkPairs) : baseIntro;
-
-      // Header (clean, not duplicating sidebar)
-      topicHeader.innerHTML = `
-        <h1>${escapeHtml(topic.display_name)}</h1>
-        <p class="muted" style="margin:.25rem 0 0;">A living, research-grounded overview. Updated from Wikipedia, Wikidata, and OpenAlex.</p>
-      `;
-
-      // Overview
-      wikiBlock.innerHTML = `
-        <h2>Overview</h2>
-        ${linkedIntro}
-        ${wikiURL ? `<p style="font-size:0.9em;">Source: <a href="${wikiURL}" target="_blank" rel="noopener">Wikipedia</a></p>` : ""}
-      `;
-
-      // Resources
-      resourcesBlock.innerHTML = `
-        <h2>External resources</h2>
-        ${buildResources(topic, wikiURL)}
-      `;
-
-      // Top papers
-      const papersHTML = await loadTopPapers(idTail);
-      topPapersBlock.innerHTML = `<h2>Influential papers</h2>${papersHTML}`;
-      if (window.SE && SE.components && typeof SE.components.enhancePaperCards === "function") {
-        SE.components.enhancePaperCards(topPapersBlock);
+      // 2) Wikipedia article (mobile-html) + last revision
+      const wpTitle = (topic?.display_name || "").trim();
+      let articleHTML = cacheRead(idTail, "wp_html");
+      let revMeta = cacheRead(idTail, "wp_rev");
+      if (!articleHTML) {
+        articleHTML = await loadWikipediaArticle(wpTitle);
+        cacheWrite(idTail, "wp_html", articleHTML);
+      }
+      if (!revMeta) {
+        revMeta = await loadWikipediaRevisionMeta(wpTitle);
+        cacheWrite(idTail, "wp_rev", revMeta);
       }
 
-      // People (top authors)
-      topicPeople.innerHTML = await loadTopAuthors(idTail);
+      // Insert article
+      const container = document.createElement("div");
+      container.className = "wiki-article";
+      container.innerHTML = articleHTML;
+      // Wikipedia mobile HTML includes lead sections; remove edit icons if present
+      container.querySelectorAll('.pcs-edit-section-title, .mwe-math-fallback-image-inline').forEach(n => n.remove());
 
-      // Infobox via Wikidata
-      let qid = await getQidFromConcept(topic);
-      if (!qid){
-        // last resort: try by title
-        const url = wdURL({ action:"wbsearchentities", format:"json", language:"en", type:"item", search:String(topic.display_name||"") });
-        const sr = await fetchJSON(url);
-        qid = (sr.search && sr.search[0] && sr.search[0].id) ? sr.search[0].id : null;
-      }
+      // Build ToC
+      buildTOC(container);
 
-      if (qid){
-        const entity = await fetchWikidataEntity(qid, "labels|descriptions|claims|sitelinks|aliases|datatype");
-        const tags = inferClass(entity);
-        infoboxDom.innerHTML = await buildInfobox(entity, tags);
-      } else {
-        infoboxDom.innerHTML = '<p class="muted">No Wikidata record found.</p>';
-      }
+      // Mount article
+      wikiArticle.innerHTML = "";
+      wikiArticle.appendChild(container);
 
-    } catch(e){
+      // Attribution & meta
+      const lastUpdated = revMeta?.lastRev ? new Date(revMeta.lastRev) : null;
+      const updatedStr = lastUpdated ? lastUpdated.toISOString().slice(0,10) : "unknown";
+      topicMeta.textContent = `Wikipedia-sourced overview • Last revision: ${updatedStr}`;
+      const wpURL = revMeta?.url ? `<a href="${revMeta.url}" target="_blank" rel="noopener">Wikipedia article & history</a>` : "Wikipedia";
+      wikiAttribution.innerHTML = `Text in this section is from ${wpURL} and is available under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>. Images may have separate licences.`;
+
+      // 3) Related topics
+      renderRelated(topic);
+
+      // 4) References (OpenAlex)
+      await loadReferences(idTail);
+
+      // 5) Influential papers (cards)
+      await loadTopPapers(idTail);
+
+      // 6) People (top authors)
+      await loadTopAuthors(idTail);
+
+      // 7) Infobox (lite) and trend sparkline
+      await loadWikidataInfobox(topic);
+      await loadTrend(idTail);
+
+    } catch (e){
       console.error(e);
-      topicHeader.innerHTML = "<p>Error loading topic data.</p>";
-      wikiBlock.innerHTML = "";
-      resourcesBlock.innerHTML = "";
-      topPapersBlock.innerHTML = "";
-      infoboxDom.innerHTML = "—";
-      topicPeople.innerHTML = '<li class="muted">No people listed</li>';
+      topicTitle.textContent = "Error loading topic";
+      wikiArticle.innerHTML = "<p class='muted'>We could not load the article at this time.</p>";
+      referencesList.innerHTML = "";
+      topicPeople.innerHTML = '<li class="muted">—</li>';
+      relatedBlock.innerHTML = '<li class="muted">—</li>';
+      infoboxDom.textContent = "—";
+      trendSparkline.innerHTML = '<div class="muted">—</div>';
     }
   }
 
