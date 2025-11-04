@@ -60,7 +60,6 @@
 
   // ---------- Wikipedia helpers ----------
   function detectWikiLangFromTopic(topic) {
-    // Prefer explicit topic.wikipedia_url / topic.wikipedia / topic.ids.wikipedia; fallback to 'en'
     const wp =
       topic?.wikipedia_url ||
       topic?.wikipedia ||
@@ -71,7 +70,6 @@
   }
 
   async function loadWikipediaArticle(title, lang) {
-    // Use REST mobile-html for structured article; call language subdomain directly to avoid CORS via gateway
     const url = `https://${lang}.wikipedia.org/api/rest_v1/page/mobile-html/${encodeURIComponent(title)}`;
     const res = await fetch(url, { headers: { Accept: "text/html" }, mode: "cors", credentials: "omit" });
     if (!res.ok) throw new Error(`Wikipedia mobile-html failed: ${res.status}`);
@@ -79,7 +77,6 @@
   }
 
   async function loadWikipediaRevisionMeta(title, lang) {
-    // Use Action API on language subdomain (not www) to avoid 301-without-CORS
     const u = new URL(`https://${lang}.wikipedia.org/w/api.php`);
     u.searchParams.set("action", "query");
     u.searchParams.set("prop", "revisions|info");
@@ -88,7 +85,7 @@
     u.searchParams.set("titles", title);
     u.searchParams.set("redirects", "1");
     u.searchParams.set("format", "json");
-    u.searchParams.set("origin", "*"); // required for CORS
+    u.searchParams.set("origin", "*");
     const data = await fetchJSON(u.toString(), { mode: "cors", credentials: "omit" });
     const pages = data?.query?.pages || {};
     const first = Object.values(pages)[0];
@@ -100,40 +97,11 @@
 
   // ---------- Sanitiser (keep SUP/A so [1] citations work) ----------
   const ALLOWED_TAGS = new Set([
-    "P",
-    "H2",
-    "H3",
-    "H4",
-    "UL",
-    "OL",
-    "LI",
-    "B",
-    "STRONG",
-    "I",
-    "EM",
-    "A",
-    "IMG",
-    "BLOCKQUOTE",
-    "CODE",
-    "PRE",
-    "TABLE",
-    "THEAD",
-    "TBODY",
-    "TR",
-    "TH",
-    "TD",
-    "SUP",
-    "SUB",
+    "P","H2","H3","H4","UL","OL","LI","B","STRONG","I","EM","A","IMG",
+    "BLOCKQUOTE","CODE","PRE","TABLE","THEAD","TBODY","TR","TH","TD","SUP","SUB"
   ]);
   function makeIdFromText(t) {
-    return (
-      "sec-" +
-      t
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .slice(0, 64)
-    );
+    return ("sec-" + t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64));
   }
   function sanitiseWikipediaHTML(html) {
     const src = document.createElement("div");
@@ -158,7 +126,6 @@
       const el = document.createElement(tag.toLowerCase());
       if (tag === "A") {
         const href = node.getAttribute("href") || "";
-        // allow fragment links for references (#cite_note…) + external http(s)
         if (/^#/.test(href) || /^https?:\/\//i.test(href)) {
           el.setAttribute("href", href);
           if (!/^#/.test(href)) {
@@ -168,9 +135,7 @@
         }
       } else if (tag === "IMG") {
         let srcAttr = node.getAttribute("src") || "";
-        // Allow protocol-relative and absolute Wikimedia upload hosts
         if (/^(https?:)?\/\/upload\.wikimedia\.org\//i.test(srcAttr)) {
-          // normalise protocol-relative to https
           if (srcAttr.startsWith("//")) srcAttr = "https:" + srcAttr;
           el.setAttribute("src", srcAttr);
           const alt = node.getAttribute("alt") || "";
@@ -194,7 +159,6 @@
       if (c) out.appendChild(c);
     });
 
-    // Heading IDs for ToC
     out.querySelectorAll("h2, h3, h4").forEach((h) => {
       if (!h.id) h.id = makeIdFromText(h.textContent || "");
     });
@@ -227,14 +191,13 @@
       acceptNode(node) {
         const parent = node.parentElement;
         if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-        if (parent && (parent.closest("a") || parent.closest("sup"))) return NodeFilter.FILTER_REJECT; // don’t touch links or citation numbers
+        if (parent && (parent.closest("a") || parent.closest("sup"))) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       },
     });
 
     const nodes = [];
-    let n;
-    while ((n = walker.nextNode())) nodes.push(n);
+    let n; while ((n = walker.nextNode())) nodes.push(n);
 
     nodes.forEach((node) => {
       const txt = node.nodeValue;
@@ -249,6 +212,8 @@
         const a = document.createElement("a");
         a.href = "topic.html?id=" + encodeURIComponent(found.idTail);
         a.textContent = p1;
+        a.className = "se-topic-link";
+        a.setAttribute("data-topic-id", found.idTail);
         frag.appendChild(a);
         last = idx + p1.length;
         return p1;
@@ -262,21 +227,16 @@
   // ---------- ToC ----------
   function buildTOC(container) {
     const headings = container.querySelectorAll("h2, h3");
-    if (!headings.length) {
-      tocBlock.style.display = "none";
-      return;
-    }
+    if (!headings.length) { tocBlock.style.display = "none"; return; }
     const items = [];
     headings.forEach((h) => {
       const level = h.tagName.toLowerCase() === "h2" ? 2 : 3;
       items.push({ id: h.id, text: (h.textContent || "").trim(), level });
     });
-    tocNav.innerHTML = items
-      .map((it) => {
-        const pad = it.level === 3 ? ' style="padding-left:1rem;"' : "";
-        return `<div class="toc-item"${pad}><a href="#${escapeHtml(it.id)}">${escapeHtml(it.text)}</a></div>`;
-      })
-      .join("");
+    tocNav.innerHTML = items.map(it => {
+      const pad = it.level === 3 ? ' style="padding-left:1rem;"' : "";
+      return `<div class="toc-item"${pad}><a href="#${escapeHtml(it.id)}">${escapeHtml(it.text)}</a></div>`;
+    }).join("");
     tocBlock.style.display = "";
   }
 
@@ -285,10 +245,7 @@
     for (let i = 0; i <= retries; i++) {
       const res = await fetch(url);
       if (res.ok) return await res.json();
-      if (res.status === 429 && i < retries) {
-        await sleep(500 * (i + 1));
-        continue;
-      }
+      if (res.status === 429 && i < retries) { await sleep(500 * (i + 1)); continue; }
       throw new Error(`OpenAlex error ${res.status}: ${url}`);
     }
   }
@@ -321,13 +278,10 @@
     return parts.join(" ");
   }
   function dedupByDOI(arr) {
-    const seen = new Set();
-    const out = [];
+    const seen = new Set(); const out = [];
     for (const w of arr) {
       const key = (w.doi || w.id || "").toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(w);
+      if (seen.has(key)) continue; seen.add(key); out.push(w);
     }
     return out;
   }
@@ -340,66 +294,52 @@
     const [rev, rec] = await Promise.all([fetchOpenAlexJSON(reviewURL), fetchOpenAlexJSON(recentURL)]);
     const works = dedupByDOI([...(rev.results || []), ...(rec.results || [])]).slice(0, 15);
     referencesList.innerHTML = works.length
-      ? works.map((w, i) => `<li>${citeLine(w, i + 1)}</li>`).join("")
+      ? works.map((w, i) => `<li id="se-ref-li-${i + 1}">${citeLine(w, i + 1)} <a class="se-ref-back muted" href="#" title="Back to text" aria-label="Back to text">↩︎</a></li>`).join("")
       : `<p class="muted">No references available.</p>`;
     referencesWhy.textContent = "Selected via OpenAlex: citation impact (reviews) and recent influential works (last two years).";
   }
 
   async function loadTopPapers(conceptIdTail) {
     try {
-      const data = await fetchOpenAlexJSON(
-        `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&sort=cited_by_count:desc&per_page=12`
-      );
+      const data = await fetchOpenAlexJSON(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&sort=cited_by_count:desc&per_page=12`);
       const works = Array.isArray(data.results) ? data.results : [];
-      if (!works.length) {
-        papersCards.innerHTML = '<p class="muted">No papers found.</p>';
-        return;
-      }
+      if (!works.length) { papersCards.innerHTML = '<p class="muted">No papers found.</p>'; return; }
       if (window.SE?.components?.renderPaperCard) {
         papersCards.innerHTML = works.map((w) => SE.components.renderPaperCard(w, { compact: true })).join("");
         if (SE.components.enhancePaperCards) SE.components.enhancePaperCards(papersCards);
       } else {
-        papersCards.innerHTML = `<ul class="list-reset">${works
-          .map((w) => `<li class="list-item"><a href="paper.html?id=${encodeURIComponent(tail(w.id))}">${escapeHtml(w.title || "Untitled")}</a></li>`)
-          .join("")}</ul>`;
+        papersCards.innerHTML = `<ul class="list-reset">${works.map((w) =>
+          `<li class="list-item"><a href="paper.html?id=${encodeURIComponent(tail(w.id))}">${escapeHtml(w.title || "Untitled")}</a></li>`
+        ).join("")}</ul>`;
       }
-    } catch (_) {
-      papersCards.innerHTML = '<p class="muted">Failed to load papers.</p>';
-    }
+    } catch (_) { papersCards.innerHTML = '<p class="muted">Failed to load papers.</p>'; }
   }
 
   async function loadTopAuthors(conceptIdTail) {
     try {
-      const u = new URL(`https://api.openalex.org/authors`);
+      const u = new URL(`${API_OA}/authors`);
       u.searchParams.set("filter", `x_concepts.id:${conceptIdTail}`);
       u.searchParams.set("sort", "cited_by_count:desc");
       u.searchParams.set("per_page", "10");
       const data = await fetchJSON(u.toString());
       const results = Array.isArray(data.results) ? data.results : [];
-      if (!results.length) {
-        topicPeople.innerHTML = '<li class="muted">No people listed</li>';
-        return;
-      }
-      topicPeople.innerHTML = results
-        .map((a) => {
-          const idT = tail(a.id);
-          const name = a.display_name || "Unknown";
-          const cits = a.cited_by_count || 0;
-          return `<li class="list-item list-card" style="display:flex;justify-content:space-between;align-items:center;">
+      if (!results.length) { topicPeople.innerHTML = '<li class="muted">No people listed</li>'; return; }
+      topicPeople.innerHTML = results.map(a => {
+        const idT = tail(a.id);
+        const name = a.display_name || "Unknown";
+        const cits = a.cited_by_count || 0;
+        return `<li class="list-item list-card" style="display:flex;justify-content:space-between;align-items:center;">
           <a href="profile.html?id=${encodeURIComponent(idT)}">${escapeHtml(name)}</a>
           <span class="badge" title="Total citations">${cits.toLocaleString()}</span>
         </li>`;
-        })
-        .join("");
-    } catch (_) {
-      topicPeople.innerHTML = '<li class="muted">No people listed</li>';
-    }
+      }).join("");
+    } catch (_) { topicPeople.innerHTML = '<li class="muted">No people listed</li>'; }
   }
 
   function renderRelated(concept) {
     const rel = Array.isArray(concept.related_concepts) ? concept.related_concepts.slice(0, 12) : [];
     relatedBlock.innerHTML = rel.length
-      ? rel.map((r) => `<li class="list-item"><a href="topic.html?id=${encodeURIComponent(tail(r.id))}">${escapeHtml(r.display_name)}</a></li>`).join("")
+      ? rel.map(r => `<li class="list-item"><a href="topic.html?id=${encodeURIComponent(tail(r.id))}">${escapeHtml(r.display_name)}</a></li>`).join("")
       : '<li class="muted">No related topics.</li>';
   }
 
@@ -413,63 +353,227 @@
     if (wp) links.push(`<a href="${wp}" target="_blank" rel="noopener">Wikipedia</a>`);
     if (topic.wikidata || topic.wikidata_id) {
       const wd = String(topic.wikidata || topic.wikidata_id);
-      links.push(`<a href="${wd.startsWith("http") ? wd : "https://www.wikidata.org/wiki/" + wd}" target="_blank" rel="noopener">Wikidata</a>`);
+      links.push(`<a href="${wd.startsWith('http') ? wd : 'https://www.wikidata.org/wiki/'+wd}" target="_blank" rel="noopener">Wikidata</a>`);
     }
     if (links.length) html += `<div style="margin-top:.5rem;">${links.join(" · ")}</div>`;
     infoboxDom.innerHTML = html;
   }
 
   function renderSparkline(points) {
-    if (!points.length) {
-      trendSparkline.innerHTML = '<div class="muted">No data.</div>';
-      return;
-    }
+    if (!points.length) { trendSparkline.innerHTML = '<div class="muted">No data.</div>'; return; }
     const w = trendSparkline.clientWidth || 260;
     const h = trendSparkline.clientHeight || 56;
     const pad = 6;
-    const ys = points.map((p) => p.count);
+    const ys = points.map(p => p.count);
     const maxY = Math.max(1, ...ys);
-    const minYear = Math.min(...points.map((p) => p.year));
-    const maxYear = Math.max(...points.map((p) => p.year));
+    const minYear = Math.min(...points.map(p=>p.year));
+    const maxYear = Math.max(...points.map(p=>p.year));
     const span = Math.max(1, maxYear - minYear);
-    const xy = points
-      .map((p) => {
-        const x = pad + ((w - 2 * pad) * (span ? (p.year - minYear) / span : 0));
-        const y = h - pad - ((h - 2 * pad) * p.count) / maxY;
-        return `${Math.round(x)},${Math.round(y)}`;
-      })
-      .join(" ");
+    const xy = points.map(p => {
+      const x = pad + (w - 2*pad) * (span ? (p.year - minYear) / span : 0);
+      const y = h - pad - (h - 2*pad) * (p.count / maxY);
+      return `${Math.round(x)},${Math.round(y)}`;
+    }).join(" ");
     trendSparkline.innerHTML = `
       <svg width="${w}" height="${h}" role="img" aria-label="Papers per year">
         <polyline points="${xy}" fill="none" stroke="currentColor" stroke-width="2" />
       </svg>
     `;
   }
-  async function loadTrend(conceptIdTail) {
-    try {
+  async function loadTrend(conceptIdTail){
+    try{
       const url = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&group_by=publication_year&per_page=200`;
       const data = await fetchOpenAlexJSON(url);
-      const byYear = Array.isArray(data.group_by) ? data.group_by.map((g) => ({ year: Number(g.key), count: g.count })) : [];
-      byYear.sort((a, b) => a.year - b.year);
+      const byYear = Array.isArray(data.group_by) ? data.group_by.map(g => ({ year: Number(g.key), count: g.count })) : [];
+      byYear.sort((a,b)=>a.year-b.year);
       renderSparkline(byYear);
-    } catch (_) {
-      trendSparkline.innerHTML = '<div class="muted">No data.</div>';
+    }catch(_){ trendSparkline.innerHTML = '<div class="muted">No data.</div>'; }
+  }
+
+  // ---------- Link previews (hover/focus) ----------
+  function injectPreviewStyles() {
+    if (document.getElementById("se-topic-preview-css")) return;
+    const css = `
+      .se-preview {
+        position: fixed; z-index: 9999; max-width: 360px;
+        background: var(--card-bg, #111); color: var(--card-fg, #fff);
+        border: 1px solid rgba(128,128,128,.25); border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.35);
+        padding: 10px 12px; font-size: .9rem; line-height: 1.35;
+        pointer-events: none; opacity: 0; transform: translateY(4px);
+        transition: opacity .12s ease, transform .12s ease;
+      }
+      .se-preview[data-show="1"] { opacity: 1; transform: translateY(0); }
+      .se-preview .se-p-title { font-weight: 700; margin-bottom: .25rem; }
+      .se-preview .se-p-meta { font-size: .8rem; opacity: .75; margin-top: .25rem; }
+    `;
+    const style = document.createElement("style");
+    style.id = "se-topic-preview-css";
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+  function initLinkPreviews(root) {
+    injectPreviewStyles();
+    let tip = document.getElementById("se-topic-preview");
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.id = "se-topic-preview";
+      tip.className = "se-preview";
+      tip.setAttribute("role", "status");
+      tip.setAttribute("aria-live", "polite");
+      document.body.appendChild(tip);
     }
+    const cache = new Map(); // idTail -> {title, desc, count}
+    let hideTO = null, showTO = null, anchorRect = null;
+
+    function position(x, y) {
+      const pad = 10;
+      const rect = tip.getBoundingClientRect();
+      let left = x + pad;
+      let top = y + pad;
+      if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+      if (top + rect.height > window.innerHeight - pad) top = y - rect.height - pad;
+      if (top < pad) top = pad;
+      tip.style.left = `${Math.max(pad, left)}px`;
+      tip.style.top = `${Math.max(pad, top)}px`;
+    }
+
+    async function loadPreview(idTail) {
+      if (cache.has(idTail)) return cache.get(idTail);
+      try {
+        const data = await fetchJSON(`${API_OA}/concepts/${encodeURIComponent(idTail)}`);
+        const item = {
+          title: data.display_name || "Topic",
+          desc: (data.description || "").split(/\.\s/).slice(0,2).join(". ") + (data.description ? "." : ""),
+          count: data.works_count || 0
+        };
+        cache.set(idTail, item);
+        return item;
+      } catch {
+        const item = { title: "Topic", desc: "Preview unavailable.", count: 0 };
+        cache.set(idTail, item);
+        return item;
+      }
+    }
+
+    function show(content, x, y) {
+      tip.innerHTML = content;
+      tip.dataset.show = "1";
+      position(x, y);
+    }
+    function hide() {
+      tip.dataset.show = "0";
+    }
+
+    function contentFor(item) {
+      const meta = item.count ? `<div class="se-p-meta">${item.count.toLocaleString()} works in OpenAlex</div>` : "";
+      return `<div class="se-p-title">${escapeHtml(item.title)}</div><div>${escapeHtml(item.desc || "")}</div>${meta}`;
+    }
+
+    function onEnter(e) {
+      const a = e.currentTarget;
+      const idTail = a.getAttribute("data-topic-id");
+      if (!idTail) return;
+      clearTimeout(hideTO);
+      const [x, y] = [e.clientX || (anchorRect ? anchorRect.left : 0), e.clientY || (anchorRect ? anchorRect.bottom : 0)];
+      showTO = setTimeout(async () => {
+        const preview = await loadPreview(idTail);
+        show(contentFor(preview), x, y);
+      }, 160);
+    }
+    function onLeave() {
+      clearTimeout(showTO);
+      hideTO = setTimeout(hide, 80);
+    }
+    function onMove(e) {
+      if (tip.dataset.show !== "1") return;
+      position(e.clientX, e.clientY);
+    }
+    function onFocus(e) {
+      // keyboard users: place near element
+      anchorRect = e.currentTarget.getBoundingClientRect();
+      onEnter({ currentTarget: e.currentTarget, clientX: anchorRect.left, clientY: anchorRect.bottom });
+    }
+    function onBlur() { onLeave(); }
+
+    const links = root.querySelectorAll("a.se-topic-link");
+    links.forEach(a => {
+      a.addEventListener("mouseenter", onEnter);
+      a.addEventListener("mouseleave", onLeave);
+      a.addEventListener("mousemove", onMove);
+      a.addEventListener("focus", onFocus);
+      a.addEventListener("blur", onBlur);
+    });
+  }
+
+  // ---------- Citations: link [n] → #se-ref-n ----------
+  function attachCitationLinks(container) {
+    const sups = container.querySelectorAll("sup");
+    if (!sups.length) return;
+
+    // Build a quick set of existing reference ids so we don't link to nowhere.
+    const refIds = new Set(Array.from(referencesList.querySelectorAll(".ref-anchor")).map(a => a.id)); // se-ref-1, se-ref-2, ...
+
+    // For back navigation, remember last clicked citation to mark a target.
+    let lastAnchorFrom = null;
+
+    sups.forEach(sup => {
+      const text = sup.textContent || "";
+      const m = text.match(/^\s*\[?(\d{1,3})\]?\s*$/); // [12] or 12
+      if (!m) return;
+      const n = m[1];
+      const targetId = `se-ref-${n}`;
+      if (!refIds.has(targetId)) return; // Do not rewire if no such ref exists
+
+      // Replace sup content with a link
+      const a = document.createElement("a");
+      a.href = `#${targetId}`;
+      a.className = "se-cite-link";
+      a.textContent = `[${n}]`;
+      a.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        // Mark the parent paragraph to scroll back to
+        const mark = sup.closest("p, li, h2, h3, h4") || sup;
+        const markId = `se-cite-src-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        mark.setAttribute("id", markId);
+        lastAnchorFrom = `#${markId}`;
+        const target = document.getElementById(targetId);
+        if (target) {
+          const li = target.closest("li") || target;
+          li.scrollIntoView({ behavior: "smooth", block: "start" });
+          // Also highlight briefly
+          li.style.transition = "background-color .3s";
+          const bg = getComputedStyle(li).backgroundColor;
+          li.style.backgroundColor = "rgba(255,255,0,0.15)";
+          setTimeout(() => (li.style.backgroundColor = bg), 450);
+          // Wire the back link for this particular list item
+          const back = li.querySelector(".se-ref-back");
+          if (back) {
+            back.onclick = (e2) => {
+              e2.preventDefault();
+              if (lastAnchorFrom) {
+                const src = document.querySelector(lastAnchorFrom);
+                if (src) src.scrollIntoView({ behavior: "smooth", block: "center" });
+              }
+            };
+          }
+        }
+      });
+      sup.textContent = "";
+      sup.appendChild(a);
+    });
   }
 
   // ---------- Main ----------
   async function loadTopic() {
     const idParam = getParam("id");
-    if (!idParam) {
-      topicTitle.textContent = "Missing topic ID.";
-      return;
-    }
+    if (!idParam) { topicTitle.textContent = "Missing topic ID."; return; }
     const idTail = idParam.includes("openalex.org") ? idParam.split("/").pop() : idParam;
 
     try {
       // OpenAlex concept
       const topicCache = cacheRead(idTail, "concept");
-      const topic = topicCache || (await (await fetch(`https://api.openalex.org/concepts/${encodeURIComponent(idTail)}`)).json());
+      const topic = topicCache || (await (await fetch(`${API_OA}/concepts/${encodeURIComponent(idTail)}`)).json());
       if (!topicCache) cacheWrite(idTail, "concept", topic);
 
       const lang = detectWikiLangFromTopic(topic);
@@ -477,18 +581,12 @@
       topicTitle.textContent = topic.display_name || "Topic";
       topicMeta.textContent = "Loading article…";
 
-      // Wikipedia article & revision (language-aware, CORS-safe)
+      // Wikipedia article & revision (language-aware)
       const wpTitle = (topic?.display_name || "").trim();
       let articleHTML = cacheRead(idTail, "wp_html");
       let revMeta = cacheRead(idTail, "wp_rev");
-      if (!articleHTML) {
-        articleHTML = await loadWikipediaArticle(wpTitle, lang);
-        cacheWrite(idTail, "wp_html", articleHTML);
-      }
-      if (!revMeta) {
-        revMeta = await loadWikipediaRevisionMeta(wpTitle, lang);
-        cacheWrite(idTail, "wp_rev", revMeta);
-      }
+      if (!articleHTML) { articleHTML = await loadWikipediaArticle(wpTitle, lang); cacheWrite(idTail, "wp_html", articleHTML); }
+      if (!revMeta) { revMeta = await loadWikipediaRevisionMeta(wpTitle, lang); cacheWrite(idTail, "wp_rev", revMeta); }
 
       // Sanitise & split lead vs rest
       const clean = sanitiseWikipediaHTML(articleHTML);
@@ -498,15 +596,10 @@
       let node = clean.firstChild;
       while (node) {
         if (node === firstHeading) break;
-        // keep only <p> as lead paragraphs
         if (node.nodeType === 1 && node.tagName === "P") leadNodes.push(node.cloneNode(true));
         node = node.nextSibling;
       }
-      // collect rest
-      while (node) {
-        restNodes.push(node.cloneNode(true));
-        node = node.nextSibling;
-      }
+      while (node) { restNodes.push(node.cloneNode(true)); node = node.nextSibling; }
 
       // Build containers
       const leadWrap = document.createElement("div");
@@ -526,24 +619,40 @@
       // ToC (from body only)
       buildTOC(bodyWrap);
 
+      // References / people / infobox / trend
+      renderRelated(topic);
+      await loadReferences(idTail);
+      await loadTopPapers(idTail);
+      await loadTopAuthors(idTail);
+      await loadInfobox(topic);
+      await loadTrend(idTail);
+
+      // Wire extras after DOM is filled:
+      // - previews: pass the whole wikiArticle container (contains blue links)
+      initLinkPreviews(wikiArticle);
+      initLinkPreviews(topicSubtitle);
+      // - citations: convert [n] to anchors, and set back-links in the list
+      attachCitationLinks(wikiArticle);
+      attachCitationLinks(topicSubtitle);
+
       // Attribution/meta
       const lastUpdated = revMeta?.lastRev ? new Date(revMeta.lastRev) : null;
       const updatedStr = lastUpdated ? lastUpdated.toISOString().slice(0, 10) : "unknown";
       topicMeta.textContent = `Overview sourced from Wikipedia • Last revision: ${updatedStr}`;
-      const wpURL = revMeta?.url
-        ? `<a href="${revMeta.url}" target="_blank" rel="noopener">Wikipedia article & history</a>`
-        : "Wikipedia";
-      wikiAttribution.innerHTML =
-        `Text in this section is from ${wpURL} and is available under ` +
-        `<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>.`;
+      const wpURL = revMeta?.url ? `<a href="${revMeta.url}" target="_blank" rel="noopener">Wikipedia article & history</a>` : "Wikipedia";
+      wikiAttribution.innerHTML = `Text in this section is from ${wpURL} and is available under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>.`;
 
-      // SE sections
-      renderRelated(topic); // See also → links to topic.html
-      await loadReferences(idTail); // References → DOI + SE paper page links
-      await loadTopPapers(idTail); // Cards
-      await loadTopAuthors(idTail); // People
-      await loadInfobox(topic); // Infobox links
-      await loadTrend(idTail); // Sparkline
+      // Smooth-scroll for internal hash links (#sec-*, #se-ref-*)
+      document.addEventListener("click", (e) => {
+        const a = e.target.closest('a[href^="#"]');
+        if (!a) return;
+        const id = a.getAttribute("href").slice(1);
+        const t = document.getElementById(id);
+        if (!t) return;
+        e.preventDefault();
+        t.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+
     } catch (e) {
       console.error(e);
       topicTitle.textContent = "Error loading topic";
