@@ -103,7 +103,8 @@
   function makeIdFromText(t) {
     return ("sec-" + t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64));
   }
-  function sanitiseWikipediaHTML(html) {
+  function sanitiseWikipediaHTML(html, lang) {
+    const wikiLang = lang || "en";
     const src = document.createElement("div");
     src.innerHTML = html;
     src.querySelectorAll("style, link, script, noscript").forEach((n) => n.remove());
@@ -125,7 +126,13 @@
       }
       const el = document.createElement(tag.toLowerCase());
       if (tag === "A") {
-        const href = node.getAttribute("href") || "";
+        const rawHref = node.getAttribute("href") || "";
+        let href = rawHref;
+        if (/^\/wiki\//i.test(rawHref)) {
+          href = `https://${wikiLang}.wikipedia.org${rawHref}`;
+        } else if (/^\/\/([a-z-]+\.wikipedia\.org)/i.test(rawHref)) {
+          href = "https:" + rawHref;
+        }
         if (/^#/.test(href) || /^https?:\/\//i.test(href)) {
           el.setAttribute("href", href);
           if (!/^#/.test(href)) {
@@ -224,6 +231,22 @@
     });
   }
 
+  function stripReferenceSections(root) {
+    const refTitles = new Set(["references", "reference", "notes", "footnotes", "bibliography", "sources", "citations"]);
+    const headings = Array.from(root.querySelectorAll("h2, h3, h4"));
+    headings.forEach((h) => {
+      const txt = (h.textContent || "").trim().toLowerCase();
+      if (!refTitles.has(txt)) return;
+      let node = h;
+      while (node) {
+        const next = node.nextSibling;
+        node.parentNode?.removeChild(node);
+        if (next && next.nodeType === 1 && /^h[2-4]$/i.test(next.tagName)) break;
+        node = next;
+      }
+    });
+  }
+
   // ---------- ToC ----------
   function buildTOC(container) {
     const headings = container.querySelectorAll("h2, h3");
@@ -293,9 +316,36 @@
     const recentURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},from_publication_date:${nowY - 2}-01-01&sort=cited_by_count:desc&per_page=10`;
     const [rev, rec] = await Promise.all([fetchOpenAlexJSON(reviewURL), fetchOpenAlexJSON(recentURL)]);
     const works = dedupByDOI([...(rev.results || []), ...(rec.results || [])]).slice(0, 15);
-    referencesList.innerHTML = works.length
-      ? works.map((w, i) => `<li id="se-ref-li-${i + 1}">${citeLine(w, i + 1)} <a class="se-ref-back muted" href="#" title="Back to text" aria-label="Back to text">↩︎</a></li>`).join("")
-      : `<p class="muted">No references available.</p>`;
+    if (!works.length) {
+      referencesList.innerHTML = '<li class="muted">No references available.</li>';
+      return;
+    }
+
+    function renderReferenceCard(w, idx) {
+      const anchor = `<a id="se-ref-${idx}" class="ref-anchor"></a>`;
+      const back = `<a class="se-ref-back muted" href="#" title="Back to text" aria-label="Back to text">↩︎</a>`;
+      if (window.SE?.components?.renderPaperCard) {
+        const card = SE.components.renderPaperCard(w, { compact: true });
+        return `<li id="se-ref-li-${idx}" class="ref-card" style="list-style:none; margin:0 0 1rem; padding:0;">
+          <div class="ref-card-inner" style="position:relative; border:1px solid var(--border-color,#e5e7eb); border-radius:12px; padding:.75rem; background:#fff;">
+            ${anchor}
+            <div class="ref-num" style="position:absolute; top:10px; right:12px; font-weight:700;">${idx}</div>
+            ${card}
+            <div style="margin-top:.35rem;">${back}</div>
+          </div>
+        </li>`;
+      }
+      return `<li id="se-ref-li-${idx}" style="list-style:none; margin:0 0 1rem; padding:0;">
+        <div class="ref-card-inner" style="position:relative; border:1px solid var(--border-color,#e5e7eb); border-radius:12px; padding:.75rem; background:#fff;">
+          ${anchor}
+          <div class="ref-num" style="position:absolute; top:10px; right:12px; font-weight:700;">${idx}</div>
+          <div>${citeLine(w, idx)}</div>
+          <div style="margin-top:.35rem;">${back}</div>
+        </div>
+      </li>`;
+    }
+
+    referencesList.innerHTML = works.map((w, i) => renderReferenceCard(w, i + 1)).join("");
     referencesWhy.textContent = "Selected via OpenAlex: citation impact (reviews) and recent influential works (last two years).";
   }
 
@@ -589,7 +639,8 @@
       if (!revMeta) { revMeta = await loadWikipediaRevisionMeta(wpTitle, lang); cacheWrite(idTail, "wp_rev", revMeta); }
 
       // Sanitise & split lead vs rest
-      const clean = sanitiseWikipediaHTML(articleHTML);
+      const clean = sanitiseWikipediaHTML(articleHTML, lang);
+      stripReferenceSections(clean);
       const firstHeading = clean.querySelector("h2, h3, h4");
       const leadNodes = [];
       const restNodes = [];
