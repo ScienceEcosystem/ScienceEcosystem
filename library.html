@@ -97,14 +97,6 @@
   <button id="logoutBtn" class="btn" style="display:none;">Logout</button></div></div>
 </nav>
 
-  <header>
-    <div class="nav-center">
-      <div class="nav-search" style="display:flex; gap:.5rem;">
-        <input id="libFilter" class="input input-pill" placeholder="Filter in library…"/>
-        <button id="newCollectionBtn" class="btn btn-secondary">New collection</button>
-      </div>
-    </div>
-  </header>
 
   <main id="main" class="container">
     <section class="panel">
@@ -143,6 +135,11 @@
                 <option value="asc">Asc</option>
                 <option value="desc">Desc</option>
               </select>
+            </div>
+            <!-- PDF import controls -->
+            <div class="lib-import">
+              <button id="importPdfBtn" class="btn btn-secondary">Add PDF</button>
+              <input id="importPdfInput" type="file" accept="application/pdf" style="display:none;">
             </div>
           </div>
 
@@ -186,8 +183,8 @@
                   <button id="addNoteBtn" class="btn btn-secondary">Add Note</button>
                 </div>
               </div>
-            </div>
 
+            </div>
           </div>
         </aside>
       </div>

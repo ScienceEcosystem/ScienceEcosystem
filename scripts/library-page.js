@@ -6,7 +6,13 @@
   const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
   const esc=(s)=>String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
   async function api(path, opts={}){
-    const res = await fetch(path,{ credentials:"include", headers:{ "Content-Type":"application/json" }, ...opts });
+    const isFormData = opts.body instanceof FormData;
+    const defaultHeaders = isFormData ? {} : { "Content-Type":"application/json" };
+    const res = await fetch(path,{
+      credentials:"include",
+      headers:{ ...defaultHeaders, ...(opts.headers||{}) },
+      ...opts
+    });
     if(!res.ok) throw new Error(await res.text().catch(()=>res.statusText));
     const ct=res.headers.get("content-type")||"";
     return ct.includes("application/json")?res.json():res.text();
@@ -329,6 +335,23 @@
     });
   }
 
+  // Only show first author's last name in main table
+  function firstAuthorLastName(authStr){
+    const s=(authStr||"").trim();
+    if(!s) return "—";
+    // Split list of authors on common separators
+    let first = s.split(/;| and | & /i)[0].trim();
+    if(!first) return "—";
+    // If stored as "Last, First"
+    if(first.includes(",")){
+      first = first.split(",")[0].trim();
+    }else{
+      const parts = first.split(/\s+/);
+      if(parts.length) first = parts[parts.length-1];
+    }
+    return first || "—";
+  }
+
   function renderTable(){
     const tbody=$("#itemsTbody"); if(!tbody) return;
     const cols=visibleColumns();
@@ -350,7 +373,8 @@
     tbody.innerHTML=view.map(it=>{
       const tagsHtml = Array.isArray(it.tags)&&it.tags.length
         ? `<div>${it.tags.map(t=>`<span class="tag-chip">${esc(t)}</span>`).join("")}</div>` : "";
-      const authors = cols.has("authors")?`<td>${esc(it.authors||"—")}${tagsHtml}</td>`:"";
+      const authorsDisplay = firstAuthorLastName(it.authors);
+      const authors = cols.has("authors")?`<td>${esc(authorsDisplay)}${tagsHtml}</td>`:"";
       const year    = cols.has("year")   ?`<td>${esc(it.year??"—")}</td>`:"";
       return `<tr data-id="${esc(it.id)}">
         <td>${esc(it.title||"—")}</td>
@@ -513,6 +537,37 @@
     };
   }
 
+  // ---- PDF import (front-end hook; requires /api/library/import-pdf on server) ----
+  async function handlePdfUpload(file){
+    if(!file) return;
+    const form = new FormData();
+    form.append("file", file);
+
+    try{
+      const res = await api("/api/library/import-pdf",{ method:"POST", body:form });
+      // Expect server to return { item } or { items: [...] }
+      let createdItem = null;
+      if(res && res.item){
+        createdItem = res.item;
+        const idx = items.findIndex(x=>String(x.id)===String(createdItem.id));
+        if(idx>=0) items[idx]=createdItem; else items.push(createdItem);
+      }else if(res && Array.isArray(res.items) && res.items.length){
+        createdItem = res.items[0];
+        items = res.items;
+      }else{
+        await safeRefreshItems();
+      }
+      renderTable();
+      if(createdItem){
+        currentSelection = createdItem.id;
+        await renderInspector(currentSelection);
+      }
+    }catch(e){
+      console.error("PDF import failed", e);
+      alert("Could not import PDF. Please try again.");
+    }
+  }
+
   // ---- Bind UI & observers ----
   function bindUI(){
     // Persist widths (optional)
@@ -527,5 +582,18 @@
     if($(".lib-right")) obs.observe($(".lib-right"));
 
     bindNewCollectionButtons();
+
+    // PDF import bindings
+    const importBtn   = $("#importPdfBtn");
+    const importInput = $("#importPdfInput");
+    if(importBtn && importInput){
+      importBtn.addEventListener("click",()=>importInput.click());
+      importInput.addEventListener("change", async(ev)=>{
+        const file = ev.target.files && ev.target.files[0];
+        await handlePdfUpload(file);
+        // Reset so selecting same file again still triggers change
+        ev.target.value="";
+      });
+    }
   }
 })();
