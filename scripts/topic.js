@@ -128,16 +128,31 @@
       if (tag === "A") {
         const rawHref = node.getAttribute("href") || "";
         let href = rawHref;
+        let asTopicLink = false;
         if (/^\/wiki\//i.test(rawHref)) {
-          href = `https://${wikiLang}.wikipedia.org${rawHref}`;
+          const title = decodeURIComponent(rawHref.replace(/^\/wiki\//i, ""));
+          href = `topic.html?id=${encodeURIComponent(title)}`;
+          asTopicLink = true;
         } else if (/^\/\/([a-z-]+\.wikipedia\.org)/i.test(rawHref)) {
           href = "https:" + rawHref;
+        } else if (/^https?:\/\/([a-z-]+)\.wikipedia\.org\/wiki\//i.test(rawHref)) {
+          // keep external wiki links but prefer SE topic if possible
+          const m = rawHref.match(/^https?:\/\/[a-z-]+\.wikipedia\.org\/wiki\/(.+)/i);
+          if (m && m[1]) {
+            const title = decodeURIComponent(m[1]);
+            href = `topic.html?id=${encodeURIComponent(title)}`;
+            asTopicLink = true;
+          }
         }
-        if (/^#/.test(href) || /^https?:\/\//i.test(href)) {
+        if (/^#/.test(href) || /^https?:\/\//i.test(href) || href.startsWith("topic.html")) {
           el.setAttribute("href", href);
           if (!/^#/.test(href)) {
             el.setAttribute("target", "_blank");
             el.setAttribute("rel", "noopener");
+          }
+          if (asTopicLink) {
+            el.classList.add("se-topic-link");
+            el.setAttribute("data-topic-id", decodeURIComponent(href.split("id=").pop() || ""));
           }
         }
       } else if (tag === "IMG") {
@@ -315,7 +330,7 @@
     const reviewURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},type:review&sort=cited_by_count:desc&per_page=10`;
     const recentURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},from_publication_date:${nowY - 2}-01-01&sort=cited_by_count:desc&per_page=10`;
     const [rev, rec] = await Promise.all([fetchOpenAlexJSON(reviewURL), fetchOpenAlexJSON(recentURL)]);
-    const works = dedupByDOI([...(rev.results || []), ...(rec.results || [])]).slice(0, 15);
+    const works = dedupByDOI([...(rev.results || []), ...(rec.results || [])]);
     if (!works.length) {
       referencesList.innerHTML = '<li class="muted">No references available.</li>';
       return;
@@ -329,7 +344,8 @@
         return `<li id="se-ref-li-${idx}" class="ref-card" style="list-style:none; margin:0 0 1rem; padding:0;">
           <div class="ref-card-inner" style="position:relative; border:1px solid var(--border-color,#e5e7eb); border-radius:12px; padding:.75rem; background:#fff;">
             ${anchor}
-            <div class="ref-num" style="position:absolute; top:10px; right:12px; font-weight:700;">${idx}</div>
+            <div class="ref-num" style="position:absolute; top:10px; right:12px; font-weight:700; font-size:.95rem;">[${idx}]</div>
+            <div class="ref-card-num" style="font-weight:700; margin-bottom:.35rem;">[${idx}] Reference</div>
             ${card}
             <div style="margin-top:.35rem;">${back}</div>
           </div>
@@ -338,7 +354,8 @@
       return `<li id="se-ref-li-${idx}" style="list-style:none; margin:0 0 1rem; padding:0;">
         <div class="ref-card-inner" style="position:relative; border:1px solid var(--border-color,#e5e7eb); border-radius:12px; padding:.75rem; background:#fff;">
           ${anchor}
-          <div class="ref-num" style="position:absolute; top:10px; right:12px; font-weight:700;">${idx}</div>
+          <div class="ref-num" style="position:absolute; top:10px; right:12px; font-weight:700; font-size:.95rem;">[${idx}]</div>
+          <div class="ref-card-num" style="font-weight:700; margin-bottom:.35rem;">[${idx}] Reference</div>
           <div>${citeLine(w, idx)}</div>
           <div style="margin-top:.35rem;">${back}</div>
         </div>
@@ -618,12 +635,28 @@
   async function loadTopic() {
     const idParam = getParam("id");
     if (!idParam) { topicTitle.textContent = "Missing topic ID."; return; }
-    const idTail = idParam.includes("openalex.org") ? idParam.split("/").pop() : idParam;
+    let idTail = idParam.includes("openalex.org") ? idParam.split("/").pop() : idParam;
+
+    async function fetchConceptByIdOrSearch(idOrName) {
+      // Try direct fetch
+      try {
+        const res = await fetch(`${API_OA}/concepts/${encodeURIComponent(idOrName)}`);
+        if (res.ok) return await res.json();
+      } catch (_) {}
+      // Fallback: search by name/title
+      try {
+        const searchURL = `${API_OA}/concepts?search=${encodeURIComponent(idOrName)}&per_page=1`;
+        const data = await fetchOpenAlexJSON(searchURL);
+        const c = data.results?.[0];
+        if (c?.id) { idTail = tail(c.id); return c; }
+      } catch (_) {}
+      throw new Error("Concept not found");
+    }
 
     try {
       // OpenAlex concept
       const topicCache = cacheRead(idTail, "concept");
-      const topic = topicCache || (await (await fetch(`${API_OA}/concepts/${encodeURIComponent(idTail)}`)).json());
+      const topic = topicCache || (await fetchConceptByIdOrSearch(idTail));
       if (!topicCache) cacheWrite(idTail, "concept", topic);
 
       const lang = detectWikiLangFromTopic(topic);
