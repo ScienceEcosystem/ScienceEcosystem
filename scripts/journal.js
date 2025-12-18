@@ -118,13 +118,52 @@
   }
 
   // ---- Rendering ----
+  function idTailFrom(url){
+    if (!url) return "";
+    var s = String(url);
+    var parts = s.split("/").filter(Boolean);
+    return parts[parts.length-1] || "";
+  }
+
+  async function populatePublisher(src){
+    var el = $("journalPublisher");
+    if (!el) return;
+
+    var pubString = get(src,"publisher",null);
+    var hostId = get(src,"host_organization",null);
+    var hostName = get(src,"host_organization_name",null);
+
+    // If we have no id but a string, just show the string.
+    if (!hostId && pubString){
+      el.textContent = pubString;
+      return;
+    }
+
+    var tail = idTailFrom(hostId);
+    // If we have id + name, link to publisher page.
+    if (tail && (pubString || hostName)){
+      el.innerHTML = '<a href="publisher.html?id='+esc(tail)+'">'+esc(pubString || hostName)+'</a>';
+      return;
+    }
+
+    // Try to fetch the publisher entity for a display name if missing.
+    if (tail){
+      try{
+        var pub = await getJSON(API + "/publishers/" + encodeURIComponent(tail));
+        var name = pub.display_name || pubString || hostName || "Publisher";
+        el.innerHTML = '<a href="publisher.html?id='+esc(tail)+'">'+esc(name)+'</a>';
+        return;
+      }catch(_){}
+    }
+
+    // Last resort
+    el.textContent = pubString || "Unknown publisher";
+  }
+
   function renderHeader(src){
     if ($("journalName")) $("journalName").textContent = src.display_name || "Unknown journal";
 
-    var pubName = get(src,"publisher",null);
-    if ($("journalPublisher")){
-      $("journalPublisher").innerHTML = pubName ? esc(pubName) : "Unknown publisher";
-    }
+    if ($("journalPublisher")) $("journalPublisher").textContent = "Loading publisher…";
 
     var type = get(src,"type","—");
     var issn_l = get(src,"issn_l",null);
@@ -170,6 +209,7 @@
       parts.push(". Type: "+(type||"—")+".");
       if (oa) parts.push(" Open Access journal.");
       if (doaj) parts.push(" Indexed in DOAJ.");
+      var pubName = get(src,"publisher",null) || get(src,"host_organization_name",null);
       if (pubName) parts.push(" Publisher: "+pubName+".");
       $("journalSummary").textContent = parts.join("");
     }
@@ -266,6 +306,7 @@
 
       var src = await getJSON(API + "/sources/" + encodeURIComponent(tail));
       renderHeader(src);
+      populatePublisher(src);
       renderTrends(src);
 
       // Works API (OpenAlex usually provides this on the entity)

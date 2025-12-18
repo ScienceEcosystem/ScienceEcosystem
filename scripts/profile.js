@@ -66,23 +66,30 @@
   }
 
   // ---- Header / metrics ----
+  function setAffiliationNode(label, tail){
+    var affNode = $("profileAffiliation");
+    if (!affNode) return;
+    if (label && tail){
+      affNode.innerHTML = '<a href="institute.html?id='+encodeURIComponent(tail)+'">'+escapeHtml(label)+'</a>';
+    } else if (label){
+      affNode.textContent = label;
+    } else {
+      affNode.textContent = "Unknown affiliation";
+    }
+  }
+
   function renderAuthorHeader(a){
     if ($("profileName")) $("profileName").textContent = a.display_name || "Unknown researcher";
 
     // Main affiliation — link to institute page when possible
-    var affNode = $("profileAffiliation");
     var lki = get(a,"last_known_institution", null);
-    if (affNode){
-      if (lki && lki.display_name){
-        var tail = (lki.id ? String(lki.id).replace(/^https?:\/\/openalex\.org\//i,"") : null);
-        if (tail) {
-          affNode.innerHTML = '<a href="institute.html?id='+encodeURIComponent(tail)+'">'+escapeHtml(lki.display_name)+'</a>';
-        } else {
-          affNode.textContent = lki.display_name;
-        }
-      } else {
-        affNode.textContent = "Unknown affiliation";
-      }
+    var lkis = Array.isArray(a.last_known_institutions) ? a.last_known_institutions : [];
+    var mainAff = lki || lkis[0] || null;
+    if (mainAff && mainAff.display_name){
+      var tailMain = (mainAff.id ? String(mainAff.id).replace(/^https?:\/\/openalex\.org\//i,"") : null);
+      setAffiliationNode(mainAff.display_name, tailMain);
+    } else {
+      setAffiliationNode("Affiliation unavailable (deriving from publications…)", null);
     }
 
     var alt = (Array.isArray(a.display_name_alternatives)&&a.display_name_alternatives.length)?a.display_name_alternatives:(Array.isArray(a.alternate_names)?a.alternate_names:[]);
@@ -130,7 +137,6 @@
 
     // Past affiliations timeline: initial fallback to last_known_institutions
     var items = [];
-    var lkis = Array.isArray(a.last_known_institutions) ? a.last_known_institutions : [];
     if (!lkis.length && lki) lkis = [lki];
     if ($("careerTimeline")){
       if (lkis.length){
@@ -173,10 +179,10 @@
     // opts: { title, series:[{year, value}], id, yLabel }
     var title = opts.title || "";
     var series = Array.isArray(opts.series) ? opts.series : [];
-    var yLabel = opts.yLabel || "";
+    var yLabel = opts.yLabel || "Count";
     var id = opts.id || ("c" + Math.random().toString(36).slice(2));
 
-    var H = 220, W = 600, padL = 56, padR = 10, padT = 14, padB = 40;
+    var H = 300, W = 640, padL = 68, padR = 16, padT = 20, padB = 48;
     var innerW = W - padL - padR;
     var innerH = H - padT - padB;
 
@@ -189,11 +195,11 @@
     for (var i=0;i<n;i++){ if (series[i].value > maxVal) maxVal = series[i].value; }
     if (maxVal <= 0) maxVal = 1;
 
-    var ticks = niceTicks(maxVal, 4);
+    var ticks = niceTicks(maxVal, 5);
     var maxTick = ticks[ticks.length-1];
 
     var step = innerW / n;
-    var barW = Math.max(5, Math.min(24, step * 0.6));
+    var barW = Math.max(6, Math.min(28, step * 0.6));
 
     function x(i){ return padL + i*step + (step - barW)/2; }
     function y(v){ return padT + innerH - (v/maxTick)*innerH; }
@@ -207,7 +213,7 @@
     for (var i=0;i<n;i++){
       var s = series[i];
       var bx = x(i), by = y(s.value), h = Math.max(0, y0 - by);
-      bars.push('<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" ry="3"><title>'+escapeHtml(String(s.year))+': '+escapeHtml(String(s.value))+'</title></rect>');
+      bars.push('<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" ry="3" stroke="none"><title>'+escapeHtml(String(s.year))+": "+escapeHtml(String(s.value))+'</title></rect>');
     }
 
     var grid = [];
@@ -215,34 +221,31 @@
     for (var t=0; t<ticks.length; t++){
       var val = ticks[t];
       var gy = y(val);
-      grid.push('<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+gy.toFixed(1)+'" y2="'+gy.toFixed(1)+'" class="grid"/>');
-      yLabels.push('<text x="'+(padL-8)+'" y="'+(gy+4).toFixed(1)+'" class="ylabel" text-anchor="end">'+escapeHtml(val.toLocaleString())+'</text>');
+      grid.push('<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+gy.toFixed(1)+'" y2="'+gy.toFixed(1)+'" class="grid" stroke="currentColor" stroke-opacity=".12" stroke-width="1"/>' );
+      yLabels.push('<text x="'+(padL-10)+'" y="'+(gy+4).toFixed(1)+'" class="ylabel" text-anchor="end">'+escapeHtml(val.toLocaleString())+'</text>');
     }
 
     var xLabels = [
-      '<text x="'+padL+'" y="'+(H-10)+'" class="xlabel">'+escapeHtml(String(first))+'</text>',
-      '<text x="'+(padL + innerW/2)+'" y="'+(H-10)+'" class="xlabel" text-anchor="middle">'+escapeHtml(String(mid))+'</text>',
-      '<text x="'+(W-padR)+'" y="'+(H-10)+'" class="xlabel" text-anchor="end">'+escapeHtml(String(last))+'</text>'
+      '<text x="'+padL+'" y="'+(H-14)+'" class="xlabel">'+escapeHtml(String(first))+'</text>',
+      '<text x="'+(padL + innerW/2)+'" y="'+(H-14)+'" class="xlabel" text-anchor="middle">'+escapeHtml(String(mid))+'</text>',
+      '<text x="'+(W-padR)+'" y="'+(H-14)+'" class="xlabel" text-anchor="end">'+escapeHtml(String(last))+'</text>'
     ];
 
+    var yAxisLabel = yLabel ? '<text x="16" y="'+(padT+8)+'" class="ylabel-unit" font-size="12" fill="currentColor" fill-opacity=".7">'+escapeHtml(yLabel)+'</text>' : '';
+
     return ''+
-      '<div class="chart-block">' +
-        '<h4>'+escapeHtml(title)+'</h4>' +
-        '<svg class="chart-svg" role="img" aria-labelledby="'+id+'-title" viewBox="0 0 '+W+' '+H+'" width="100%" height="220">' +
-          '<title id="'+id+'-title">'+escapeHtml(title)+'</title>' +
-          // y-label (left top)
-          (yLabel ? '<text x="'+(8)+'" y="'+(16)+'" class="ylabel strong">'+escapeHtml(yLabel)+'</text>' : '') +
-          // grid
-          '<g fill="none" stroke="currentColor" stroke-opacity=".08" stroke-width="1">'+ grid.join("") +'</g>' +
-          // y ticks
-          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="12">'+ yLabels.join("") +'</g>' +
-          // bars
-          '<g class="bars" fill="currentColor" fill-opacity=".78">'+ bars.join("") +'</g>' +
-          // x-axis labels
-          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="12">'+ xLabels.join("") +'</g>' +
-        '</svg>' +
+      '<div class="chart-block">'+
+        '<h4>'+escapeHtml(title)+'</h4>'+
+        '<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" role="img" aria-label="'+escapeHtml(title)+'">'+
+          yAxisLabel +
+          '<g class="grid-lines">'+grid.join("")+'</g>'+
+          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="12">'+yLabels.join("")+'</g>'+
+          '<g class="bars" fill="currentColor" fill-opacity=".8">'+bars.join("")+'</g>'+
+          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="12">'+xLabels.join("")+'</g>'+
+        '</svg>'+
       '</div>';
   }
+
 
   function buildYearSeries(author){
     // Use counts_by_year, but ensure a continuous  min..max range (fill with zeros)
@@ -307,6 +310,7 @@
     processWorksForSidebar(works);
     renderCoauthors();
     renderAffTimelineFromWorks();
+    applyAffiliationFromWorksFallback();
 
     // Pagination UI
     var pag = $("pubsPagination");
@@ -424,6 +428,24 @@
           }
         }
       }
+    }
+  }
+
+  function applyAffiliationFromWorksFallback(){
+    var affNode = $("profileAffiliation");
+    if (!affNode) return;
+    if (affNode.textContent && !/Unknown affiliation|Affiliation unavailable/i.test(affNode.textContent)) return;
+    var best = null;
+    Object.keys(affYears).forEach(function(t){
+      var entry = affYears[t];
+      if (!entry) return;
+      if (!best) { best = entry; return; }
+      var bestYear = best.max != null ? best.max : best.min || 0;
+      var curYear = entry.max != null ? entry.max : entry.min || 0;
+      if (curYear > bestYear) best = entry;
+    });
+    if (best){
+      setAffiliationNode(best.name, best.tail);
     }
   }
 
