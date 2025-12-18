@@ -77,6 +77,25 @@
           <ul id="activityList" class="timeline" style="margin-top:.5rem;"></ul>
         </section>
 
+        <!-- Followed researchers feed -->
+        <section id="sectionFollowing" class="panel" aria-labelledby="h-following" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
+          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
+            <h2 id="h-following" style="margin:0;">Following</h2>
+            <button id="refreshFollowingBtn" class="btn btn-small">Refresh</button>
+          </div>
+          <p class="muted small" style="margin:.25rem 0;">Follow researchers on their profile pages. New works appear here.</p>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; margin-top:.5rem;">
+            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+              <h3 style="margin-top:0;">Researchers you follow</h3>
+              <ul id="followedList" class="list"></ul>
+            </div>
+            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+              <h3 style="margin-top:0;">Latest updates</h3>
+              <ul id="followedUpdates" class="list"></ul>
+            </div>
+          </div>
+        </section>
+
         <!-- Projects snapshot -->
         <section id="sectionProjects" class="panel" aria-labelledby="h-projects" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
           <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">

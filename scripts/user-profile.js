@@ -32,6 +32,28 @@ function fmtDate(iso) {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+// --- Following store (local-only for now) ---
+const FOLLOW_KEY = "se_followed_authors";
+const OPENALEX = "https://api.openalex.org";
+const MAILTO = "info@scienceecosystem.org";
+
+function readFollows() {
+  try { return JSON.parse(localStorage.getItem(FOLLOW_KEY) || "[]"); } catch { return []; }
+}
+function saveFollows(list) {
+  localStorage.setItem(FOLLOW_KEY, JSON.stringify(list));
+}
+function isFollowing(id) {
+  return readFollows().some((f) => f.id === id);
+}
+function addMailto(u) {
+  try {
+    const url = new URL(u);
+    if (!url.searchParams.get("mailto")) url.searchParams.set("mailto", MAILTO);
+    return url.toString();
+  } catch { return u; }
+}
+
 function badge(txt) {
   return `<span class="badge" style="display:inline-block; padding:.1rem .4rem; border-radius:999px; background:#eef; color:#223;">${escapeHtml(txt)}</span>`;
 }
@@ -57,6 +79,9 @@ async function bootstrap() {
   const clearBtn       = document.getElementById("clearLibBtn");
   const identityBox    = document.getElementById("identityStatus");
   const libraryList    = document.getElementById("userLibraryList");
+  const followingBtn   = document.getElementById("refreshFollowingBtn");
+  const followListEl   = document.getElementById("followedList");
+  const followUpdates  = document.getElementById("followedUpdates");
 
   try {
     // --- Session ---
@@ -205,6 +230,21 @@ async function bootstrap() {
       };
     }
 
+    // --- Following (local) ---
+    await loadFollowingFeed();
+    followingBtn?.addEventListener("click", loadFollowingFeed);
+    if (followListEl) {
+      followListEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-unfollow]");
+        if (!btn) return;
+        const id = btn.getAttribute("data-unfollow");
+        const next = readFollows().filter((f) => f.id !== id);
+        saveFollows(next);
+        renderFollowedAuthors(next);
+        loadFollowingFeed();
+      });
+    }
+
     // --- Claims / Merge UI (existing feature) ---
     await renderClaimsUI();
 
@@ -290,6 +330,75 @@ function renderLibrarySidebar(listEl, items, libCountEl) {
       }
     };
   });
+}
+
+// --- Following feed ---
+async function fetchRecentWorksFor(authorId, limit = 2) {
+  const url = addMailto(`${OPENALEX}/works?filter=authorships.author.id:${encodeURIComponent(authorId)}&sort=publication_date:desc&per_page=${limit}`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to load works");
+  const data = await res.json();
+  return Array.isArray(data?.results) ? data.results : [];
+}
+
+function renderFollowedAuthors(list) {
+  const ul = document.getElementById("followedList");
+  if (!ul) return;
+  if (!list.length) {
+    ul.innerHTML = '<li class="muted">Not following anyone yet.</li>';
+    return;
+  }
+  ul.innerHTML = list.map((f) => `
+    <li style="display:flex; justify-content:space-between; gap:.5rem; align-items:center;">
+      <span><a href="profile.html?id=${encodeURIComponent(f.id)}">${escapeHtml(f.name || f.id)}</a></span>
+      <button class="btn btn-small" data-unfollow="${encodeURIComponent(f.id)}">Unfollow</button>
+    </li>
+  `).join("");
+}
+
+function renderFollowUpdates(entries) {
+  const ul = document.getElementById("followedUpdates");
+  if (!ul) return;
+  if (!entries.length) {
+    ul.innerHTML = '<li class="muted">No new works yet.</li>';
+    return;
+  }
+  entries.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  ul.innerHTML = entries.slice(0, 12).map((item) => `
+    <li>
+      <a href="${escapeHtml(item.link)}">${escapeHtml(item.title || "Untitled")}</a>
+      <span class="muted"> · ${escapeHtml(item.author || "")} · ${fmtDate(item.date)}</span>
+    </li>
+  `).join("");
+}
+
+async function loadFollowingFeed() {
+  const follows = readFollows();
+  renderFollowedAuthors(follows);
+  const updatesBox = document.getElementById("followedUpdates");
+  if (!follows.length) {
+    if (updatesBox) updatesBox.innerHTML = '<li class="muted">Follow researchers to see updates.</li>';
+    return;
+  }
+  if (updatesBox) updatesBox.innerHTML = '<li class="muted">Loading updates…</li>';
+
+  const entries = [];
+  for (const f of follows.slice(0, 8)) {
+    try {
+      const works = await fetchRecentWorksFor(f.id, 2);
+      works.forEach((w) => {
+        entries.push({
+          author: f.name || f.id,
+          title: w.title,
+          date: w.publication_date || w.publication_year,
+          link: w.id ? w.id.replace("https://openalex.org/", "paper.html?id=") : "#",
+        });
+      });
+    } catch {
+      // keep going
+    }
+  }
+  renderFollowUpdates(entries);
 }
 
 // ---- Claim / Merge UI (profile sidebar) ----

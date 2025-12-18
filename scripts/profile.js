@@ -5,6 +5,7 @@
   var API = "https://api.openalex.org";
   var MAILTO = "info@scienceecosystem.org";
   var PAGE_SIZE = 50;
+  var FOLLOW_KEY = "se_followed_authors";
 
   // ---- State (publications) ----
   var currentPage = 1;
@@ -39,6 +40,15 @@
     var url=new URL(u, API);
     if(!url.searchParams.get("mailto")) url.searchParams.set("mailto", MAILTO);
     return url.toString();
+  }
+  function readFollows(){
+    try{ return JSON.parse(localStorage.getItem(FOLLOW_KEY) || "[]"); }catch(e){ return []; }
+  }
+  function saveFollows(list){
+    localStorage.setItem(FOLLOW_KEY, JSON.stringify(list));
+  }
+  function isFollowing(id){
+    return readFollows().some(function(f){ return f.id === id; });
   }
   async function getJSON(url){
     var withMt = addMailto(url);
@@ -491,6 +501,31 @@
     }).join("");
   }
 
+  function wireFollowButton(author){
+    var btn = $("followAuthorBtn");
+    var status = $("followStatus");
+    if (!btn || !authorTail) return;
+    function refresh(){
+      var following = isFollowing(authorTail);
+      btn.textContent = following ? "Following" : "Follow";
+      btn.classList.toggle("btn-secondary", !following);
+      btn.classList.toggle("btn-success", following);
+      if (status) status.textContent = following ? "Updates will show on your Home page." : "";
+    }
+    refresh();
+    btn.onclick = function(){
+      var list = readFollows();
+      var exists = list.some(function(f){ return f.id === authorTail; });
+      if (exists){
+        list = list.filter(function(f){ return f.id !== authorTail; });
+      } else {
+        list.push({ id: authorTail, name: author.display_name || authorTail });
+      }
+      saveFollows(list);
+      refresh();
+    };
+  }
+
   // ---- Boot ----
   async function boot(){
     try{
@@ -502,6 +537,7 @@
 
       var author = await getJSON(authorUrl);
       renderAuthorHeader(author);
+      wireFollowButton(author);
       renderTrendCharts(author);
       await loadWorks(author);
 
