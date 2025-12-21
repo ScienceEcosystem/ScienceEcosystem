@@ -1947,7 +1947,7 @@ function renderToolGrid(list) {
 }
 
 function applyFilters() {
-  const searchTerm = (document.getElementById('toolSearchInput')?.value || '').toLowerCase();
+  const searchTerm = (document.getElementById('problemInput')?.value || '').toLowerCase();
   const category = document.getElementById('categoryFilter')?.value || '';
   const cost = document.getElementById('costFilter')?.value || '';
 
@@ -1989,14 +1989,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   findBtn?.addEventListener('click', () => {
     renderRecommendations(problemInput.value);
+    applyFilters();
   });
   problemInput?.addEventListener('keydown', (evt) => {
     if (evt.key === 'Enter' && (evt.metaKey || evt.ctrlKey)) {
       renderRecommendations(problemInput.value);
+      applyFilters();
     }
   });
-
-  document.getElementById('toolSearchInput')?.addEventListener('input', applyFilters);
+  problemInput?.addEventListener('input', () => {
+    applyFilters();
+    renderRecommendations(problemInput.value);
+  });
   document.getElementById('categoryFilter')?.addEventListener('change', applyFilters);
   document.getElementById('costFilter')?.addEventListener('change', applyFilters);
 });

@@ -47,40 +47,7 @@ FILE: research-tools.html
     <header class="page-header hero">
       <h1>Research Tools Guide</h1>
       <p class="lead">Describe your task and get matched to the best tool. Compare options by purpose, ease of use, and cost.</p>
-      <p class="lead-links">
-        <a class="chip" href="#finder">Find my tool</a>
-        <a class="chip" href="#overview">See all tools</a>
-        <a class="chip" href="data-code.html">Data & Code</a>
-        <a class="chip" href="open-science.html">Open Science</a>
-      </p>
     </header>
-
-    <section id="finder" class="panel">
-      <div class="finder-grid">
-        <div>
-          <h2>Tell us your problem</h2>
-          <p>We’ll surface a short list of tools that fit your task, prioritising open, reproducible options.</p>
-          <label class="visually-hidden" for="problemInput">Describe your research task</label>
-          <textarea id="problemInput" class="input" rows="4" placeholder="e.g., “I need to clean messy CSV data and run quick visualizations with teammates.”"></textarea>
-          <div class="finder-actions">
-            <button class="btn btn-primary" id="findToolsBtn" type="button">Find tools</button>
-            <p class="muted small">Supports writing, data cleaning, analysis, collaboration, archiving, and more.</p>
-          </div>
-        </div>
-        <div>
-          <div class="finder-note">
-            <h3>How we pick tools</h3>
-            <ul>
-              <li>Match to the task you describe.</li>
-              <li>Favor open-source or free-first options.</li>
-              <li>Highlight ease of use and active communities.</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div id="recommendations" class="recommendations" aria-live="polite"></div>
-    </section>
 
     <section id="overview" class="panel">
       <div class="overview-header">
@@ -88,9 +55,29 @@ FILE: research-tools.html
           <h2>Overview of research tools</h2>
           <p class="muted">Compare tools by purpose, cost, ease, and strengths. Use filters to narrow quickly.</p>
         </div>
-        <div class="filter-bar">
-          <label class="visually-hidden" for="toolSearchInput">Search tools</label>
-          <input id="toolSearchInput" class="input" type="text" placeholder="Search by name, purpose, or keyword" />
+        <div class="finder-grid" style="margin-top: 1rem;">
+          <div>
+            <h3>Describe your task</h3>
+            <label class="visually-hidden" for="problemInput">Describe your research task</label>
+            <textarea id="problemInput" class="input" rows="3" placeholder="e.g., “I need to clean messy CSV data and run quick visualizations with teammates.”"></textarea>
+            <div class="finder-actions">
+              <button class="btn btn-primary" id="findToolsBtn" type="button">Find tools</button>
+              <p class="muted small">Search by keywords, categories, or costs. We highlight open, reproducible options first.</p>
+            </div>
+          </div>
+          <div>
+            <div class="finder-note">
+              <h3>How we pick tools</h3>
+              <ul>
+                <li>Match to the task you describe.</li>
+                <li>Favor open-source or free-first options.</li>
+                <li>Highlight ease of use and active communities.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-bar" style="margin-top: 1rem;">
           <label class="visually-hidden" for="categoryFilter">Filter by category</label>
           <select id="categoryFilter" class="input select">
             <option value="">All categories</option>
@@ -104,6 +91,8 @@ FILE: research-tools.html
           </select>
         </div>
       </div>
+
+      <div id="recommendations" class="recommendations" aria-live="polite"></div>
 
       <div id="toolGrid" class="tool-grid"></div>
     </section>
@@ -130,6 +119,6 @@ FILE: research-tools.html
   <script src="scripts/search.js" defer></script>
   <script src="scripts/components.js" defer></script>
   <script src="scripts/session.js" defer></script>
-  <script src="scripts/tools.js" defer></script>
+  <script src="scripts/tools.js?v=1.1" defer></script>
 </body>
 </html>
