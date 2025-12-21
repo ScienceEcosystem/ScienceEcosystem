@@ -189,7 +189,7 @@
     // opts: { title, series:[{year, value}], id, yLabel }
     var title = opts.title || "";
     var series = Array.isArray(opts.series) ? opts.series : [];
-    var yLabel = opts.yLabel || "Count";
+    var yLabel = opts.yLabel || "";
     var id = opts.id || ("c" + Math.random().toString(36).slice(2));
 
     var H = 300, W = 640, padL = 68, padR = 16, padT = 20, padB = 48;
