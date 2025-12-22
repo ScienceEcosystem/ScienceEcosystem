@@ -48,44 +48,42 @@ FILE: journal-finder.html
   <main id="main" class="container">
     <header class="page-header hero">
       <h1>Journal Selection Guide</h1>
-      <p class="lead">Describe your manuscript and constraints. Compare journals by scope, OA/APC, speed, and ambition.</p>
+      <p class="lead">Describe your manuscript, constraints, and ambition. We’ll suggest journals and show how to verify fit.</p>
     </header>
 
-    <section id="overview" class="panel">
-      <div class="overview-header">
+    <section id="finder" class="panel">
+      <div class="finder-grid">
         <div>
-          <h2>Find and compare journals</h2>
-          <p class="muted">Use one input to get recommendations and refine with filters. Decision support only—always verify on the journal site.</p>
-        </div>
-        <div class="finder-grid" style="margin-top: 1rem;">
-          <div>
-            <h3>Describe your manuscript</h3>
-            <label class="visually-hidden" for="journalProblem">Describe your paper</label>
-            <textarea id="journalProblem" class="input" rows="3" placeholder="e.g., “Clinical AI paper, OA under $2k, fast review, mid-tier okay.”"></textarea>
-            <div class="finder-actions">
-              <button class="btn btn-primary" id="findJournalsBtn" type="button">Find journals</button>
-              <p class="muted small">We consider field, article type, OA/APC, speed, and ambition.</p>
-            </div>
-          </div>
-          <div>
-            <div class="finder-note">
-              <h3>How we pick journals</h3>
-              <ul>
-                <li>Match discipline + article type first.</li>
-                <li>Respect OA/APC and speed signals.</li>
-                <li>Balance prestige, solid, and rapid options.</li>
-                <li>Add a verification checklist per pick.</li>
-              </ul>
-            </div>
+          <h2>Describe your manuscript</h2>
+          <p>Include field, article type, urgency, and whether OA/APC matters.</p>
+          <label class="visually-hidden" for="journalProblem">Describe your paper</label>
+          <textarea id="journalProblem" class="input" rows="4" placeholder="e.g., “Clinical AI paper (retrospective), need OA under $2k, want rapid review, mid-tier okay.”"></textarea>
+          <div class="finder-actions">
+            <button class="btn btn-primary" id="findJournalsBtn" type="button">Find journals</button>
+            <p class="muted small">Decision support only — always verify aims & scope, APC, and timelines on the journal site.</p>
           </div>
         </div>
+        <div>
+          <div class="finder-note">
+            <h3>How we suggest</h3>
+            <ul>
+              <li>Match discipline + article type first.</li>
+              <li>Respect OA/APC and speed signals.</li>
+              <li>Offer prestige vs mid-tier vs rapid options.</li>
+              <li>Add a verification checklist per pick.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
 
-        <div class="filter-bar" style="margin-top: 1rem; flex-wrap: wrap; gap: .75rem;">
+      <div class="filter-bar" style="margin-top:1rem; flex-wrap:wrap; gap:.75rem;">
+        <div class="filter-group">
           <label class="visually-hidden" for="disciplineFilter">Discipline</label>
           <select id="disciplineFilter" class="input select">
             <option value="">All disciplines</option>
           </select>
-
+        </div>
+        <div class="filter-group">
           <label class="visually-hidden" for="articleTypeFilter">Article type</label>
           <select id="articleTypeFilter" class="input select">
             <option value="">Any type</option>
@@ -96,7 +94,8 @@ FILE: journal-finder.html
             <option value="Case">Case/Clinical</option>
             <option value="Data">Data/Resources</option>
           </select>
-
+        </div>
+        <div class="filter-group">
           <label class="visually-hidden" for="oaFilter">OA policy</label>
           <select id="oaFilter" class="input select">
             <option value="">Any OA</option>
@@ -104,7 +103,8 @@ FILE: journal-finder.html
             <option value="Hybrid">Hybrid</option>
             <option value="Closed">Closed</option>
           </select>
-
+        </div>
+        <div class="filter-group">
           <label class="visually-hidden" for="apcFilter">APC budget</label>
           <select id="apcFilter" class="input select">
             <option value="">Any APC</option>
@@ -113,7 +113,8 @@ FILE: journal-finder.html
             <option value="1500-3500">$1.5k–$3.5k</option>
             <option value="Over3500">Over $3.5k</option>
           </select>
-
+        </div>
+        <div class="filter-group">
           <label class="visually-hidden" for="speedFilter">Speed</label>
           <select id="speedFilter" class="input select">
             <option value="">Any speed</option>
@@ -121,7 +122,8 @@ FILE: journal-finder.html
             <option value="Moderate">Moderate (~2–3mo)</option>
             <option value="Deliberate">Deliberate (>3mo)</option>
           </select>
-
+        </div>
+        <div class="filter-group">
           <label class="visually-hidden" for="ambitionFilter">Ambition</label>
           <select id="ambitionFilter" class="input select">
             <option value="">Any ambition</option>
@@ -133,6 +135,15 @@ FILE: journal-finder.html
       </div>
 
       <div id="journalRecommendations" class="recommendations" aria-live="polite"></div>
+    </section>
+
+    <section id="overview" class="panel">
+      <div class="overview-header">
+        <div>
+          <h2>Compare journals</h2>
+          <p class="muted">Filter by discipline, OA/APC, speed, and ambition. Check the verification checklist before submitting.</p>
+        </div>
+      </div>
       <div id="journalGrid" class="tool-grid"></div>
     </section>
   </main>

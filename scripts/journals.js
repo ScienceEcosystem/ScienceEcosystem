@@ -272,7 +272,6 @@ function applyJournalFilters(problemText) {
     return matchesDiscipline && matchesArticle && matchesOA && matchesAPC && matchesSpeed && matchesAmbition;
   });
   renderJournalGrid(filtered);
-  renderRecommendations(problemText, filters);
 }
 
 function populateDisciplineOptions() {
@@ -293,7 +292,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   populateDisciplineOptions();
   renderJournalGrid(journalCatalog);
-  renderRecommendations("", getFilters());
 
   btn?.addEventListener("click", () => {
     applyJournalFilters(input?.value || "");
