@@ -36,16 +36,6 @@ function fmtDate(iso) {
 const FOLLOW_KEY = "se_followed_authors";
 const OPENALEX = "https://api.openalex.org";
 const MAILTO = "info@scienceecosystem.org";
-
-function readFollows() {
-  try { return JSON.parse(localStorage.getItem(FOLLOW_KEY) || "[]"); } catch { return []; }
-}
-function saveFollows(list) {
-  localStorage.setItem(FOLLOW_KEY, JSON.stringify(list));
-}
-function isFollowing(id) {
-  return readFollows().some((f) => f.id === id);
-}
 function addMailto(u) {
   try {
     const url = new URL(u);
@@ -82,6 +72,24 @@ async function bootstrap() {
   const followingBtn   = document.getElementById("refreshFollowingBtn");
   const followListEl   = document.getElementById("followedList");
   const followUpdates  = document.getElementById("followedUpdates");
+
+  function setupFollowingUI() {
+    loadFollowingFeed();
+    followingBtn?.addEventListener("click", loadFollowingFeed);
+    if (followListEl) {
+      followListEl.addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-unfollow]");
+        if (!btn) return;
+        const id = btn.getAttribute("data-unfollow");
+        try {
+          await api(`/api/follows/${encodeURIComponent(id)}`, { method: "DELETE" });
+          await loadFollowingFeed();
+        } catch {
+          alert("Failed to unfollow. Please try again.");
+        }
+      });
+    }
+  }
 
   try {
     // --- Session ---
@@ -229,25 +237,6 @@ async function bootstrap() {
         } catch { alert("Failed to clear library."); }
       };
     }
-
-    // --- Following (local) ---
-    await loadFollowingFeed();
-    followingBtn?.addEventListener("click", loadFollowingFeed);
-    if (followListEl) {
-      followListEl.addEventListener("click", (e) => {
-        const btn = e.target.closest("[data-unfollow]");
-        if (!btn) return;
-        const id = btn.getAttribute("data-unfollow");
-        const next = readFollows().filter((f) => f.id !== id);
-        saveFollows(next);
-        renderFollowedAuthors(next);
-        loadFollowingFeed();
-      });
-    }
-
-    // --- Claims / Merge UI (existing feature) ---
-    await renderClaimsUI();
-
   } catch (e) {
     // Not logged in yet (or error): keep prior behaviour
     console.warn(e);
@@ -265,6 +254,12 @@ async function bootstrap() {
     if (loginBtn) loginBtn.style.display = "inline-flex";
     if (logoutBtn) logoutBtn.style.display = "none";
   }
+
+  // Always wire up local following (works even when not signed in)
+  setupFollowingUI();
+
+  // --- Claims / Merge UI (existing feature) ---
+  try { await renderClaimsUI(); } catch (e) { console.warn(e); }
 }
 
 // --- helpers ---
@@ -333,6 +328,16 @@ function renderLibrarySidebar(listEl, items, libCountEl) {
 }
 
 // --- Following feed ---
+async function fetchFollows() {
+  try {
+    const list = await api("/api/follows");
+    return Array.isArray(list) ? list.map((f) => ({ id: f.author_id || f.id, name: f.name || f.author_id })) : [];
+  } catch (e) {
+    console.warn("Could not load follows", e);
+    return [];
+  }
+}
+
 async function fetchRecentWorksFor(authorId, limit = 2) {
   const url = addMailto(`${OPENALEX}/works?filter=authorships.author.id:${encodeURIComponent(authorId)}&sort=publication_date:desc&per_page=${limit}`);
   const res = await fetch(url);
@@ -373,7 +378,7 @@ function renderFollowUpdates(entries) {
 }
 
 async function loadFollowingFeed() {
-  const follows = readFollows();
+  const follows = await fetchFollows();
   renderFollowedAuthors(follows);
   const updatesBox = document.getElementById("followedUpdates");
   if (!follows.length) {

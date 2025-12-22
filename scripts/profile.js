@@ -14,6 +14,8 @@
   var currentSort = "date"; // "date" | "citations"
   var worksApiBaseUrl = null;
   var abortCtrl = null;
+  var isAuthed = false;
+  var serverFollows = [];
 
   // ---- Sidebar derived state ----
   var authorTail = null;                // "A12345"
@@ -41,14 +43,8 @@
     if(!url.searchParams.get("mailto")) url.searchParams.set("mailto", MAILTO);
     return url.toString();
   }
-  function readFollows(){
-    try{ return JSON.parse(localStorage.getItem(FOLLOW_KEY) || "[]"); }catch(e){ return []; }
-  }
-  function saveFollows(list){
-    localStorage.setItem(FOLLOW_KEY, JSON.stringify(list));
-  }
   function isFollowing(id){
-    return readFollows().some(function(f){ return f.id === id; });
+    return serverFollows.some(function(f){ return f.id === id || f.author_id === id; });
   }
   async function getJSON(url){
     var withMt = addMailto(url);
@@ -510,25 +506,52 @@
       btn.textContent = following ? "Following" : "Follow";
       btn.classList.toggle("btn-secondary", !following);
       btn.classList.toggle("btn-success", following);
-      if (status) status.textContent = following ? "Updates will show on your Home page." : "";
+      if (status) status.textContent = following ? "Updates will show on your Home page." : (isAuthed ? "" : "Sign in to follow.");
     }
     refresh();
-    btn.onclick = function(){
-      var list = readFollows();
-      var exists = list.some(function(f){ return f.id === authorTail; });
-      if (exists){
-        list = list.filter(function(f){ return f.id !== authorTail; });
-      } else {
-        list.push({ id: authorTail, name: author.display_name || authorTail });
+    btn.onclick = async function(){
+      if (!isAuthed){
+        if (status) status.textContent = "Sign in with ORCID to follow.";
+        location.href = "/auth/orcid/login";
+        return;
       }
-      saveFollows(list);
-      refresh();
+      var following = isFollowing(authorTail);
+      try{
+        if (following){
+          await fetch("/api/follows/"+encodeURIComponent(authorTail), { method:"DELETE", credentials:"include" });
+          serverFollows = serverFollows.filter(function(f){ return (f.id||f.author_id) !== authorTail; });
+        } else {
+          await fetch("/api/follows", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type":"application/json" },
+            body: JSON.stringify({ author_id: authorTail, name: author.display_name || authorTail })
+          });
+          serverFollows.push({ id: authorTail, name: author.display_name || authorTail });
+        }
+        refresh();
+      } catch(e){
+        if (status) status.textContent = "Could not update follow. Try again.";
+        console.error(e);
+      }
     };
   }
 
   // ---- Boot ----
   async function boot(){
     try{
+      try{
+        await fetch("/api/me", { credentials: "include" });
+        isAuthed = true;
+        try{
+          var fl = await fetch("/api/follows", { credentials: "include" });
+          if (fl.ok){
+            var list = await fl.json();
+            serverFollows = Array.isArray(list) ? list.map(function(f){ return ({ id: f.author_id || f.id, name: f.name || f.author_id }); }) : [];
+          }
+        }catch(_){}
+      }catch(_){ isAuthed = false; serverFollows = []; }
+
       var raw = getParam("id");
       var id = normalizeAuthorId(raw);
       var authorId = id || "A1969205033"; // fallback example

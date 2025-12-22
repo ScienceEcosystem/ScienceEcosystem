@@ -88,6 +88,18 @@ async function pgInit() {
     );
   `);
 
+  // New: followed authors
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS followed_authors (
+      orcid TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (orcid, author_id),
+      CONSTRAINT fk_user_follow FOREIGN KEY (orcid) REFERENCES users(orcid) ON DELETE CASCADE
+    );
+  `);
+
   // New: collections + collection_items
   await pool.query(`
     CREATE TABLE IF NOT EXISTS collections (
@@ -237,6 +249,27 @@ async function claimAdd(orcid, author_id) {
 }
 async function claimDel(orcid, author_id) {
   await pool.query(`DELETE FROM claimed_authors WHERE orcid=$1 AND author_id=$2`, [orcid, author_id]);
+}
+
+// Follows
+async function followsList(orcid) {
+  const { rows } = await pool.query(
+    `SELECT author_id, name, EXTRACT(EPOCH FROM created_at)::bigint AS created_at
+     FROM followed_authors WHERE orcid=$1 ORDER BY created_at DESC`,
+    [orcid]
+  );
+  return rows;
+}
+async function followAdd(orcid, author_id, name) {
+  await pool.query(
+    `INSERT INTO followed_authors (orcid, author_id, name)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (orcid, author_id) DO UPDATE SET name = EXCLUDED.name`,
+    [orcid, author_id, name]
+  );
+}
+async function followDel(orcid, author_id) {
+  await pool.query(`DELETE FROM followed_authors WHERE orcid=$1 AND author_id=$2`, [orcid, author_id]);
 }
 async function mergeAdd(orcid, primary_id, merged_id) {
   await pool.query(
@@ -422,6 +455,41 @@ app.delete("/api/library", async (req, res) => {
   if (!sess) return res.status(401).json({ error: "Not signed in" });
   await libraryClear(sess.orcid);
   res.status(204).end();
+});
+
+// Followed authors (requires login)
+app.get("/api/follows", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    res.json(await followsList(sess.orcid));
+  } catch (e) {
+    console.error("GET /api/follows failed:", e);
+    res.status(500).json({ error: "Failed to load follows" });
+  }
+});
+
+app.post("/api/follows", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { author_id, name } = req.body || {};
+  if (!author_id) return res.status(400).json({ error: "author_id required" });
+  try {
+    await followAdd(sess.orcid, String(author_id), String(name || author_id));
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /api/follows failed:", e);
+    res.status(500).json({ error: "Failed to save follow" });
+  }
+});
+
+app.delete("/api/follows/:authorId", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    await followDel(sess.orcid, String(req.params.authorId));
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE /api/follows/:authorId failed:", e);
+    res.status(500).json({ error: "Failed to remove follow" });
+  }
 });
 
 /* ---------------------------
