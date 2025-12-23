@@ -67,6 +67,18 @@ const journalState = {
   defaultCount: 6
 };
 
+function buildJournalPageUrl(journal) {
+  const rawId = journal.openAlexId || journal.id || "";
+  let tail = "";
+  if (/^https?:\/\//i.test(rawId)) {
+    tail = rawId.split("/").filter(Boolean).pop() || "";
+  } else if (/^S\d+$/i.test(rawId)) {
+    tail = rawId;
+  }
+  if (tail) return `journal.html?id=${encodeURIComponent(tail)}`;
+  return `journal.html?name=${encodeURIComponent(journal.name)}`;
+}
+
 const disciplineKeywords = [
   { key: "Biology", words: ["bio", "genome", "cell", "molecular", "genetic", "protein", "microbio"] },
   { key: "Medicine", words: ["clinical", "medicine", "trial", "patient", "healthcare"] },
@@ -185,12 +197,13 @@ function renderRecommendations(problemText, filters) {
       "Check review timelines",
       "Confirm preprint policy"
     ].map(t => `<span class="badge">${t}</span>`).join("");
+    const journalUrl = buildJournalPageUrl(journal);
     const card = document.createElement("article");
     card.className = "rec-card";
     card.innerHTML = `
       <div class="rec-head">
         <div>
-          <h3>${journal.name}</h3>
+          <h3><a href="${journalUrl}">${journal.name}</a></h3>
           <p class="muted small">${journal.discipline} · ${journal.publisher}</p>
         </div>
         <div class="pill-row">
@@ -224,11 +237,12 @@ function renderJournalGrid(list) {
     return;
   }
   list.forEach(j => {
+    const journalUrl = buildJournalPageUrl(j);
     const card = document.createElement("article");
     card.className = "tool-card";
     card.innerHTML = `
       <div class="tool-meta">
-        <h3>${j.name}</h3>
+        <h3><a href="${journalUrl}">${j.name}</a></h3>
         <div class="pill-row">
           <span class="badge">${j.discipline}</span>
           <span class="badge">${j.oaPolicy}</span>

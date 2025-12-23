@@ -40,6 +40,18 @@
     throw new Error("Unreachable");
   }
 
+  async function findSourceByName(name){
+    var q = (name||"").trim();
+    if (!q) return null;
+    var url = new URL(API + "/sources");
+    url.searchParams.set("search", q);
+    url.searchParams.set("per_page", "1");
+    url.searchParams.set("sort", "relevance_score:desc");
+    var data = await getJSON(url.toString());
+    if (Array.isArray(data.results) && data.results.length) return data.results[0];
+    return null;
+  }
+
   // ---- Charts (reuse simple SVG bars like profile.js) ----
   function niceTicks(maxValue, count){
     count = count || 4;
@@ -298,13 +310,37 @@
   async function boot(){
     try{
       var raw = getParam("id");
+      var nameParam = getParam("name");
       var tail = (raw||"").trim();
       try{ tail = decodeURIComponent(tail); }catch(_){}
       if (tail.indexOf("/")!==-1){ var seg=tail.split("/").filter(Boolean); tail=seg[seg.length-1]; }
 
-      if (!tail){ $("journalName").textContent = "No journal specified."; return; }
+      var src = null;
 
-      var src = await getJSON(API + "/sources/" + encodeURIComponent(tail));
+      if (!tail && nameParam){
+        src = await findSourceByName(nameParam);
+        if (!src){
+          if ($("journalName")) $("journalName").textContent = "Journal not found.";
+          if ($("publicationsList")) $("publicationsList").innerHTML = '<p class="muted">No journal matched "'+esc(nameParam)+'".</p>';
+          return;
+        }
+        tail = idTailFrom(get(src,"id",""));
+      }
+
+      if (!tail){
+        if ($("journalName")) $("journalName").textContent = nameParam ? "Journal not found." : "No journal specified.";
+        if ($("publicationsList")) $("publicationsList").innerHTML = '<p class="muted">Please open this page with a journal id or name.</p>';
+        return;
+      }
+
+      if (!src){
+        src = await getJSON(API + "/sources/" + encodeURIComponent(tail));
+      }
+
+      if (!src){
+        if ($("journalName")) $("journalName").textContent = "Journal not found.";
+        return;
+      }
       renderHeader(src);
       populatePublisher(src);
       renderTrends(src);

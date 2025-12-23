@@ -640,6 +640,43 @@
     }, true);
   }
 
+  // ---------- nav dropdowns ----------
+  function setupNavDropdowns(){
+    var dropdowns = Array.from(document.querySelectorAll(".nav-dropdown"));
+    if (!dropdowns.length) return;
+
+    function close(dd){
+      dd.classList.remove("open");
+      var btn = dd.querySelector(".nav-dropdown-toggle");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+    }
+
+    dropdowns.forEach(function(dd){
+      var btn = dd.querySelector(".nav-dropdown-toggle");
+      if (!btn) return;
+      btn.addEventListener("click", function(e){
+        e.preventDefault();
+        var isOpen = dd.classList.toggle("open");
+        btn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      });
+      dd.addEventListener("keydown", function(e){
+        if (e.key === "Escape"){
+          close(dd);
+          btn.focus();
+        }
+      });
+    });
+
+    document.addEventListener("click", function(e){
+      dropdowns.forEach(function(dd){
+        if (!dd.classList.contains("open")) return;
+        if (dd.contains(e.target)) return;
+        close(dd);
+      });
+    });
+  }
+  setupNavDropdowns();
+
   // ---------- export ----------
   (globalThis.SE ??= {}).components = {
     renderPaperCard: renderPaperCard,
