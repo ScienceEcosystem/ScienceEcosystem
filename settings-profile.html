@@ -122,21 +122,10 @@
     function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");}
     function linesToArray(text){return (text||"").split("\n").map(s=>s.trim()).filter(Boolean);}
     function arrayToLines(arr){return (arr||[]).join("\n");}
-    const LOCAL_KEY = "se_profile_draft";
     async function load(){
       let me;
-      try{
-        me=await api("/api/me");
-      }catch{
-        const local = localStorage.getItem(LOCAL_KEY);
-        if (local){
-          me = JSON.parse(local);
-          document.getElementById("msg").textContent="Loaded local draft (not signed in or API unavailable).";
-        } else {
-          document.getElementById("msg").textContent="Not signed in. Edits will save locally only.";
-          me = {};
-        }
-      }
+      try{ me=await api("/api/me"); }
+      catch{ document.getElementById("msg").textContent="Please sign in with ORCID to edit your profile."; return; }
       document.getElementById("name").value = me.name||"";
       document.getElementById("affiliation").value = me.affiliation||"";
       document.getElementById("bio").value = me.bio||"";
@@ -160,9 +149,8 @@
       try{
         await api("/api/settings/profile",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
         msg.textContent="Saved.";
-      }catch{
-        localStorage.setItem(LOCAL_KEY, JSON.stringify(body));
-        msg.textContent="API unavailable; saved locally on this device.";
+      }catch(e){
+        msg.textContent="Failed to save. Please ensure you are logged in.";
       }
     }
     window.addEventListener("DOMContentLoaded", ()=>{
