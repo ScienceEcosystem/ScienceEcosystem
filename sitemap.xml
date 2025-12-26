@@ -1,13 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://scienceecosystem.org/</loc>
-    <lastmod>2025-09-22</lastmod>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://scienceecosystem.org/about/</loc>
-    <lastmod>2025-09-22</lastmod>
-  </url>
-  <!-- Add every important page: /papers/, each /paper/{id}, /datasets/, /journals/{slug}, etc. -->
+  <url><loc>https://scienceecosystem.org/</loc><lastmod>2025-12-26</lastmod><priority>1.0</priority></url>
+  <url><loc>https://scienceecosystem.org/about.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/data-code.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/funders.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/funding-collaboration.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/groups.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/institute.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/integrations.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/journal-finder.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/journal.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/library.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/material.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/materials.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/materials-new.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/news.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/open-peer-review.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/open-science.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/paper.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/profile.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/profiles-orcid.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/project.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/projects.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/projects-new.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/publisher.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/research-integrity.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/research-tools.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/search.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/settings-identity.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/settings-notifications.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/settings-privacy.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/settings-profile.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/topic.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/topics.html</loc><lastmod>2025-12-26</lastmod></url>
+  <url><loc>https://scienceecosystem.org/user-profile.html</loc><lastmod>2025-12-26</lastmod></url>
 </urlset>
