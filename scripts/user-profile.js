@@ -27,7 +27,7 @@ function escapeHtml(s) {
 }
 
 function fmtDate(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
@@ -112,7 +112,7 @@ async function bootstrap() {
         <div>
           <h1 style="margin:.25rem 0 0;">${escapeHtml(me.name || "Your Home")}</h1>
           <p style="margin:.25rem 0;">
-            <strong>ORCID:</strong> ${me.orcid ? `<a href="${orcidUrl}" target="_blank" rel="noopener">${me.orcid}</a>` : "—"}
+            <strong>ORCID:</strong> ${me.orcid ? `<a href="${orcidUrl}" target="_blank" rel="noopener">${me.orcid}</a>` : "-"}
             &nbsp;&nbsp; ${me.affiliation ? `| <strong>Affiliation:</strong> ${escapeHtml(me.affiliation)}` : ""}
           </p>
           <p id="syncStatus" class="muted" style="margin:.25rem 0;">Synchronisation status: <span id="syncText">Loading…</span></p>
@@ -131,10 +131,10 @@ async function bootstrap() {
       const ident = await api("/api/identity/status"); // { orcid:true, github:false, scholar:false, osf:false, zenodo:false, last_sync:iso }
       const bits = [];
       bits.push(`${ident.orcid ? "✅" : "⚠️"} ORCID`);
-      if ("github" in ident)  bits.push(`${ident.github ? "✅" : "—"} GitHub`);
-      if ("scholar" in ident) bits.push(`${ident.scholar ? "✅" : "—"} Google Scholar`);
-      if ("osf" in ident)     bits.push(`${ident.osf ? "✅" : "—"} OSF`);
-      if ("zenodo" in ident)  bits.push(`${ident.zenodo ? "✅" : "—"} Zenodo`);
+      if ("github" in ident)  bits.push(`${ident.github ? "✅" : "-"} GitHub`);
+      if ("scholar" in ident) bits.push(`${ident.scholar ? "✅" : "-"} Google Scholar`);
+      if ("osf" in ident)     bits.push(`${ident.osf ? "✅" : "-"} OSF`);
+      if ("zenodo" in ident)  bits.push(`${ident.zenodo ? "✅" : "-"} Zenodo`);
       identityBox.innerHTML = `
         <p style="margin:.25rem 0;">${bits.join(" &middot; ")}</p>
         <p class="muted" style="margin:.25rem 0;">Last sync: ${fmtDate(ident.last_sync)}</p>
@@ -232,7 +232,7 @@ async function bootstrap() {
         if (!confirm("Remove all items from your library?")) return;
         try {
           await api("/api/library", { method: "DELETE" });
-          [libRecent, libToRead, libStarred, libraryList].forEach(ul => { if (ul) ul.innerHTML = "<li>—</li>"; });
+          [libRecent, libToRead, libStarred, libraryList].forEach(ul => { if (ul) ul.innerHTML = "<li>-</li>"; });
           if (libCountEl) libCountEl.textContent = "0";
         } catch { alert("Failed to clear library."); }
       };
@@ -280,7 +280,7 @@ function hasLabel(item, label) {
 
 function fillBucket(ul, items, dateKey) {
   if (!ul) return;
-  if (!items || !items.length) { ul.innerHTML = `<li class="muted">—</li>`; return; }
+  if (!items || !items.length) { ul.innerHTML = `<li class="muted">-</li>`; return; }
   ul.innerHTML = items.map(i => `
     <li>
       <a href="paper.html?id=${encodeURIComponent(i.id)}">${escapeHtml(i.title || "Untitled")}</a>

@@ -56,7 +56,7 @@
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
         <div>
           <h1 id="projTitle" style="margin:0;">Loading project…</h1>
-          <p id="projMeta" class="muted" style="margin:.25rem 0 0;">—</p>
+          <p id="projMeta" class="muted" style="margin:.25rem 0 0;">-</p>
         </div>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
           <a class="btn" id="btnNewMaterial" href="materials-new.html">Add material</a>
@@ -72,7 +72,7 @@
         <!-- Overview -->
         <section class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
           <h2 style="margin-top:0;">Overview</h2>
-          <div id="projDesc" class="prose">—</div>
+          <div id="projDesc" class="prose">-</div>
           <div id="aimsWrap" style="margin-top:1rem; display:none;">
             <h3 style="margin:0 0 .5rem;">Aims</h3>
             <ul id="projAims" class="list"></ul>
@@ -136,8 +136,8 @@
         <!-- Meta -->
         <section class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
           <h3 style="margin-top:0;">Project meta</h3>
-          <p id="projStage" style="margin:.25rem 0;">—</p>
-          <p class="muted" id="projTimes" style="margin:.25rem 0;">—</p>
+          <p id="projStage" style="margin:.25rem 0;">-</p>
+          <p class="muted" id="projTimes" style="margin:.25rem 0;">-</p>
         </section>
 
         <!-- Team -->
@@ -154,8 +154,8 @@
         <!-- Integrations -->
         <section class="panel" style="background:#fff; padding:1rem; border-radius:10px;">
           <h3 style="margin-top:0;">Integrations</h3>
-          <p id="intRepo" class="muted" style="margin:.25rem 0;">GitHub: —</p>
-          <p id="intStore" class="muted" style="margin:.25rem 0;">Cloud folder: —</p>
+          <p id="intRepo" class="muted" style="margin:.25rem 0;">GitHub: -</p>
+          <p id="intStore" class="muted" style="margin:.25rem 0;">Cloud folder: -</p>
           <a class="btn btn-small" href="integrations.html">Manage mappings</a>
         </section>
       </aside>
@@ -197,7 +197,7 @@
     // --- small utilities ---
     function qs(k){ return new URLSearchParams(location.search).get(k); }
     function esc(s){ return String(s ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
-    function fmtDate(iso){ if(!iso) return "—"; const d=new Date(iso); return d.toLocaleString(); }
+    function fmtDate(iso){ if(!iso) return "-"; const d=new Date(iso); return d.toLocaleString(); }
     function badge(txt){ return '<span class="badge" style="display:inline-block; padding:.1rem .4rem; border-radius:999px; background:#eef; color:#223;">'+esc(txt)+'</span>'; }
     async function api(path,opts){
       const r=await fetch(path,{credentials:"include", headers:{ "Content-Type":"application/json" }, ...(opts||{})});
@@ -220,7 +220,7 @@
       const metaBits = [];
       if (PROJECT?.stage) metaBits.push(badge(PROJECT.stage));
       if (PROJECT?.open_tasks!=null) metaBits.push(badge(String(PROJECT.open_tasks)+' open tasks'));
-      document.getElementById("projMeta").innerHTML = metaBits.join(" ") || "—";
+      document.getElementById("projMeta").innerHTML = metaBits.join(" ") || "-";
 
       document.getElementById("projDesc").textContent = PROJECT?.summary || "No description yet.";
 
@@ -233,11 +233,11 @@
         aimsWrap.style.display = "none";
       }
 
-      document.getElementById("projStage").innerHTML = 'Stage: ' + (PROJECT?.stage ? "<strong>"+esc(PROJECT.stage)+"</strong>" : "—");
+      document.getElementById("projStage").innerHTML = 'Stage: ' + (PROJECT?.stage ? "<strong>"+esc(PROJECT.stage)+"</strong>" : "-");
       document.getElementById("projTimes").textContent = 'Created: ' + fmtDate(PROJECT?.created_at) + ' · Last active: ' + fmtDate(PROJECT?.last_active);
 
-      document.getElementById("intRepo").innerHTML  = 'GitHub: ' + (PROJECT?.repo ? '<a href="https://github.com/'+esc(PROJECT.repo)+'" target="_blank" rel="noopener">'+esc(PROJECT.repo)+'</a>' : '—');
-      document.getElementById("intStore").innerHTML = 'Cloud folder: ' + (PROJECT?.store_name ? esc(PROJECT.store_name) : '—');
+      document.getElementById("intRepo").innerHTML  = 'GitHub: ' + (PROJECT?.repo ? '<a href="https://github.com/'+esc(PROJECT.repo)+'" target="_blank" rel="noopener">'+esc(PROJECT.repo)+'</a>' : '-');
+      document.getElementById("intStore").innerHTML = 'Cloud folder: ' + (PROJECT?.store_name ? esc(PROJECT.store_name) : '-');
     }
 
     function renderTasks(){
@@ -258,7 +258,7 @@
             '<div style="min-width:0;">' +
               '<strong>'+esc(t.title||"Task")+'</strong>' +
               '<span class="muted"> · '+esc(t.assignee || "unassigned")+'</span>' +
-              '<span class="muted"> · due '+(t.due_at ? fmtDate(t.due_at) : "—")+'</span>' +
+              '<span class="muted"> · due '+(t.due_at ? fmtDate(t.due_at) : "-")+'</span>' +
             '</div>' +
             '<div style="display:flex; gap:.5rem; align-items:center;">' +
               '<select data-id="'+esc(t.id)+'" class="taskStatus input" style="min-width:140px;">' +

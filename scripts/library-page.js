@@ -338,10 +338,10 @@
   // Only show first author's last name in main table
   function firstAuthorLastName(authStr){
     const s=(authStr||"").trim();
-    if(!s) return "—";
+    if(!s) return "-";
     // Split list of authors on common separators
     let first = s.split(/;| and | & /i)[0].trim();
-    if(!first) return "—";
+    if(!first) return "-";
     // If stored as "Last, First"
     if(first.includes(",")){
       first = first.split(",")[0].trim();
@@ -349,7 +349,7 @@
       const parts = first.split(/\s+/);
       if(parts.length) first = parts[parts.length-1];
     }
-    return first || "—";
+    return first || "-";
   }
 
   function renderTable(){
@@ -375,9 +375,9 @@
         ? `<div>${it.tags.map(t=>`<span class="tag-chip">${esc(t)}</span>`).join("")}</div>` : "";
       const authorsDisplay = firstAuthorLastName(it.authors);
       const authors = cols.has("authors")?`<td>${esc(authorsDisplay)}${tagsHtml}</td>`:"";
-      const year    = cols.has("year")   ?`<td>${esc(it.year??"—")}</td>`:"";
+      const year    = cols.has("year")   ?`<td>${esc(it.year??"-")}</td>`:"";
       return `<tr data-id="${esc(it.id)}">
-        <td>${esc(it.title||"—")}</td>
+        <td>${esc(it.title||"-")}</td>
         ${authors}${year}
       </tr>`;
     }).join("");
@@ -419,8 +419,8 @@
       <div>
         <div style="padding:.75rem 1rem;">
           <h4 style="margin:0 0 .25rem 0;">${esc(item.title)}</h4>
-          <p class="muted" style="margin:.25rem 0;">${esc(item.authors||"—")}</p>
-          <p class="meta"><strong>${esc(item.year??"—")}</strong> · ${esc(item.venue||"—")}</p>
+          <p class="muted" style="margin:.25rem 0;">${esc(item.authors||"-")}</p>
+          <p class="meta"><strong>${esc(item.year??"-")}</strong> · ${esc(item.venue||"-")}</p>
           <p style="display:flex;gap:.5rem;flex-wrap:wrap;">
             ${chip(doiUrl,"DOI")}
             ${chip(item.openalex_url,"OpenAlex")}
@@ -435,7 +435,7 @@
           </div>
           <div class="panel" style="padding:.5rem; margin-top:.5rem;">
             <strong>Abstract</strong>
-            <p style="margin:.25rem 0;">${esc(item.abstract||"—")}</p>
+            <p style="margin:.25rem 0;">${esc(item.abstract||"-")}</p>
           </div>
           ${Array.isArray(item.tags)&&item.tags.length?`
             <div class="panel" style="padding:.5rem; margin-top:.5rem;">

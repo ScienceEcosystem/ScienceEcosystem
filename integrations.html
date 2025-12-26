@@ -156,12 +156,12 @@
           <h3 style="margin-top:0;">${esc(p.title)}</h3>
           <label class="label">GitHub repository</label>
           <select class="input" data-project="${esc(p.id)}" data-kind="repo">
-            <option value="">—</option>
+            <option value="">-</option>
             ${repos.map(r=>`<option value="${esc(r.full_name)}" ${p.repo===r.full_name?"selected":""}>${esc(r.full_name)}</option>`).join("")}
           </select>
           <label class="label" style="margin-top:.5rem;">Cloud folder</label>
           <select class="input" data-project="${esc(p.id)}" data-kind="store">
-            <option value="">—</option>
+            <option value="">-</option>
             ${stores.map(s=>`<option value="${esc(s.id)}" ${p.store_id===s.id?"selected":""}>${esc(s.name)}</option>`).join("")}
           </select>
         </div>

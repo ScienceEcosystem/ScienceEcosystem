@@ -121,7 +121,7 @@
     return ct.includes("application/json") ? res.json() : res.text();
   }
   function escapeHtml(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
-  function fmtDate(iso){ if(!iso) return "—"; const d=new Date(iso); return d.toLocaleString(undefined,{dateStyle:"medium", timeStyle:"short"}); }
+  function fmtDate(iso){ if(!iso) return "-"; const d=new Date(iso); return d.toLocaleString(undefined,{dateStyle:"medium", timeStyle:"short"}); }
 
   async function load() {
     const loginBtn=document.getElementById("orcidLoginBtn");

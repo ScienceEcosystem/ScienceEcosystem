@@ -33,7 +33,7 @@
   }
   async function fetchJSON(url, opts) {
     const res = await fetch(url, Object.assign({ headers: { Accept: "application/json" } }, opts || {}));
-    if (!res.ok) throw new Error(res.status + " " + res.statusText + " — " + url);
+    if (!res.ok) throw new Error(res.status + " " + res.statusText + " - " + url);
     return await res.json();
   }
 
@@ -412,7 +412,7 @@
 
   async function loadInfobox(topic) {
     let html = "";
-    html += `<div class="stat"><div class="stat-value" style="font-weight:700;">${escapeHtml(topic.display_name || "—")}</div></div>`;
+    html += `<div class="stat"><div class="stat-value" style="font-weight:700;">${escapeHtml(topic.display_name || "-")}</div></div>`;
     if (topic.description) html += `<div class="muted" style="margin-top:.25rem;">${escapeHtml(topic.description)}</div>`;
     const links = [];
     if (topic.id) links.push(`<a href="${topic.id}" target="_blank" rel="noopener">OpenAlex</a>`);
@@ -743,10 +743,10 @@
       topicSubtitle.textContent = "";
       wikiArticle.innerHTML = "<p class='muted'>We could not load the article at this time.</p>";
       referencesList.innerHTML = "";
-      topicPeople.innerHTML = '<li class="muted">—</li>';
-      relatedBlock.innerHTML = '<li class="muted">—</li>';
-      infoboxDom.textContent = "—";
-      trendSparkline.innerHTML = '<div class="muted">—</div>';
+      topicPeople.innerHTML = '<li class="muted">-</li>';
+      relatedBlock.innerHTML = '<li class="muted">-</li>';
+      infoboxDom.textContent = "-";
+      trendSparkline.innerHTML = '<div class="muted">-</div>';
     }
   }
 

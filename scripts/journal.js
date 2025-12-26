@@ -177,7 +177,7 @@
 
     if ($("journalPublisher")) $("journalPublisher").textContent = "Loading publisher…";
 
-    var type = get(src,"type","—");
+    var type = get(src,"type","-");
     var issn_l = get(src,"issn_l",null);
     var issns = Array.isArray(get(src,"issn",[])) ? get(src,"issn",[]) : [];
     if ($("journalTypeIssn")){
@@ -218,7 +218,7 @@
       parts.push((src.display_name||"This journal")+" has "+(get(src,"works_count",0)||0).toLocaleString()+" works");
       var cit = get(src,"cited_by_count",0)||0;
       if (cit) parts.push(" and "+cit.toLocaleString()+" total citations");
-      parts.push(". Type: "+(type||"—")+".");
+      parts.push(". Type: "+(type||"-")+".");
       if (oa) parts.push(" Open Access journal.");
       if (doaj) parts.push(" Indexed in DOAJ.");
       var pubName = get(src,"publisher",null) || get(src,"host_organization_name",null);
@@ -231,7 +231,7 @@
       var items = [];
       items.push('<li><span>Open Access</span><strong>'+(oa?"Yes":"No")+'</strong></li>');
       items.push('<li><span>DOAJ</span><strong>'+(doaj?"Yes":"No")+'</strong></li>');
-      items.push('<li><span>Type</span><strong>'+esc(type||"—")+'</strong></li>');
+      items.push('<li><span>Type</span><strong>'+esc(type||"-")+'</strong></li>');
       if (issn_l) items.push('<li><span>ISSN-L</span><strong>'+esc(issn_l)+'</strong></li>');
       if (issns.length) items.push('<li><span>ISSN</span><strong>'+esc(issns.join(", "))+'</strong></li>');
       if (homepage) items.push('<li><span>Homepage</span><strong><a href="'+esc(homepage)+'" target="_blank" rel="noopener">Visit</a></strong></li>');

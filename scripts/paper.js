@@ -304,7 +304,7 @@
   }
   function institutionsLinksHTML(authorships){
     var list = collectInstitutions(authorships);
-    if (!list.length) return { shortHtml: "—", allHtml: "—", moreCount: 0 };
+    if (!list.length) return { shortHtml: "-", allHtml: "-", moreCount: 0 };
     function render(item){
       if (item.idTail) return '<a href="institution.html?id='+encodeURIComponent(item.idTail)+'">'+escapeHtml(item.name)+'</a>';
       return escapeHtml(item.name);
@@ -355,7 +355,7 @@
         var g = grants[i];
         var fIdTail = g.funder ? idTailFrom(g.funder) : "";
         var name = g.funder_display_name || (fIdTail ? fIdTail : "Funder");
-        var label = escapeHtml(name) + (g.award_id ? (" — " + escapeHtml(g.award_id)) : "");
+        var label = escapeHtml(name) + (g.award_id ? (" - " + escapeHtml(g.award_id)) : "");
         if (fIdTail) items.push('<a href="funders.html?id='+encodeURIComponent(fIdTail)+'">'+label+'</a>');
         else items.push(label);
       }
@@ -465,13 +465,13 @@
     function stat(label, value){
       return '<div class="stat"><div class="stat-value">'+escapeHtml(String(value))+'</div><div class="stat-label">'+escapeHtml(label)+'</div></div>';
     }
-    return stat('Citations', citedBy) + stat('References used', refCount) + stat('Altmetric', '—');
+    return stat('Citations', citedBy) + stat('References used', refCount) + stat('Altmetric', '-');
   }
 
   // ---------- Journal & Quality (simplified + PubPeer/RW) ----------
   function renderJournalBlockSimple(p, source){
-    var journalName = get(source, 'display_name', null) || get(p, 'host_venue.display_name', null) || get(p, 'primary_location.source.display_name', '—');
-    var venueType  = get(source, 'type', get(p, 'primary_location.source.type', '—'));
+    var journalName = get(source, 'display_name', null) || get(p, 'host_venue.display_name', null) || get(p, 'primary_location.source.display_name', '-');
+    var venueType  = get(source, 'type', get(p, 'primary_location.source.type', '-'));
     var sourceTail = source ? idTailFrom(source.id) : sourceTailFromPaper(p);
     var journalLinkHtml = sourceTail
       ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'">'+escapeHtml(journalName)+'</a>'
@@ -872,7 +872,7 @@
     return ''
       + '<article class="result-card">'
         + '<h3 class="result-title"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+title+'</a>'+yr+'</h3>'
-        + '<p class="muted">'+escapeHtml(authors)+(authors && venue ? " — " : "")+escapeHtml(venue)+'</p>'
+        + '<p class="muted">'+escapeHtml(authors)+(authors && venue ? " - " : "")+escapeHtml(venue)+'</p>'
         + '<p class="chips">'+badge+'</p>'
       + '</article>';
   }

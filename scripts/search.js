@@ -238,7 +238,7 @@ function fallbackPaperCard(w){
   return `
     <article class="result-card">
       <h3 class="result-title"><a href="paper.html?id=${encodeURIComponent(id)}">${title}</a>${year}</h3>
-      <p class="muted">${escapeHtml(authors)}${authors && venue ? " — " : ""}${escapeHtml(venue)}</p>
+      <p class="muted">${escapeHtml(authors)}${authors && venue ? " - " : ""}${escapeHtml(venue)}</p>
       <p class="chips">${provenanceChips(w)}</p>
     </article>
   `;
@@ -293,7 +293,7 @@ function renderInstitutions(items) {
         const id = inst.id.split("/").pop();
         const country = inst.country_code ? inst.country_code.toUpperCase() : null;
         const works = Number.isFinite(inst.works_count) ? `${inst.works_count.toLocaleString()} works` : null;
-        const sub = [country, works].filter(Boolean).join(" · ") || "—";
+        const sub = [country, works].filter(Boolean).join(" · ") || "-";
         return `
           <li class="list-item list-card" onclick="location.href='institution.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(inst.display_name)}">
             <div class="title">${escapeHtml(inst.display_name)}</div>
@@ -557,7 +557,7 @@ async function runUnifiedSearch(){
     const papers = await fetchPapers(query, currentAuthorIds, currentPage, searchAbort.signal);
     renderPapers(papers);
 
-    // 2) The rest — sequential to avoid burst 429s
+    // 2) The rest - sequential to avoid burst 429s
     const topics = await fetchTopics(query, searchAbort.signal);
     renderTopics(topics);
 

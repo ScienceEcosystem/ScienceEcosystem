@@ -158,7 +158,7 @@
     var cites = inst.cited_by_count || 0;
     var span = (function(){
       var arr = Array.isArray(inst.counts_by_year) ? inst.counts_by_year.slice().sort(function(a,b){return a.year-b.year;}) : [];
-      if (!arr.length) return "—";
+      if (!arr.length) return "-";
       var min = arr[0].year, max = arr[arr.length-1].year;
       return (max - min + 1) + " yrs active";
     })();
@@ -195,7 +195,7 @@
     if (wiki) ids.push('<a href="'+wiki+'" target="_blank" rel="noopener">Wikipedia</a>');
     if (ids.length) lines.push('<p><strong>Identifiers:</strong> '+ids.join(" · ")+'</p>');
 
-    $("instAbout").innerHTML = lines.join("") || "—";
+    $("instAbout").innerHTML = lines.join("") || "-";
   }
 
   // ---- Works list (reusing components.js) ----

@@ -87,7 +87,7 @@
   function renderAuthorHeader(a){
     if ($("profileName")) $("profileName").textContent = a.display_name || "Unknown researcher";
 
-    // Main affiliation — link to institute page when possible
+    // Main affiliation - link to institute page when possible
     var lki = get(a,"last_known_institution", null);
     var lkis = Array.isArray(a.last_known_institutions) ? a.last_known_institutions : [];
     var mainAff = lki || lkis[0] || null;
@@ -488,7 +488,7 @@
     for (var i=0;i<arr.length;i++){ if (arr[i].max!=null && arr[i].max > lastActive) lastActive = arr[i].max; }
 
     dom.innerHTML = arr.map(function(x){
-      var range = "—";
+      var range = "-";
       if (x.min!=null && x.max!=null){
         range = (x.min === x.max) ? String(x.min) : (x.min + "–" + (x.max === lastActive ? "present" : x.max));
       } else if (x.min!=null){ range = String(x.min); } else if (x.max!=null){ range = String(x.max); }

@@ -81,7 +81,7 @@
           <div>
             <label class="label">Project (optional)</label>
             <select class="input" id="projectSelect">
-              <option value="">—</option>
+              <option value="">-</option>
             </select>
           </div>
         </div>
@@ -131,8 +131,8 @@
     function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");}
     async function loadProjects(){
       let select=document.getElementById("projectSelect");
-      try{const rows=await api("/api/projects?limit=100"); select.innerHTML='<option value="">—</option>'+rows.map(p=>`<option value="${esc(p.id)}">${esc(p.title)}</option>`).join("");}
-      catch{select.innerHTML='<option value="">—</option>';}
+      try{const rows=await api("/api/projects?limit=100"); select.innerHTML='<option value="">-</option>'+rows.map(p=>`<option value="${esc(p.id)}">${esc(p.title)}</option>`).join("");}
+      catch{select.innerHTML='<option value="">-</option>';}
     }
     async function create(){
       const msg=document.getElementById("msg");
