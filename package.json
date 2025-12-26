@@ -4,7 +4,8 @@
   "type": "module",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "sitemap": "node scripts/generate-sitemap.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.6",
