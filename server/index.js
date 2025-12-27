@@ -93,6 +93,14 @@ async function pgInit() {
     );
   `);
 
+  // Ensure legacy tables gain newer columns (idempotent)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS keywords TEXT[]`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS languages TEXT[]`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS links TEXT[]`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS visibility TEXT DEFAULT 'public'`);
+  await pool.query(`UPDATE users SET visibility='public' WHERE visibility IS NULL`);
+
   // New: followed authors
   await pool.query(`
     CREATE TABLE IF NOT EXISTS followed_authors (
@@ -440,10 +448,8 @@ app.get("/auth/orcid/callback", async (req, res) => {
       method: "POST",
       headers: {
         "Accept": "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": "Basic " + Buffer.from(`${ORCID_CLIENT_ID}:${ORCID_CLIENT_SECRET}`).toString("base64")
+        "Content-Type": "application/x-www-form-urlencoded"
       },
-      // ORCID accepts client credentials via Basic auth; include in body too for safety.
       body: (() => {
         const withClient = new URLSearchParams(form);
         withClient.set("client_id", ORCID_CLIENT_ID);
@@ -453,8 +459,8 @@ app.get("/auth/orcid/callback", async (req, res) => {
     });
     if (!tokenRes.ok) {
       const t = await tokenRes.text().catch(() => "");
-      console.error("ORCID token exchange failed:", tokenRes.status, t);
-      return sendAuthError(res, `Token exchange failed: ${tokenRes.status} ${t}`);
+      console.error("ORCID token exchange failed:", tokenRes.status, t, "redirect:", ORCID_REDIRECT_URI);
+      return sendAuthError(res, `Token exchange failed: ${tokenRes.status} ${t || "No response body."}`);
     }
 
     const token = await tokenRes.json();
