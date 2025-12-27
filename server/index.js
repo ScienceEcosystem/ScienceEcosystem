@@ -396,10 +396,21 @@ app.get("/auth/orcid/login", (req, res) => {
   return res.redirect(`${ORCID_BASE}/oauth/authorize?${params.toString()}`);
 });
 
+function sendAuthError(res, message) {
+  res.status(400).type("html").send(`
+    <!doctype html>
+    <html><body style="font-family:Arial,sans-serif;padding:2rem;">
+      <h2>Login error</h2>
+      <p>${message}</p>
+      <p><a href="/auth/orcid/login">Try logging in again</a> or go back to the <a href="/">home page</a>.</p>
+    </body></html>
+  `);
+}
+
 app.get("/auth/orcid/callback", async (req, res) => {
   const { code, error, error_description } = req.query;
-  if (error) return res.status(400).send(`ORCID error: ${String(error_description || error)}`);
-  if (!code) return res.status(400).send("Missing authorization code");
+  if (error) return sendAuthError(res, `ORCID error: ${String(error_description || error)}`);
+  if (!code) return sendAuthError(res, "Missing authorization code");
 
   const form = new URLSearchParams({
     client_id: ORCID_CLIENT_ID,
@@ -409,39 +420,44 @@ app.get("/auth/orcid/callback", async (req, res) => {
     redirect_uri: ORCID_REDIRECT_URI
   });
 
-  const tokenRes = await fetch(`${ORCID_BASE}/oauth/token`, {
-    method: "POST",
-    headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-    body: form
-  });
-  if (!tokenRes.ok) {
-    const t = await tokenRes.text().catch(() => "");
-    return res.status(400).send(`Token exchange failed: ${tokenRes.status} ${t}`);
-  }
-
-  const token = await tokenRes.json();
-  const orcid = token.orcid;
-  if (!orcid) return res.status(400).send("Token response missing ORCID iD");
-
-  // Fetch public profile (best-effort)
-  let name = null, affiliation = null;
   try {
-    const recRes = await fetch(`${ORCID_API_BASE}/${orcid}/record`, { headers: { Accept: "application/json" } });
-    if (recRes.ok) {
-      const rec = await recRes.json();
-      const person = rec?.person;
-      const given  = person?.name?.["given-names"]?.value || "";
-      const family = person?.name?.["family-name"]?.value || "";
-      const credit = person?.name?.["credit-name"]?.value || "";
-      name = (credit || `${given} ${family}`).trim() || null;
-      const emp = rec?.["activities-summary"]?.employments?.["employment-summary"]?.[0];
-      affiliation = emp?.organization?.name || null;
+    const tokenRes = await fetch(`${ORCID_BASE}/oauth/token`, {
+      method: "POST",
+      headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+      body: form
+    });
+    if (!tokenRes.ok) {
+      const t = await tokenRes.text().catch(() => "");
+      return sendAuthError(res, `Token exchange failed: ${tokenRes.status} ${t}`);
     }
-  } catch {}
 
-  await upsertUser({ orcid, name, affiliation });
-  await setSession(res, { orcid });
-  res.redirect("/user-profile.html");
+    const token = await tokenRes.json();
+    const orcid = token.orcid;
+    if (!orcid) return sendAuthError(res, "Token response missing ORCID iD");
+
+    // Fetch public profile (best-effort)
+    let name = null, affiliation = null;
+    try {
+      const recRes = await fetch(`${ORCID_API_BASE}/${orcid}/record`, { headers: { Accept: "application/json" } });
+      if (recRes.ok) {
+        const rec = await recRes.json();
+        const person = rec?.person;
+        const given  = person?.name?.["given-names"]?.value || "";
+        const family = person?.name?.["family-name"]?.value || "";
+        const credit = person?.name?.["credit-name"]?.value || "";
+        name = (credit || `${given} ${family}`).trim() || null;
+        const emp = rec?.["activities-summary"]?.employments?.["employment-summary"]?.[0];
+        affiliation = emp?.organization?.name || null;
+      }
+    } catch {}
+
+    await upsertUser({ orcid, name, affiliation });
+    await setSession(res, { orcid });
+    res.redirect("/user-profile.html");
+  } catch (e) {
+    console.error("ORCID callback failed:", e);
+    return sendAuthError(res, "Login failed. Please try again.");
+  }
 });
 
 /* ---------------------------
