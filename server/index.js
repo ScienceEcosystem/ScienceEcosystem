@@ -52,7 +52,12 @@ async function pgInit() {
     CREATE TABLE IF NOT EXISTS users (
       orcid TEXT PRIMARY KEY,
       name TEXT,
-      affiliation TEXT
+      affiliation TEXT,
+      bio TEXT,
+      keywords TEXT[],
+      languages TEXT[],
+      links TEXT[],
+      visibility TEXT DEFAULT 'public'
     );
 
     CREATE TABLE IF NOT EXISTS library_items (
@@ -198,16 +203,43 @@ function requireAuth(req, res) {
 /* ------------
    SQL helpers
 -------------*/
-async function upsertUser({ orcid, name, affiliation }) {
+async function upsertUser({ orcid, name, affiliation, bio = null, keywords = null, languages = null, links = null, visibility = null }) {
   await pool.query(
-    `INSERT INTO users (orcid, name, affiliation)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (orcid) DO UPDATE SET name = EXCLUDED.name, affiliation = EXCLUDED.affiliation`,
-    [orcid, name, affiliation]
+    `INSERT INTO users (orcid, name, affiliation, bio, keywords, languages, links, visibility)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (orcid) DO UPDATE SET
+       name = EXCLUDED.name,
+       affiliation = EXCLUDED.affiliation,
+       bio = COALESCE(EXCLUDED.bio, users.bio),
+       keywords = COALESCE(EXCLUDED.keywords, users.keywords),
+       languages = COALESCE(EXCLUDED.languages, users.languages),
+       links = COALESCE(EXCLUDED.links, users.links),
+       visibility = COALESCE(EXCLUDED.visibility, users.visibility)`,
+    [orcid, name, affiliation, bio, keywords, languages, links, visibility]
   );
 }
 async function getUser(orcid) {
-  const { rows } = await pool.query(`SELECT orcid, name, affiliation FROM users WHERE orcid = $1`, [orcid]);
+  const { rows } = await pool.query(
+    `SELECT orcid, name, affiliation, bio, keywords, languages, links, visibility FROM users WHERE orcid = $1`,
+    [orcid]
+  );
+  return rows[0] || null;
+}
+async function updateProfile(orcid, payload) {
+  const { name, affiliation, bio, keywords, languages, links, visibility } = payload;
+  const { rows } = await pool.query(
+    `UPDATE users SET
+      name=$2,
+      affiliation=$3,
+      bio=$4,
+      keywords=$5,
+      languages=$6,
+      links=$7,
+      visibility=$8
+     WHERE orcid=$1
+     RETURNING orcid, name, affiliation, bio, keywords, languages, links, visibility`,
+    [orcid, name, affiliation, bio, keywords, languages, links, visibility]
+  );
   return rows[0] || null;
 }
 async function libraryList(orcid) {
@@ -426,6 +458,28 @@ app.get("/api/me", async (req, res) => {
   const row = await getUser(sess.orcid);
   if (!row) return res.status(404).json({ error: "User not found" });
   res.json(row);
+});
+
+app.patch("/api/settings/profile", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const body = req.body || {};
+  const payload = {
+    name: body.name || null,
+    affiliation: body.affiliation || null,
+    bio: body.bio || null,
+    keywords: Array.isArray(body.keywords) ? body.keywords : [],
+    languages: Array.isArray(body.languages) ? body.languages : [],
+    links: Array.isArray(body.links) ? body.links : [],
+    visibility: body.visibility || "public"
+  };
+  try {
+    const updated = await updateProfile(sess.orcid, payload);
+    res.json(updated || payload);
+  } catch (e) {
+    console.error("PATCH /api/settings/profile failed:", e);
+    res.status(500).json({ error: "Failed to save profile" });
+  }
 });
 
 app.get("/api/library", async (req, res) => {
