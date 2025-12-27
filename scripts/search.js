@@ -209,8 +209,17 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
       return true;
     });
 
-    if (currentFilter === "citations") merged.sort((a,b)=> (b.cited_by_count||0)-(a.cited_by_count||0));
-    else if (currentFilter === "year") merged.sort((a,b)=> (b.publication_year||0)-(a.publication_year||0));
+    if (currentFilter === "citations") {
+      merged.sort((a,b)=> {
+        const diff = (b.cited_by_count||0)-(a.cited_by_count||0);
+        return currentOrder === "asc" ? -diff : diff;
+      });
+    } else if (currentFilter === "year") {
+      merged.sort((a,b)=> {
+        const diff = (b.publication_year||0)-(a.publication_year||0);
+        return currentOrder === "asc" ? -diff : diff;
+      });
+    }
 
     return merged;
   } catch (err) {
@@ -400,11 +409,17 @@ function renderPapers(works, append = false) {
       <h2 style="display:flex; align-items:center; justify-content:space-between; gap:.75rem;">
         <span>Papers <span class="muted">(${totalResults.toLocaleString()})</span></span>
         <div id="filters" style="display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;">
-          <label>Sort by: 
+          <label>Sort by:
             <select id="paperFilter" onchange="changeFilter(this.value)">
               <option value="relevance"${currentFilter==='relevance'?' selected':''}>Relevance</option>
               <option value="citations"${currentFilter==='citations'?' selected':''}>Citations</option>
               <option value="year"${currentFilter==='year'?' selected':''}>Year</option>
+            </select>
+          </label>
+          <label>Order:
+            <select id="orderFilter" onchange="changeOrder(this.value)">
+              <option value="desc"${currentOrder==='desc'?' selected':''}>High to low / Newest</option>
+              <option value="asc"${currentOrder==='asc'?' selected':''}>Low to high / Oldest</option>
             </select>
           </label>
           <div class="chips" id="facetChips" role="group" aria-label="Filters">
@@ -512,6 +527,11 @@ function changeFilter(filter) {
   setURLState(currentQuery, currentFilter);
   handleUnifiedSearch(true);
 }
+function changeOrder(order){
+  currentOrder = (order === "asc" ? "asc" : "desc");
+  setURLState(currentQuery, currentFilter);
+  handleUnifiedSearch(true);
+}
 
 /* ---------- Unified search flow (papers FIRST, sidebars AFTER) ---------- */
 const debouncedUnified = debounce(runUnifiedSearch, 300);
@@ -603,9 +623,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const s = params.get("sort");
     if (["relevance","citations","year"].includes(s)) {
       currentFilter = s;
-      if (pf) pf.value = s;
     }
   }
+  const of = $("orderFilter");
+  if (params.has("order")) {
+    const o = params.get("order");
+    if (["asc","desc"].includes(o)) currentOrder = o;
+  }
+  if (pf) pf.value = currentFilter;
+  if (of) of.value = currentOrder;
 
   if (params.has("q") && input) {
     input.value = params.get("q") || "";
