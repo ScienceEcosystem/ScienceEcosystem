@@ -392,7 +392,7 @@ app.get("/auth/orcid/login", (req, res) => {
     httpOnly: true,
     sameSite: "lax",
     secure: NODE_ENV === "production",
-    path: "/auth/orcid"
+    path: "/"
   });
 
   const params = new URLSearchParams({
@@ -427,11 +427,9 @@ app.get("/auth/orcid/callback", async (req, res) => {
   } catch (_e) {
     return sendAuthError(res, "Session expired. Please try logging in again.");
   }
-  res.clearCookie("orcid_oauth", { path: "/auth/orcid" });
+  res.clearCookie("orcid_oauth", { path: "/" });
 
   const form = new URLSearchParams({
-    client_id: ORCID_CLIENT_ID,
-    client_secret: ORCID_CLIENT_SECRET,
     grant_type: "authorization_code",
     code,
     redirect_uri: ORCID_REDIRECT_URI
@@ -440,8 +438,18 @@ app.get("/auth/orcid/callback", async (req, res) => {
   try {
     const tokenRes = await fetch(`${ORCID_BASE}/oauth/token`, {
       method: "POST",
-      headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-      body: form
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": "Basic " + Buffer.from(`${ORCID_CLIENT_ID}:${ORCID_CLIENT_SECRET}`).toString("base64")
+      },
+      // ORCID accepts client credentials via Basic auth; include in body too for safety.
+      body: (() => {
+        const withClient = new URLSearchParams(form);
+        withClient.set("client_id", ORCID_CLIENT_ID);
+        withClient.set("client_secret", ORCID_CLIENT_SECRET);
+        return withClient;
+      })()
     });
     if (!tokenRes.ok) {
       const t = await tokenRes.text().catch(() => "");
