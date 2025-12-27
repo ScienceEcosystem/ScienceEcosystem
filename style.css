@@ -539,7 +539,7 @@ body {
   align-items:center;
 }
 
-.result-card.paper-card .card-footer-row{
+.result-card.paper-card .paper-actions-row{
   display:flex;
   justify-content:space-between;
   align-items:center;
@@ -547,7 +547,7 @@ body {
   flex-wrap:wrap;
   margin-top:.75rem;
 }
-.result-card.paper-card .meta-links{
+.result-card.paper-card .paper-actions-row .chip-row{
   display:flex;
   gap:.5rem;
   flex-wrap:wrap;

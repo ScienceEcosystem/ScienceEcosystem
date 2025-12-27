@@ -329,11 +329,10 @@
 
     var chips = [];
     var doiHref = doiUrl(doi);
+    var oaPDF = get(work,"best_oa_location.url_for_pdf",null) || get(work,"primary_location.pdf_url",null) || get(work,"open_access.oa_url",null);
+    if (oaPDF) chips.push('<a class="badge badge-oa" href="'+oaPDF+'" target="_blank" rel="noopener">PDF</a>');
     if (doiHref) chips.push('<a class="badge" href="'+doiHref+'" target="_blank" rel="noopener">DOI</a>');
     if (work.id) chips.push('<a class="badge" href="'+work.id+'" target="_blank" rel="noopener">OpenAlex</a>');
-
-    var oaPDF = get(work,"best_oa_location.url_for_pdf",null) || get(work,"primary_location.pdf_url",null) || get(work,"open_access.oa_url",null);
-    if (oaPDF) chips.unshift('<a class="badge badge-oa" href="'+oaPDF+'" target="_blank" rel="noopener">PDF</a>');
 
     var citeData = collectCiteData(work);
     function attr(v){ return v ? escapeHtml(String(v)) : ""; }
@@ -360,19 +359,18 @@
       '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+journalLinkHTML(work)+
         ' · <span title="Times this work has been cited">Cited by '+escapeHtml(String(cited))+'</span></p>'+
       '<p class="authors"><strong>Authors:</strong> '+authors+'</p>'+
-      '<p class="abstract">'+
-        (short ? '<span class="abs-short">'+short+'</span>' : '<span class="muted">No summary available.</span>')+
-        (hasMore ? ' <button class="link-btn" data-role="toggle-abs">Show more</button>' : '')+
-        (hasMore ? '<span class="abs-full">'+full+'</span>' : '')+
-      '</p>'+
-      '<p class="chips" data-chips>'+chips.join(" ")+'</p>'+
-      '<div class="card-footer-row">'+
-        '<div class="meta-links muted">'+metaLinksHtml+'</div>'+
+      '<div class="paper-actions-row">'+
+        '<div class="chip-row">'+chips.join(" ")+'</div>'+
         '<div class="card-actions">'+
           '<button class="btn btn-secondary btn-save" title="Add to Library" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
           '<button class="btn btn-secondary btn-cite" title="Cite this paper" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'+
         '</div>'+
       '</div>'+
+      '<p class="abstract">'+
+        (short ? '<span class="abs-short">'+short+'</span>' : '<span class="muted">No summary available.</span>')+
+        (hasMore ? ' <button class="link-btn" data-role="toggle-abs">Show more</button>' : '')+
+        (hasMore ? '<span class="abs-full">'+full+'</span>' : '')+
+      '</p>'+
       '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '+
         'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+
     '</article>';
