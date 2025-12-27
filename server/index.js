@@ -387,11 +387,24 @@ app.use(express.static(staticRoot, {
    ORCID OAuth
 ----------------------------*/
 app.get("/auth/orcid/login", (req, res) => {
+  const state = crypto.randomBytes(16).toString("hex");
+  const codeVerifier = crypto.randomBytes(32).toString("hex");
+  const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
+  res.cookie("orcid_oauth", JSON.stringify({ state, codeVerifier }), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: NODE_ENV === "production",
+    path: "/auth/orcid"
+  });
+
   const params = new URLSearchParams({
     client_id: ORCID_CLIENT_ID,
     response_type: "code",
     scope: "/authenticate",
-    redirect_uri: ORCID_REDIRECT_URI
+    redirect_uri: ORCID_REDIRECT_URI,
+    state,
+    code_challenge_method: "S256",
+    code_challenge: codeChallenge
   });
   return res.redirect(`${ORCID_BASE}/oauth/authorize?${params.toString()}`);
 });
@@ -408,16 +421,27 @@ function sendAuthError(res, message) {
 }
 
 app.get("/auth/orcid/callback", async (req, res) => {
-  const { code, error, error_description } = req.query;
+  const { code, state, error, error_description } = req.query;
   if (error) return sendAuthError(res, `ORCID error: ${String(error_description || error)}`);
   if (!code) return sendAuthError(res, "Missing authorization code");
+  const oauthCookie = req.cookies?.orcid_oauth;
+  let verifier = null;
+  try {
+    const parsed = JSON.parse(oauthCookie || "{}");
+    if (parsed.state !== state) return sendAuthError(res, "State mismatch. Please try logging in again.");
+    verifier = parsed.codeVerifier;
+  } catch (_e) {
+    return sendAuthError(res, "Session expired. Please try logging in again.");
+  }
+  res.clearCookie("orcid_oauth", { path: "/auth/orcid" });
 
   const form = new URLSearchParams({
     client_id: ORCID_CLIENT_ID,
     client_secret: ORCID_CLIENT_SECRET,
     grant_type: "authorization_code",
     code,
-    redirect_uri: ORCID_REDIRECT_URI
+    redirect_uri: ORCID_REDIRECT_URI,
+    code_verifier: verifier
   });
 
   try {
