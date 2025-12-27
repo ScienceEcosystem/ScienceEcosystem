@@ -72,6 +72,7 @@ let currentQuery = "";
 let currentAuthorIds = [];
 let totalResults = 0;
 let currentFilter = "relevance"; // relevance | citations | year
+let currentOrder = "desc";       // desc | asc
 let searchAbort = null;
 
 // Facets
@@ -89,6 +90,7 @@ function setURLState(q, sort){
   const params = new URLSearchParams(location.search);
   if (q) params.set("q", q); else params.delete("q");
   if (sort) params.set("sort", sort); else params.delete("sort");
+  if (currentOrder && currentOrder !== "desc") params.set("order", currentOrder); else params.delete("order");
   history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
 }
 
@@ -177,8 +179,9 @@ function buildFilter(){
 }
 
 function serverSortParam(){
-  if (currentFilter === "citations") return "&sort=cited_by_count:desc";
-  if (currentFilter === "year") return "&sort=publication_year:desc";
+  const dir = currentOrder === "asc" ? "asc" : "desc";
+  if (currentFilter === "citations") return `&sort=cited_by_count:${dir}`;
+  if (currentFilter === "year") return `&sort=publication_year:${dir}`;
   return ""; // relevance = default
 }
 
@@ -587,7 +590,7 @@ function handleSearch(inputId) {
   if (!input) return;
   const query = input.value.trim();
   if (!query) return;
-  window.location.href = `search.html?q=${encodeURIComponent(query)}&sort=${encodeURIComponent(currentFilter)}`;
+  window.location.href = `search.html?q=${encodeURIComponent(query)}&sort=${encodeURIComponent(currentFilter)}&order=${encodeURIComponent(currentOrder)}`;
 }
 
 /* ---------- Init ---------- */

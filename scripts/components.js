@@ -337,6 +337,10 @@
 
     var citeData = collectCiteData(work);
     function attr(v){ return v ? escapeHtml(String(v)) : ""; }
+    var metaLinks = [];
+    if (doiHref) metaLinks.push('<a href="'+doiHref+'" target="_blank" rel="noopener">DOI</a>');
+    if (work.id) metaLinks.push('<a href="'+escapeHtml(work.id)+'" target="_blank" rel="noopener">OpenAlex</a>');
+    var metaLinksHtml = metaLinks.join(" · ");
 
     return ''+
     '<article class="result-card paper-card" ' +
@@ -362,9 +366,12 @@
         (hasMore ? '<span class="abs-full">'+full+'</span>' : '')+
       '</p>'+
       '<p class="chips" data-chips>'+chips.join(" ")+'</p>'+
-      '<div class="card-actions">'+
-        '<button class="btn btn-secondary btn-save" title="Add to Library" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
-        '<button class="btn btn-secondary btn-cite" title="Cite this paper" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'+
+      '<div class="card-footer-row">'+
+        '<div class="meta-links muted">'+metaLinksHtml+'</div>'+
+        '<div class="card-actions">'+
+          '<button class="btn btn-secondary btn-save" title="Add to Library" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
+          '<button class="btn btn-secondary btn-cite" title="Cite this paper" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'+
+        '</div>'+
       '</div>'+
       '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '+
         'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+

@@ -219,9 +219,9 @@ async function bootstrap() {
       if (libCountEl) libCountEl.textContent = String(libItems.length || 0);
 
       // Quick access buckets
-      fillBucket(libRecent, sortByDate(libItems).slice(0, 6), "saved_at");
-      fillBucket(libToRead, libItems.filter(i => hasLabel(i, "to-read")).slice(0, 6));
-      fillBucket(libStarred, libItems.filter(i => hasLabel(i, "starred")).slice(0, 6));
+      fillBucket(libRecent, sortByDate(libItems).slice(0, 3), "saved_at");
+      fillBucket(libToRead, libItems.filter(i => hasLabel(i, "to-read")).slice(0, 3));
+      fillBucket(libStarred, libItems.filter(i => hasLabel(i, "starred")).slice(0, 3));
 
       // Sidebar detailed list (with remove buttons intact)
       renderLibrarySidebar(libraryList, libItems, libCountEl);

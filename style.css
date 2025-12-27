@@ -532,11 +532,25 @@ body {
 
 /* ==== Card action bar: align right + equal heights ==== */
 .result-card.paper-card .card-actions{
-  margin-top:.75rem;
+  margin-top:0;
   display:flex;
   gap:.5rem;
   justify-content:flex-end;   /* right side */
   align-items:center;
+}
+
+.result-card.paper-card .card-footer-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:1rem;
+  flex-wrap:wrap;
+  margin-top:.75rem;
+}
+.result-card.paper-card .meta-links{
+  display:flex;
+  gap:.5rem;
+  flex-wrap:wrap;
 }
 
 /* Normalize both buttons to same size */
