@@ -388,9 +388,7 @@ app.use(express.static(staticRoot, {
 ----------------------------*/
 app.get("/auth/orcid/login", (req, res) => {
   const state = crypto.randomBytes(16).toString("hex");
-  const codeVerifier = crypto.randomBytes(32).toString("hex");
-  const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
-  res.cookie("orcid_oauth", JSON.stringify({ state, codeVerifier }), {
+  res.cookie("orcid_oauth", JSON.stringify({ state }), {
     httpOnly: true,
     sameSite: "lax",
     secure: NODE_ENV === "production",
@@ -402,9 +400,7 @@ app.get("/auth/orcid/login", (req, res) => {
     response_type: "code",
     scope: "/authenticate",
     redirect_uri: ORCID_REDIRECT_URI,
-    state,
-    code_challenge_method: "S256",
-    code_challenge: codeChallenge
+    state
   });
   return res.redirect(`${ORCID_BASE}/oauth/authorize?${params.toString()}`);
 });
@@ -425,11 +421,9 @@ app.get("/auth/orcid/callback", async (req, res) => {
   if (error) return sendAuthError(res, `ORCID error: ${String(error_description || error)}`);
   if (!code) return sendAuthError(res, "Missing authorization code");
   const oauthCookie = req.cookies?.orcid_oauth;
-  let verifier = null;
   try {
     const parsed = JSON.parse(oauthCookie || "{}");
     if (parsed.state !== state) return sendAuthError(res, "State mismatch. Please try logging in again.");
-    verifier = parsed.codeVerifier;
   } catch (_e) {
     return sendAuthError(res, "Session expired. Please try logging in again.");
   }
@@ -440,8 +434,7 @@ app.get("/auth/orcid/callback", async (req, res) => {
     client_secret: ORCID_CLIENT_SECRET,
     grant_type: "authorization_code",
     code,
-    redirect_uri: ORCID_REDIRECT_URI,
-    code_verifier: verifier
+    redirect_uri: ORCID_REDIRECT_URI
   });
 
   try {
@@ -452,6 +445,7 @@ app.get("/auth/orcid/callback", async (req, res) => {
     });
     if (!tokenRes.ok) {
       const t = await tokenRes.text().catch(() => "");
+      console.error("ORCID token exchange failed:", tokenRes.status, t);
       return sendAuthError(res, `Token exchange failed: ${tokenRes.status} ${t}`);
     }
 
@@ -480,7 +474,7 @@ app.get("/auth/orcid/callback", async (req, res) => {
     res.redirect("/user-profile.html");
   } catch (e) {
     console.error("ORCID callback failed:", e);
-    return sendAuthError(res, "Login failed. Please try again.");
+    return sendAuthError(res, `Login failed. Please try again. (${e.message || e})`);
   }
 });
 
