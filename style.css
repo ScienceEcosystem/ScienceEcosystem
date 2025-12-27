@@ -194,6 +194,10 @@ body {
 .search-wrap {
   display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem;
 }
+
+.sort-controls select {
+  font-size: .95rem;
+}
 .cta-buttons { margin-top: 1.25rem; }
 
 /* Brand wordmarks */

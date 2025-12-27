@@ -199,9 +199,9 @@
   }
 
   // ---- Works list (reusing components.js) ----
-  var currentPage = 1, totalWorksCount = 0, accumulatedWorks = [], currentSort = "date", worksApiBaseUrl = null, abortCtrl = null;
+  var currentPage = 1, totalWorksCount = 0, accumulatedWorks = [], currentSort = "date", currentOrder = "desc", worksApiBaseUrl = null, abortCtrl = null;
 
-  function sortParam(){ return currentSort==="citations" ? "cited_by_count:desc" : "publication_year:desc"; }
+  function sortParam(){ var dir = currentOrder === "asc" ? "asc" : "desc"; return currentSort==="citations" ? "cited_by_count:"+dir : "publication_year:"+dir; }
 
   async function fetchWorksPage(page, replace){
     if (!worksApiBaseUrl) return;
@@ -270,10 +270,19 @@
       await loadWorks(inst);
 
       var sortSel = $("instSort");
+      var orderSel = $("orderSort");
       if (sortSel){
         sortSel.value = "date";
         sortSel.addEventListener("change", async function(){
           currentSort = this.value==="citations" ? "citations" : "date";
+          currentPage = 1; accumulatedWorks = [];
+          await fetchWorksPage(currentPage, true);
+        });
+      }
+      if (orderSel){
+        orderSel.value = currentOrder;
+        orderSel.addEventListener("change", async function(){
+          currentOrder = (this.value==="asc" ? "asc" : "desc");
           currentPage = 1; accumulatedWorks = [];
           await fetchWorksPage(currentPage, true);
         });
