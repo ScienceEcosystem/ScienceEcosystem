@@ -367,8 +367,12 @@
   }
 
   async function loadTopPapers(conceptIdTail) {
+    const sortSel = $("topicSort");
+    const orderSel = $("topicOrder");
+    const sortField = (sortSel && sortSel.value === "date") ? "publication_year" : "cited_by_count";
+    const dir = (orderSel && orderSel.value === "asc") ? "asc" : "desc";
     try {
-      const data = await fetchOpenAlexJSON(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&sort=cited_by_count:desc&per_page=12`);
+      const data = await fetchOpenAlexJSON(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&sort=${sortField}:${dir}&per_page=12`);
       const works = Array.isArray(data.results) ? data.results : [];
       if (!works.length) { papersCards.innerHTML = '<p class="muted">No papers found.</p>'; return; }
       if (window.SE?.components?.renderPaperCard) {
@@ -708,6 +712,10 @@
       await loadReferences(idTail);
       await loadTopPapers(idTail);
       await loadTopAuthors(idTail);
+      const sortSel = $("topicSort");
+      const orderSel = $("topicOrder");
+      if (sortSel){ sortSel.addEventListener("change", ()=>loadTopPapers(idTail)); }
+      if (orderSel){ orderSel.addEventListener("change", ()=>loadTopPapers(idTail)); }
       await loadInfobox(topic);
       await loadTrend(idTail);
 

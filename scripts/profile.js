@@ -569,7 +569,7 @@
       var sortSel = $("pubSort");
       var orderSel = $("orderSort");
       if (sortSel) {
-        sortSel.value = "date";
+        sortSel.value = currentSort;
         sortSel.addEventListener("change", async function(){
           currentSort = this.value === "citations" ? "citations" : "date";
           currentPage = 1;

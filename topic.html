@@ -77,6 +77,18 @@
 
         <section class="topic-section" id="topPapersBlock">
           <h2>Influential papers</h2>
+          <div class="sort-controls" style="margin-bottom:.5rem;">
+            <label for="topicSort">Sort by:</label>
+            <select id="topicSort">
+              <option value="citations" selected>Citations</option>
+              <option value="date">Year</option>
+            </select>
+            <label for="topicOrder">Order:</label>
+            <select id="topicOrder">
+              <option value="desc" selected>High to low / Newest</option>
+              <option value="asc">Low to high / Oldest</option>
+            </select>
+          </div>
           <div id="papersCards"></div>
         </section>
       </section>

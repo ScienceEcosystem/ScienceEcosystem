@@ -12,6 +12,7 @@
   var accumulated = [];
   var totalWorksCount = 0;
   var currentSort = "date";
+  var currentOrder = "desc";
   var abortCtrl = null;
 
   // ---- Utils ----

@@ -361,8 +361,13 @@ body {
 
 /* Sidebar charts and timeline */
 .charts-wrap { overflow-x: auto; }
+.charts-wrap { display: flex; flex-direction: column; gap: 1rem; }
 .chart-block { max-width: 100%; overflow-x: auto; margin-bottom: 1rem; }
-.chart-block h4 { margin: 0 0 .25rem; }
+.chart-block h4 { margin: 0 0 .35rem; font-size: 1rem; }
+.chart-block .chart-svg { width: 100%; height: auto; min-height: 220px; }
+@media (max-width: 640px){
+  .chart-block .chart-svg { min-height: 180px; }
+}
 
 .timeline { list-style: none; margin: 0; padding-left: 0.75rem; border-left: 2px solid #e5e7eb; }
 .timeline li { position: relative; margin: 0 0 .75rem 0; padding-left: .75rem; }

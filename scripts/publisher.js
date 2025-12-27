@@ -12,6 +12,7 @@
   var totalWorksCount = 0;
   var accumulated = [];
   var currentSort = "date";
+  var currentOrder = "desc";
   var abortCtrl = null;
 
   function $(id){ return document.getElementById(id); }
@@ -141,7 +142,10 @@
     var list=$("publicationsList"); if (list) list.innerHTML="";
     var pag=$("pubsPagination"); if (pag) pag.innerHTML="";
   }
-  function sortParam(){ return currentSort==="citations" ? "cited_by_count:desc" : "publication_year:desc"; }
+  function sortParam(){
+    var dir = currentOrder === "asc" ? "asc" : "desc";
+    return currentSort==="citations" ? "cited_by_count:"+dir : "publication_year:"+dir;
+  }
 
   async function fetchWorksPage(page, replace){
     if (!worksApiBaseUrl) return;
@@ -247,10 +251,19 @@
       await fetchWorksPage(currentPage, true);
 
       var sortSel = $("pubSort");
+      var orderSel = $("orderSort");
       if (sortSel){
-        sortSel.value = "date";
+        sortSel.value = currentSort;
         sortSel.addEventListener("change", async function(){
           currentSort = this.value === "citations" ? "citations" : "date";
+          currentPage = 1; accumulated = [];
+          await fetchWorksPage(currentPage, true);
+        });
+      }
+      if (orderSel){
+        orderSel.value = currentOrder;
+        orderSel.addEventListener("change", async function(){
+          currentOrder = (this.value === "asc" ? "asc" : "desc");
           currentPage = 1; accumulated = [];
           await fetchWorksPage(currentPage, true);
         });
