@@ -1,13 +1,10 @@
-<!-- =========================
-FILE: research-tools.html
-========================== -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Research Tools Guide | ScienceEcosystem</title>
-  <meta name="description" content="Describe your research task and get matched to the right open science tools. Explore an overview of tools by purpose, ease-of-use, and cost." />
+  <title>Funder Finder | ScienceEcosystem</title>
+  <meta name="description" content="Describe your project and constraints to get funder matches with scope, eligibility, amount, and timelines." />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
@@ -53,55 +50,100 @@ FILE: research-tools.html
 
   <main id="main" class="container">
     <header class="page-header hero">
-      <h1>Research Tools Guide</h1>
-      <p class="lead">Describe your task and get matched to the best tool. Compare options by purpose, ease of use, and cost.</p>
+      <h1>Funder Finder</h1>
+      <p class="lead">Describe your project and constraints. We’ll suggest funders and calls by scope, amount, region, and career stage.</p>
     </header>
 
-    <section id="overview" class="panel">
-      <div class="overview-header">
+    <section class="panel">
+      <div class="finder-grid">
         <div>
-          <h2>Overview of research tools</h2>
-          <p class="muted">Compare tools by purpose, cost, ease, and strengths. Use filters to narrow quickly.</p>
-        </div>
-        <div class="finder-grid" style="margin-top: 1rem;">
-          <div>
-            <h3>Describe your task</h3>
-            <label class="visually-hidden" for="problemInput">Describe your research task</label>
-            <textarea id="problemInput" class="input" rows="3" placeholder="e.g., “I need to clean messy CSV data and run quick visualizations with teammates.”"></textarea>
-            <div class="finder-actions">
-              <button class="btn btn-primary" id="findToolsBtn" type="button">Find tools</button>
-              <p class="muted small">Search by keywords, categories, or costs. We highlight open, reproducible options first.</p>
-            </div>
-          </div>
-          <div>
-            <div class="finder-note">
-              <h3>How we pick tools</h3>
-              <ul>
-                <li>Match to the task you describe.</li>
-                <li>Favor open-source or free-first options.</li>
-                <li>Highlight ease of use and active communities.</li>
-              </ul>
-            </div>
+          <h2>Describe your project</h2>
+          <p>Mention field, type (e.g., pilot, RCT, infrastructure), region, career stage, and budget.</p>
+          <label class="visually-hidden" for="funderProblem">Describe your project</label>
+          <textarea id="funderProblem" class="input" rows="4" placeholder="e.g., Early-career PI, clinical AI pilot in EU, need up to $500k, open science friendly."></textarea>
+          <div class="finder-actions">
+            <button class="btn btn-primary" id="findFundersBtn" type="button">Find funders</button>
+            <p class="muted small">Always verify eligibility, amounts, and deadlines on the funder site.</p>
           </div>
         </div>
+        <div>
+          <div class="finder-note">
+            <h3>How we suggest</h3>
+            <ul>
+              <li>Match discipline + project type first.</li>
+              <li>Respect region, budget, and career stage signals.</li>
+              <li>Surface open science–friendly options.</li>
+              <li>Highlight fit notes and verification checklist.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
 
-        <div class="filter-bar" style="margin-top: 1rem;">
-          <label class="visually-hidden" for="categoryFilter">Filter by category</label>
-          <select id="categoryFilter" class="input select">
-            <option value="">All categories</option>
+      <div class="filter-bar" style="margin-top:1rem; flex-wrap:wrap; gap:.75rem;">
+        <div class="filter-group">
+          <label class="visually-hidden" for="regionFilter">Region</label>
+          <select id="regionFilter" class="input select">
+            <option value="">Any region</option>
           </select>
-          <label class="visually-hidden" for="costFilter">Filter by cost</label>
-          <select id="costFilter" class="input select">
-            <option value="">Any cost</option>
-            <option value="Free">Free</option>
-            <option value="Freemium">Freemium</option>
-            <option value="Paid">Paid</option>
+        </div>
+        <div class="filter-group">
+          <label class="visually-hidden" for="disciplineFilter">Discipline</label>
+          <select id="disciplineFilter" class="input select">
+            <option value="">All disciplines</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="visually-hidden" for="typeFilter">Project type</label>
+          <select id="typeFilter" class="input select">
+            <option value="">Any type</option>
+            <option value="pilot">Pilot/seed</option>
+            <option value="research">Research</option>
+            <option value="infrastructure">Infrastructure</option>
+            <option value="training">Training/mentorship</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="visually-hidden" for="careerFilter">Career stage</label>
+          <select id="careerFilter" class="input select">
+            <option value="">Any stage</option>
+            <option value="student">Student</option>
+            <option value="early">Early-career</option>
+            <option value="mid">Mid-career</option>
+            <option value="senior">Senior</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="visually-hidden" for="budgetFilter">Budget</label>
+          <select id="budgetFilter" class="input select">
+            <option value="">Any budget</option>
+            <option value="under100k">Under $100k</option>
+            <option value="100k-500k">$100k–$500k</option>
+            <option value="500k-1m">$500k–$1m</option>
+            <option value="over1m">Over $1m</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="visually-hidden" for="osFilter">Open science</label>
+          <select id="osFilter" class="input select">
+            <option value="">Any policy</option>
+            <option value="strong">Strong OS</option>
+            <option value="encouraged">Encouraged</option>
+            <option value="none">Not specified</option>
           </select>
         </div>
       </div>
 
+      <div id="funderRecommendations" class="recommendations" aria-live="polite"></div>
+    </section>
 
-      <div id="toolGrid" class="tool-grid"></div>
+    <section id="overview" class="panel">
+      <div class="overview-header">
+        <div>
+          <h2>Compare funders</h2>
+          <p class="muted">Filter by discipline, type, budget, region, and career stage. Check the verification checklist before applying.</p>
+        </div>
+      </div>
+      <div id="funderGrid" class="tool-grid"></div>
     </section>
   </main>
 
@@ -126,6 +168,6 @@ FILE: research-tools.html
   <script src="scripts/search.js" defer></script>
   <script src="scripts/components.js" defer></script>
   <script src="scripts/session.js" defer></script>
-  <script src="scripts/tools.js?v=1.1" defer></script>
+  <script src="scripts/funders.js" defer></script>
 </body>
 </html>
