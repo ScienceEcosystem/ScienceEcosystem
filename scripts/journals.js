@@ -1,5 +1,5 @@
 /* Journal Selection Guide */
-const journalCatalog = [
+let journalCatalog = [
   // General / high-prestige
   { id: "nature", name: "Nature", discipline: "Multidisciplinary", articleTypes: ["Research", "Short"], oaPolicy: "Hybrid", apcBand: "Over3500", speed: "Deliberate", ambition: "High", summary: "Flagship multidisciplinary journal with stringent novelty bar.", strengths: ["Prestige", "Broad reach", "News coverage"], bestFor: "Field-defining advances across science.", avoidIf: "Incremental work or narrow scope.", publisher: "Springer Nature", link: "https://www.nature.com/" },
   { id: "science", name: "Science", discipline: "Multidisciplinary", articleTypes: ["Research", "Short"], oaPolicy: "Hybrid", apcBand: "Over3500", speed: "Deliberate", ambition: "High", summary: "Top multidisciplinary journal with high selectivity.", strengths: ["Prestige", "Broad audience", "Rapid news pickup"], bestFor: "Breakthroughs of broad scientific interest.", avoidIf: "Specialized or incremental studies.", publisher: "AAAS", link: "https://www.science.org/" },
@@ -64,8 +64,43 @@ const journalCatalog = [
 ];
 
 const journalState = {
-  defaultCount: 6
+  defaultCount: 10
 };
+
+async function loadOpenAlexCatalog(){
+  try{
+    const res = await fetch("https://api.openalex.org/sources?per_page=200&sort=works_count:desc&mailto=info@scienceecosystem.org");
+    if (!res.ok) throw new Error(res.status+" "+res.statusText);
+    const data = await res.json();
+    const seen = new Set(journalCatalog.map(j=>j.id));
+    const mapped = (data.results||[]).map(s=>{
+      const tail = (s.id||"").split("/").pop();
+      return {
+        id: tail || s.id || s.display_name,
+        name: s.display_name || "Journal",
+        discipline: "Multidisciplinary",
+        articleTypes: ["Research"],
+        oaPolicy: s.is_oa ? "OA" : (s.is_in_doaj ? "OA" : "Hybrid"),
+        apcBand: "Unknown",
+        speed: "Unknown",
+        ambition: "Solid",
+        summary: s.summary || "Journal from OpenAlex.",
+        strengths: [
+          s.is_in_doaj ? "DOAJ listed" : "Publisher journal",
+          (s.is_oa || s.is_in_doaj) ? "OA friendly" : "Mixed access"
+        ],
+        bestFor: "General research in its scope.",
+        avoidIf: "Scope mismatch or closed access constraints.",
+        publisher: s.host_organization_name || "Publisher",
+        link: s.homepage_url || s.id || "#",
+        openAlexId: s.id
+      };
+    }).filter(j=>!seen.has(j.id));
+    journalCatalog = journalCatalog.concat(mapped);
+  }catch(e){
+    console.warn("OpenAlex catalog load failed:", e);
+  }
+}
 
 function buildJournalPageUrl(journal) {
   const rawId = journal.openAlexId || journal.id || "";
@@ -304,8 +339,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const input = document.getElementById("journalProblem");
   const btn = document.getElementById("findJournalsBtn");
 
-  populateDisciplineOptions();
-  renderJournalGrid(journalCatalog);
+  loadOpenAlexCatalog().then(()=>{
+    populateDisciplineOptions();
+    renderJournalGrid(journalCatalog);
+  }).catch(()=>{
+    populateDisciplineOptions();
+    renderJournalGrid(journalCatalog);
+  });
 
   btn?.addEventListener("click", () => {
     applyJournalFilters(input?.value || "");
