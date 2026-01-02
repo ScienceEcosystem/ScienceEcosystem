@@ -75,21 +75,32 @@ async function loadOpenAlexCatalog(){
     const seen = new Set(journalCatalog.map(j=>j.id));
     const mapped = (data.results||[]).map(s=>{
       const tail = (s.id||"").split("/").pop();
+      const topConcept = Array.isArray(s.x_concepts) && s.x_concepts.length
+        ? s.x_concepts.sort((a,b)=>(b.score||0)-(a.score||0))[0].display_name
+        : null;
+      const worksCount = s.works_count || 0;
+      const cited = s.cited_by_count || 0;
+      const oaStatus = s.is_oa ? "OA" : (s.is_in_doaj ? "OA" : "Hybrid");
+      const ambition = cited > 200000 ? "High" : cited > 20000 ? "Solid" : "Rapid";
+      const strengths = [
+        s.is_in_doaj ? "DOAJ listed" : "Publisher journal",
+        (s.is_oa || s.is_in_doaj) ? "OA friendly" : "Mixed access",
+        worksCount ? `${worksCount.toLocaleString()} works` : "Newer catalog entry"
+      ];
+      const summary = `${s.display_name || "Journal"} has ${worksCount.toLocaleString()} works and ${cited.toLocaleString()} citations in OpenAlex. OA: ${oaStatus}${s.is_in_doaj ? ", DOAJ listed" : ""}.`;
+
       return {
         id: tail || s.id || s.display_name,
         name: s.display_name || "Journal",
-        discipline: "Multidisciplinary",
+        discipline: topConcept || "Multidisciplinary",
         articleTypes: ["Research"],
-        oaPolicy: s.is_oa ? "OA" : (s.is_in_doaj ? "OA" : "Hybrid"),
+        oaPolicy: oaStatus,
         apcBand: "Unknown",
         speed: "Unknown",
-        ambition: "Solid",
-        summary: s.summary || "Journal from OpenAlex.",
-        strengths: [
-          s.is_in_doaj ? "DOAJ listed" : "Publisher journal",
-          (s.is_oa || s.is_in_doaj) ? "OA friendly" : "Mixed access"
-        ],
-        bestFor: "General research in its scope.",
+        ambition: ambition,
+        summary: summary,
+        strengths: strengths,
+        bestFor: "Research that fits the journal's scope and access policy.",
         avoidIf: "Scope mismatch or closed access constraints.",
         publisher: s.host_organization_name || "Publisher",
         link: s.homepage_url || s.id || "#",

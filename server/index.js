@@ -337,6 +337,26 @@ async function fetchJSON(url) {
   if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(()=>r.statusText)}`);
   return r.json();
 }
+
+// Simple HTML link extractor for known code/data hosts
+function extractLinks(html) {
+  const links = [];
+  const re = /href=["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    links.push(m[1]);
+  }
+  const allow = [
+    "github.com","gitlab.com","bitbucket.org","zenodo.org","figshare.com","figshare.com",
+    "osf.io","dataverse","dryad","codeocean","kaggle.com"
+  ];
+  return links.filter(h=>{
+    try {
+      const u = new URL(h, "https://example.com");
+      return allow.some(a=>u.hostname.includes(a));
+    } catch(_){ return false; }
+  });
+}
 function invertAbstract(idx){
   const words = [];
   Object.keys(idx||{}).forEach(word => {
@@ -557,6 +577,23 @@ app.delete("/api/library", async (req, res) => {
   if (!sess) return res.status(401).json({ error: "Not signed in" });
   await libraryClear(sess.orcid);
   res.status(204).end();
+});
+
+// Publisher landing links (code/data hosts)
+app.get("/api/paper/links", async (req, res) => {
+  const { url, doi } = req.query || {};
+  const target = url || (doi ? `https://doi.org/${doi}` : null);
+  if (!target) return res.status(400).json({ error: "url or doi required" });
+  try {
+    const r = await fetch(target, { headers: { "User-Agent":"ScienceEcosystemBot/1.0 (+https://scienceecosystem.org)" } });
+    if (!r.ok) return res.status(400).json({ error: `Fetch failed ${r.status}` });
+    const html = await r.text();
+    const links = extractLinks(html);
+    const unique = Array.from(new Set(links));
+    res.json(unique.map(h=>({ url: h, provenance:"Publisher page" })));
+  } catch (e) {
+    res.status(500).json({ error: String(e.message||e) });
+  }
 });
 
 // Followed authors (requires login)

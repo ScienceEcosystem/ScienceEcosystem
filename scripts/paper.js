@@ -238,6 +238,25 @@
     }); } catch(e){}
     try { (await fetchDataCiteBacklinks(doi)).forEach(function(r){ all.push(r); }); } catch(e){}
     try { (await fetchZenodoBacklinks(doi)).forEach(function(r){ all.push(r); }); } catch(e){}
+    // Publisher page scrape for code/data hosts
+    try {
+      var landing = paper.primary_location?.landing_page_url || paper.open_access?.oa_url || null;
+      var scrapeUrl = landing || (doi ? `https://doi.org/${encodeURIComponent(doi)}` : null);
+      if (scrapeUrl){
+        var resp = await fetch(`/api/paper/links?${doi ? ("doi="+encodeURIComponent(doi)) : ("url="+encodeURIComponent(scrapeUrl))}`);
+        if (resp.ok){
+          var links = await resp.json();
+          links.forEach(function(h){
+            all.push({
+              provenance: h.provenance || "Publisher page",
+              type: classifyROKind(h.url || ""),
+              title: h.url,
+              url: h.url
+            });
+          });
+        }
+      }
+    } catch(_) {}
 
     var dedup = uniqueByKey(all, function(x){
       return (x.doi && x.doi.toLowerCase()) || (String(x.title||"").toLowerCase()+"|"+String(x.url||"").toLowerCase());
@@ -1081,5 +1100,4 @@
 
   document.addEventListener("DOMContentLoaded", boot);
 })();
-
 
