@@ -4,10 +4,12 @@ import fetch from "node-fetch";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import pkg from "pg";
 const { Pool } = pkg;
+const fsp = fs.promises;
 
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
@@ -139,6 +141,99 @@ async function pgInit() {
       text TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+  `);
+
+  // Identity linking status
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS identity_links (
+      orcid TEXT PRIMARY KEY,
+      github BOOLEAN DEFAULT FALSE,
+      scholar BOOLEAN DEFAULT FALSE,
+      osf BOOLEAN DEFAULT FALSE,
+      zenodo BOOLEAN DEFAULT FALSE,
+      last_sync TIMESTAMPTZ
+    );
+  `);
+
+  // Projects + tasks + team
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id BIGSERIAL PRIMARY KEY,
+      orcid TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      summary TEXT,
+      stage TEXT DEFAULT 'in-progress',
+      last_active TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS projects_orcid_idx ON projects(orcid);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS project_tasks (
+      id BIGSERIAL PRIMARY KEY,
+      project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      orcid TEXT NOT NULL,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      assignee TEXT,
+      due_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS project_tasks_proj_idx ON project_tasks(project_id);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS project_team (
+      id BIGSERIAL PRIMARY KEY,
+      project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      orcid TEXT NOT NULL,
+      email TEXT NOT NULL,
+      role TEXT DEFAULT 'collaborator',
+      invited_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS project_team_proj_idx ON project_team(project_id);
+  `);
+
+  // Materials + files
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS materials (
+      id BIGSERIAL PRIMARY KEY,
+      orcid TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      project_id BIGINT REFERENCES projects(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      type TEXT DEFAULT 'material',
+      status TEXT DEFAULT 'draft',
+      description TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS materials_orcid_idx ON materials(orcid);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS material_files (
+      id BIGSERIAL PRIMARY KEY,
+      material_id BIGINT NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+      name TEXT,
+      url TEXT,
+      size BIGINT
+    );
+    CREATE INDEX IF NOT EXISTS material_files_mat_idx ON material_files(material_id);
+  `);
+
+  // Activity stream (user scoped)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id BIGSERIAL PRIMARY KEY,
+      orcid TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      scope TEXT NOT NULL DEFAULT 'all',
+      project_id BIGINT REFERENCES projects(id) ON DELETE CASCADE,
+      verb TEXT NOT NULL,
+      object TEXT,
+      link TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS activity_orcid_idx ON activity_log(orcid);
   `);
 
   // Extend library_items with cached metadata columns (idempotent)
@@ -326,6 +421,83 @@ async function mergeDel(orcid, primary_id, merged_id) {
   );
 }
 
+// Identity links
+async function getIdentity(orcid) {
+  const { rows } = await pool.query(
+    `INSERT INTO identity_links (orcid)
+     VALUES ($1)
+     ON CONFLICT (orcid) DO NOTHING
+     RETURNING orcid, github, scholar, osf, zenodo, last_sync`,
+    [orcid]
+  );
+  if (rows[0]) return rows[0];
+  const existing = await pool.query(
+    `SELECT orcid, github, scholar, osf, zenodo, last_sync FROM identity_links WHERE orcid=$1`,
+    [orcid]
+  );
+  return existing.rows[0] || { orcid, github:false, scholar:false, osf:false, zenodo:false, last_sync:null };
+}
+
+async function setIdentityField(orcid, field, value) {
+  const allowed = ["github","scholar","osf","zenodo"];
+  if (!allowed.includes(field)) throw new Error("Invalid identity field");
+  await pool.query(
+    `INSERT INTO identity_links (orcid, ${field})
+     VALUES ($1, $2)
+     ON CONFLICT (orcid) DO UPDATE SET ${field} = EXCLUDED.${field}`,
+    [orcid, !!value]
+  );
+}
+
+async function markIdentitySync(orcid) {
+  await pool.query(
+    `INSERT INTO identity_links (orcid, last_sync)
+     VALUES ($1, now())
+     ON CONFLICT (orcid) DO UPDATE SET last_sync = now()`,
+    [orcid]
+  );
+}
+
+// Projects + tasks + activity
+async function ownedProject(orcid, projectId) {
+  const { rows } = await pool.query(
+    `SELECT id, orcid, title, summary, stage, last_active
+     FROM projects WHERE id=$1 AND orcid=$2`,
+    [Number(projectId), orcid]
+  );
+  return rows[0] || null;
+}
+
+async function touchProject(projectId) {
+  await pool.query(`UPDATE projects SET last_active = now() WHERE id=$1`, [Number(projectId)]);
+}
+
+async function countOpenTasks(projectId) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS open_tasks FROM project_tasks WHERE project_id=$1 AND status NOT IN ('done','closed','completed')`,
+    [Number(projectId)]
+  );
+  return rows[0]?.open_tasks ?? 0;
+}
+
+async function logActivity(orcid, { scope = "all", project_id = null, verb, object, link = null }) {
+  if (!verb) return;
+  await pool.query(
+    `INSERT INTO activity_log (orcid, scope, project_id, verb, object, link)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [orcid, scope, project_id ? Number(project_id) : null, verb, object || null, link || null]
+  );
+}
+
+// Materials
+async function ownedMaterial(orcid, materialId) {
+  const { rows } = await pool.query(
+    `SELECT id, orcid, project_id, title, type, status, description, updated_at FROM materials WHERE id=$1 AND orcid=$2`,
+    [Number(materialId), orcid]
+  );
+  return rows[0] || null;
+}
+
 /* -----------------------------
    External APIs (OpenAlex/OA)
 ------------------------------*/
@@ -406,6 +578,7 @@ async function hydrateWorkMeta(idTail) {
 app.get("/health", (_req, res) => res.type("text").send("ok"));
 
 const staticRoot = path.resolve(__dirname, STATIC_DIR);
+const uploadDir = path.join(staticRoot, "uploads", "materials");
 app.use(express.static(staticRoot, {
   extensions: ["html"],
   maxAge: NODE_ENV === "production" ? "1h" : 0
@@ -513,6 +686,67 @@ app.get("/auth/orcid/callback", async (req, res) => {
 });
 
 /* ---------------------------
+   Upload helpers (materials)
+----------------------------*/
+async function parseMultipartForm(req, maxSize = 15 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const ctype = req.headers["content-type"] || "";
+    const boundaryMatch = ctype.match(/boundary=([^;]+)/i);
+    if (!boundaryMatch) return reject(new Error("Missing multipart boundary"));
+    const boundary = `--${boundaryMatch[1]}`;
+    const chunks = [];
+    let total = 0;
+
+    req.on("data", (chunk) => {
+      total += chunk.length;
+      if (total > maxSize) {
+        reject(new Error("Upload too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("error", reject);
+    req.on("end", () => {
+      const buffer = Buffer.concat(chunks);
+      const parts = buffer.toString("binary").split(boundary).filter(Boolean);
+      const fields = {};
+      const files = [];
+
+      for (const raw of parts) {
+        if (raw === "--\r\n" || raw === "--") continue;
+        const [rawHeaders, rawBody] = raw.split("\r\n\r\n");
+        if (!rawHeaders || !rawBody) continue;
+        const headerLines = rawHeaders.trim().split("\r\n").filter(Boolean);
+        const dispoLine = headerLines.find(l => l.toLowerCase().startsWith("content-disposition"));
+        if (!dispoLine) continue;
+        const nameMatch = dispoLine.match(/name="([^"]+)"/i);
+        const filenameMatch = dispoLine.match(/filename="([^"]*)"/i);
+        const content = rawBody.replace(/^\r\n/, "").replace(/\r\n--$/, "").replace(/\r\n$/, "");
+
+        if (filenameMatch && filenameMatch[1]) {
+          const buf = Buffer.from(content, "binary");
+          files.push({ field: nameMatch?.[1] || "file", filename: filenameMatch[1], buffer: buf, size: buf.length });
+        } else if (nameMatch) {
+          fields[nameMatch[1]] = content.trim();
+        }
+      }
+      resolve({ fields, files });
+    });
+  });
+}
+
+async function saveUploadedFile(file) {
+  if (!file?.buffer?.length) return null;
+  await fsp.mkdir(uploadDir, { recursive: true });
+  const safeBase = (file.filename || "file").replace(/[^\w.\-]/g, "_");
+  const fname = `${Date.now()}_${crypto.randomBytes(5).toString("hex")}_${safeBase}`;
+  const fullPath = path.join(uploadDir, fname);
+  await fsp.writeFile(fullPath, file.buffer);
+  return { name: file.filename || "file", url: `/uploads/materials/${fname}`, size: file.size || file.buffer.length };
+}
+
+/* ---------------------------
    Auth + existing Library API
 ----------------------------*/
 app.post("/auth/logout", async (req, res) => {
@@ -593,6 +827,109 @@ app.get("/api/paper/links", async (req, res) => {
     res.json(unique.map(h=>({ url: h, provenance:"Publisher page" })));
   } catch (e) {
     res.status(500).json({ error: String(e.message||e) });
+  }
+});
+
+/* ---------------------------
+   Identity + alerts + activity
+----------------------------*/
+app.get("/api/identity/status", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const row = await getIdentity(sess.orcid);
+    res.json({
+      orcid: true,
+      github: !!row.github,
+      scholar: !!row.scholar,
+      osf: !!row.osf,
+      zenodo: !!row.zenodo,
+      last_sync: row.last_sync ? new Date(row.last_sync).toISOString() : null
+    });
+  } catch (e) {
+    console.error("GET /api/identity/status failed:", e);
+    res.status(500).json({ error: "Failed to load identity status" });
+  }
+});
+
+app.post("/api/identity/sync", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    await markIdentitySync(sess.orcid);
+    res.json({ ok: true, last_sync: new Date().toISOString() });
+  } catch (e) {
+    console.error("POST /api/identity/sync failed:", e);
+    res.status(500).json({ error: "Failed to sync" });
+  }
+});
+
+["github","scholar","osf","zenodo"].forEach(provider => {
+  app.post(`/auth/${provider}/disconnect`, async (req, res) => {
+    const sess = await requireAuth(req, res); if (!sess) return;
+    try {
+      await setIdentityField(sess.orcid, provider, false);
+      res.status(204).end();
+    } catch (e) {
+      console.error(`POST /auth/${provider}/disconnect failed:`, e);
+      res.status(500).json({ error: "Failed to disconnect" });
+    }
+  });
+});
+
+app.get("/api/alerts", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.id, t.title, t.due_at, t.project_id
+       FROM project_tasks t
+       JOIN projects p ON p.id = t.project_id
+       WHERE p.orcid=$1
+         AND t.due_at IS NOT NULL
+         AND t.status NOT IN ('done','closed','completed')
+       ORDER BY t.due_at ASC
+       LIMIT 30`,
+      [sess.orcid]
+    );
+    const alerts = rows.map(r => ({
+      id: r.id,
+      type: "task",
+      title: r.title,
+      due_at: r.due_at,
+      link: r.project_id ? `/project.html?id=${r.project_id}#tasks` : null
+    }));
+    res.json(alerts);
+  } catch (e) {
+    console.error("GET /api/alerts failed:", e);
+    res.status(500).json({ error: "Failed to load alerts" });
+  }
+});
+
+app.get("/api/activity", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const scope = req.query?.scope || "all";
+  const projectId = req.query?.project_id ? Number(req.query.project_id) : null;
+  try {
+    const params = [sess.orcid];
+    let where = "orcid = $1";
+    if (scope && scope !== "all") { params.push(scope); where += ` AND scope = $${params.length}`; }
+    if (projectId) { params.push(projectId); where += ` AND project_id = $${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT id, verb, object, link, created_at
+       FROM activity_log
+       WHERE ${where}
+       ORDER BY created_at DESC
+       LIMIT 40`,
+      params
+    );
+    res.json(rows.map(r => ({
+      id: r.id,
+      verb: r.verb,
+      object: r.object,
+      link: r.link,
+      when: r.created_at
+    })));
+  } catch (e) {
+    console.error("GET /api/activity failed:", e);
+    res.status(500).json({ error: "Failed to load activity" });
   }
 });
 
@@ -813,6 +1150,363 @@ app.post("/api/notes", async (req, res) => {
 app.delete("/api/notes/:id", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   await pool.query(`DELETE FROM notes WHERE orcid=$1 AND id=$2`, [sess.orcid, Number(req.params.id)]);
+  res.status(204).end();
+});
+
+/* ---------------------------
+   Projects API
+----------------------------*/
+app.get("/api/projects", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const q = (req.query?.q || "").trim();
+  const stage = (req.query?.stage || "").trim();
+  const sort = (req.query?.sort || "recent").trim();
+  const limit = Math.min(Math.max(Number(req.query?.limit) || 20, 1), 100);
+
+  try {
+    const params = [sess.orcid];
+    let where = "p.orcid = $1";
+    if (q) { params.push(`%${q}%`); where += ` AND (p.title ILIKE $${params.length} OR p.summary ILIKE $${params.length})`; }
+    if (stage) { params.push(stage); where += ` AND p.stage = $${params.length}`; }
+
+    let orderBy = "p.last_active DESC";
+    if (sort === "title") orderBy = "p.title ASC";
+    if (sort === "tasks") orderBy = "open_tasks DESC, p.last_active DESC";
+
+    const sql = `
+      SELECT p.id, p.title, p.summary, p.stage, p.last_active,
+             COALESCE(t.open_tasks, 0) AS open_tasks
+      FROM projects p
+      LEFT JOIN (
+        SELECT project_id, COUNT(*) FILTER (WHERE status NOT IN ('done','closed','completed')) AS open_tasks
+        FROM project_tasks
+        GROUP BY project_id
+      ) t ON t.project_id = p.id
+      WHERE ${where}
+      ORDER BY ${orderBy}
+      LIMIT ${limit};
+    `;
+
+    const { rows } = await pool.query(sql, params);
+    res.json(rows);
+  } catch (e) {
+    console.error("GET /api/projects failed:", e);
+    res.status(500).json({ error: "Failed to load projects" });
+  }
+});
+
+app.post("/api/projects", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const body = req.body || {};
+  const title = (body.title || "").trim();
+  const summary = (body.summary || "").trim() || null;
+  const stage = (body.stage || "in-progress").trim();
+  if (!title) return res.status(400).json({ error: "title required" });
+  try {
+    const out = await pool.query(
+      `INSERT INTO projects (orcid, title, summary, stage)
+       VALUES ($1,$2,$3,$4)
+       RETURNING id, title, summary, stage, last_active`,
+      [sess.orcid, title, summary, stage]
+    );
+    await logActivity(sess.orcid, { scope: "project", project_id: out.rows[0].id, verb: "Created project", object: title, link: `/project.html?id=${out.rows[0].id}` });
+    res.status(201).json({ ...out.rows[0], open_tasks: 0 });
+  } catch (e) {
+    console.error("POST /api/projects failed:", e);
+    res.status(500).json({ error: "Failed to create project" });
+  }
+});
+
+app.get("/api/projects/:id", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const proj = await ownedProject(sess.orcid, req.params.id);
+  if (!proj) return res.status(404).json({ error: "Project not found" });
+  const open_tasks = await countOpenTasks(proj.id);
+  res.json({ ...proj, open_tasks });
+});
+
+// Tasks
+app.get("/api/projects/:id/tasks", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const proj = await ownedProject(sess.orcid, req.params.id);
+  if (!proj) return res.status(404).json({ error: "Project not found" });
+  const { rows } = await pool.query(
+    `SELECT id, title, status, assignee, due_at, created_at
+     FROM project_tasks
+     WHERE project_id=$1
+     ORDER BY created_at DESC`,
+    [proj.id]
+  );
+  res.json(rows);
+});
+
+app.post("/api/projects/:id/tasks", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const proj = await ownedProject(sess.orcid, req.params.id);
+  if (!proj) return res.status(404).json({ error: "Project not found" });
+  const body = req.body || {};
+  const title = (body.title || "").trim();
+  if (!title) return res.status(400).json({ error: "title required" });
+  const status = (body.status || "open").trim();
+  const assignee = (body.assignee || "").trim() || null;
+  const due_at = body.due_at ? new Date(body.due_at) : null;
+  try {
+    const out = await pool.query(
+      `INSERT INTO project_tasks (project_id, orcid, title, status, assignee, due_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING id, title, status, assignee, due_at, created_at`,
+      [proj.id, sess.orcid, title, status, assignee, due_at]
+    );
+    await touchProject(proj.id);
+    await logActivity(sess.orcid, { scope: "project", project_id: proj.id, verb: "Added task", object: title, link: `/project.html?id=${proj.id}#tasks` });
+    res.status(201).json(out.rows[0]);
+  } catch (e) {
+    console.error("POST /api/projects/:id/tasks failed:", e);
+    res.status(500).json({ error: "Failed to create task" });
+  }
+});
+
+app.patch("/api/projects/:id/tasks/:taskId", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const proj = await ownedProject(sess.orcid, req.params.id);
+  if (!proj) return res.status(404).json({ error: "Project not found" });
+  const body = req.body || {};
+  const fields = [];
+  const params = [];
+  if (body.status) { fields.push(`status=$${fields.length + 1}`); params.push(body.status); }
+  if (body.assignee !== undefined) { fields.push(`assignee=$${fields.length + 1}`); params.push(body.assignee || null); }
+  if (body.due_at !== undefined) { fields.push(`due_at=$${fields.length + 1}`); params.push(body.due_at ? new Date(body.due_at) : null); }
+  if (!fields.length) return res.status(400).json({ error: "No changes" });
+  params.push(proj.id, Number(req.params.taskId));
+  try {
+    const out = await pool.query(
+      `UPDATE project_tasks SET ${fields.join(", ")}, updated_at = now()
+       WHERE project_id=$${fields.length + 1} AND id=$${fields.length + 2}
+       RETURNING id, title, status, assignee, due_at, created_at`,
+      params
+    );
+    if (!out.rowCount) return res.status(404).json({ error: "Task not found" });
+    await touchProject(proj.id);
+    await logActivity(sess.orcid, { scope: "project", project_id: proj.id, verb: "Updated task", object: out.rows[0].title, link: `/project.html?id=${proj.id}#tasks` });
+    res.json(out.rows[0]);
+  } catch (e) {
+    console.error("PATCH /api/projects/:id/tasks failed:", e);
+    res.status(500).json({ error: "Failed to update task" });
+  }
+});
+
+app.delete("/api/projects/:id/tasks/:taskId", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const proj = await ownedProject(sess.orcid, req.params.id);
+  if (!proj) return res.status(404).json({ error: "Project not found" });
+  const del = await pool.query(
+    `DELETE FROM project_tasks WHERE project_id=$1 AND id=$2 RETURNING title`,
+    [proj.id, Number(req.params.taskId)]
+  );
+  if (!del.rowCount) return res.status(404).json({ error: "Task not found" });
+  await touchProject(proj.id);
+  await logActivity(sess.orcid, { scope: "project", project_id: proj.id, verb: "Deleted task", object: del.rows[0].title, link: `/project.html?id=${proj.id}#tasks` });
+  res.status(204).end();
+});
+
+// Team
+app.get("/api/projects/:id/team", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const proj = await ownedProject(sess.orcid, req.params.id);
+  if (!proj) return res.status(404).json({ error: "Project not found" });
+  const { rows } = await pool.query(
+    `SELECT id, email, role, invited_at
+     FROM project_team
+     WHERE project_id=$1
+     ORDER BY invited_at DESC`,
+    [proj.id]
+  );
+  const owner = await getUser(sess.orcid);
+  const ownerEntry = {
+    id: "owner",
+    name: owner?.name || sess.orcid,
+    email: owner?.links?.[0] || "",
+    role: "owner"
+  };
+  res.json([ownerEntry, ...rows.map(r => ({ id: r.id, email: r.email, role: r.role, invited_at: r.invited_at }))]);
+});
+
+app.post("/api/projects/:id/team", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const proj = await ownedProject(sess.orcid, req.params.id);
+  if (!proj) return res.status(404).json({ error: "Project not found" });
+  const email = (req.body?.email || "").trim();
+  const role = (req.body?.role || "collaborator").trim();
+  if (!email) return res.status(400).json({ error: "email required" });
+  await pool.query(
+    `INSERT INTO project_team (project_id, orcid, email, role)
+     VALUES ($1,$2,$3,$4)`,
+    [proj.id, sess.orcid, email, role]
+  );
+  await logActivity(sess.orcid, { scope: "project", project_id: proj.id, verb: "Invited teammate", object: email, link: `/project.html?id=${proj.id}` });
+  res.status(201).json({ ok: true });
+});
+
+// Project → materials
+app.get("/api/projects/:id/materials", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const proj = await ownedProject(sess.orcid, req.params.id);
+  if (!proj) return res.status(404).json({ error: "Project not found" });
+  const { rows } = await pool.query(
+    `SELECT id, title, type, status, updated_at
+     FROM materials
+     WHERE project_id=$1 AND orcid=$2
+     ORDER BY updated_at DESC`,
+    [proj.id, sess.orcid]
+  );
+  res.json(rows.map(r => ({ ...r, link: `/material.html?id=${r.id}` })));
+});
+
+/* ---------------------------
+   Materials API
+----------------------------*/
+app.get("/api/materials", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const q = (req.query?.q || "").trim().toLowerCase();
+  const type = (req.query?.type || "").trim();
+  const status = (req.query?.status || "").trim();
+  const limit = Math.min(Math.max(Number(req.query?.limit) || 50, 1), 200);
+  try {
+    const params = [sess.orcid];
+    let where = "orcid = $1";
+    if (q) { params.push(`%${q}%`); where += ` AND (LOWER(title) LIKE $${params.length} OR LOWER(type) LIKE $${params.length})`; }
+    if (type) { params.push(type); where += ` AND type = $${params.length}`; }
+    if (status) { params.push(status); where += ` AND status = $${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT id, title, type, status, updated_at
+       FROM materials
+       WHERE ${where}
+       ORDER BY updated_at DESC
+       LIMIT ${limit}`,
+      params
+    );
+    res.json(rows.map(r => ({ ...r, link: `/material.html?id=${r.id}` })));
+  } catch (e) {
+    console.error("GET /api/materials failed:", e);
+    res.status(500).json({ error: "Failed to load materials" });
+  }
+});
+
+app.get("/api/materials/:id", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const mat = await ownedMaterial(sess.orcid, req.params.id);
+  if (!mat) return res.status(404).json({ error: "Material not found" });
+  const files = await pool.query(
+    `SELECT id, name, url, size FROM material_files WHERE material_id=$1`,
+    [mat.id]
+  );
+  let project = null;
+  if (mat.project_id) {
+    const p = await ownedProject(sess.orcid, mat.project_id);
+    if (p) project = { id: p.id, title: p.title };
+  }
+  res.json({ ...mat, files: files.rows, project });
+});
+
+app.post("/api/materials", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  let fields = {}, files = [];
+  try {
+    const ctype = req.headers["content-type"] || "";
+    if (ctype.startsWith("multipart/form-data")) {
+      ({ fields, files } = await parseMultipartForm(req));
+    } else {
+      fields = req.body || {};
+    }
+    const title = (fields.title || "").trim();
+    if (!title) return res.status(400).json({ error: "title required" });
+    const projectId = fields.project_id ? Number(fields.project_id) : null;
+    if (projectId) {
+      const p = await ownedProject(sess.orcid, projectId);
+      if (!p) return res.status(400).json({ error: "project not found" });
+    }
+    const type = (fields.type || "material").trim();
+    const status = (fields.status || "draft").trim();
+    const description = (fields.description || "").trim() || null;
+
+    const created = await pool.query(
+      `INSERT INTO materials (orcid, project_id, title, type, status, description)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING id, project_id, title, type, status, description, updated_at`,
+      [sess.orcid, projectId, title, type, status, description]
+    );
+    const materialId = created.rows[0].id;
+    const savedFiles = [];
+    for (const file of files || []) {
+      const saved = await saveUploadedFile(file);
+      if (!saved) continue;
+      savedFiles.push(saved);
+      await pool.query(
+        `INSERT INTO material_files (material_id, name, url, size)
+         VALUES ($1,$2,$3,$4)`,
+        [materialId, saved.name, saved.url, saved.size]
+      );
+    }
+    if (projectId) await touchProject(projectId);
+    await logActivity(sess.orcid, { scope: "project", project_id: projectId, verb: "Uploaded material", object: title, link: `/material.html?id=${materialId}` });
+    res.status(201).json({ ...created.rows[0], files: savedFiles, link: `/material.html?id=${materialId}` });
+  } catch (e) {
+    console.error("POST /api/materials failed:", e);
+    res.status(500).json({ error: "Failed to create material" });
+  }
+});
+
+app.patch("/api/materials/:id", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const mat = await ownedMaterial(sess.orcid, req.params.id);
+  if (!mat) return res.status(404).json({ error: "Material not found" });
+  const body = req.body || {};
+  const fields = [];
+  const params = [];
+  if (body.title) { fields.push(`title=$${fields.length + 1}`); params.push(body.title); }
+  if (body.status) { fields.push(`status=$${fields.length + 1}`); params.push(body.status); }
+  if (body.type) { fields.push(`type=$${fields.length + 1}`); params.push(body.type); }
+  if (body.description !== undefined) { fields.push(`description=$${fields.length + 1}`); params.push(body.description || null); }
+  if (body.project_id !== undefined) {
+    const projectId = body.project_id ? Number(body.project_id) : null;
+    if (projectId) {
+      const p = await ownedProject(sess.orcid, projectId);
+      if (!p) return res.status(400).json({ error: "project not found" });
+    }
+    fields.push(`project_id=$${fields.length + 1}`); params.push(projectId);
+  }
+  if (!fields.length) return res.status(400).json({ error: "No changes" });
+  params.push(mat.id, sess.orcid);
+  try {
+    const out = await pool.query(
+      `UPDATE materials SET ${fields.join(", ")}, updated_at = now()
+       WHERE id=$${fields.length + 1} AND orcid=$${fields.length + 2}
+       RETURNING id, project_id, title, type, status, description, updated_at`,
+      params
+    );
+    await logActivity(sess.orcid, { scope: "project", project_id: out.rows[0].project_id, verb: "Updated material", object: out.rows[0].title, link: `/material.html?id=${out.rows[0].id}` });
+    if (out.rows[0].project_id) await touchProject(out.rows[0].project_id);
+    res.json({ ...out.rows[0] });
+  } catch (e) {
+    console.error("PATCH /api/materials/:id failed:", e);
+    res.status(500).json({ error: "Failed to update material" });
+  }
+});
+
+app.delete("/api/materials/:id", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const mat = await ownedMaterial(sess.orcid, req.params.id);
+  if (!mat) return res.status(404).json({ error: "Material not found" });
+  const files = await pool.query(`SELECT url FROM material_files WHERE material_id=$1`, [mat.id]);
+  await pool.query(`DELETE FROM materials WHERE id=$1 AND orcid=$2`, [mat.id, sess.orcid]);
+  for (const f of files.rows) {
+    if (!f.url) continue;
+    const rel = f.url.startsWith("/") ? f.url : `/${f.url}`;
+    const full = path.join(staticRoot, rel);
+    try { await fsp.unlink(full); } catch (e) { if (e.code !== "ENOENT") console.error("Failed to delete file", full, e); }
+  }
+  await logActivity(sess.orcid, { scope: "project", project_id: mat.project_id, verb: "Deleted material", object: mat.title });
+  if (mat.project_id) await touchProject(mat.project_id);
   res.status(204).end();
 });
 
