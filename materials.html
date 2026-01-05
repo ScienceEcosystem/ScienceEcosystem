@@ -103,31 +103,6 @@
   <script src="scripts/library.js" defer></script>
   <script src="scripts/components.js" defer></script>
   <script src="scripts/session.js" defer></script>
-  <script>
-    async function api(path){const r=await fetch(path,{credentials:"include"});if(!r.ok)throw new Error(await r.text());return r.json();}
-    function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");}
-    function card(m){const link=m.link||`material.html?id=${encodeURIComponent(m.id)}`;return `
-      <article class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
-        <h3 style="margin-top:0;"><a href="${link}">${esc(m.title||"Untitled")}</a></h3>
-        <p style="margin:.25rem 0;">Type: <strong>${esc(m.type||"material")}</strong> · Status: <strong>${esc(m.status||"draft")}</strong></p>
-        <p class="muted" style="margin:.25rem 0;">Updated: ${new Date(m.updated_at||Date.now()).toLocaleString()}</p>
-      </article>`;}
-    async function load(){
-      const grid=document.getElementById("materialsGrid");
-      const empty=document.getElementById("emptyState");
-      let items=[];
-      try{items=await api("/api/materials?limit=100");}catch{grid.innerHTML="<p class='muted'>Could not load materials.</p>";return;}
-      function apply(){
-        const q=document.getElementById("q").value.toLowerCase();
-        const t=document.getElementById("typeFilter").value;
-        const s=document.getElementById("statusFilter").value;
-        const f=items.filter(m=>(!q||((m.title||"").toLowerCase().includes(q)||(m.type||"").toLowerCase().includes(q)))&&(!t||m.type===t)&&(!s||m.status===s));
-        if(!f.length){grid.innerHTML=""; empty.style.display="block";} else {empty.style.display="none"; grid.innerHTML=f.map(card).join("");}
-      }
-      ["q","typeFilter","statusFilter"].forEach(id=>document.getElementById(id).addEventListener("input",apply));
-      apply();
-    }
-    window.addEventListener("DOMContentLoaded", load);
-  </script>
+  <script src="scripts/materials.js" defer></script>
 </body>
 </html>

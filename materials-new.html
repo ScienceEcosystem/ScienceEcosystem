@@ -127,37 +127,6 @@
   <script src="scripts/library.js" defer></script>
   <script src="scripts/components.js" defer></script>
   <script src="scripts/session.js" defer></script>
-  <script>
-    async function api(path,opts){const r=await fetch(path,{credentials:"include",...(opts||{})});if(!r.ok)throw new Error(await r.text());return r.headers.get("content-type")?.includes("json")?r.json():r.text();}
-    function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");}
-    async function loadProjects(){
-      let select=document.getElementById("projectSelect");
-      try{const rows=await api("/api/projects?limit=100"); select.innerHTML='<option value="">-</option>'+rows.map(p=>`<option value="${esc(p.id)}">${esc(p.title)}</option>`).join("");}
-      catch{select.innerHTML='<option value="">-</option>';}
-    }
-    async function create(){
-      const msg=document.getElementById("msg");
-      msg.textContent="Creating…";
-      const fd=new FormData();
-      fd.append("title", document.getElementById("title").value.trim());
-      fd.append("type", document.getElementById("type").value);
-      fd.append("status", document.getElementById("status").value);
-      fd.append("project_id", document.getElementById("projectSelect").value);
-      fd.append("description", document.getElementById("description").value.trim());
-      const file=document.getElementById("fileInput").files[0];
-      if(file) fd.append("file", file);
-      try{
-        const res=await fetch("/api/materials",{method:"POST",credentials:"include",body:fd});
-        if(!res.ok) throw new Error(await res.text());
-        msg.textContent="Created. Redirecting…";
-        const obj=await res.json().catch(()=>({}));
-        const id=obj.id; setTimeout(()=>{ location.href = id ? `material.html?id=${encodeURIComponent(id)}` : "materials.html"; }, 300);
-      }catch(e){msg.textContent="Failed to create material.";}
-    }
-    window.addEventListener("DOMContentLoaded", ()=>{
-      loadProjects();
-      document.getElementById("createBtn").addEventListener("click", create);
-    });
-  </script>
+  <script src="scripts/materials.js" defer></script>
 </body>
 </html>

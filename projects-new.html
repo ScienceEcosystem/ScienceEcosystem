@@ -92,38 +92,6 @@
   <script src="scripts/library.js" defer></script>
   <script src="scripts/components.js" defer></script>
   <script src="scripts/session.js" defer></script>
-
-  <script>
-  async function api(path, opts={}) {
-    const res = await fetch(path, { credentials: "include", headers: {"Content-Type":"application/json"}, ...opts });
-    if (!res.ok) throw new Error(await res.text().catch(()=>`HTTP ${res.status}`));
-    const ct = res.headers.get("content-type")||"";
-    return ct.includes("application/json") ? res.json() : res.text();
-  }
-  window.addEventListener("DOMContentLoaded", async ()=>{
-    const form=document.getElementById("form");
-    const msg=document.getElementById("msg");
-    const loginBtn=document.getElementById("orcidLoginBtn");
-    const logoutBtn=document.getElementById("logoutBtn");
-    try{ await api("/api/me"); if(loginBtn) loginBtn.style.display="none"; if(logoutBtn){ logoutBtn.style.display="inline-block"; logoutBtn.onclick=async()=>{try{await api("/auth/logout",{method:"POST"});}catch{} location.reload();}; } }catch{ if(loginBtn) loginBtn.style.display="inline-flex"; if(logoutBtn) logoutBtn.style.display="none"; }
-
-    form.addEventListener("submit", async (e)=>{
-      e.preventDefault();
-      msg.textContent="Creating…";
-      const payload={
-        title: document.getElementById("title").value.trim(),
-        summary: document.getElementById("summary").value.trim(),
-        stage: document.getElementById("stage").value
-      };
-      if(!payload.title){ msg.textContent="Title is required."; return; }
-      try{
-        const created = await api("/api/projects", { method:"POST", body: JSON.stringify(payload) });
-        msg.textContent="Created.";
-        if(created?.id) location.href = `project.html?id=${encodeURIComponent(created.id)}`;
-        else location.href = "projects.html";
-      }catch(err){ msg.textContent="Failed to create project."; }
-    });
-  });
-  </script>
+  <script src="scripts/projects.js" defer></script>
 </body>
 </html>
