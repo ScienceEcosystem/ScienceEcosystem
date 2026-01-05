@@ -330,7 +330,7 @@ async function getUser(orcid) {
 }
 async function updateProfile(orcid, payload) {
   const { name, affiliation, bio, keywords, languages, links, visibility } = payload;
-  const { rows } = await pool.query(
+  const { rowCount, rows } = await pool.query(
     `UPDATE users SET
       name=$2,
       affiliation=$3,
@@ -343,7 +343,10 @@ async function updateProfile(orcid, payload) {
      RETURNING orcid, name, affiliation, bio, keywords, languages, links, visibility`,
     [orcid, name, affiliation, bio, keywords, languages, links, visibility]
   );
-  return rows[0] || null;
+  if (rowCount) return rows[0];
+  // If user row is missing for some reason, create it and return payload
+  await upsertUser({ orcid, name, affiliation, bio, keywords, languages, links, visibility });
+  return payload;
 }
 async function libraryList(orcid) {
   const { rows } = await pool.query(`SELECT id, title FROM library_items WHERE orcid = $1 ORDER BY title`, [orcid]);
