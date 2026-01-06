@@ -228,6 +228,16 @@
     var doi = normalizeDOI(paper.doi || get(paper,"ids.doi",""));
     var title = paper.display_name || "";
     var all = [];
+    // Backend-backed artifacts to avoid browser CORS and catch Zenodo/DataCite quickly
+    if (doi) {
+      try {
+        var back = await fetch("/api/paper/artifacts?doi="+encodeURIComponent(doi));
+        if (back.ok) {
+          var arr = await back.json();
+          if (Array.isArray(arr)) arr.forEach(function(x){ all.push(x); });
+        }
+      } catch(_) {}
+    }
     try { (await fetchCrossrefRelations(doi)).forEach(function(r){
       all.push({
         provenance:"Crossref",
