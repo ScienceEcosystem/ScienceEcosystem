@@ -18,6 +18,22 @@
   } catch (_e) {}
 })();
 
+(function ensureFavicon(){
+  try {
+    var existing = document.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
+    var href = "/assets/logos_se/logo.png";
+    if (existing) {
+      existing.rel = "icon";
+      existing.href = href;
+    } else {
+      var link = document.createElement("link");
+      link.rel = "icon";
+      link.href = href;
+      document.head.appendChild(link);
+    }
+  } catch(_e){}
+})();
+
 (async function () {
   // Finds elements if present on the page
   const loginBtn  = document.getElementById("orcidLoginBtn");
