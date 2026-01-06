@@ -833,6 +833,100 @@ app.get("/api/paper/links", async (req, res) => {
   }
 });
 
+// Server-side DOI backlinks (avoids browser CORS)
+async function fetchJSONSafe(url) {
+  const r = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+function classifyROKind(str) {
+  const s = String(str || "").toLowerCase();
+  if (s.includes("software") || s.includes("code")) return "Software";
+  if (s.includes("dataset") || s.includes("data")) return "Dataset";
+  return "Other";
+}
+
+app.get("/api/paper/artifacts", async (req, res) => {
+  const doiRaw = (req.query?.doi || "").trim();
+  if (!doiRaw) return res.status(400).json({ error: "doi required" });
+  const doi = String(doiRaw).replace(/^doi:/i, "").replace(/^https?:\/\/doi.org\//i, "");
+  const out = [];
+  try {
+    // DataCite backlinks
+    const dc = await fetchJSONSafe(`https://api.datacite.org/works?query=${encodeURIComponent('relatedIdentifiers.identifier:"' + doi.replace(/"/g,'\\"') + '"')}&page[size]=200`);
+    const hits = Array.isArray(dc.data) ? dc.data : [];
+    hits.forEach(rec => {
+      const a = rec.attributes || {};
+      const title = Array.isArray(a.titles) && a.titles[0]?.title ? a.titles[0].title : (a.title || "");
+      const typeGen = String(a.types?.resourceTypeGeneral || "").toLowerCase();
+      const kind = typeGen.includes("software") ? "Software" : (typeGen.includes("dataset") ? "Dataset" : "Other");
+      out.push({
+        provenance: "DataCite",
+        type: kind,
+        title: title || a.doi || "Related item",
+        doi: a.doi || "",
+        url: a.url || (a.doi ? `https://doi.org/${a.doi}` : ""),
+        repository: a.publisher || ""
+      });
+    });
+  } catch (_) {}
+
+  try {
+    // Zenodo backlinks
+    const query = encodeURIComponent(`related_identifiers.identifier:"${doi.replace(/"/g,'\\"')}"`);
+    const zn = await fetchJSONSafe(`https://zenodo.org/api/records/?q=${query}&size=200`);
+    const hits = Array.isArray(zn.hits?.hits) ? zn.hits.hits : [];
+    hits.forEach(h => {
+      const md = h.metadata || {};
+      const typeGen = String(md.resource_type?.type || "").toLowerCase();
+      const kind = typeGen.includes("software") ? "Software" : (typeGen.includes("dataset") ? "Dataset" : "Other");
+      const title = md.title || h.doi || "";
+      const doiZ = md.doi || h.doi || "";
+      const urlZ = h.links?.html || (doiZ ? `https://doi.org/${doiZ}` : "");
+      out.push({
+        provenance: "Zenodo",
+        type: kind,
+        title: title || "Zenodo record",
+        doi: doiZ,
+        url: urlZ,
+        repository: "Zenodo",
+        version: md.version || "",
+        licence: (md.license && (md.license.id || md.license)) || ""
+      });
+    });
+  } catch (_) {}
+
+  try {
+    // Publisher page scrape fallback (re-use existing endpoint logic)
+    const r = await fetch(`${req.protocol}://${req.get("host")}/api/paper/links?doi=${encodeURIComponent(doi)}`, {
+      headers: { "Accept": "application/json" }
+    });
+    if (r.ok) {
+      const links = await r.json();
+      links.forEach(h => {
+        out.push({
+          provenance: h.provenance || "Publisher page",
+          type: classifyROKind(h.url || ""),
+          title: h.url,
+          url: h.url
+        });
+      });
+    }
+  } catch (_) {}
+
+  if (!out.length) return res.json([]);
+  // Deduplicate by URL
+  const seen = new Set();
+  const unique = [];
+  out.forEach(item => {
+    const key = item.url || item.doi;
+    if (key && seen.has(key)) return;
+    if (key) seen.add(key);
+    unique.push(item);
+  });
+  res.json(unique);
+});
+
 /* ---------------------------
    Identity + alerts + activity
 ----------------------------*/

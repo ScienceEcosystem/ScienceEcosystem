@@ -17,6 +17,7 @@
   var __CURRENT_PAPER__ = null;
   var __HEADER_HTML_SNAPSHOT__ = null;
   window.__GRAPH_CTX__ = { main: null, cited: [], citing: [] };
+  var __HEADER_OBSERVER__ = null;
 
   // ---------- Helpers ----------
   function $(id){ return document.getElementById(id); }
@@ -714,8 +715,18 @@
           + '</div>'
         + '</label>'
         + '<button id="applyGraphFilters" class="btn btn-secondary" type="button">Apply</button>'
-      + '</div>';
+      + '</div>'
+      + '<p class="muted small" style="margin-top:6px;">Connected Map uses similarity + year/citation filters. Citation mode shows direct references and citations; similarity is ignored there.</p>';
     return el;
+  }
+
+  function updateGraphControlState(){
+    var mode = $("#graphMode") ? $("#graphMode").value : "citation";
+    var simInput = $("#minSim");
+    if (simInput){
+      simInput.disabled = (mode !== "connected");
+      simInput.title = mode === "connected" ? "Keep edges above this similarity" : "Only used in Connected Map";
+    }
   }
 
   async function renderCitationGraph(main, cited, citing){
@@ -758,7 +769,12 @@
         else await renderCitationGraph(main, cited, citing);
       };
     }
-    var modeSel = $("#graphMode"); if (modeSel) modeSel.value = "citation";
+    var modeSel = $("#graphMode");
+    if (modeSel) {
+      modeSel.value = "citation";
+      modeSel.onchange = updateGraphControlState;
+    }
+    updateGraphControlState();
 
     repopulateHeaderIfEmpty(); restoreHeaderIfNeeded();
     renderBelowGraphLists(cited, citing);
@@ -873,7 +889,12 @@
         else await renderConnectedGraph(main, cited, citing);
       };
     }
-    var gm = $("#graphMode"); if (gm) gm.value = "connected";
+    var gm = $("#graphMode");
+    if (gm) {
+      gm.value = "connected";
+      gm.onchange = updateGraphControlState;
+    }
+    updateGraphControlState();
 
     repopulateHeaderIfEmpty(); restoreHeaderIfNeeded();
     renderBelowGraphLists(cited, citing);
@@ -994,6 +1015,16 @@
       wireHeaderToggles();
     }
   }
+  function startHeaderObserver(){
+    if (__HEADER_OBSERVER__) return;
+    var hdr = document.getElementById("paperHeaderMain");
+    if (!hdr) return;
+    __HEADER_OBSERVER__ = new MutationObserver(function(){
+      restoreHeaderIfNeeded();
+      repopulateHeaderIfEmpty();
+    });
+    __HEADER_OBSERVER__.observe(hdr, { childList:true, subtree:true });
+  }
 
   // ---------- Research Objects UI ----------
   function renderResearchObjectsUI(items){
@@ -1025,6 +1056,7 @@
     $("paperStats").innerHTML     = buildStatsHeader(p);
     __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
     wireHeaderToggles();
+    startHeaderObserver();
 
     var guardUntil = Date.now() + 15000;
     (function loopGuard(){
@@ -1100,4 +1132,3 @@
 
   document.addEventListener("DOMContentLoaded", boot);
 })();
-
