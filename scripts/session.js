@@ -1,4 +1,23 @@
 // scripts/session.js
+(function ensureCanonical(){
+  try {
+    var path = location.pathname || "/";
+    path = path.replace(/index\.html?$/i, "");
+    if (!path.startsWith("/")) path = "/" + path;
+    if (path === "") path = "/";
+    var href = location.origin + path;
+    var link = document.querySelector('link[rel="canonical"]');
+    if (link) {
+      link.href = href;
+    } else {
+      link = document.createElement("link");
+      link.rel = "canonical";
+      link.href = href;
+      document.head.appendChild(link);
+    }
+  } catch (_e) {}
+})();
+
 (async function () {
   // Finds elements if present on the page
   const loginBtn  = document.getElementById("orcidLoginBtn");
