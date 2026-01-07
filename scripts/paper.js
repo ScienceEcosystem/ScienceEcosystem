@@ -284,9 +284,18 @@
       return (x.doi && x.doi.toLowerCase()) || (String(x.title||"").toLowerCase()+"|"+String(x.url||"").toLowerCase());
     });
 
+    var trustedHosts = ["zenodo.org","figshare.com","osf.io","github.com","gitlab.com","doi.org"];
     var filtered = dedup.filter(function(x){
       if (!x) return false;
+      // Always keep direct DOI match
       if (x.doi && doi && normalizeDOI(x.doi) === doi) return true;
+      // Prefer keeping known repositories even if title similarity is low
+      try {
+        var urlHost = x.url ? new URL(x.url, "https://example.org").hostname : "";
+        if (trustedHosts.some(function(h){ return urlHost.includes(h); })) return true;
+      } catch(_){}
+      if (x.provenance === "Zenodo" || x.provenance === "DataCite") return true;
+
       var sim = jaccardTokens(title, x.title || "");
       if (x.type === "Other") return sim >= 0.28;
       return sim >= 0.18;
