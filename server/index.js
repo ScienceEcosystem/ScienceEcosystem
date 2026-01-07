@@ -873,27 +873,37 @@ app.get("/api/paper/artifacts", async (req, res) => {
 
   try {
     // Zenodo backlinks
-    const query = encodeURIComponent(`related_identifiers.identifier:"${doi.replace(/"/g,'\\"')}"`);
-    const zn = await fetchJSONSafe(`https://zenodo.org/api/records/?q=${query}&size=200`);
-    const hits = Array.isArray(zn.hits?.hits) ? zn.hits.hits : [];
-    hits.forEach(h => {
-      const md = h.metadata || {};
-      const typeGen = String(md.resource_type?.type || "").toLowerCase();
-      const kind = typeGen.includes("software") ? "Software" : (typeGen.includes("dataset") ? "Dataset" : "Other");
-      const title = md.title || h.doi || "";
-      const doiZ = md.doi || h.doi || "";
-      const urlZ = h.links?.html || (doiZ ? `https://doi.org/${doiZ}` : "");
-      out.push({
-        provenance: "Zenodo",
-        type: kind,
-        title: title || "Zenodo record",
-        doi: doiZ,
-        url: urlZ,
-        repository: "Zenodo",
-        version: md.version || "",
-        licence: (md.license && (md.license.id || md.license)) || ""
-      });
-    });
+    const doiEsc = doi.replace(/"/g, '\\"');
+    const zenQueries = [
+      `metadata.related_identifiers.identifier:"${doiEsc}"`,
+      `related.identifiers.identifier:"${doiEsc}"`,
+      `doi:"${doiEsc}" OR metadata.related_identifiers.identifier:"${doiEsc}"`
+    ];
+    for (const qRaw of zenQueries) {
+      try {
+        const zn = await fetchJSONSafe(`https://zenodo.org/api/records/?q=${encodeURIComponent(qRaw)}&size=200`);
+        const hits = Array.isArray(zn.hits?.hits) ? zn.hits.hits : [];
+        hits.forEach(h => {
+          const md = h.metadata || {};
+          const typeGen = String(md.resource_type?.type || "").toLowerCase();
+          const kind = typeGen.includes("software") ? "Software" : (typeGen.includes("dataset") ? "Dataset" : "Other");
+          const title = md.title || h.doi || "";
+          const doiZ = md.doi || h.doi || "";
+          const urlZ = h.links?.html || (doiZ ? `https://doi.org/${doiZ}` : "");
+          out.push({
+            provenance: "Zenodo",
+            type: kind,
+            title: title || "Zenodo record",
+            doi: doiZ,
+            url: urlZ,
+            repository: "Zenodo",
+            version: md.version || "",
+            licence: (md.license && (md.license.id || md.license)) || ""
+          });
+        });
+        if (hits.length) break;
+      } catch (_) { /* try next */ }
+    }
   } catch (_) {}
 
   try {

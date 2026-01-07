@@ -224,6 +224,17 @@
     }
     return out;
   }
+  function uniqueNodes(nodes){
+    var seen = new Set();
+    var out = [];
+    for (var i=0;i<nodes.length;i++){
+      var id = String(nodes[i].id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(nodes[i]);
+    }
+    return out;
+  }
   async function harvestAndFilterResearchObjects(paper){
     var doi = normalizeDOI(paper.doi || get(paper,"ids.doi",""));
     var title = paper.display_name || "";
@@ -758,6 +769,7 @@
     var nodes = [{ id: main.id, label: shortCitation(main), title: main.display_name, group: "main", paperId: main.id }];
     for (var i=0;i<cited.length;i++){ nodes.push({ id: cited[i].id,  label: shortCitation(cited[i]),  title: cited[i].display_name,  group: "cited",  paperId: cited[i].id }); }
     for (var j=0;j<citing.length;j++){ nodes.push({ id: citing[j].id, label: shortCitation(citing[j]), title: citing[j].display_name, group: "citing", paperId: citing[j].id }); }
+    nodes = uniqueNodes(nodes);
 
     var edges = [];
     for (var k=0;k<cited.length;k++){ edges.push({ from: main.id, to: cited[k].id, value: 1, width: 1 }); }
@@ -872,6 +884,8 @@
         edges.push({ from:aF, to:bF, value:EE.w, width: Math.max(1, 6*EE.w) });
       }
     }
+
+    nodes = uniqueNodes(nodes);
 
     var allIds = [];
     for (var n=0;n<nodes.length;n++){ allIds.push(String(nodes[n].id)); }
