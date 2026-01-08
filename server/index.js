@@ -877,7 +877,9 @@ app.get("/api/paper/artifacts", async (req, res) => {
     const zenQueries = [
       `metadata.related_identifiers.identifier:"${doiEsc}"`,
       `related.identifiers.identifier:"${doiEsc}"`,
-      `doi:"${doiEsc}" OR metadata.related_identifiers.identifier:"${doiEsc}"`
+      `doi:"${doiEsc}" OR metadata.related_identifiers.identifier:"${doiEsc}"`,
+      `"${doiEsc}"`,
+      doiEsc.split("/").pop() || doiEsc
     ];
     for (const qRaw of zenQueries) {
       try {
@@ -1667,6 +1669,16 @@ app.delete("/api/claims/merge", async (req, res) => {
 /* ---------------------------
    SPA fallback
 ----------------------------*/
+// Pretty institution path -> static file with query
+app.get("/institution/:id", (req, res) => {
+  const instPath = path.join(staticRoot, "institution.html");
+  if (fs.existsSync(instPath)) {
+    res.sendFile(instPath);
+  } else {
+    res.redirect(`/institution.html?id=${encodeURIComponent(req.params.id)}`);
+  }
+});
+
 app.get("*", (req, res, next) => {
   if (req.method === "GET" && req.accepts("html")) {
     return res.sendFile(path.join(staticRoot, "index.html"));
