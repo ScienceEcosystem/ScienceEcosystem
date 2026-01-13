@@ -30,6 +30,27 @@ app.use(session({
   }
 }));
 
+// Canonical host + scheme redirects for SEO.
+app.use((req, res, next) => {
+  if (NODE_ENV !== 'production') return next();
+
+  const host = req.headers.host || '';
+  const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+  const isHttps = proto === 'https';
+  const canonicalHost = 'scienceecosystem.org';
+
+  if (host && host !== canonicalHost) {
+    return res.redirect(301, `https://${canonicalHost}${req.originalUrl}`);
+  }
+  if (!isHttps) {
+    return res.redirect(301, `https://${canonicalHost}${req.originalUrl}`);
+  }
+  if (req.path === '/index.html') {
+    return res.redirect(301, `https://${canonicalHost}/`);
+  }
+  next();
+});
+
 // Initialize DB schema
 db.init().catch(e => console.error("DB init error:", e));
 
