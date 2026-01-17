@@ -119,8 +119,6 @@ async function bootstrap() {
         </div>
         <div class="quick-actions" style="display:flex; gap:.5rem; flex-wrap:wrap;">
           <a class="btn" href="library.html#add">Add to library</a>
-          <a class="btn" href="projects-new.html">New project</a>
-          <a class="btn" href="materials-new.html">Upload material</a>
           <a class="btn" href="settings-identity.html">Link account</a>
         </div>
       </div>
@@ -178,35 +176,39 @@ async function bootstrap() {
     await loadActivity("all");
 
     // --- Projects snapshot ---
-    try {
-      const projects = await api("/api/projects?limit=6"); // [{id,title,stage,open_tasks,last_active,summary}]
-      if (!projects || !projects.length) {
-        projectsGrid.innerHTML = `<p class="muted">No projects yet. <a href="projects-new.html">Create your first project</a>.</p>`;
-      } else {
-        projectsGrid.innerHTML = projects.map(p => `
-          <article class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
-            <h3 style="margin-top:0;"><a href="project.html?id=${encodeURIComponent(p.id)}">${escapeHtml(p.title)}</a></h3>
-            <p class="muted" style="margin:.25rem 0;">${escapeHtml(p.summary || "")}</p>
-            <p style="margin:.25rem 0;">${p.stage ? badge(p.stage) : ""} ${typeof p.open_tasks === "number" ? badge(`${p.open_tasks} open tasks`) : ""}</p>
-            <p class="muted" style="margin:.25rem 0;">Last active: ${fmtDate(p.last_active)}</p>
-          </article>
-        `).join("");
+    if (projectsGrid) {
+      try {
+        const projects = await api("/api/projects?limit=6"); // [{id,title,stage,open_tasks,last_active,summary}]
+        if (!projects || !projects.length) {
+          projectsGrid.innerHTML = `<p class="muted">No projects yet. <a href="projects-new.html">Create your first project</a>.</p>`;
+        } else {
+          projectsGrid.innerHTML = projects.map(p => `
+            <article class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
+              <h3 style="margin-top:0;"><a href="project.html?id=${encodeURIComponent(p.id)}">${escapeHtml(p.title)}</a></h3>
+              <p class="muted" style="margin:.25rem 0;">${escapeHtml(p.summary || "")}</p>
+              <p style="margin:.25rem 0;">${p.stage ? badge(p.stage) : ""} ${typeof p.open_tasks === "number" ? badge(`${p.open_tasks} open tasks`) : ""}</p>
+              <p class="muted" style="margin:.25rem 0;">Last active: ${fmtDate(p.last_active)}</p>
+            </article>
+          `).join("");
+        }
+      } catch {
+        projectsGrid.innerHTML = `<p class="muted">Could not load projects.</p>`;
       }
-    } catch {
-      projectsGrid.innerHTML = `<p class="muted">Could not load projects.</p>`;
     }
 
     // --- Materials in progress ---
-    try {
-      const materials = await api("/api/materials?limit=8"); // [{id,type,title,status,updated_at,link}]
-      renderSimpleList(materialsList, materials, (m) => `
-        <li>
-          ${badge(m.type || "material")} <a href="${escapeHtml(m.link || `material.html?id=${encodeURIComponent(m.id)}`)}">${escapeHtml(m.title || "Untitled")}</a>
-          <span class="muted"> · ${escapeHtml(m.status || "draft")} · ${fmtDate(m.updated_at)}</span>
-        </li>
-      `, "No materials yet. Try <a href='materials-new.html'>uploading a file</a> or creating a draft.");
-    } catch {
-      materialsList.innerHTML = `<li class="muted">Could not load materials.</li>`;
+    if (materialsList) {
+      try {
+        const materials = await api("/api/materials?limit=8"); // [{id,type,title,status,updated_at,link}]
+        renderSimpleList(materialsList, materials, (m) => `
+          <li>
+            ${badge(m.type || "material")} <a href="${escapeHtml(m.link || `material.html?id=${encodeURIComponent(m.id)}`)}">${escapeHtml(m.title || "Untitled")}</a>
+            <span class="muted"> · ${escapeHtml(m.status || "draft")} · ${fmtDate(m.updated_at)}</span>
+          </li>
+        `, "No materials yet. Try <a href='materials-new.html'>uploading a file</a> or creating a draft.");
+      } catch {
+        materialsList.innerHTML = `<li class="muted">Could not load materials.</li>`;
+      }
     }
 
     // --- Library (quick access + stats + sidebar list preserves your remove flow) ---
