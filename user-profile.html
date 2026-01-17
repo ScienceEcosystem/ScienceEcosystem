@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Researcher Home | ScienceEcosystem</title>
-  <meta name="description" content="Your ScienceEcosystem home: projects, materials, library, lab groups, activity, and identity linking." />
+  <meta name="description" content="Your ScienceEcosystem home: library, activity, and identity linking." />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
@@ -63,7 +63,6 @@
         <section id="sectionToday" class="panel" aria-labelledby="h-today" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
           <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
             <h2 id="h-today" style="margin:0;">Today &amp; this week</h2>
-            <a class="link" href="projects.html">View all</a>
           </div>
           <ul id="todayList" class="list" style="margin-top:.5rem;"></ul>
         </section>
@@ -75,8 +74,6 @@
             <div class="controls" style="display:flex; gap:.5rem;">
               <select id="activityScope" class="input">
                 <option value="all">Everything</option>
-                <option value="projects">My projects</option>
-                <option value="groups">My groups</option>
                 <option value="library">Library</option>
               </select>
               <button id="refreshActivityBtn" class="btn btn-small">Refresh</button>
@@ -102,24 +99,6 @@
               <ul id="followedUpdates" class="list"></ul>
             </div>
           </div>
-        </section>
-
-        <!-- Projects snapshot -->
-        <section id="sectionProjects" class="panel" aria-labelledby="h-projects" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
-            <h2 id="h-projects" style="margin:0;">Projects</h2>
-            <a class="btn btn-small" href="projects.html">All projects</a>
-          </div>
-          <div id="projectsGrid" class="cards-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem;"></div>
-        </section>
-
-        <!-- Materials in progress -->
-        <section id="sectionMaterials" class="panel" aria-labelledby="h-materials" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
-            <h2 id="h-materials" style="margin:0;">Materials you’re working on</h2>
-            <a class="btn btn-small" href="materials.html">All materials</a>
-          </div>
-          <ul id="materialsList" class="list" style="margin-top:.5rem;"></ul>
         </section>
 
         <!-- Library quick access -->
@@ -176,9 +155,6 @@
         <section id="sectionShortcuts" class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
           <h3 style="margin-top:0;">Shortcuts</h3>
           <ul class="list">
-            <li><a href="projects.html">Projects</a></li>
-            <li><a href="materials.html">Materials</a></li>
-            <li><a href="groups.html">Lab groups</a></li>
             <li><a href="settings-profile.html">Profile settings</a></li>
             <li><a href="settings-notifications.html">Notifications</a></li>
             <li><a href="settings-privacy.html">Privacy</a></li>
