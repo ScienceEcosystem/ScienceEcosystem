@@ -11,7 +11,7 @@ const ORCID_CLIENT_ID = process.env.ORCID_CLIENT_ID || "";
 const ORCID_CLIENT_SECRET = process.env.ORCID_CLIENT_SECRET || "";
 const ORCID_REDIRECT_URI = process.env.ORCID_REDIRECT_URI || "";
 
-const SCOPE = "/authenticate"; // minimal scope to identify user
+const SCOPE = process.env.ORCID_SCOPE || "/read-limited"; // request ORCID record access (user-granted)
 
 function base64url(input) {
   return input.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -75,7 +75,13 @@ router.get("/auth/orcid/callback", async (req, res) => {
     // Basic upsert; name can be filled later by user.
     await db.upsertUser(orcid, { name: tokenData.name || null });
 
-    req.session.user = { orcid };
+    req.session.user = {
+      orcid,
+      orcid_access_token: tokenData.access_token || null,
+      orcid_scope: tokenData.scope || null,
+      orcid_expires_in: tokenData.expires_in || null,
+      orcid_token_type: tokenData.token_type || null
+    };
     return res.redirect("/user-profile.html");
   } catch (e) {
     console.error("ORCID callback error:", e);

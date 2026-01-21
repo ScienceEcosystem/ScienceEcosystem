@@ -72,6 +72,7 @@ async function bootstrap() {
   const followingBtn   = document.getElementById("refreshFollowingBtn");
   const followListEl   = document.getElementById("followedList");
   const followUpdates  = document.getElementById("followedUpdates");
+  const orcidProfileEl = document.getElementById("orcidProfile");
 
   function setupFollowingUI() {
     loadFollowingFeed();
@@ -144,6 +145,84 @@ async function bootstrap() {
       const syncText = document.getElementById("syncText");
       if (syncText) syncText.textContent = "unknown";
     }
+
+    // --- ORCID profile (live record) ---
+    async function loadOrcidProfile() {
+      if (!orcidProfileEl) return;
+      try {
+        const record = await api("/api/orcid/record");
+        const person = record?.person || {};
+        const nameObj = person?.name || {};
+        const given = nameObj?.["given-names"]?.value || "";
+        const family = nameObj?.["family-name"]?.value || "";
+        const credit = nameObj?.["credit-name"]?.value || "";
+        const displayName = (credit || `${given} ${family}`).trim() || "Not provided";
+
+        const bio = person?.biography?.content || "";
+        const keywords = (person?.keywords?.keyword || []).map(k => k?.content).filter(Boolean);
+        const urls = (person?.["researcher-urls"]?.["researcher-url"] || []).map(u => ({
+          name: u?.["url-name"] || "Link",
+          url: u?.url?.value || ""
+        })).filter(u => u.url);
+        const emails = (person?.emails?.email || []).map(e => e?.email).filter(Boolean);
+
+        const activities = record?.["activities-summary"] || {};
+        const employments = activities?.employments?.["employment-summary"] || [];
+        const educations = activities?.educations?.["education-summary"] || [];
+        const worksCount = Array.isArray(activities?.works?.group) ? activities.works.group.length : 0;
+
+        const extIds = (person?.["external-identifiers"]?.["external-identifier"] || []).map(e => ({
+          type: e?.["external-id-type"],
+          value: e?.["external-id-value"]
+        })).filter(e => e.type || e.value);
+
+        const listItems = (arr, render) => arr.length
+          ? `<ul class="list">${arr.map(render).join("")}</ul>`
+          : `<p class="muted">-</p>`;
+
+        const fmtRange = (start, end) => {
+          const s = start ? `${start.year?.value || ""}` : "";
+          const e = end ? `${end.year?.value || ""}` : "";
+          if (!s && !e) return "";
+          return s && e ? `${s} - ${e}` : (s || e);
+        };
+
+        const orgLine = (item) => {
+          const org = item?.organization?.name || "Organization";
+          const role = item?.["role-title"] || "";
+          const range = fmtRange(item?.["start-date"], item?.["end-date"]);
+          const parts = [org, role].filter(Boolean).join(" - ");
+          return `${escapeHtml(parts)}${range ? ` <span class="muted">(${escapeHtml(range)})</span>` : ""}`;
+        };
+
+        orcidProfileEl.innerHTML = `
+          <p><strong>Name:</strong> ${escapeHtml(displayName)}</p>
+          <p><strong>ORCID iD:</strong> ${record?.["orcid-identifier"]?.path ? `<a href="https://orcid.org/${escapeHtml(record["orcid-identifier"].path)}" target="_blank" rel="noopener">${escapeHtml(record["orcid-identifier"].path)}</a>` : "-"}</p>
+          ${bio ? `<p><strong>Bio:</strong> ${escapeHtml(bio)}</p>` : ""}
+          <p><strong>Keywords:</strong> ${keywords.length ? keywords.map(escapeHtml).join(", ") : "-"}</p>
+          <p><strong>Emails:</strong> ${emails.length ? emails.map(escapeHtml).join(", ") : "-"}</p>
+          <p><strong>External IDs:</strong> ${extIds.length ? extIds.map(e => `${escapeHtml(e.type || "")}${e.value ? `: ${escapeHtml(e.value)}` : ""}`).join(", ") : "-"}</p>
+          <div style="margin-top:.5rem;">
+            <strong>Employments:</strong>
+            ${listItems(employments, (e) => `<li>${orgLine(e)}</li>`)}
+          </div>
+          <div style="margin-top:.5rem;">
+            <strong>Education:</strong>
+            ${listItems(educations, (e) => `<li>${orgLine(e)}</li>`)}
+          </div>
+          <p><strong>Works:</strong> ${worksCount || "-"}</p>
+          ${urls.length ? `<div><strong>Researcher links:</strong>${listItems(urls, (u) => `<li><a href="${escapeHtml(u.url)}" target="_blank" rel="noopener">${escapeHtml(u.name)}</a></li>`)}</div>` : ""}
+          <p class="muted small" style="margin-top:.5rem;">Only fields visible on ORCID are shown.</p>
+          <details style="margin-top:.5rem;">
+            <summary>Full ORCID record (JSON)</summary>
+            <pre style="white-space:pre-wrap; background:#f7f7f7; padding:.75rem; border-radius:8px; margin-top:.5rem;">${escapeHtml(JSON.stringify(record, null, 2))}</pre>
+          </details>
+        `;
+      } catch {
+        orcidProfileEl.innerHTML = `<p class="muted">Could not load ORCID data. Please re-login to grant access.</p>`;
+      }
+    }
+    await loadOrcidProfile();
 
     // --- Today / this week (actions & alerts) ---
     try {

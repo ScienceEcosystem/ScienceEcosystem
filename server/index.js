@@ -23,6 +23,7 @@ const {
   ORCID_CLIENT_ID,
   ORCID_CLIENT_SECRET,
   ORCID_REDIRECT_URI,
+  ORCID_SCOPE = "/read-limited",
   STATIC_DIR = "../",
   NODE_ENV = "development",
   COOKIE_DOMAIN,                // optional: ".scienceecosystem.org"
@@ -623,7 +624,7 @@ app.get("/auth/orcid/login", (req, res) => {
   const params = new URLSearchParams({
     client_id: ORCID_CLIENT_ID,
     response_type: "code",
-    scope: "/authenticate",
+    scope: ORCID_SCOPE,
     redirect_uri: ORCID_REDIRECT_URI,
     state
   });
@@ -701,7 +702,13 @@ app.get("/auth/orcid/callback", async (req, res) => {
     } catch {}
 
     await upsertUser({ orcid, name, affiliation });
-    await setSession(res, { orcid });
+    await setSession(res, {
+      orcid,
+      orcid_access_token: token.access_token || null,
+      orcid_scope: token.scope || null,
+      orcid_expires_in: token.expires_in || null,
+      orcid_token_type: token.token_type || null
+    });
     res.redirect("/user-profile.html");
   } catch (e) {
     console.error("ORCID callback failed:", e);
@@ -784,6 +791,30 @@ app.get("/api/me", async (req, res) => {
   const row = await getUser(sess.orcid);
   if (!row) return res.status(404).json({ error: "User not found" });
   res.json(row);
+});
+
+app.get("/api/orcid/record", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const token = sess.orcid_access_token;
+  if (!token) return res.status(403).json({ error: "ORCID access not granted" });
+  try {
+    const recRes = await fetch(`${ORCID_API_BASE}/${sess.orcid}/record`, {
+      headers: {
+        "Accept": "application/json",
+        "Authorization": `Bearer ${token}`
+      }
+    });
+    if (!recRes.ok) {
+      const text = await recRes.text().catch(() => "");
+      return res.status(recRes.status).json({ error: text || "ORCID request failed" });
+    }
+    const record = await recRes.json();
+    res.json(record);
+  } catch (e) {
+    console.error("GET /api/orcid/record failed:", e);
+    res.status(500).json({ error: "Failed to load ORCID record" });
+  }
 });
 
 app.patch("/api/settings/profile", async (req, res) => {
