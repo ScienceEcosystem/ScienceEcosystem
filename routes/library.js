@@ -1,6 +1,7 @@
-const express = require('express');
+import express from 'express';
+import { pool } from '../db.js';
+
 const router = express.Router();
-const { pool } = require('../db');
 
 function getOrcid(req) {
   return req.session?.user?.orcid || null;
@@ -75,4 +76,4 @@ router.delete('/api/library/:doi(*)', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

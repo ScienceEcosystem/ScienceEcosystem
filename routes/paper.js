@@ -1,5 +1,6 @@
-const express = require('express');
-const fetch = require('node-fetch');
+import express from 'express';
+import fetch from 'node-fetch';
+
 const router = express.Router();
 
 // Get paper with linked resources
@@ -131,4 +132,4 @@ function calculateReproducibilityScore(resources) {
   };
 }
 
-module.exports = router;
+export default router;

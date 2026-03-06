@@ -10,6 +10,8 @@ import crypto from "crypto";
 import pkg from "pg";
 const { Pool } = pkg;
 const fsp = fs.promises;
+import paperRoutes from "../routes/paper.js";
+import libraryRoutes from "../routes/library.js";
 
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
@@ -601,6 +603,9 @@ async function hydrateWorkMeta(idTail) {
    Health + static
 ----------------------------*/
 app.get("/health", (_req, res) => res.type("text").send("ok"));
+
+app.use(paperRoutes);
+app.use(libraryRoutes);
 
 const staticRoot = path.resolve(__dirname, STATIC_DIR);
 const uploadDir = path.join(staticRoot, "uploads", "materials");

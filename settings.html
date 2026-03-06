@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - ScienceEcosystem</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="main-nav">
+    <a href="index.html" class="logo">ScienceEcosystem</a>
+    <div class="nav-links">
+      <a href="search.html">Search</a>
+      <a href="research-tools.html">Tools</a>
+      <a href="about.html">About</a>
+      <div class="user-menu" id="user-menu" style="display: none;">
+        <a href="library.html">Library</a>
+        <a href="profile.html">Profile</a>
+        <a href="settings.html">Settings</a>
+      </div>
+      <a href="/auth/orcid/login" class="btn-login" id="login-btn">Sign In with ORCID</a>
+    </div>
+  </nav>
+
+  <main class="container" style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
+    <h1>Settings</h1>
+    <p class="subtitle">Manage your account and preferences</p>
+
+    <div class="settings-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 2rem;">
+      
+      <a href="settings-profile.html" class="settings-card panel" style="text-decoration: none; color: inherit; padding: 1.5rem; border: 1px solid #e1e4e8; border-radius: 8px; transition: border-color 0.2s;">
+        <h3 style="margin: 0 0 0.5rem 0;">👤 Profile</h3>
+        <p style="margin: 0; color: #6c757d;">Update your name, affiliation, and public information</p>
+      </a>
+
+      <a href="settings-privacy.html" class="settings-card panel" style="text-decoration: none; color: inherit; padding: 1.5rem; border: 1px solid #e1e4e8; border-radius: 8px; transition: border-color 0.2s;">
+        <h3 style="margin: 0 0 0.5rem 0;">🔒 Privacy</h3>
+        <p style="margin: 0; color: #6c757d;">Control who can see your information</p>
+      </a>
+
+      <a href="settings-notifications.html" class="settings-card panel" style="text-decoration: none; color: inherit; padding: 1.5rem; border: 1px solid #e1e4e8; border-radius: 8px; transition: border-color 0.2s;">
+        <h3 style="margin: 0 0 0.5rem 0;">🔔 Notifications</h3>
+        <p style="margin: 0; color: #6c757d;">Email and alert preferences</p>
+      </a>
+
+      <a href="settings-identity.html" class="settings-card panel" style="text-decoration: none; color: inherit; padding: 1.5rem; border: 1px solid #e1e4e8; border-radius: 8px; transition: border-color 0.2s;">
+        <h3 style="margin: 0 0 0.5rem 0;">🔗 Identity</h3>
+        <p style="margin: 0; color: #6c757d;">Link additional accounts and verify authorship</p>
+      </a>
+
+    </div>
+
+    <div class="panel" style="margin-top: 2rem; padding: 1.5rem;">
+      <h3>Account Actions</h3>
+      <button onclick="handleLogout()" class="btn btn-secondary" style="margin-top: 1rem;">
+        Sign Out
+      </button>
+    </div>
+  </main>
+
+  <script>
+    // Show/hide user menu based on login status
+    fetch('/api/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(user => {
+        if (user) {
+          document.getElementById('user-menu').style.display = 'flex';
+          document.getElementById('login-btn').style.display = 'none';
+        } else {
+          // Not logged in - redirect to home
+          window.location.href = 'index.html';
+        }
+      })
+      .catch(() => {
+        window.location.href = 'index.html';
+      });
+
+    async function handleLogout() {
+      try {
+        await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+        window.location.href = 'index.html';
+      } catch (error) {
+        console.error('Logout error:', error);
+        window.location.href = 'index.html';
+      }
+    }
+
+    // Add hover effect to cards
+    document.addEventListener('DOMContentLoaded', () => {
+      const cards = document.querySelectorAll('.settings-card');
+      cards.forEach(card => {
+        card.addEventListener('mouseenter', () => {
+          card.style.borderColor = '#0366d6';
+        });
+        card.addEventListener('mouseleave', () => {
+          card.style.borderColor = '#e1e4e8';
+        });
+      });
+    });
+  </script>
+</body>
+</html>
