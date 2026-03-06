@@ -36,9 +36,9 @@ if (!ORCID_CLIENT_ID || !ORCID_CLIENT_SECRET || !ORCID_REDIRECT_URI) {
   console.error("Missing ORCID env vars in .env");
   process.exit(1);
 }
-if (!DATABASE_URL) {
-  console.error("Missing DATABASE_URL env var (Neon Postgres)");
-  process.exit(1);
+const HAS_DATABASE_URL = !!DATABASE_URL;
+if (!HAS_DATABASE_URL) {
+  console.warn("[db] DATABASE_URL not set; database-backed routes will be unavailable.");
 }
 
 const app = express();
@@ -67,12 +67,26 @@ app.use((req, res, next) => {
   next();
 });
 
+// If DB is unavailable, short-circuit API/auth routes with a clear error.
+app.use((req, res, next) => {
+  if (!pool && (req.path.startsWith("/api") || req.path.startsWith("/auth"))) {
+    return res.status(503).json({ error: "Database unavailable" });
+  }
+  return next();
+});
+
 /* ---------------------------------
    Postgres (Neon) connection + DDL
 ----------------------------------*/
-const pool = new Pool({ connectionString: DATABASE_URL });
+const pool = HAS_DATABASE_URL ? new Pool({ connectionString: DATABASE_URL }) : null;
+function assertDb(res) {
+  if (pool) return true;
+  res.status(503).json({ error: "Database unavailable" });
+  return false;
+}
 
 async function pgInit() {
+  if (!pool) return;
   // Core tables you already had
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -272,7 +286,11 @@ async function pgInit() {
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS pdf_url     TEXT`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS meta_fresh  BOOLEAN DEFAULT FALSE`);
 }
-await pgInit();
+try {
+  await pgInit();
+} catch (e) {
+  console.error("[db] init failed; continuing without database:", e?.message || e);
+}
 
 /* ---------------------------
    Session helpers (persistent)

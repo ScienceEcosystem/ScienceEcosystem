@@ -1,4 +1,5 @@
-const { Pool } = require("pg");
+import pkg from "pg";
+const { Pool } = pkg;
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -74,7 +75,15 @@ async function updateProfile(orcid, data) {
   return rows[0] || null;
 }
 
-module.exports = {
+export {
+  pool,
+  init,
+  upsertUser,
+  getUser,
+  updateProfile,
+};
+
+export default {
   pool,
   init,
   upsertUser,
