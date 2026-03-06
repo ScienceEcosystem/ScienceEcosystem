@@ -7,6 +7,119 @@
   var PAGE_SIZE = 50;
   var FOLLOW_KEY = "se_followed_authors";
 
+  // Check if viewing own profile (ORCID matches current user)
+  async function initProfilePage() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const authorId = urlParams.get('id');
+    
+    // Check if user is logged in
+    const currentUser = await fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null);
+    
+    // If no author ID in URL and user is logged in, show their profile
+    if (!authorId && currentUser) {
+      showPersonalDashboard(currentUser);
+    } 
+    // If author ID matches current user's ORCID, show enhanced profile
+    else if (authorId && currentUser && authorId === currentUser.orcid) {
+      showEnhancedProfile(authorId, currentUser);
+    }
+    // Otherwise, show public profile
+    else {
+      showPublicProfile(authorId);
+    }
+  }
+
+  function showPersonalDashboard(user) {
+    if ($("profileName")) $("profileName").textContent = user?.name || "Your Profile";
+    if ($("profileAffiliation")) $("profileAffiliation").textContent = user?.affiliation || "Signed in with ORCID";
+    if ($("otherNames")) $("otherNames").textContent = "";
+
+    if ($("profileOrcid") && user?.orcid) {
+      $("profileOrcid").href = "https://orcid.org/" + user.orcid;
+      $("profileOrcid").textContent = "ORCID: " + user.orcid;
+      $("profileOrcid").style.display = "inline-block";
+    }
+
+    if ($("followAuthorBtn")) $("followAuthorBtn").style.display = "none";
+    if ($("followStatus")) $("followStatus").textContent = "";
+
+    const main = $("profileMain");
+    const sidebar = $("profileSidebar");
+    if (main) {
+      main.innerHTML = `
+        <div class="panel">
+          <h2>Your Dashboard</h2>
+          <p class="muted">Quick stats from your library and profile.</p>
+          <div id="personalStats" class="stats-grid"></div>
+          <div style="margin-top:1rem;">
+            <a class="btn btn-secondary" href="settings-profile.html">Edit profile</a>
+          </div>
+          <div id="claimPrompt" class="notice" style="margin-top:1rem;"></div>
+        </div>
+        <div class="panel" style="margin-top:1rem;">
+          <h3>Recent activity</h3>
+          <ul class="list-reset" id="recentActivity"><li class="muted">No recent activity.</li></ul>
+        </div>
+      `;
+    }
+    if (sidebar) {
+      sidebar.innerHTML = `
+        <section class="panel">
+          <h3>Library</h3>
+          <div id="libraryQuickStats" class="muted">Loading…</div>
+          <div style="margin-top:.75rem;">
+            <a class="btn btn-secondary" href="library.html">Open library</a>
+          </div>
+        </section>
+      `;
+    }
+
+    // Claim prompt
+    const claim = document.getElementById("claimPrompt");
+    if (claim) {
+      const needsClaim = !user?.name || !user?.affiliation;
+      claim.innerHTML = needsClaim
+        ? `Claim your ORCID profile to complete your public info. <a href="settings-profile.html">Add details</a>.`
+        : "";
+    }
+
+    // Library stats
+    fetch("/api/library", { credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then(items => {
+        const count = Array.isArray(items) ? items.length : 0;
+        const stats = document.getElementById("personalStats");
+        if (stats) {
+          stats.innerHTML = `
+            <div class="stat">
+              <div class="stat-label">Saved papers</div>
+              <div class="stat-value">${count}</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Last saved</div>
+              <div class="stat-value">${count ? "Recently" : "-"}</div>
+            </div>
+          `;
+        }
+        const lib = document.getElementById("libraryQuickStats");
+        if (lib) {
+          lib.textContent = count ? `${count} papers saved` : "No papers saved yet.";
+        }
+      })
+      .catch(() => {
+        const lib = document.getElementById("libraryQuickStats");
+        if (lib) lib.textContent = "Library unavailable.";
+      });
+  }
+
+  function showEnhancedProfile(authorId, user) {
+    showPublicProfile(authorId, { enhanced: true, user });
+  }
+
+  function showPublicProfile(authorId, opts = {}) {
+    boot(authorId, opts);
+  }
+
   // ---- State (publications) ----
   var currentPage = 1;
   var totalWorksCount = 0;
@@ -540,7 +653,7 @@
   }
 
   // ---- Boot ----
-  async function boot(){
+  async function boot(authorIdParam, opts = {}){
     try{
       try{
         await fetch("/api/me", { credentials: "include" });
@@ -554,17 +667,43 @@
         }catch(_){}
       }catch(_){ isAuthed = false; serverFollows = []; }
 
-      var raw = getParam("id");
-      var id = normalizeAuthorId(raw);
+      var id = normalizeAuthorId(authorIdParam || getParam("id"));
       var authorId = id || "A1969205033"; // fallback example
       authorTail = authorId.replace(/^https?:\/\/openalex\.org\//i,"");
       var authorUrl = API + "/authors/" + encodeURIComponent(authorTail);
 
       var author = await getJSON(authorUrl);
       renderAuthorHeader(author);
-      wireFollowButton(author);
+      if (opts.enhanced && $("followAuthorBtn")) {
+        $("followAuthorBtn").textContent = "Edit profile";
+        $("followAuthorBtn").onclick = function(){ location.href = "settings-profile.html"; };
+      } else {
+        wireFollowButton(author);
+      }
       renderTrendCharts(author);
       await loadWorks(author);
+
+      if (opts.enhanced && $("profileSidebar")) {
+        const box = document.createElement("section");
+        box.className = "panel";
+        box.innerHTML = `
+          <h3>Personal Stats</h3>
+          <p class="muted">Library and account insights.</p>
+          <div id="enhancedStats" class="muted">Loading…</div>
+        `;
+        $("profileSidebar").prepend(box);
+        fetch("/api/library", { credentials: "include" })
+          .then(r => r.ok ? r.json() : [])
+          .then(items => {
+            const count = Array.isArray(items) ? items.length : 0;
+            const el = document.getElementById("enhancedStats");
+            if (el) el.textContent = `${count} papers in your library.`;
+          })
+          .catch(() => {
+            const el = document.getElementById("enhancedStats");
+            if (el) el.textContent = "Library unavailable.";
+          });
+      }
 
       var sortSel = $("pubSort");
       var orderSel = $("orderSort");
@@ -597,5 +736,5 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", boot);
+  document.addEventListener("DOMContentLoaded", initProfilePage);
 })();

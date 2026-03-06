@@ -6,6 +6,8 @@ const express = require('express');
 const searchRouter = require('./routes/search');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
+const paperRoutes = require('./routes/paper');
+const libraryRoutes = require('./routes/library');
 const session = require('express-session');
 const db = require('./db');
 
@@ -57,6 +59,8 @@ db.init().catch(e => console.error("DB init error:", e));
 app.use('/api', searchRouter);
 app.use('/api', profileRouter);
 app.use(authRouter);
+app.use(paperRoutes);
+app.use(libraryRoutes);
 app.use(express.static(PUBLIC_DIR));
 
 // Health check

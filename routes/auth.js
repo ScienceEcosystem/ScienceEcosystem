@@ -82,7 +82,7 @@ router.get("/auth/orcid/callback", async (req, res) => {
       orcid_expires_in: tokenData.expires_in || null,
       orcid_token_type: tokenData.token_type || null
     };
-    return res.redirect("/user-profile.html");
+    return res.redirect("/profile.html");
   } catch (e) {
     console.error("ORCID callback error:", e);
     return res.status(500).send("Auth failed");

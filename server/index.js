@@ -709,7 +709,7 @@ app.get("/auth/orcid/callback", async (req, res) => {
       orcid_expires_in: token.expires_in || null,
       orcid_token_type: token.token_type || null
     });
-    res.redirect("/user-profile.html");
+    res.redirect("/profile.html");
   } catch (e) {
     console.error("ORCID callback failed:", e);
     return sendAuthError(res, `Login failed. Please try again. (${e.message || e})`);

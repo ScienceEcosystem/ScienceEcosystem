@@ -1112,7 +1112,149 @@
     }
 
     renderJournalBlockSimple(p, source);
+
+    var doi = doiFromWork(p);
+    if (doi) {
+      loadLinkedResources(doi);
+    }
   }
+
+  // Load linked resources for a paper
+  async function loadLinkedResources(doi) {
+    const linkedSection = document.getElementById('linked-resources');
+    if (!linkedSection) {
+      // Create section if it doesn't exist
+      const sidebar = document.querySelector('.paper-sidebar');
+      if (sidebar) {
+        const section = document.createElement('div');
+        section.id = 'linked-resources';
+        section.className = 'paper-section';
+        sidebar.appendChild(section);
+      }
+    }
+    
+    try {
+      const response = await fetch(`/api/paper/${encodeURIComponent(doi)}`);
+      if (!response.ok) throw new Error('Failed to fetch resources');
+      
+      const data = await response.json();
+      displayLinkedResources(data.linkedResources, data.reproducibilityScore);
+    } catch (error) {
+      console.error('Error loading linked resources:', error);
+      const el = document.getElementById('linked-resources');
+      if (el) {
+        el.innerHTML = `
+          <div class="error-message">
+            <p>Could not load linked resources</p>
+          </div>
+        `;
+      }
+    }
+  }
+  
+  function displayLinkedResources(resources, score) {
+    const container = document.getElementById('linked-resources');
+    if (!container) return;
+    
+    let html = '<h3>📦 Linked Resources</h3>';
+    
+    // Reproducibility Score
+    if (score) {
+      const scoreColor = score.percentage >= 70 ? 'high' : score.percentage >= 40 ? 'medium' : 'low';
+      html += `
+        <div class="reproducibility-score ${scoreColor}">
+          <div class="score-circle">
+            <span class="score-number">${score.percentage}%</span>
+            <span class="score-label">Reproducibility</span>
+          </div>
+          <div class="score-breakdown">
+            <div class="score-item ${score.breakdown.hasOSF ? 'yes' : 'no'}">
+              <span class="icon">${score.breakdown.hasOSF ? '✓' : '○'}</span>
+              <span>OSF Project</span>
+            </div>
+            <div class="score-item ${score.breakdown.hasData ? 'yes' : 'no'}">
+              <span class="icon">${score.breakdown.hasData ? '✓' : '○'}</span>
+              <span>Data Available</span>
+            </div>
+            <div class="score-item ${score.breakdown.hasCode ? 'yes' : 'no'}">
+              <span class="icon">${score.breakdown.hasCode ? '✓' : '○'}</span>
+              <span>Code Available</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    // OSF Project
+    if (resources.osf) {
+      html += `
+        <div class="resource-card osf-project">
+          <div class="resource-header">
+            <img src="https://osf.io/static/img/cos-white2.png" alt="OSF" class="resource-logo">
+            <span class="resource-type">OSF Project</span>
+          </div>
+          <h4>${escapeHtml(resources.osf.title)}</h4>
+          ${resources.osf.description ? `<p class="resource-description">${escapeHtml(resources.osf.description)}</p>` : ''}
+          <a href="${resources.osf.url}" target="_blank" class="btn-resource">
+            View Project Materials →
+          </a>
+        </div>
+      `;
+    }
+    
+    // Datasets
+    if (resources.datasets.length > 0) {
+      html += '<div class="resource-list">';
+      html += `<h4>📊 Datasets (${resources.datasets.length})</h4>`;
+      resources.datasets.forEach(dataset => {
+        html += `
+          <div class="resource-item">
+            <div class="resource-meta">
+              <span class="resource-badge">${dataset.source}</span>
+              ${dataset.publisher ? `<span class="resource-publisher">${escapeHtml(dataset.publisher)}</span>` : ''}
+            </div>
+            <a href="${dataset.url}" target="_blank" class="resource-link">
+              ${dataset.title ? escapeHtml(dataset.title) : dataset.doi}
+            </a>
+          </div>
+        `;
+      });
+      html += '</div>';
+    }
+    
+    // Code
+    if (resources.code.length > 0) {
+      html += '<div class="resource-list">';
+      html += `<h4>💻 Code (${resources.code.length})</h4>`;
+      resources.code.forEach(code => {
+        html += `
+          <div class="resource-item">
+            <span class="resource-badge">GitHub</span>
+            <a href="${code.url}" target="_blank" class="resource-link">
+              ${code.name || code.url}
+            </a>
+          </div>
+        `;
+      });
+      html += '</div>';
+    }
+    
+    // No resources
+    if (!resources.osf && resources.datasets.length === 0 && resources.code.length === 0) {
+      html += `
+        <div class="no-resources">
+          <p>⚠️ No linked materials found</p>
+          <p class="help-text">
+            Are you the author? 
+            <a href="mailto:contact@scienceecosystem.org">Add your materials</a>
+          </p>
+        </div>
+      `;
+    }
+    
+    container.innerHTML = html;
+  }
+  
 
   async function renderGraphs(main, cited, citing){
     await renderConnectedGraph(main, cited, citing);
