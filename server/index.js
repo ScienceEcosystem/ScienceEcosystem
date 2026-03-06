@@ -668,7 +668,10 @@ function sendAuthError(res, message) {
 app.get("/auth/orcid/callback", async (req, res) => {
   const { code, state, error, error_description } = req.query;
   if (error) return sendAuthError(res, `ORCID error: ${String(error_description || error)}`);
-  if (!code) return sendAuthError(res, "Missing authorization code");
+  if (!code) {
+    console.warn("ORCID callback missing code. Query:", req.query);
+    return res.redirect("/auth/orcid/login");
+  }
   const oauthCookie = req.cookies?.orcid_oauth;
   try {
     const parsed = JSON.parse(oauthCookie || "{}");
