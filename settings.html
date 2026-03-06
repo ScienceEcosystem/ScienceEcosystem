@@ -7,22 +7,39 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <nav class="main-nav">
-    <a href="index.html" class="logo">ScienceEcosystem</a>
-    <div class="nav-links">
-      <a href="search.html">Search</a>
-      <a href="research-tools.html">Tools</a>
-      <a href="about.html">About</a>
-      <div class="user-menu" id="user-menu" style="display: none;">
-        <a href="library.html">Library</a>
-        <a href="profile.html">Profile</a>
-        <a href="settings.html">Settings</a>
-      </div>
-      <a href="/auth/orcid/login" class="btn-login" id="login-btn">Sign In with ORCID</a>
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+  <div class="nav-inner container">
+    <div class="logo">
+      <a href="index.html" aria-label="ScienceEcosystem Home">
+        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+      </a>
     </div>
-  </nav>
 
-  <main class="container" style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
+    <div class="nav-center"></div>
+
+    <div class="nav-right">
+      <a class="nav-link" href="index.html">Home</a>
+      <a class="nav-link" href="about.html">About</a>
+      <div class="nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Tools<span class="nav-chevron">▾</span></button>
+        <div class="nav-dropdown-menu">
+          <a class="nav-dropdown-item" href="journal-finder.html">Journal finder</a>
+          <a class="nav-dropdown-item" href="research-tools.html">Tools finder</a>
+        </div>
+      </div>
+
+      <a id="profileLink" class="nav-link" href="profile.html" style="display:none;"></a>
+
+      <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+        <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+        <span>Login with ORCID</span>
+      </a>
+
+      <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+    </div>
+  </div>
+</nav>
+<main class="container" style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
     <h1>Settings</h1>
     <p class="subtitle">Manage your account and preferences</p>
 
