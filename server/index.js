@@ -636,6 +636,13 @@ app.use(express.static(staticRoot, {
    ORCID OAuth
 ----------------------------*/
 app.get("/auth/orcid/login", (req, res) => {
+  console.log("\n=== ORCID LOGIN INITIATED ===");
+  console.log("Time:", new Date().toISOString());
+  console.log("Environment check:");
+  console.log("  ORCID_BASE:", process.env.ORCID_BASE);
+  console.log("  ORCID_CLIENT_ID:", process.env.ORCID_CLIENT_ID);
+  console.log("  ORCID_REDIRECT_URI:", process.env.ORCID_REDIRECT_URI);
+
   const state = crypto.randomBytes(16).toString("hex");
   res.cookie("orcid_oauth", JSON.stringify({ state }), {
     httpOnly: true,
@@ -651,7 +658,11 @@ app.get("/auth/orcid/login", (req, res) => {
     redirect_uri: ORCID_REDIRECT_URI,
     state
   });
-  return res.redirect(`${ORCID_BASE}/oauth/authorize?${params.toString()}`);
+  const authUrl = `${ORCID_BASE}/oauth/authorize?${params.toString()}`;
+  console.log("Generated auth URL:", authUrl);
+  console.log("Redirecting to ORCID...");
+  console.log("===============================\n");
+  return res.redirect(authUrl);
 });
 
 function sendAuthError(res, message) {
@@ -666,12 +677,25 @@ function sendAuthError(res, message) {
 }
 
 app.get("/auth/orcid/callback", async (req, res) => {
+  console.log("\n=== ORCID CALLBACK RECEIVED ===");
+  console.log("Time:", new Date().toISOString());
+  console.log("Query params:", req.query);
+  console.log("Full URL:", req.protocol + '://' + req.get('host') + req.originalUrl);
+
   const { code, state, error, error_description } = req.query;
-  if (error) return sendAuthError(res, `ORCID error: ${String(error_description || error)}`);
+  if (error) {
+    console.error("❌ ORCID returned error:", error, error_description);
+    console.log("===============================\n");
+    return sendAuthError(res, `ORCID error: ${String(error_description || error)}`);
+  }
   if (!code) {
-    console.warn("ORCID callback missing code. Query:", req.query);
+    console.error("❌ No authorization code received");
+    console.error("This usually means redirect URI mismatch");
+    console.log("===============================\n");
     return res.redirect("/auth/orcid/login");
   }
+  console.log("✓ Authorization code received:", String(code).substring(0, 20) + "...");
+  console.log("Exchanging code for token...");
   const oauthCookie = req.cookies?.orcid_oauth;
   try {
     const parsed = JSON.parse(oauthCookie || "{}");
@@ -688,6 +712,7 @@ app.get("/auth/orcid/callback", async (req, res) => {
   });
 
   try {
+    console.log("Sending token request to ORCID...");
     const tokenRes = await fetch(`${ORCID_BASE}/oauth/token`, {
       method: "POST",
       headers: {
@@ -701,6 +726,7 @@ app.get("/auth/orcid/callback", async (req, res) => {
         return withClient;
       })()
     });
+    console.log("Token response status:", tokenRes.status);
     if (!tokenRes.ok) {
       const t = await tokenRes.text().catch(() => "");
       console.error("ORCID token exchange failed:", tokenRes.status, t, "redirect:", ORCID_REDIRECT_URI);
@@ -708,6 +734,11 @@ app.get("/auth/orcid/callback", async (req, res) => {
     }
 
     const token = await tokenRes.json();
+    console.log("Token data received:", {
+      access_token: token.access_token ? "present" : "missing",
+      orcid: token.orcid,
+      expires_in: token.expires_in
+    });
     const orcid = token.orcid;
     if (!orcid) return sendAuthError(res, "Token response missing ORCID iD");
 
@@ -735,9 +766,13 @@ app.get("/auth/orcid/callback", async (req, res) => {
       orcid_expires_in: token.expires_in || null,
       orcid_token_type: token.token_type || null
     });
+    console.log("✓ Token exchange successful");
+    console.log("✓ User authenticated:", orcid);
+    console.log("===============================\n");
     res.redirect("/profile.html");
   } catch (e) {
-    console.error("ORCID callback failed:", e);
+    console.error("❌ Token exchange failed:", e);
+    console.log("===============================\n");
     return sendAuthError(res, `Login failed. Please try again. (${e.message || e})`);
   }
 });
@@ -1762,6 +1797,15 @@ app.get("*", (req, res, next) => {
     return res.sendFile(path.join(staticRoot, "index.html"));
   }
   next();
+});
+
+app.use((err, req, res, next) => {
+  console.error("\n=== UNHANDLED ERROR ===");
+  console.error("Path:", req.path);
+  console.error("Error:", err);
+  console.error("Stack:", err.stack);
+  console.error("======================\n");
+  res.status(500).send("Internal server error - check console");
 });
 
 app.listen(PORT, () => {
