@@ -1,6 +1,5 @@
 // --- user-profile.js ---
-// Researcher Home (post-ORCID). Adds dashboard + identity linking + projects/materials/groups.
-// Preserves existing behaviour (paper.html?id=...), nav, and claims/merge UI.
+// Researcher profile dashboard with ORCID data, library overview, and following feed.
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -26,14 +25,45 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
-function fmtDate(iso) {
+function fmtDateTime(iso) {
   if (!iso) return "-";
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-// --- Following store (local-only for now) ---
-const FOLLOW_KEY = "se_followed_authors";
+function fmtDateOnly(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function initialsFromName(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "SE";
+  const first = parts[0][0] || "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase();
+}
+
+function setAvatar(photoUrl, name) {
+  const avatar = document.getElementById("profileAvatar");
+  const img = document.getElementById("profileAvatarImg");
+  const initials = document.getElementById("profileAvatarInitials");
+  if (!avatar || !img || !initials) return;
+
+  if (photoUrl) {
+    img.src = photoUrl;
+    img.alt = name ? `${name} profile photo` : "Profile photo";
+    avatar.classList.add("has-photo");
+  } else {
+    avatar.classList.remove("has-photo");
+    initials.textContent = initialsFromName(name);
+  }
+}
+
+// --- Following feed ---
 const OPENALEX = "https://api.openalex.org";
 const MAILTO = "info@scienceecosystem.org";
 function addMailto(u) {
@@ -41,374 +71,11 @@ function addMailto(u) {
     const url = new URL(u);
     if (!url.searchParams.get("mailto")) url.searchParams.set("mailto", MAILTO);
     return url.toString();
-  } catch { return u; }
-}
-
-function badge(txt) {
-  return `<span class="badge" style="display:inline-block; padding:.1rem .4rem; border-radius:999px; background:#eef; color:#223;">${escapeHtml(txt)}</span>`;
-}
-
-async function bootstrap() {
-  const userHeader = document.getElementById("userHeader");
-  const userMain   = document.getElementById("userMain");
-  const sidebar    = document.getElementById("userSidebar");
-  const loginBtn   = document.getElementById("orcidLoginBtn");
-  const logoutBtn  = document.getElementById("logoutBtn");
-
-  // Sections
-  const todayList      = document.getElementById("todayList");
-  const activityList   = document.getElementById("activityList");
-  const activityScope  = document.getElementById("activityScope");
-  const refreshActBtn  = document.getElementById("refreshActivityBtn");
-  const projectsGrid   = document.getElementById("projectsGrid");
-  const materialsList  = document.getElementById("materialsList");
-  const libRecent      = document.getElementById("libRecent");
-  const libToRead      = document.getElementById("libToRead");
-  const libStarred     = document.getElementById("libStarred");
-  const libCountEl     = document.getElementById("libCount");
-  const clearBtn       = document.getElementById("clearLibBtn");
-  const identityBox    = document.getElementById("identityStatus");
-  const libraryList    = document.getElementById("userLibraryList");
-  const followingBtn   = document.getElementById("refreshFollowingBtn");
-  const followListEl   = document.getElementById("followedList");
-  const followUpdates  = document.getElementById("followedUpdates");
-  const orcidProfileEl = document.getElementById("orcidProfile");
-
-  function setupFollowingUI() {
-    loadFollowingFeed();
-    followingBtn?.addEventListener("click", loadFollowingFeed);
-    if (followListEl) {
-      followListEl.addEventListener("click", async (e) => {
-        const btn = e.target.closest("[data-unfollow]");
-        if (!btn) return;
-        const id = btn.getAttribute("data-unfollow");
-        try {
-          await api(`/api/follows/${encodeURIComponent(id)}`, { method: "DELETE" });
-          await loadFollowingFeed();
-        } catch {
-          alert("Failed to unfollow. Please try again.");
-        }
-      });
-    }
+  } catch {
+    return u;
   }
-
-  try {
-    // --- Session ---
-    const me = await api("/api/me");
-
-    // Toggle login/logout UI
-    if (loginBtn)  loginBtn.style.display = "none";
-    if (logoutBtn) {
-      logoutBtn.style.display = "inline-block";
-      logoutBtn.onclick = async () => {
-        try { await api("/auth/logout", { method: "POST" }); } catch(_) {}
-        location.reload();
-      };
-    }
-
-    // --- Header ---
-    const orcidUrl = me?.orcid ? `https://orcid.org/${me.orcid}` : "#";
-    userHeader.innerHTML = `
-      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem;">
-        <div>
-          <h1 style="margin:.25rem 0 0;">${escapeHtml(me.name || "Your Home")}</h1>
-          <p style="margin:.25rem 0;">
-            <strong>ORCID:</strong> ${me.orcid ? `<a href="${orcidUrl}" target="_blank" rel="noopener">${me.orcid}</a>` : "-"}
-            &nbsp;&nbsp; ${me.affiliation ? `| <strong>Affiliation:</strong> ${escapeHtml(me.affiliation)}` : ""}
-          </p>
-          <p id="syncStatus" class="muted" style="margin:.25rem 0;">Synchronisation status: <span id="syncText">Loading…</span></p>
-        </div>
-        <div class="quick-actions" style="display:flex; gap:.5rem; flex-wrap:wrap;">
-          <a class="btn" href="library.html#add">Add to library</a>
-          <a class="btn" href="settings-identity.html">Link account</a>
-        </div>
-      </div>
-    `;
-
-    // --- Identity / linking status ---
-    try {
-      const ident = await api("/api/identity/status"); // { orcid:true, github:false, scholar:false, osf:false, zenodo:false, last_sync:iso }
-      const bits = [];
-      bits.push(`${ident.orcid ? "✅" : "⚠️"} ORCID`);
-      if ("github" in ident)  bits.push(`${ident.github ? "✅" : "-"} GitHub`);
-      if ("scholar" in ident) bits.push(`${ident.scholar ? "✅" : "-"} Google Scholar`);
-      if ("osf" in ident)     bits.push(`${ident.osf ? "✅" : "-"} OSF`);
-      if ("zenodo" in ident)  bits.push(`${ident.zenodo ? "✅" : "-"} Zenodo`);
-      identityBox.innerHTML = `
-        <p style="margin:.25rem 0;">${bits.join(" &middot; ")}</p>
-        <p class="muted" style="margin:.25rem 0;">Last sync: ${fmtDate(ident.last_sync)}</p>
-      `;
-      const syncText = document.getElementById("syncText");
-      if (syncText) syncText.textContent = ident.last_sync ? fmtDate(ident.last_sync) : "never";
-    } catch {
-      identityBox.textContent = "Could not load identity status.";
-      const syncText = document.getElementById("syncText");
-      if (syncText) syncText.textContent = "unknown";
-    }
-
-    // --- ORCID profile (live record) ---
-    async function loadOrcidProfile() {
-      if (!orcidProfileEl) return;
-      try {
-        const record = await api("/api/orcid/record");
-        const person = record?.person || {};
-        const nameObj = person?.name || {};
-        const given = nameObj?.["given-names"]?.value || "";
-        const family = nameObj?.["family-name"]?.value || "";
-        const credit = nameObj?.["credit-name"]?.value || "";
-        const displayName = (credit || `${given} ${family}`).trim() || "Not provided";
-
-        const bio = person?.biography?.content || "";
-        const keywords = (person?.keywords?.keyword || []).map(k => k?.content).filter(Boolean);
-        const urls = (person?.["researcher-urls"]?.["researcher-url"] || []).map(u => ({
-          name: u?.["url-name"] || "Link",
-          url: u?.url?.value || ""
-        })).filter(u => u.url);
-        const emails = (person?.emails?.email || []).map(e => e?.email).filter(Boolean);
-
-        const activities = record?.["activities-summary"] || {};
-        const employments = activities?.employments?.["employment-summary"] || [];
-        const educations = activities?.educations?.["education-summary"] || [];
-        const worksCount = Array.isArray(activities?.works?.group) ? activities.works.group.length : 0;
-
-        const extIds = (person?.["external-identifiers"]?.["external-identifier"] || []).map(e => ({
-          type: e?.["external-id-type"],
-          value: e?.["external-id-value"]
-        })).filter(e => e.type || e.value);
-
-        const listItems = (arr, render) => arr.length
-          ? `<ul class="list">${arr.map(render).join("")}</ul>`
-          : `<p class="muted">-</p>`;
-
-        const fmtRange = (start, end) => {
-          const s = start ? `${start.year?.value || ""}` : "";
-          const e = end ? `${end.year?.value || ""}` : "";
-          if (!s && !e) return "";
-          return s && e ? `${s} - ${e}` : (s || e);
-        };
-
-        const orgLine = (item) => {
-          const org = item?.organization?.name || "Organization";
-          const role = item?.["role-title"] || "";
-          const range = fmtRange(item?.["start-date"], item?.["end-date"]);
-          const parts = [org, role].filter(Boolean).join(" - ");
-          return `${escapeHtml(parts)}${range ? ` <span class="muted">(${escapeHtml(range)})</span>` : ""}`;
-        };
-
-        orcidProfileEl.innerHTML = `
-          <p><strong>Name:</strong> ${escapeHtml(displayName)}</p>
-          <p><strong>ORCID iD:</strong> ${record?.["orcid-identifier"]?.path ? `<a href="https://orcid.org/${escapeHtml(record["orcid-identifier"].path)}" target="_blank" rel="noopener">${escapeHtml(record["orcid-identifier"].path)}</a>` : "-"}</p>
-          ${bio ? `<p><strong>Bio:</strong> ${escapeHtml(bio)}</p>` : ""}
-          <p><strong>Keywords:</strong> ${keywords.length ? keywords.map(escapeHtml).join(", ") : "-"}</p>
-          <p><strong>Emails:</strong> ${emails.length ? emails.map(escapeHtml).join(", ") : "-"}</p>
-          <p><strong>External IDs:</strong> ${extIds.length ? extIds.map(e => `${escapeHtml(e.type || "")}${e.value ? `: ${escapeHtml(e.value)}` : ""}`).join(", ") : "-"}</p>
-          <div style="margin-top:.5rem;">
-            <strong>Employments:</strong>
-            ${listItems(employments, (e) => `<li>${orgLine(e)}</li>`)}
-          </div>
-          <div style="margin-top:.5rem;">
-            <strong>Education:</strong>
-            ${listItems(educations, (e) => `<li>${orgLine(e)}</li>`)}
-          </div>
-          <p><strong>Works:</strong> ${worksCount || "-"}</p>
-          ${urls.length ? `<div><strong>Researcher links:</strong>${listItems(urls, (u) => `<li><a href="${escapeHtml(u.url)}" target="_blank" rel="noopener">${escapeHtml(u.name)}</a></li>`)}</div>` : ""}
-          <p class="muted small" style="margin-top:.5rem;">Only fields visible on ORCID are shown.</p>
-          <details style="margin-top:.5rem;">
-            <summary>Full ORCID record (JSON)</summary>
-            <pre style="white-space:pre-wrap; background:#f7f7f7; padding:.75rem; border-radius:8px; margin-top:.5rem;">${escapeHtml(JSON.stringify(record, null, 2))}</pre>
-          </details>
-        `;
-      } catch {
-        orcidProfileEl.innerHTML = `<p class="muted">Could not load ORCID data. Please re-login to grant access.</p>`;
-      }
-    }
-    await loadOrcidProfile();
-
-    // --- Today / this week (actions & alerts) ---
-    try {
-      const due = await api("/api/alerts"); // [{id,type,title,due_at,link}]
-      renderSimpleList(todayList, due, (a) => `
-        <li>
-          <a href="${escapeHtml(a.link || '#')}">${escapeHtml(a.title || a.type || "Item")}</a>
-          <span class="muted"> · due ${fmtDate(a.due_at)}</span>
-        </li>
-      `, "Nothing scheduled.");
-    } catch { todayList.innerHTML = `<li class="muted">No items.</li>`; }
-
-    // --- Activity ---
-    async function loadActivity(scope = "all") {
-      try {
-        const items = await api(`/api/activity?scope=${encodeURIComponent(scope)}`); // [{id,verb,object,when,link}]
-        renderSimpleList(activityList, items, (ev) => `
-          <li>
-            <span>${escapeHtml(ev.verb || "Updated")} ${escapeHtml(ev.object || "")}</span>
-            ${ev.link ? ` · <a href="${escapeHtml(ev.link)}">open</a>` : ""}
-            <span class="muted"> · ${fmtDate(ev.when)}</span>
-          </li>
-        `, "No recent activity.");
-      } catch {
-        activityList.innerHTML = `<li class="muted">Could not load activity.</li>`;
-      }
-    }
-    activityScope?.addEventListener("change", (e) => loadActivity(e.target.value));
-    document.getElementById("refreshActivityBtn")?.addEventListener("click", () => loadActivity(activityScope?.value || "all"));
-    await loadActivity("all");
-
-    // --- Projects snapshot ---
-    if (projectsGrid) {
-      try {
-        const projects = await api("/api/projects?limit=6"); // [{id,title,stage,open_tasks,last_active,summary}]
-        if (!projects || !projects.length) {
-          projectsGrid.innerHTML = `<p class="muted">No projects yet. <a href="projects-new.html">Create your first project</a>.</p>`;
-        } else {
-          projectsGrid.innerHTML = projects.map(p => `
-            <article class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
-              <h3 style="margin-top:0;"><a href="project.html?id=${encodeURIComponent(p.id)}">${escapeHtml(p.title)}</a></h3>
-              <p class="muted" style="margin:.25rem 0;">${escapeHtml(p.summary || "")}</p>
-              <p style="margin:.25rem 0;">${p.stage ? badge(p.stage) : ""} ${typeof p.open_tasks === "number" ? badge(`${p.open_tasks} open tasks`) : ""}</p>
-              <p class="muted" style="margin:.25rem 0;">Last active: ${fmtDate(p.last_active)}</p>
-            </article>
-          `).join("");
-        }
-      } catch {
-        projectsGrid.innerHTML = `<p class="muted">Could not load projects.</p>`;
-      }
-    }
-
-    // --- Materials in progress ---
-    if (materialsList) {
-      try {
-        const materials = await api("/api/materials?limit=8"); // [{id,type,title,status,updated_at,link}]
-        renderSimpleList(materialsList, materials, (m) => `
-          <li>
-            ${badge(m.type || "material")} <a href="${escapeHtml(m.link || `material.html?id=${encodeURIComponent(m.id)}`)}">${escapeHtml(m.title || "Untitled")}</a>
-            <span class="muted"> · ${escapeHtml(m.status || "draft")} · ${fmtDate(m.updated_at)}</span>
-          </li>
-        `, "No materials yet. Try <a href='materials-new.html'>uploading a file</a> or creating a draft.");
-      } catch {
-        materialsList.innerHTML = `<li class="muted">Could not load materials.</li>`;
-      }
-    }
-
-    // --- Library (quick access + stats + sidebar list preserves your remove flow) ---
-    let libItems = [];
-    try {
-      libItems = await api("/api/library"); // [{id,title,labels:["starred","to-read",...], saved_at}]
-    } catch {}
-    if (Array.isArray(libItems)) {
-      // Stats
-      if (libCountEl) libCountEl.textContent = String(libItems.length || 0);
-
-      // Quick access buckets
-      fillBucket(libRecent, sortByDate(libItems).slice(0, 3), "saved_at");
-      fillBucket(libToRead, libItems.filter(i => hasLabel(i, "to-read")).slice(0, 3));
-      fillBucket(libStarred, libItems.filter(i => hasLabel(i, "starred")).slice(0, 3));
-
-      // Sidebar detailed list (with remove buttons intact)
-      renderLibrarySidebar(libraryList, libItems, libCountEl);
-    }
-
-    if (clearBtn) {
-      clearBtn.onclick = async () => {
-        if (!confirm("Remove all items from your library?")) return;
-        try {
-          await api("/api/library", { method: "DELETE" });
-          [libRecent, libToRead, libStarred, libraryList].forEach(ul => { if (ul) ul.innerHTML = "<li>-</li>"; });
-          if (libCountEl) libCountEl.textContent = "0";
-        } catch { alert("Failed to clear library."); }
-      };
-    }
-  } catch (e) {
-    // Not logged in yet (or error): keep prior behaviour
-    console.warn(e);
-    const userMain = document.getElementById("userMain");
-    const sidebar = document.getElementById("userSidebar");
-    const userHeader = document.getElementById("userHeader");
-    if (userHeader) userHeader.innerHTML = `<h1>Sign in to view your home</h1>`;
-    if (userMain) userMain.innerHTML = `
-      <section class="panel" style="background:#fff; padding:1rem; border-radius:10px;">
-        <p>Use the green ORCID button in the header.</p>
-      </section>`;
-    if (sidebar) sidebar.innerHTML = `<section class="panel" style="background:#fff; padding:1rem; border-radius:10px;"><p>Sign in to see your stats and tools.</p></section>`;
-    const loginBtn = document.getElementById("orcidLoginBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
-    if (loginBtn) loginBtn.style.display = "inline-flex";
-    if (logoutBtn) logoutBtn.style.display = "none";
-  }
-
-  // Always wire up local following (works even when not signed in)
-  setupFollowingUI();
-
-  // --- Claims / Merge UI (existing feature) ---
-  try { await renderClaimsUI(); } catch (e) { console.warn(e); }
 }
 
-// --- helpers ---
-
-function renderSimpleList(ul, items, tpl, emptyMsg = "Nothing here.") {
-  if (!ul) return;
-  if (!items || !items.length) { ul.innerHTML = `<li class="muted">${emptyMsg}</li>`; return; }
-  ul.innerHTML = items.map(tpl).join("");
-}
-
-function sortByDate(arr, key = "saved_at") {
-  return [...(arr || [])].sort((a, b) => new Date(b[key] || 0) - new Date(a[key] || 0));
-}
-
-function hasLabel(item, label) {
-  return Array.isArray(item?.labels) && item.labels.includes(label);
-}
-
-function fillBucket(ul, items, dateKey) {
-  if (!ul) return;
-  if (!items || !items.length) { ul.innerHTML = `<li class="muted">-</li>`; return; }
-  ul.innerHTML = items.map(i => `
-    <li>
-      <a href="paper.html?id=${encodeURIComponent(i.id)}">${escapeHtml(i.title || "Untitled")}</a>
-      ${dateKey ? `<span class="muted"> · ${fmtDate(i[dateKey])}</span>` : ""}
-    </li>
-  `).join("");
-}
-
-// Sidebar library list with remove buttons (keeps your original behaviour)
-function renderLibrarySidebar(listEl, items, libCountEl) {
-  if (!listEl) return;
-  if (!items || !items.length) {
-    listEl.innerHTML = "<li>No papers saved yet.</li>";
-    if (libCountEl) libCountEl.textContent = "0";
-    return;
-  }
-  listEl.innerHTML = items.slice(0, 10).map(p => `
-    <li style="margin:.25rem 0; display:flex; justify-content:space-between; gap:.5rem;">
-      <span><a href="paper.html?id=${encodeURIComponent(p.id)}">${escapeHtml(p.title || "Untitled")}</a></span>
-      <span>
-        <button data-id="${encodeURIComponent(p.id)}" class="removeBtn" style="margin-left:.5rem;">Remove</button>
-      </span>
-    </li>
-  `).join("");
-
-  // Wire remove buttons
-  [...document.querySelectorAll(".removeBtn")].forEach((btn) => {
-    let busy = false;
-    btn.onclick = async () => {
-      if (busy) return; busy = true;
-      try {
-        const id = btn.getAttribute("data-id");
-        await api(`/api/library/${encodeURIComponent(id)}`, { method: "DELETE" });
-        const li = btn.closest("li");
-        if (li) li.remove();
-        const remain = document.querySelectorAll("#userLibraryList li").length;
-        if (libCountEl) libCountEl.textContent = String(remain);
-      } catch {
-        alert("Failed to remove item.");
-      } finally {
-        busy = false;
-      }
-    };
-  });
-}
-
-// --- Following feed ---
 async function fetchFollows() {
   try {
     const list = await api("/api/follows");
@@ -435,9 +102,12 @@ function renderFollowedAuthors(list) {
     return;
   }
   ul.innerHTML = list.map((f) => `
-    <li style="display:flex; justify-content:space-between; gap:.5rem; align-items:center;">
-      <span><a href="profile.html?id=${encodeURIComponent(f.id)}">${escapeHtml(f.name || f.id)}</a></span>
-      <button class="btn btn-small" data-unfollow="${encodeURIComponent(f.id)}">Unfollow</button>
+    <li>
+      <div class="avatar-chip">
+        <span class="avatar-mini">${escapeHtml(initialsFromName(f.name || f.id))}</span>
+        <a href="profile.html?id=${encodeURIComponent(f.id)}">${escapeHtml(f.name || f.id)}</a>
+      </div>
+      <button class="btn btn-ghost btn-small" data-unfollow="${encodeURIComponent(f.id)}">Unfollow</button>
     </li>
   `).join("");
 }
@@ -450,10 +120,10 @@ function renderFollowUpdates(entries) {
     return;
   }
   entries.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-  ul.innerHTML = entries.slice(0, 12).map((item) => `
+  ul.innerHTML = entries.slice(0, 10).map((item) => `
     <li>
       <a href="${escapeHtml(item.link)}">${escapeHtml(item.title || "Untitled")}</a>
-      <span class="muted"> · ${escapeHtml(item.author || "")} · ${fmtDate(item.date)}</span>
+      <div class="update-meta">${escapeHtml(item.author || "")} · ${fmtDateOnly(item.date)}</div>
     </li>
   `).join("");
 }
@@ -487,7 +157,391 @@ async function loadFollowingFeed() {
   renderFollowUpdates(entries);
 }
 
-// ---- Claim / Merge UI (profile sidebar) ----
+function setupFollowingUI() {
+  loadFollowingFeed();
+  const followingBtn = document.getElementById("refreshFollowingBtn");
+  followingBtn?.addEventListener("click", loadFollowingFeed);
+
+  const followListEl = document.getElementById("followedList");
+  if (followListEl) {
+    followListEl.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-unfollow]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-unfollow");
+      try {
+        await api(`/api/follows/${encodeURIComponent(id)}`, { method: "DELETE" });
+        await loadFollowingFeed();
+      } catch {
+        alert("Failed to unfollow. Please try again.");
+      }
+    });
+  }
+}
+
+// --- ORCID helpers ---
+function orcidDateToNumber(d) {
+  if (!d || !d.year?.value) return null;
+  const y = Number(d.year.value);
+  const m = Number(d.month?.value || 1);
+  const day = Number(d.day?.value || 1);
+  return new Date(Date.UTC(y, m - 1, day)).getTime();
+}
+
+function fmtOrcidDate(d) {
+  if (!d || !d.year?.value) return "";
+  const y = Number(d.year.value);
+  const m = d.month?.value ? Number(d.month.value) : null;
+  const day = d.day?.value ? Number(d.day.value) : null;
+  if (!m) return String(y);
+  const date = new Date(Date.UTC(y, m - 1, day || 1));
+  if (day) return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return date.toLocaleDateString(undefined, { year: "numeric", month: "short" });
+}
+
+function fmtOrcidRange(start, end) {
+  const s = fmtOrcidDate(start);
+  const e = fmtOrcidDate(end);
+  if (!s && !e) return "";
+  if (s && e) return `${s} – ${e}`;
+  if (s && !e) return `${s} – Present`;
+  return e;
+}
+
+function listOrEmpty(items, renderItem, emptyMsg = "No public data available.") {
+  if (!items.length) return `<p class="muted">${emptyMsg}</p>`;
+  return `<ul class="list">${items.map(renderItem).join("")}</ul>`;
+}
+
+function extractOpenAlexId(value) {
+  if (!value) return null;
+  const str = String(value);
+  if (str.includes("openalex.org/")) {
+    const id = str.split("openalex.org/")[1];
+    return id ? id.replace(/^\s+|\s+$/g, "") : null;
+  }
+  if (/^W\d+$/i.test(str)) return str;
+  return null;
+}
+
+function getOrcidPhoto(record) {
+  const person = record?.person || {};
+  const photos = person?.["person-photos"]?.photo || [];
+  const first = photos[0] || {};
+  return first?.url?.value || first?.value || first?.url || "";
+}
+
+async function loadOrcidProfile() {
+  const personalEl = document.getElementById("orcidPersonal");
+  const contactEl = document.getElementById("orcidContact");
+  const keywordsEl = document.getElementById("orcidKeywords");
+  const employmentEl = document.getElementById("orcidEmployment");
+  const educationEl = document.getElementById("orcidEducation");
+  const worksEl = document.getElementById("orcidWorks");
+  const fundingEl = document.getElementById("orcidFunding");
+  const serviceEl = document.getElementById("orcidService");
+  const lastUpdatedEl = document.getElementById("orcidLastUpdated");
+
+  if (!personalEl) return;
+
+  try {
+    const record = await api("/api/orcid/record");
+    const person = record?.person || {};
+    const nameObj = person?.name || {};
+    const given = nameObj?.["given-names"]?.value || "";
+    const family = nameObj?.["family-name"]?.value || "";
+    const credit = nameObj?.["credit-name"]?.value || "";
+    const displayName = (credit || `${given} ${family}`).trim() || "Not provided";
+
+    const bio = person?.biography?.content || "";
+    const orcidId = record?.["orcid-identifier"]?.path || "";
+    const photoUrl = getOrcidPhoto(record);
+
+    const emails = (person?.emails?.email || []).map(e => e?.email).filter(Boolean);
+    const urls = (person?.["researcher-urls"]?.["researcher-url"] || []).map(u => ({
+      name: u?.["url-name"] || "Link",
+      url: u?.url?.value || ""
+    })).filter(u => u.url);
+    const extIds = (person?.["external-identifiers"]?.["external-identifier"] || []).map(e => ({
+      type: e?.["external-id-type"],
+      value: e?.["external-id-value"],
+      url: e?.["external-id-url"]?.value || ""
+    })).filter(e => e.type || e.value || e.url);
+
+    const keywords = (person?.keywords?.keyword || []).map(k => k?.content).filter(Boolean);
+
+    const activities = record?.["activities-summary"] || {};
+    const employments = activities?.employments?.["employment-summary"] || [];
+    const educations = activities?.educations?.["education-summary"] || [];
+
+    const worksGroups = Array.isArray(activities?.works?.group) ? activities.works.group : [];
+    const works = worksGroups.flatMap(g => g?.["work-summary"] || []);
+
+    const fundGroups = Array.isArray(activities?.fundings?.group) ? activities.fundings.group : [];
+    const fundings = fundGroups.flatMap(g => g?.["funding-summary"] || []);
+
+    const peerGroups = Array.isArray(activities?.["peer-reviews"]?.group) ? activities["peer-reviews"].group : [];
+    const peerReviews = peerGroups.flatMap(g => g?.["peer-review-summary"] || []);
+    const services = activities?.services?.["service-summary"] || [];
+
+    const lastModified = record?.["last-modified-date"]?.value;
+    if (lastUpdatedEl) lastUpdatedEl.textContent = lastModified ? fmtDateTime(lastModified) : "-";
+
+    // Personal information
+    personalEl.innerHTML = `
+      <div style="display:flex; gap:1rem; align-items:flex-start;">
+        <div class="avatar-large ${photoUrl ? "has-photo" : ""}" style="width:80px;height:80px;">
+          ${photoUrl ? `<img src="${escapeHtml(photoUrl)}" alt="${escapeHtml(displayName)} profile photo" referrerpolicy="no-referrer">` : `<span>${escapeHtml(initialsFromName(displayName))}</span>`}
+        </div>
+        <div>
+          <p><strong>Name:</strong> ${escapeHtml(displayName)}</p>
+          <p><strong>Given:</strong> ${escapeHtml(given || "-")}</p>
+          <p><strong>Family:</strong> ${escapeHtml(family || "-")}</p>
+          ${credit ? `<p><strong>Credit name:</strong> ${escapeHtml(credit)}</p>` : ""}
+          <p><strong>ORCID iD:</strong> ${orcidId ? `<a href="https://orcid.org/${escapeHtml(orcidId)}" target="_blank" rel="noopener">${escapeHtml(orcidId)}</a>` : "-"}</p>
+        </div>
+      </div>
+      ${bio ? `<p style="margin-top:.75rem;"><strong>Bio:</strong> ${escapeHtml(bio)}</p>` : ""}
+    `;
+
+    // Contact & Links
+    const emailsHtml = emails.length ? emails.map(e => `<li>${escapeHtml(e)}</li>`).join("") : "";
+    const urlsHtml = urls.length ? urls.map(u => `<li><a href="${escapeHtml(u.url)}" target="_blank" rel="noopener">${escapeHtml(u.name)}</a></li>`).join("") : "";
+    const idsHtml = extIds.length ? extIds.map(e => {
+      const label = [e.type, e.value].filter(Boolean).join(": ");
+      const link = e.url ? `<a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">${escapeHtml(label || e.url)}</a>` : escapeHtml(label || e.url);
+      return `<li>${link}</li>`;
+    }).join("") : "";
+    contactEl.innerHTML = `
+      <div>
+        <p><strong>Emails:</strong></p>
+        ${emails.length ? `<ul class="list">${emailsHtml}</ul>` : `<p class="muted">No public emails.</p>`}
+        <p><strong>Researcher URLs:</strong></p>
+        ${urls.length ? `<ul class="list">${urlsHtml}</ul>` : `<p class="muted">No public links.</p>`}
+        <p><strong>External identifiers:</strong></p>
+        ${extIds.length ? `<ul class="list">${idsHtml}</ul>` : `<p class="muted">No external identifiers.</p>`}
+      </div>
+    `;
+
+    // Keywords
+    keywordsEl.innerHTML = keywords.length
+      ? `<div class="pill-group">${keywords.map(k => `<span class="pill">${escapeHtml(k)}</span>`).join("")}</div>`
+      : `<p class="muted">No keywords listed.</p>`;
+
+    // Employment
+    const employmentSorted = [...employments].sort((a, b) => {
+      const aKey = orcidDateToNumber(a?.["end-date"]) ?? orcidDateToNumber(a?.["start-date"]) ?? 0;
+      const bKey = orcidDateToNumber(b?.["end-date"]) ?? orcidDateToNumber(b?.["start-date"]) ?? 0;
+      return bKey - aKey;
+    });
+    employmentEl.innerHTML = listOrEmpty(employmentSorted, (item) => {
+      const org = item?.organization?.name || "Organization";
+      const role = item?.["role-title"] || "";
+      const range = fmtOrcidRange(item?.["start-date"], item?.["end-date"]);
+      const title = [org, role].filter(Boolean).join(" · ");
+      return `<li><strong>${escapeHtml(title)}</strong>${range ? ` <span class="muted">(${escapeHtml(range)})</span>` : ""}</li>`;
+    });
+
+    // Education
+    const educationSorted = [...educations].sort((a, b) => {
+      const aKey = orcidDateToNumber(a?.["end-date"]) ?? orcidDateToNumber(a?.["start-date"]) ?? 0;
+      const bKey = orcidDateToNumber(b?.["end-date"]) ?? orcidDateToNumber(b?.["start-date"]) ?? 0;
+      return bKey - aKey;
+    });
+    educationEl.innerHTML = listOrEmpty(educationSorted, (item) => {
+      const org = item?.organization?.name || "Institution";
+      const role = item?.["role-title"] || item?.["department-name"] || "";
+      const range = fmtOrcidRange(item?.["start-date"], item?.["end-date"]);
+      const title = [org, role].filter(Boolean).join(" · ");
+      return `<li><strong>${escapeHtml(title)}</strong>${range ? ` <span class="muted">(${escapeHtml(range)})</span>` : ""}</li>`;
+    });
+
+    // Works
+    const worksList = works.map((w) => {
+      const title = w?.title?.title?.value || w?.title?.value || "Untitled";
+      const year = w?.["publication-date"]?.year?.value || w?.["publication-date"]?.year || w?.["publication-year"]?.value || "";
+      const ext = w?.["external-ids"]?.["external-id"] || [];
+      let openalex = null;
+      ext.forEach((e) => {
+        openalex = openalex || extractOpenAlexId(e?.["external-id-value"]) || extractOpenAlexId(e?.["external-id-url"]?.value);
+        if (!openalex && e?.["external-id-type"] && String(e["external-id-type"]).toLowerCase().includes("openalex")) {
+          openalex = extractOpenAlexId(e?.["external-id-value"]);
+        }
+      });
+      const link = openalex ? `paper.html?id=${encodeURIComponent(openalex)}` : null;
+      return { title, year, link };
+    });
+
+    worksEl.innerHTML = `
+      <p><strong>Total works:</strong> ${worksList.length || 0}</p>
+      ${listOrEmpty(worksList, (w) => `
+        <li>
+          ${w.link ? `<a href="${escapeHtml(w.link)}">${escapeHtml(w.title)}</a>` : escapeHtml(w.title)}
+          ${w.year ? `<span class="muted"> · ${escapeHtml(w.year)}</span>` : ""}
+        </li>
+      `, "No works available.")}
+    `;
+
+    // Funding
+    fundingEl.innerHTML = listOrEmpty(fundings, (f) => {
+      const title = f?.title?.title?.value || "Funding";
+      const org = f?.organization?.name || f?.["organization-defined-type"] || "";
+      const range = fmtOrcidRange(f?.["start-date"], f?.["end-date"]);
+      const meta = [org, range].filter(Boolean).join(" · ");
+      return `<li><strong>${escapeHtml(title)}</strong>${meta ? ` <span class="muted">(${escapeHtml(meta)})</span>` : ""}</li>`;
+    }, "No funding records.");
+
+    // Peer review & service
+    const serviceItems = [];
+    peerReviews.forEach((p) => {
+      const role = p?.["reviewer-role"] || "Reviewer";
+      const org = p?.["convening-organization"]?.name || p?.["review-group-id"] || "Peer review";
+      const date = fmtOrcidDate(p?.["review-completion-date"] || p?.["review-date"]);
+      serviceItems.push({ label: `${role} · ${org}`, date });
+    });
+    services.forEach((s) => {
+      const org = s?.organization?.name || "Service";
+      const role = s?.["role-title"] || "Service";
+      const range = fmtOrcidRange(s?.["start-date"], s?.["end-date"]);
+      serviceItems.push({ label: `${role} · ${org}`, date: range });
+    });
+
+    serviceEl.innerHTML = listOrEmpty(serviceItems, (item) => `
+      <li><strong>${escapeHtml(item.label)}</strong>${item.date ? ` <span class="muted">(${escapeHtml(item.date)})</span>` : ""}</li>
+    `, "No peer review or service data.");
+
+    // Update hero with ORCID photo if available
+    setAvatar(photoUrl, displayName);
+  } catch {
+    if (personalEl) personalEl.innerHTML = `<p class="muted">Could not load ORCID data. Please re-login to grant access.</p>`;
+    if (contactEl) contactEl.innerHTML = `<p class="muted">-</p>`;
+    if (keywordsEl) keywordsEl.innerHTML = `<p class="muted">-</p>`;
+    if (employmentEl) employmentEl.innerHTML = `<p class="muted">-</p>`;
+    if (educationEl) educationEl.innerHTML = `<p class="muted">-</p>`;
+    if (worksEl) worksEl.innerHTML = `<p class="muted">-</p>`;
+    if (fundingEl) fundingEl.innerHTML = `<p class="muted">-</p>`;
+    if (serviceEl) serviceEl.innerHTML = `<p class="muted">-</p>`;
+  }
+}
+
+// --- Library ---
+function sortByDate(arr, key = "saved_at") {
+  return [...(arr || [])].sort((a, b) => new Date(b[key] || 0) - new Date(a[key] || 0));
+}
+
+function hasLabel(item, label) {
+  return Array.isArray(item?.labels) && item.labels.includes(label);
+}
+
+function fillBucket(ul, items, dateKey) {
+  if (!ul) return;
+  if (!items || !items.length) { ul.innerHTML = `<li class="muted">-</li>`; return; }
+  ul.innerHTML = items.map(i => `
+    <li>
+      <a href="paper.html?id=${encodeURIComponent(i.id)}">${escapeHtml(i.title || "Untitled")}</a>
+      ${dateKey ? `<span class="item-date">${fmtDateOnly(i[dateKey])}</span>` : ""}
+    </li>
+  `).join("");
+}
+
+async function bootstrap() {
+  const loginBtn = document.getElementById("orcidLoginBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const profileName = document.getElementById("profileName");
+  const profileOrcidLink = document.getElementById("profileOrcidLink");
+  const profileAffiliation = document.getElementById("profileAffiliation");
+  const syncText = document.getElementById("syncText");
+  const viewOrcidBtn = document.getElementById("viewOrcidBtn");
+  const orcidEditLink = document.getElementById("orcidEditLink");
+
+  const identityBadges = document.getElementById("identityBadges");
+  const identityLastSync = document.getElementById("identityLastSync");
+
+  const libRecent = document.getElementById("libRecent");
+  const libToRead = document.getElementById("libToRead");
+  const libStarred = document.getElementById("libStarred");
+  const libCountBig = document.getElementById("libCountBig");
+  const libCountBadge = document.getElementById("libCountBadge");
+
+  try {
+    const me = await api("/api/me");
+
+    if (loginBtn) loginBtn.style.display = "none";
+    if (logoutBtn) {
+      logoutBtn.style.display = "inline-block";
+      logoutBtn.onclick = async () => {
+        try { await api("/auth/logout", { method: "POST" }); } catch (_) {}
+        location.reload();
+      };
+    }
+
+    const orcidUrl = me?.orcid ? `https://orcid.org/${me.orcid}` : "https://orcid.org";
+    if (profileName) profileName.textContent = me?.name || "Your profile";
+    if (profileOrcidLink) {
+      profileOrcidLink.textContent = me?.orcid ? `ORCID: ${me.orcid}` : "ORCID";
+      profileOrcidLink.href = orcidUrl;
+    }
+    if (profileAffiliation) profileAffiliation.textContent = me?.affiliation ? `• ${me.affiliation}` : "";
+    if (viewOrcidBtn) viewOrcidBtn.href = orcidUrl;
+    if (orcidEditLink) orcidEditLink.href = orcidUrl;
+    setAvatar(\"\", me?.name || \"\");
+
+    // Identity / linking status
+    try {
+      const ident = await api("/api/identity/status");
+      const bits = [
+        { key: "orcid", label: "ORCID" },
+        { key: "github", label: "GitHub" },
+        { key: "scholar", label: "Scholar" },
+        { key: "osf", label: "OSF" },
+        { key: "zenodo", label: "Zenodo" },
+      ];
+      if (identityBadges) {
+        identityBadges.innerHTML = bits.map((b) => {
+          const ok = !!ident?.[b.key];
+          const cls = ok ? "linked" : "unlinked";
+          const icon = ok ? "✅" : "⚠️";
+          return `<span class="badge ${cls}">${icon} ${escapeHtml(b.label)}</span>`;
+        }).join("");
+      }
+      const lastSync = ident?.last_sync ? fmtDateTime(ident.last_sync) : "never";
+      if (identityLastSync) identityLastSync.textContent = lastSync;
+      if (syncText) syncText.textContent = lastSync;
+    } catch {
+      if (identityBadges) identityBadges.innerHTML = `<span class="badge unlinked">⚠️ Identity status unavailable</span>`;
+      if (identityLastSync) identityLastSync.textContent = "unknown";
+      if (syncText) syncText.textContent = "unknown";
+    }
+
+    // Library overview
+    let libItems = [];
+    try {
+      libItems = await api("/api/library");
+    } catch {}
+    if (Array.isArray(libItems)) {
+      const total = libItems.length || 0;
+      if (libCountBig) libCountBig.textContent = String(total);
+      if (libCountBadge) libCountBadge.textContent = `${total} papers`;
+
+      fillBucket(libRecent, sortByDate(libItems).slice(0, 5), "saved_at");
+      fillBucket(libToRead, libItems.filter(i => hasLabel(i, "to-read")).slice(0, 5));
+      fillBucket(libStarred, libItems.filter(i => hasLabel(i, "starred")).slice(0, 5));
+    }
+
+    await loadOrcidProfile();
+  } catch (e) {
+    console.warn(e);
+    if (profileName) profileName.textContent = "Sign in to view your profile";
+    if (syncText) syncText.textContent = "-";
+    if (loginBtn) loginBtn.style.display = "inline-flex";
+    if (logoutBtn) logoutBtn.style.display = "none";
+  }
+
+  setupFollowingUI();
+
+  try { await renderClaimsUI(); } catch (e) { console.warn(e); }
+}
+
+// ---- Claim / Merge UI (advanced settings) ----
 async function renderClaimsUI() {
   const container = document.getElementById("claimsPanel");
   if (!container) return;
@@ -529,7 +583,7 @@ async function renderClaimsUI() {
         ).join("");
 
         const opts = data.claims.map(c => `<option value="${c.author_id}">${c.author_id}</option>`).join("");
-        container.querySelector("#mergePrimary").innerHTML   = `<option value="">Primary…</option>${opts}`;
+        container.querySelector("#mergePrimary").innerHTML = `<option value="">Primary…</option>${opts}`;
         container.querySelector("#mergeSecondary").innerHTML = `<option value="">Secondary…</option>${opts}`;
       }
 

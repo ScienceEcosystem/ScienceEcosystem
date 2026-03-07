@@ -6,7 +6,7 @@
   <title>Researcher Home | ScienceEcosystem</title>
   <meta name="description" content="Your ScienceEcosystem home: library, activity, and identity linking." />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
 <body data-page="user-profile">
@@ -51,128 +51,140 @@
 </nav>
 
 
-  <main id="main" class="container" style="padding:2rem 1rem;">
-    <!-- Page header (populated by JS) -->
-    <header id="userHeader" class="page-header" style="margin-bottom:1rem;">
-      <!-- JS will render name, ORCID, affiliation and quick actions -->
-    </header>
-
-    <div id="userProfileLayout" style="display:flex; flex-wrap:wrap; gap:2rem;">
-      <!-- Main column -->
-      <div id="userMain" style="flex:3; min-width:0;">
-        <!-- Today / This week -->
-        <section id="sectionToday" class="panel" aria-labelledby="h-today" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
-            <h2 id="h-today" style="margin:0;">Today &amp; this week</h2>
-          </div>
-          <ul id="todayList" class="list" style="margin-top:.5rem;"></ul>
-        </section>
-
-        <!-- Activity stream -->
-        <section id="sectionActivity" class="panel" aria-labelledby="h-activity" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
-            <h2 id="h-activity" style="margin:0;">Activity</h2>
-            <div class="controls" style="display:flex; gap:.5rem;">
-              <select id="activityScope" class="input">
-                <option value="all">Everything</option>
-                <option value="library">Library</option>
-              </select>
-              <button id="refreshActivityBtn" class="btn btn-small">Refresh</button>
-            </div>
-          </div>
-          <ul id="activityList" class="timeline" style="margin-top:.5rem;"></ul>
-        </section>
-
-        <!-- Followed researchers feed -->
-        <section id="sectionFollowing" class="panel" aria-labelledby="h-following" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
-            <h2 id="h-following" style="margin:0;">Following</h2>
-            <button id="refreshFollowingBtn" class="btn btn-small">Refresh</button>
-          </div>
-          <p class="muted small" style="margin:.25rem 0;">Follow researchers on their profile pages. New works appear here.</p>
-          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; margin-top:.5rem;">
-            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
-              <h3 style="margin-top:0;">Researchers you follow</h3>
-              <ul id="followedList" class="list"></ul>
-            </div>
-            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
-              <h3 style="margin-top:0;">Latest updates</h3>
-              <ul id="followedUpdates" class="list"></ul>
-            </div>
-          </div>
-        </section>
-
-        <!-- ORCID profile -->
-        <section id="sectionOrcid" class="panel" aria-labelledby="h-orcid" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
-            <h2 id="h-orcid" style="margin:0;">ORCID profile</h2>
-            <a class="btn btn-small" href="https://orcid.org" target="_blank" rel="noopener">ORCID</a>
-          </div>
-          <div id="orcidProfile" class="muted" style="margin-top:.5rem;">Loading ORCID data…</div>
-        </section>
-
-        <!-- Library quick access -->
-        <section id="sectionLibrary" class="panel" aria-labelledby="h-library" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:.5rem;">
-            <h2 id="h-library" style="margin:0;">Library quick access</h2>
-            <a class="btn btn-small" href="library.html">Open library</a>
-          </div>
-          <div id="libraryQuick" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem;">
-            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
-              <h3 style="margin-top:0;">Recently saved</h3>
-              <ul id="libRecent" class="list"></ul>
-            </div>
-            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
-              <h3 style="margin-top:0;">To read</h3>
-              <ul id="libToRead" class="list"></ul>
-            </div>
-            <div class="card" style="background:#fafafa; border-radius:10px; padding:1rem;">
-              <h3 style="margin-top:0;">Starred</h3>
-              <ul id="libStarred" class="list"></ul>
-            </div>
-          </div>
-        </section>
+  <main id="main" class="container user-dashboard">
+    <!-- Hero Section -->
+    <section id="profileHero" class="profile-hero dashboard-card">
+      <div class="hero-content">
+        <div class="avatar-large" id="profileAvatar">
+          <img id="profileAvatarImg" alt="" loading="lazy" referrerpolicy="no-referrer" />
+          <span id="profileAvatarInitials" aria-hidden="true">SE</span>
+        </div>
+        <div class="hero-info">
+          <p class="eyebrow">Researcher profile</p>
+          <h1 id="profileName">Your profile</h1>
+          <p class="hero-meta">
+            <a id="profileOrcidLink" href="#" target="_blank" rel="noopener" class="orcid-link">ORCID</a>
+            <span id="profileAffiliation" class="affiliation"></span>
+          </p>
+          <p class="sync-status">Last synced: <span id="syncText">Loading…</span></p>
+        </div>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="settings-profile.html">Edit Profile</a>
+          <a class="btn" href="settings-identity.html">Link Accounts</a>
+          <a id="viewOrcidBtn" class="btn btn-ghost" href="https://orcid.org" target="_blank" rel="noopener">View on ORCID</a>
+        </div>
       </div>
+    </section>
 
-      <!-- Sidebar -->
-      <aside id="userSidebar" style="flex:1; min-width:300px;">
-        <!-- Identity & quick actions -->
-        <section id="sectionIdentity" class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <h3 style="margin-top:0;">Identity &amp; linking</h3>
-          <div id="identityStatus" class="muted">Loading…</div>
-          <div style="display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.75rem;">
-            <a id="linkAccountsBtn" class="btn btn-small" href="settings-identity.html">Link accounts</a>
-            <a id="claimProfilesBtn" class="btn btn-small" href="#claimsPanel">Claim profiles</a>
+    <!-- Library Overview -->
+    <section id="sectionLibrary" class="library-overview dashboard-card">
+      <div class="section-head">
+        <h2>My Library</h2>
+        <span id="libCountBadge" class="count-badge">0 papers</span>
+      </div>
+      <div class="library-total">
+        <div id="libCountBig" class="count-number">0</div>
+        <div class="count-label">Total papers saved</div>
+      </div>
+      <div class="library-grid">
+        <div class="library-column">
+          <h3>Recently Saved</h3>
+          <ul id="libRecent" class="list"></ul>
+        </div>
+        <div class="library-column">
+          <h3>To Read</h3>
+          <ul id="libToRead" class="list"></ul>
+        </div>
+        <div class="library-column">
+          <h3>Starred</h3>
+          <ul id="libStarred" class="list"></ul>
+        </div>
+      </div>
+      <div class="section-actions">
+        <a class="btn btn-primary" href="library.html">View Full Library →</a>
+      </div>
+    </section>
+
+    <!-- Following Feed -->
+    <section id="sectionFollowing" class="following-feed dashboard-card">
+      <div class="section-head">
+        <h2>Following</h2>
+        <button id="refreshFollowingBtn" class="btn btn-ghost btn-small">Refresh</button>
+      </div>
+      <p class="muted small">Follow researchers on their profile pages. New works appear here.</p>
+      <div class="following-grid">
+        <div class="following-list">
+          <div class="subhead">
+            <h3>Researchers you follow</h3>
+            <a id="findResearchersBtn" class="btn btn-ghost btn-small" href="search.html">Find researchers to follow</a>
           </div>
-        </section>
+          <ul id="followedList" class="list avatar-list"></ul>
+        </div>
+        <div class="following-updates">
+          <h3>Latest publications</h3>
+          <ul id="followedUpdates" class="list updates-list"></ul>
+        </div>
+      </div>
+    </section>
 
-        <!-- Library stats -->
-        <section id="sectionLibStats" class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <h3 style="margin-top:0;">Library stats</h3>
-          <p><strong>Total items:</strong> <span id="libCount">0</span></p>
-          <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-            <a class="btn btn-small" href="library.html">Open library</a>
-          </div>
-        </section>
+    <!-- ORCID Profile -->
+    <section id="sectionOrcid" class="orcid-profile">
+      <div class="section-head">
+        <h2>ORCID Profile</h2>
+        <a id="orcidEditLink" class="btn btn-ghost btn-small" href="https://orcid.org" target="_blank" rel="noopener">Edit on ORCID →</a>
+      </div>
+      <div class="orcid-grid">
+        <details class="orcid-card" open>
+          <summary>Personal Information</summary>
+          <div id="orcidPersonal" class="orcid-card-body">Loading…</div>
+        </details>
+        <details class="orcid-card">
+          <summary>Contact &amp; Links</summary>
+          <div id="orcidContact" class="orcid-card-body">Loading…</div>
+        </details>
+        <details class="orcid-card">
+          <summary>Keywords &amp; Research Interests</summary>
+          <div id="orcidKeywords" class="orcid-card-body">Loading…</div>
+        </details>
+        <details class="orcid-card">
+          <summary>Employment History</summary>
+          <div id="orcidEmployment" class="orcid-card-body">Loading…</div>
+        </details>
+        <details class="orcid-card">
+          <summary>Education History</summary>
+          <div id="orcidEducation" class="orcid-card-body">Loading…</div>
+        </details>
+        <details class="orcid-card">
+          <summary>Works &amp; Publications</summary>
+          <div id="orcidWorks" class="orcid-card-body">Loading…</div>
+        </details>
+        <details class="orcid-card">
+          <summary>Funding</summary>
+          <div id="orcidFunding" class="orcid-card-body">Loading…</div>
+        </details>
+        <details class="orcid-card">
+          <summary>Peer Review &amp; Service</summary>
+          <div id="orcidService" class="orcid-card-body">Loading…</div>
+        </details>
+      </div>
+      <p class="orcid-updated muted small">Last updated on ORCID: <span id="orcidLastUpdated">-</span></p>
+    </section>
 
-        <!-- Claims / Merge (existing behaviour, now anchored) -->
-        <section id="claimsPanel" class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <h3 style="margin-top:0;">Claimed profiles (OpenAlex)</h3>
-          <!-- JS injects the full claim/merge UI here as before -->
-        </section>
+    <!-- Identity & Linking -->
+    <section id="sectionIdentity" class="identity-status dashboard-card">
+      <div class="section-head">
+        <h3>Linked Accounts</h3>
+        <a class="btn btn-ghost btn-small" href="settings-identity.html">Link More Accounts</a>
+      </div>
+      <div id="identityBadges" class="identity-badges"></div>
+      <p class="muted small">Last sync: <span id="identityLastSync">-</span></p>
+    </section>
 
-        <!-- Shortcuts -->
-        <section id="sectionShortcuts" class="panel" style="background:#fff; padding:1rem; border-radius:10px; margin-bottom:1rem;">
-          <h3 style="margin-top:0;">Shortcuts</h3>
-          <ul class="list">
-            <li><a href="settings-profile.html">Profile settings</a></li>
-            <li><a href="settings-notifications.html">Notifications</a></li>
-            <li><a href="settings-privacy.html">Privacy</a></li>
-            <li><a href="integrations.html">Integrations</a></li>
-          </ul>
-        </section>
-      </aside>
-    </div>
+    <!-- Advanced Settings -->
+    <details class="advanced-settings dashboard-card">
+      <summary>Advanced: Claim &amp; Merge OpenAlex Profiles</summary>
+      <div id="claimsPanel"></div>
+    </details>
   </main>
 
   <footer class="site-footer">
