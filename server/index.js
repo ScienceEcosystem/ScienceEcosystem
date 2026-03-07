@@ -13,9 +13,9 @@ const fsp = fs.promises;
 import paperRoutes from "../routes/paper.js";
 import libraryRoutes from "../routes/library.js";
 
-dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const {
   PORT = 5173,
@@ -25,7 +25,7 @@ const {
   ORCID_CLIENT_ID,
   ORCID_CLIENT_SECRET,
   ORCID_REDIRECT_URI,
-  ORCID_SCOPE = "/read-limited",
+  ORCID_SCOPE = "/authenticate",
   STATIC_DIR = "../",
   NODE_ENV = "development",
   COOKIE_DOMAIN,                // optional: ".scienceecosystem.org"
@@ -36,7 +36,7 @@ if (!ORCID_CLIENT_ID || !ORCID_CLIENT_SECRET || !ORCID_REDIRECT_URI) {
   console.error("Missing ORCID env vars in .env");
   process.exit(1);
 }
-const HAS_DATABASE_URL = !!DATABASE_URL;
+const HAS_DATABASE_URL = !!process.env.DATABASE_URL;
 if (!HAS_DATABASE_URL) {
   console.warn("[db] DATABASE_URL not set; database-backed routes will be unavailable.");
 }
@@ -769,7 +769,7 @@ app.get("/auth/orcid/callback", async (req, res) => {
     console.log("✓ Token exchange successful");
     console.log("✓ User authenticated:", orcid);
     console.log("===============================\n");
-    res.redirect("/profile.html");
+    res.redirect("/user-profile.html");
   } catch (e) {
     console.error("❌ Token exchange failed:", e);
     console.log("===============================\n");

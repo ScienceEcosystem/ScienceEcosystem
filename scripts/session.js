@@ -49,7 +49,7 @@
     if (loginBtn)  loginBtn.style.display = "none";
     if (profileLink) {
       profileLink.style.display = "inline-flex";
-      profileLink.href = "profile.html";
+      profileLink.href = "user-profile.html";
       profileLink.textContent = me.name ? me.name : "My Profile";
       profileLink.setAttribute("title", `Logged in as ${me.orcid}`);
     }

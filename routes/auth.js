@@ -11,7 +11,7 @@ const ORCID_CLIENT_ID = process.env.ORCID_CLIENT_ID || "";
 const ORCID_CLIENT_SECRET = process.env.ORCID_CLIENT_SECRET || "";
 const ORCID_REDIRECT_URI = process.env.ORCID_REDIRECT_URI || "";
 
-const SCOPE = process.env.ORCID_SCOPE || "/read-limited"; // request ORCID record access (user-granted)
+const SCOPE = process.env.ORCID_SCOPE || "/authenticate"; // basic login/authentication
 
 function base64url(input) {
   return input.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

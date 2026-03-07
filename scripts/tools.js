@@ -1802,6 +1802,23 @@ const toolCatalog = [
     provider: 'Posit',
     baseScore: 1
   },
+   {
+    id: 'PsychoPy',
+    name: 'PsychoPy',
+    category: 'Experiment design',
+    summary: 'Open-source platform for building and running behavioral and psychophysics experiments in Python, with a visual Builder and code-based workflows.',
+    tags: ['psychology', 'neuroscience', 'experiment', 'stimuli', 'psychophysics', 'python', 'behavioral'],
+    cost: 'Free',
+    ease: 'Intermediate',
+    open: true,
+    collaboration: true,
+    bestFor: 'Creating lab or online experiments with precise timing, stimuli presentation, and response collection.',
+    alternatives: 'E-Prime, OpenSesame, PsychoJS, Gorilla',
+    link: 'https://www.psychopy.org/',
+    strengths: ['Visual Builder + code workflows', 'Precise timing controls', 'Large community and extensions'],
+    provider: 'Open-source community (PsychoPy)',
+    baseScore: 2
+  },
   {
     id: 'pycharm',
     name: 'PyCharm',
