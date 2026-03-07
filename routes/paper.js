@@ -21,6 +21,173 @@ router.get('/api/paper/:doi(*)', async (req, res) => {
   }
 });
 
+// Semantic Scholar API
+async function getSemanticScholarCitations(doi) {
+  try {
+    const paperRes = await fetch(`https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=paperId`);
+    if (!paperRes.ok) return null;
+    const { paperId } = await paperRes.json();
+    if (!paperId) return null;
+
+    const citationsRes = await fetch(
+      `https://api.semanticscholar.org/graph/v1/paper/${paperId}/citations?fields=contexts,intents,isInfluential,citingPaper&limit=100`
+    );
+    if (!citationsRes.ok) return null;
+    const data = await citationsRes.json();
+
+    return (data.data || [])
+      .filter(c => c.citingPaper?.isOpenAccess && c.contexts?.length > 0)
+      .map(c => ({
+        source: 'semantic_scholar',
+        title: c.citingPaper.title,
+        year: c.citingPaper.year,
+        authors: c.citingPaper.authors?.map(a => a.name).join(', ') || '',
+        snippet: c.contexts[0],
+        intent: c.intents?.[0] || 'background',
+        isInfluential: c.isInfluential || false,
+        url: c.citingPaper.url || (c.citingPaper.externalIds?.DOI ? `https://doi.org/${c.citingPaper.externalIds.DOI}` : null),
+        openAccessPdf: c.citingPaper.openAccessPdf?.url || null
+      }));
+  } catch (e) {
+    console.error('Semantic Scholar API error:', e);
+    return null;
+  }
+}
+
+// OpenCitations API
+async function getOpenCitations(doi) {
+  try {
+    const cleanDoi = doi.replace(/^doi:/i, '');
+    const res = await fetch(`https://opencitations.net/index/coci/api/v1/citations/${encodeURIComponent(cleanDoi)}`);
+    if (!res.ok) return null;
+    const citations = await res.json();
+    return citations.map(c => ({
+      source: 'opencitations',
+      citingDoi: c.citing,
+      citedDoi: c.cited,
+      year: c.creation?.split('-')[0] || null
+    }));
+  } catch (e) {
+    console.error('OpenCitations API error:', e);
+    return null;
+  }
+}
+
+// CORE API (optional)
+async function getCORECitations(doi, apiKey) {
+  if (!apiKey) return null;
+  try {
+    const query = `doi:"${doi.replace(/^doi:/i, '')}"`;
+    const res = await fetch(
+      `https://core.ac.uk/api-v2/articles/search/${encodeURIComponent(query)}?apiKey=${apiKey}&metadata=true&fulltext=false&citations=false&similar=false&duplicate=false&urls=true&faithfulMetadata=false`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.data?.map(paper => ({
+      source: 'core',
+      title: paper.title,
+      year: paper.yearPublished,
+      authors: paper.authors?.join(', ') || '',
+      url: paper.downloadUrl || paper.urls?.[0] || null
+    })) || [];
+  } catch (e) {
+    console.error('CORE API error:', e);
+    return null;
+  }
+}
+
+// ScienceOpen API (peer review data)
+async function getScienceOpenReviews(doi) {
+  try {
+    const cleanDoi = doi.replace(/^doi:/i, '');
+    const res = await fetch(`https://www.scienceopen.com/api/document/doi/${encodeURIComponent(cleanDoi)}/reviews`);
+    if (!res.ok) return null;
+    const reviews = await res.json();
+    return reviews.map(r => ({
+      source: 'scienceopen',
+      reviewer: r.author?.name || 'Anonymous',
+      date: r.created,
+      rating: r.rating,
+      comment: r.comment,
+      url: `https://www.scienceopen.com/document?doi=${cleanDoi}`
+    }));
+  } catch (e) {
+    console.error('ScienceOpen API error:', e);
+    return null;
+  }
+}
+
+// Lens.org API (optional)
+async function getLensImpact(doi, apiKey) {
+  if (!apiKey) return null;
+  try {
+    const cleanDoi = doi.replace(/^doi:/i, '');
+    const res = await fetch('https://api.lens.org/scholarly/search', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query: { match: { doi: cleanDoi } },
+        include: ['scholarly_citations', 'patent_citations', 'clinical_trials']
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    const paper = data.data?.[0];
+    if (!paper) return null;
+
+    return {
+      source: 'lens',
+      patentCitations: paper.patent_citation_count || 0,
+      patents: paper.citing_patents?.slice(0, 5) || [],
+      clinicalTrials: paper.clinical_trials?.slice(0, 5) || [],
+      scholarCitations: paper.scholarly_citation_count || 0
+    };
+  } catch (e) {
+    console.error('Lens.org API error:', e);
+    return null;
+  }
+}
+
+// GET /api/paper/citation-contexts?doi=10.xxxx
+router.get('/api/paper/citation-contexts', async (req, res) => {
+  const doi = req.query?.doi;
+  if (!doi) return res.status(400).json({ error: 'doi required' });
+
+  try {
+    const [semanticScholar, openCitations, core, scienceOpen, lensImpact] = await Promise.all([
+      getSemanticScholarCitations(doi),
+      getOpenCitations(doi),
+      getCORECitations(doi, process.env.CORE_API_KEY),
+      getScienceOpenReviews(doi),
+      getLensImpact(doi, process.env.LENS_API_KEY)
+    ]);
+
+    const result = {
+      citationContexts: semanticScholar || [],
+      citationLinks: openCitations || [],
+      coreResults: core || [],
+      peerReviews: scienceOpen || [],
+      impact: lensImpact || null,
+      sources: {
+        semanticScholar: !!semanticScholar,
+        openCitations: !!openCitations,
+        core: !!core,
+        scienceOpen: !!scienceOpen,
+        lens: !!lensImpact
+      }
+    };
+
+    res.json(result);
+  } catch (e) {
+    console.error('Citation contexts error:', e);
+    res.status(500).json({ error: 'Failed to fetch citation data' });
+  }
+});
+
 async function findLinkedResources(doi) {
   const resources = {
     osf: null,

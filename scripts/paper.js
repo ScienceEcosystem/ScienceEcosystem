@@ -1116,6 +1116,9 @@
     var doi = doiFromWork(p);
     if (doi) {
       loadLinkedResources(doi);
+      var oaPdf = get(p,"best_oa_location.url_for_pdf",null) || get(p,"primary_location.pdf_url",null);
+      var hasOpenAccess = !!oaPdf;
+      loadCitationContexts(doi, hasOpenAccess);
     }
   }
 
@@ -1253,6 +1256,150 @@
     }
     
     container.innerHTML = html;
+  }
+
+  // ---------- Citation contexts ----------
+  async function loadCitationContexts(doi, hasOpenAccess) {
+    const section = document.getElementById("citationContextsSection");
+    if (!section || !doi) return;
+
+    if (hasOpenAccess) {
+      section.style.display = "none";
+      return;
+    }
+
+    const list = document.getElementById("citationContextsList");
+    if (list) list.innerHTML = "<p class='muted'>Loading citation contexts…</p>";
+
+    try {
+      const res = await fetch(`/api/paper/citation-contexts?doi=${encodeURIComponent(doi)}`);
+      if (!res.ok) throw new Error("Failed to load citations");
+      const data = await res.json();
+
+      const contexts = data.citationContexts || [];
+      const hasPeerReviews = data.peerReviews && data.peerReviews.length > 0;
+      const hasImpact = data.impact && (data.impact.patentCitations > 0 || (data.impact.clinicalTrials && data.impact.clinicalTrials.length > 0));
+      if (contexts.length === 0 && !hasPeerReviews && !hasImpact) {
+        section.style.display = "none";
+        return;
+      }
+
+      section.style.display = "block";
+      document.getElementById("citationCount").textContent = contexts.length;
+      document.getElementById("countAll").textContent = contexts.length;
+      document.getElementById("countInfluential").textContent = contexts.filter(c => c.isInfluential).length;
+      document.getElementById("countMethodology").textContent = contexts.filter(c => c.intent === "methodology").length;
+      document.getElementById("countResult").textContent = contexts.filter(c => c.intent === "result").length;
+
+      if (contexts.length > 0) {
+        renderCitationContexts(contexts, "all");
+      } else if (list) {
+        list.innerHTML = "<p class='muted'>No open-access citation snippets available yet.</p>";
+      }
+
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          const filter = btn.getAttribute("data-filter");
+          renderCitationContexts(contexts, filter);
+        });
+      });
+
+      if (hasPeerReviews) {
+        renderPeerReviews(data.peerReviews);
+      }
+
+      if (hasImpact) {
+        renderImpactData(data.impact);
+      }
+    } catch (e) {
+      console.error("Citation contexts error:", e);
+      section.style.display = "none";
+    }
+  }
+
+  function renderCitationContexts(contexts, filter) {
+    const list = document.getElementById("citationContextsList");
+    if (!list) return;
+
+    let filtered = contexts;
+    if (filter === "influential") filtered = contexts.filter(c => c.isInfluential);
+    else if (filter !== "all") filtered = contexts.filter(c => c.intent === filter);
+
+    filtered.sort((a, b) => {
+      if (a.isInfluential && !b.isInfluential) return -1;
+      if (!a.isInfluential && b.isInfluential) return 1;
+      return (b.year || 0) - (a.year || 0);
+    });
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<p class="muted">No citations found for this filter.</p>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(c => `
+      <article class="citation-context" style="padding:1rem; margin-bottom:1rem; background:#f9f9f9; border-left:3px solid ${c.isInfluential ? "#f39c12" : "#3498db"}; border-radius:4px;">
+        <p class="snippet" style="margin:0 0 .5rem; font-size:1rem; line-height:1.6;">
+          "${escapeHtml(c.snippet)}"
+        </p>
+        <cite style="display:block; font-style:normal; color:#666; font-size:.9rem;">
+          <strong>→ From:</strong> <a href="${c.url || "#"}" target="_blank" rel="noopener">${escapeHtml(c.title)}</a>
+          ${c.authors ? ` by ${escapeHtml(c.authors)}` : ""}
+          ${c.year ? ` (${escapeHtml(c.year)})` : ""}
+          <div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+            ${c.intent ? `<span class="badge" style="background:#ecf0f1; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">${escapeHtml(c.intent)}</span>` : ""}
+            ${c.isInfluential ? '<span class="badge" style="background:#f39c12; color:#fff; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">⭐ Influential</span>' : ""}
+            ${c.openAccessPdf ? `<a href="${c.openAccessPdf}" target="_blank" class="badge" style="background:#27ae60; color:#fff; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">📄 Read PDF</a>` : ""}
+          </div>
+        </cite>
+      </article>
+    `).join("");
+  }
+
+  function renderPeerReviews(reviews) {
+    const section = document.getElementById("peerReviewsSection");
+    const list = document.getElementById("peerReviewsList");
+    if (!section || !list) return;
+
+    section.style.display = "block";
+    list.innerHTML = reviews.map(r => `
+      <article style="padding:1rem; margin-bottom:1rem; background:#f0f8ff; border-radius:4px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:.5rem;">
+          <strong>${escapeHtml(r.reviewer)}</strong>
+          <span>${"⭐".repeat(r.rating || 0)}</span>
+        </div>
+        <p style="margin:0; color:#555;">${escapeHtml(r.comment || "No comment")}</p>
+        <small class="muted">${r.date ? new Date(r.date).toLocaleDateString() : ""}</small>
+      </article>
+    `).join("");
+  }
+
+  function renderImpactData(impact) {
+    const section = document.getElementById("impactSection");
+    const data = document.getElementById("impactData");
+    if (!section || !data) return;
+
+    section.style.display = "block";
+
+    const parts = [];
+    if (impact.patentCitations > 0) {
+      parts.push(`<p><strong>📋 Cited in ${impact.patentCitations} patents</strong></p>`);
+      if (impact.patents && impact.patents.length > 0) {
+        parts.push('<ul>' + impact.patents.map(p =>
+          `<li><a href="${p.url || "#"}" target="_blank">${escapeHtml(p.title || p.lens_id)}</a></li>`
+        ).join("") + '</ul>');
+      }
+    }
+
+    if (impact.clinicalTrials && impact.clinicalTrials.length > 0) {
+      parts.push(`<p><strong>🏥 Referenced in ${impact.clinicalTrials.length} clinical trials</strong></p>`);
+      parts.push('<ul>' + impact.clinicalTrials.map(t =>
+        `<li><a href="${t.url || "#"}" target="_blank">${escapeHtml(t.title || t.trial_id)}</a></li>`
+      ).join("") + '</ul>');
+    }
+
+    data.innerHTML = parts.join("");
   }
   
 
