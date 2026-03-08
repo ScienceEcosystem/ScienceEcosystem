@@ -330,6 +330,7 @@
         ? '<a href="profile.html?id='+encodeURIComponent(authorId.split("/").pop())+'">'+authorName+'</a>'
         : authorName;
 
+        
       var insts = Array.isArray(authorships[i].institutions) ? authorships[i].institutions : [];
       var instParts = [];
       for (var j=0;j<insts.length;j++){
