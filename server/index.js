@@ -1784,11 +1784,19 @@ app.delete("/api/claims/merge", async (req, res) => {
 ----------------------------*/
 // Pretty institution path -> static file with query
 app.get("/institution/:id", (req, res) => {
-  const instPath = path.join(staticRoot, "institution.html");
+  const instPath = path.join(staticRoot, "institute.html");
   if (fs.existsSync(instPath)) {
     res.sendFile(instPath);
   } else {
-    res.redirect(`/institution.html?id=${encodeURIComponent(req.params.id)}`);
+    res.redirect(`/institute.html?id=${encodeURIComponent(req.params.id)}`);
+  }
+});
+app.get("/institute/:id", (req, res) => {
+  const instPath = path.join(staticRoot, "institute.html");
+  if (fs.existsSync(instPath)) {
+    res.sendFile(instPath);
+  } else {
+    res.redirect(`/institute.html?id=${encodeURIComponent(req.params.id)}`);
   }
 });
 

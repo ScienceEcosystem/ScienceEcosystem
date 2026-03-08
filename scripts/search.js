@@ -289,7 +289,7 @@ function renderTopics(topics) {
     ? topics.map(t => {
         const id = t.id.split("/").pop();
         return `
-          <li class="list-item list-card" onclick="location.href='topic.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(t.display_name)}">
+          <li class="list-item list-card" onclick="location.href='topic.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button" aria-label="${escapeHtml(t.display_name)}">
             ${escapeHtml(t.display_name)}
           </li>
         `;
@@ -307,7 +307,7 @@ function renderInstitutions(items) {
         const works = Number.isFinite(inst.works_count) ? `${inst.works_count.toLocaleString()} works` : null;
         const sub = [country, works].filter(Boolean).join(" · ") || "-";
         return `
-          <li class="list-item list-card" onclick="location.href='institution.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(inst.display_name)}">
+          <li class="list-item list-card" onclick="location.href='institute.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button" aria-label="${escapeHtml(inst.display_name)}">
             <div class="title">${escapeHtml(inst.display_name)}</div>
             <div class="muted">${escapeHtml(sub)}</div>
           </li>
@@ -329,11 +329,11 @@ function renderJournals(items) {
         const pubName = j.host_organization_name || j.host_organization_lineage?.[0]?.display_name || null;
         const subLeft = [abbrev, works].filter(Boolean).join(" · ") || "Journal";
         const pubLink = (pubId && pubName)
-          ? `<a href="publisher.html?id=${pubId}" class="muted" onclick="event.stopPropagation();" aria-label="Go to publisher ${escapeHtml(pubName)}">Publisher: ${escapeHtml(pubName)}</a>`
+          ? `<a href="publisher.html?id=${encodeURIComponent(pubId)}" class="muted" onclick="event.stopPropagation();" aria-label="Go to publisher ${escapeHtml(pubName)}">Publisher: ${escapeHtml(pubName)}</a>`
           : `<span class="muted">Publisher: ${escapeHtml(pubName || "Unknown")}</span>`;
 
         return `
-          <li class="list-item list-card" onclick="location.href='journal.html?id=${srcId}'" tabindex="0" role="button" aria-label="${escapeHtml(j.display_name)}">
+          <li class="list-item list-card" onclick="location.href='journal.html?id=${encodeURIComponent(srcId)}'" tabindex="0" role="button" aria-label="${escapeHtml(j.display_name)}">
             <div class="title">${escapeHtml(j.display_name)}</div>
             <div class="muted">${escapeHtml(subLeft)}</div>
             <div>${pubLink}</div>
@@ -353,7 +353,7 @@ function renderPublishers(items) {
         const sources = Number.isFinite(p.sources_count) ? `${p.sources_count.toLocaleString()} sources` : null;
         const sub = [works, sources].filter(Boolean).join(" · ") || "Publisher";
         return `
-          <li class="list-item list-card" onclick="location.href='publisher.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(p.display_name)}">
+          <li class="list-item list-card" onclick="location.href='publisher.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button" aria-label="${escapeHtml(p.display_name)}">
             <div class="title">${escapeHtml(p.display_name)}</div>
             <div class="muted">${escapeHtml(sub)}</div>
           </li>

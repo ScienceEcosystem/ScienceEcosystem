@@ -324,14 +324,28 @@
     if (!Array.isArray(authorships) || !authorships.length) return { allHtml:"Unknown authors", shortHtml:"Unknown authors", moreCount:0 };
     var out = [];
     for (var i=0;i<authorships.length;i++){
-      var id = get(authorships[i],"author.id",null);
-      var name = escapeHtml(get(authorships[i],"author.display_name","Unknown"));
-      if (!id) { out.push(name); continue; }
-      var aid = id.split("/").pop();
-      out.push('<a href="profile.html?id='+encodeURIComponent(aid)+'">'+name+'</a>');
+      var authorId = get(authorships[i],"author.id",null);
+      var authorName = escapeHtml(get(authorships[i],"author.display_name","Unknown"));
+      var authorHtml = authorId
+        ? '<a href="profile.html?id='+encodeURIComponent(authorId.split(\"/\").pop())+'">'+authorName+'</a>'
+        : authorName;
+
+      var insts = Array.isArray(authorships[i].institutions) ? authorships[i].institutions : [];
+      var instParts = [];
+      for (var j=0;j<insts.length;j++){
+        var instName = get(insts[j], \"display_name\", null);
+        if (!instName) continue;
+        var instId = get(insts[j], \"id\", null);
+        var instTail = instId ? String(instId).replace(/^https?:\\/\\/openalex\\.org\\//i, \"\") : null;
+        if (instTail) instParts.push('<a href=\"institute.html?id='+encodeURIComponent(instTail)+'\">'+escapeHtml(instName)+'</a>');
+        else instParts.push(escapeHtml(instName));
+      }
+
+      var instHtml = instParts.length ? ' <span class=\"author-inst\" style=\"color:#64748b; font-size:.9em;\">('+instParts.join(\", \")+')</span>' : \"\";
+      out.push('<span class=\"author-affiliation\">'+authorHtml+instHtml+'</span>');
     }
     var short = out.slice(0,8);
-    return { allHtml: out.join(", "), shortHtml: short.join(", "), moreCount: Math.max(0, out.length - short.length) };
+    return { allHtml: out.join(\" · \"), shortHtml: short.join(\" · \"), moreCount: Math.max(0, out.length - short.length) };
   }
   function collectInstitutions(authorships){
     var map = Object.create(null), out = [];
@@ -356,7 +370,7 @@
     var list = collectInstitutions(authorships);
     if (!list.length) return { shortHtml: "-", allHtml: "-", moreCount: 0 };
     function render(item){
-      if (item.idTail) return '<a href="institution.html?id='+encodeURIComponent(item.idTail)+'">'+escapeHtml(item.name)+'</a>';
+      if (item.idTail) return '<a href="institute.html?id='+encodeURIComponent(item.idTail)+'">'+escapeHtml(item.name)+'</a>';
       return escapeHtml(item.name);
     }
     var short = list.slice(0,8).map(render).join(", ");
@@ -557,7 +571,7 @@
 
   // ---------- Abstract ----------
   function formatAbstract(idx){
-    if (!idx || typeof idx !== "object") return "<em>No abstract available.</em>";
+    if (!idx || typeof idx !== "object") return "";
     var words = [];
     var keys = Object.keys(idx);
     for (var i=0;i<keys.length;i++){
@@ -565,6 +579,20 @@
       for (var j=0;j<positions.length;j++) words[positions[j]] = word;
     }
     return escapeHtml(words.join(" ") || "");
+  }
+
+  async function loadAbstractFallback(doi){
+    if (!doi) return;
+    try {
+      const res = await fetch(`/api/paper/abstract?doi=${encodeURIComponent(doi)}`);
+      if (!res.ok) throw new Error("No fallback abstract");
+      const data = await res.json();
+      if (data?.abstract) {
+        $("abstractBlock").innerHTML = '<h2>Abstract</h2><p>' + escapeHtml(data.abstract) + '</p>';
+      }
+    } catch (e) {
+      // keep default fallback text
+    }
   }
 
   // ---------- Graph ----------
@@ -1101,7 +1129,12 @@
       SE.components.enhancePaperCards($("paperActions"));
     }
 
-    $("abstractBlock").innerHTML = '<h2>Abstract</h2><p>' + formatAbstract(p.abstract_inverted_index) + '</p>';
+    var abstractHtml = formatAbstract(p.abstract_inverted_index);
+    if (abstractHtml) {
+      $("abstractBlock").innerHTML = '<h2>Abstract</h2><p>' + abstractHtml + '</p>';
+    } else {
+      $("abstractBlock").innerHTML = '<h2>Abstract</h2><p class="muted">Looking for an abstract…</p>';
+    }
 
     $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">Looking for code & data…</p>';
     try{
@@ -1115,9 +1148,10 @@
 
     var doi = doiFromWork(p);
     if (doi) {
+      if (!abstractHtml) loadAbstractFallback(doi);
       loadLinkedResources(doi);
       var oaPdf = get(p,"best_oa_location.url_for_pdf",null) || get(p,"primary_location.pdf_url",null);
-      var hasOpenAccess = !!oaPdf;
+      var hasOpenAccess = !!(get(p,"open_access.is_oa",false) || get(p,"best_oa_location.is_oa",false) || oaPdf);
       loadCitationContexts(doi, hasOpenAccess);
     }
   }
@@ -1279,10 +1313,6 @@
       const contexts = data.citationContexts || [];
       const hasPeerReviews = data.peerReviews && data.peerReviews.length > 0;
       const hasImpact = data.impact && (data.impact.patentCitations > 0 || (data.impact.clinicalTrials && data.impact.clinicalTrials.length > 0));
-      if (contexts.length === 0 && !hasPeerReviews && !hasImpact) {
-        section.style.display = "none";
-        return;
-      }
 
       section.style.display = "block";
       document.getElementById("citationCount").textContent = contexts.length;

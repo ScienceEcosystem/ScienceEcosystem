@@ -120,7 +120,7 @@
     const concepts = Array.isArray(a.x_concepts) ? a.x_concepts : [];
     $("tagsContainer").innerHTML = concepts
       .sort((x,y)=> (y.score||0)-(x.score||0)).slice(0,12)
-      .map(c => `<a class="topic-card" href="topic.html?id=${c.id?.split("/").pop()||""}"><span class="topic-name">${escapeHtml(c.display_name||"Topic")}</span></a>`)
+      .map(c => `<a class="topic-card" href="topic.html?id=${encodeURIComponent(c.id?.split(\"/\").pop()||\"\")}"><span class="topic-name">${escapeHtml(c.display_name||"Topic")}</span></a>`)
       .join("");
 
     // Tiny bio

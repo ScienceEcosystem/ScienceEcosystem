@@ -154,7 +154,7 @@
       li.className = "list-item";
       const a = document.createElement("a");
       if (type === "author") a.href = `researcher.html?id=${encodeURIComponent(it.id)}`;
-      if (type === "institution") a.href = `institution.html?id=${encodeURIComponent(it.id)}`;
+      if (type === "institution") a.href = `institute.html?id=${encodeURIComponent(it.id)}`;
       a.textContent = it.display_name || "Unknown";
       const meta = document.createElement("div");
       meta.className = "muted";

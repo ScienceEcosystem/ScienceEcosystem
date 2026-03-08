@@ -243,7 +243,7 @@
     if ($("tagsContainer")){
       $("tagsContainer").innerHTML = concepts.slice(0,12).map(function(c){
         var tid = c.id ? c.id.split("/").pop() : "";
-        return '<a class="topic-card" href="topic.html?id='+tid+'" title="Open topic"><span class="topic-name">'+escapeHtml(c.display_name||"Topic")+'</span></a>';
+        return '<a class="topic-card" href="topic.html?id='+encodeURIComponent(tid)+'" title="Open topic"><span class="topic-name">'+escapeHtml(c.display_name||"Topic")+'</span></a>';
       }).join("");
     }
 

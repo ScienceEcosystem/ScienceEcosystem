@@ -155,7 +155,7 @@
     var tail = idTailFrom(hostId);
     // If we have id + name, link to publisher page.
     if (tail && (pubString || hostName)){
-      el.innerHTML = '<a href="publisher.html?id='+esc(tail)+'">'+esc(pubString || hostName)+'</a>';
+      el.innerHTML = '<a href="publisher.html?id='+encodeURIComponent(tail)+'">'+esc(pubString || hostName)+'</a>';
       return;
     }
 
@@ -164,7 +164,7 @@
       try{
         var pub = await getJSON(API + "/publishers/" + encodeURIComponent(tail));
         var name = pub.display_name || pubString || hostName || "Publisher";
-        el.innerHTML = '<a href="publisher.html?id='+esc(tail)+'">'+esc(name)+'</a>';
+        el.innerHTML = '<a href="publisher.html?id='+encodeURIComponent(tail)+'">'+esc(name)+'</a>';
         return;
       }catch(_){}
     }
@@ -210,7 +210,7 @@
     if ($("tagsContainer")){
       $("tagsContainer").innerHTML = xconcepts.slice(0,12).map(function(c){
         var tid = c.id ? String(c.id).split("/").pop() : "";
-        return '<a class="topic-card" href="topic.html?id='+esc(tid)+'"><span class="topic-name">'+esc(c.display_name||"Topic")+'</span></a>';
+        return '<a class="topic-card" href="topic.html?id='+encodeURIComponent(tid)+'"><span class="topic-name">'+esc(c.display_name||"Topic")+'</span></a>';
       }).join("") || '<p class="muted">No topics listed.</p>';
     }
 

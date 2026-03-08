@@ -461,6 +461,7 @@ async function bootstrap() {
   const libStarred = document.getElementById("libStarred");
   const libCountBig = document.getElementById("libCountBig");
   const libCountBadge = document.getElementById("libCountBadge");
+  const libCountEl = document.getElementById("libCount");
 
   try {
     const me = await api("/api/me");
@@ -516,11 +517,15 @@ async function bootstrap() {
     let libItems = [];
     try {
       libItems = await api("/api/library");
-    } catch {}
+      console.log("Library items loaded:", Array.isArray(libItems) ? libItems.length : 0, libItems);
+    } catch (e) {
+      console.error("Library load error:", e);
+    }
     if (Array.isArray(libItems)) {
       const total = libItems.length || 0;
       if (libCountBig) libCountBig.textContent = String(total);
       if (libCountBadge) libCountBadge.textContent = `${total} papers`;
+      if (libCountEl) libCountEl.textContent = String(total);
 
       fillBucket(libRecent, sortByDate(libItems).slice(0, 5), "saved_at");
       fillBucket(libToRead, libItems.filter(i => hasLabel(i, "to-read")).slice(0, 5));

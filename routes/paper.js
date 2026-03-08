@@ -152,6 +152,37 @@ async function getLensImpact(doi, apiKey) {
   }
 }
 
+// Semantic Scholar abstract (fallback when OpenAlex abstract is missing)
+async function getSemanticScholarAbstract(doi) {
+  try {
+    const res = await fetch(
+      `https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=title,abstract`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.abstract) return null;
+    return { title: data.title || null, abstract: data.abstract };
+  } catch (e) {
+    console.error('Semantic Scholar abstract error:', e);
+    return null;
+  }
+}
+
+// GET /api/paper/abstract?doi=10.xxxx
+router.get('/api/paper/abstract', async (req, res) => {
+  const doi = req.query?.doi;
+  if (!doi) return res.status(400).json({ error: 'doi required' });
+
+  try {
+    const ss = await getSemanticScholarAbstract(doi);
+    if (!ss) return res.status(404).json({ error: 'No abstract found' });
+    res.json({ source: 'semantic_scholar', title: ss.title, abstract: ss.abstract });
+  } catch (e) {
+    console.error('Abstract fallback error:', e);
+    res.status(500).json({ error: 'Failed to fetch abstract' });
+  }
+});
+
 // GET /api/paper/citation-contexts?doi=10.xxxx
 router.get('/api/paper/citation-contexts', async (req, res) => {
   const doi = req.query?.doi;
