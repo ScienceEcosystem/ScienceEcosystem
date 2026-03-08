@@ -327,25 +327,25 @@
       var authorId = get(authorships[i],"author.id",null);
       var authorName = escapeHtml(get(authorships[i],"author.display_name","Unknown"));
       var authorHtml = authorId
-        ? '<a href="profile.html?id='+encodeURIComponent(authorId.split(\"/\").pop())+'">'+authorName+'</a>'
+        ? '<a href="profile.html?id='+encodeURIComponent(authorId.split("/").pop())+'">'+authorName+'</a>'
         : authorName;
 
       var insts = Array.isArray(authorships[i].institutions) ? authorships[i].institutions : [];
       var instParts = [];
       for (var j=0;j<insts.length;j++){
-        var instName = get(insts[j], \"display_name\", null);
+        var instName = get(insts[j], "display_name", null);
         if (!instName) continue;
-        var instId = get(insts[j], \"id\", null);
-        var instTail = instId ? String(instId).replace(/^https?:\\/\\/openalex\\.org\\//i, \"\") : null;
-        if (instTail) instParts.push('<a href=\"institute.html?id='+encodeURIComponent(instTail)+'\">'+escapeHtml(instName)+'</a>');
+        var instId = get(insts[j], "id", null);
+        var instTail = instId ? String(instId).replace(/^https?:\/\/openalex\.org\//i, "") : null;
+        if (instTail) instParts.push('<a href="institute.html?id='+encodeURIComponent(instTail)+'">'+escapeHtml(instName)+'</a>');
         else instParts.push(escapeHtml(instName));
       }
 
-      var instHtml = instParts.length ? ' <span class=\"author-inst\" style=\"color:#64748b; font-size:.9em;\">('+instParts.join(\", \")+')</span>' : \"\";
-      out.push('<span class=\"author-affiliation\">'+authorHtml+instHtml+'</span>');
+      var instHtml = instParts.length ? ' <span class="author-inst" style="color:#64748b; font-size:.9em;">('+instParts.join(", ")+')</span>' : "";
+      out.push('<span class="author-affiliation">'+authorHtml+instHtml+'</span>');
     }
     var short = out.slice(0,8);
-    return { allHtml: out.join(\" · \"), shortHtml: short.join(\" · \"), moreCount: Math.max(0, out.length - short.length) };
+    return { allHtml: out.join(" · "), shortHtml: short.join(" · "), moreCount: Math.max(0, out.length - short.length) };
   }
   function collectInstitutions(authorships){
     var map = Object.create(null), out = [];
@@ -1193,7 +1193,7 @@
     const container = document.getElementById('linked-resources');
     if (!container) return;
     
-    let html = '<h3>📦 Linked Resources</h3>';
+    let html = '<h3>Linked Resources</h3>';
     
     // Reproducibility Score
     if (score) {
@@ -1242,7 +1242,7 @@
     // Datasets
     if (resources.datasets.length > 0) {
       html += '<div class="resource-list">';
-      html += `<h4>📊 Datasets (${resources.datasets.length})</h4>`;
+      html += `<h4>Datasets (${resources.datasets.length})</h4>`;
       resources.datasets.forEach(dataset => {
         html += `
           <div class="resource-item">
@@ -1262,7 +1262,7 @@
     // Code
     if (resources.code.length > 0) {
       html += '<div class="resource-list">';
-      html += `<h4>💻 Code (${resources.code.length})</h4>`;
+      html += `<h4>Code (${resources.code.length})</h4>`;
       resources.code.forEach(code => {
         html += `
           <div class="resource-item">
@@ -1280,7 +1280,7 @@
     if (!resources.osf && resources.datasets.length === 0 && resources.code.length === 0) {
       html += `
         <div class="no-resources">
-          <p>⚠️ No linked materials found</p>
+          <p>No linked materials found</p>
           <p class="help-text">
             Are you the author? 
             <a href="mailto:contact@scienceecosystem.org">Add your materials</a>
@@ -1379,8 +1379,8 @@
           ${c.year ? ` (${escapeHtml(c.year)})` : ""}
           <div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap;">
             ${c.intent ? `<span class="badge" style="background:#ecf0f1; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">${escapeHtml(c.intent)}</span>` : ""}
-            ${c.isInfluential ? '<span class="badge" style="background:#f39c12; color:#fff; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">⭐ Influential</span>' : ""}
-            ${c.openAccessPdf ? `<a href="${c.openAccessPdf}" target="_blank" class="badge" style="background:#27ae60; color:#fff; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">📄 Read PDF</a>` : ""}
+            ${c.isInfluential ? '<span class="badge" style="background:#f39c12; color:#fff; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">Influential</span>' : ""}
+            ${c.openAccessPdf ? `<a href="${c.openAccessPdf}" target="_blank" class="badge" style="background:#27ae60; color:#fff; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">Read PDF</a>` : ""}
           </div>
         </cite>
       </article>
@@ -1397,7 +1397,7 @@
       <article style="padding:1rem; margin-bottom:1rem; background:#f0f8ff; border-radius:4px;">
         <div style="display:flex; justify-content:space-between; margin-bottom:.5rem;">
           <strong>${escapeHtml(r.reviewer)}</strong>
-          <span>${"⭐".repeat(r.rating || 0)}</span>
+          <span>${r.rating ? `Rating: ${r.rating}/5` : ""}</span>
         </div>
         <p style="margin:0; color:#555;">${escapeHtml(r.comment || "No comment")}</p>
         <small class="muted">${r.date ? new Date(r.date).toLocaleDateString() : ""}</small>
@@ -1414,7 +1414,7 @@
 
     const parts = [];
     if (impact.patentCitations > 0) {
-      parts.push(`<p><strong>📋 Cited in ${impact.patentCitations} patents</strong></p>`);
+      parts.push(`<p><strong>Cited in ${impact.patentCitations} patents</strong></p>`);
       if (impact.patents && impact.patents.length > 0) {
         parts.push('<ul>' + impact.patents.map(p =>
           `<li><a href="${p.url || "#"}" target="_blank">${escapeHtml(p.title || p.lens_id)}</a></li>`
@@ -1423,7 +1423,7 @@
     }
 
     if (impact.clinicalTrials && impact.clinicalTrials.length > 0) {
-      parts.push(`<p><strong>🏥 Referenced in ${impact.clinicalTrials.length} clinical trials</strong></p>`);
+      parts.push(`<p><strong>Referenced in ${impact.clinicalTrials.length} clinical trials</strong></p>`);
       parts.push('<ul>' + impact.clinicalTrials.map(t =>
         `<li><a href="${t.url || "#"}" target="_blank">${escapeHtml(t.title || t.trial_id)}</a></li>`
       ).join("") + '</ul>');
