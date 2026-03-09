@@ -660,7 +660,45 @@ body[data-page="user-profile"] h3 {
 
 /* ===== Citation contexts ===== */
 .citation-context {
+  margin-bottom: 1rem;
   transition: transform 0.2s ease;
+}
+.citation-snippet {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.citation-meta {
+  display: block;
+  font-style: normal;
+  color: #666;
+  font-size: 0.9rem;
+}
+.citation-tags {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.badge-warn {
+  background: #f39c12;
+  color: #fff;
+}
+.badge-ok {
+  background: #27ae60;
+  color: #fff;
+}
+.peer-review {
+  margin-bottom: 1rem;
+}
+.peer-review-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.peer-review-text {
+  margin: 0 0 0.25rem 0;
+  color: #555;
 }
 .citation-context:hover {
   transform: translateX(4px);

@@ -15,10 +15,17 @@ async function seApi(path, opts = {}) {
 async function loadLibraryOnce() {
   if (SE_LIB_MAP) return SE_LIB_MAP;
   try {
-    const items = await seApi("/api/library");
+    const res = await fetch("/api/library", { credentials: "include" });
+    if (res.status === 401) {
+      SE_LIB_MAP = Object.create(null);
+      return SE_LIB_MAP;
+    }
+    if (!res.ok) throw new Error("Library check failed");
+    const items = await res.json();
     SE_LIB_MAP = Object.create(null);
     for (const it of items) SE_LIB_MAP[String(it.id)] = true;
-  } catch {
+  } catch (e) {
+    console.warn("Library check error:", e);
     // Not signed in or server error → empty cache (don’t throw)
     SE_LIB_MAP = Object.create(null);
   }
@@ -67,4 +74,3 @@ globalThis.savePaper = async function savePaper(paper, btnEl) {
     }
   }
 };
-

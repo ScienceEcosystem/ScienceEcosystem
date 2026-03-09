@@ -34,6 +34,20 @@
   } catch(_e){}
 })();
 
+async function checkSession() {
+  try {
+    const res = await fetch("/api/me", { credentials: "include" });
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error("Session check failed");
+    return await res.json();
+  } catch (e) {
+    if (e && e.message !== "Session check failed") {
+      console.warn("Session check error:", e);
+    }
+    return null;
+  }
+}
+
 (async function () {
   // Finds elements if present on the page
   const loginBtn  = document.getElementById("orcidLoginBtn");
@@ -41,9 +55,8 @@
   const profileLink = document.getElementById("profileLink"); // optional <a> to profile
 
   try {
-    const res = await fetch("/api/me", { credentials: "include" });
-    if (!res.ok) throw new Error("not signed in");
-    const me = await res.json();
+    const me = await checkSession();
+    if (!me) throw new Error("not signed in");
 
     // Toggle nav: show Profile + Logout, hide Login
     if (loginBtn)  loginBtn.style.display = "none";

@@ -95,7 +95,13 @@
   // ---------- Fetchers ----------
   async function fetchPaperData(paperId){
     var id = normalizePaperId(paperId);
-    return await getJSON(API + "/works/" + encodeURIComponent(id));
+    if (!id) throw new Error("Missing paper id");
+    try {
+      return await getJSON(API + "/works/" + encodeURIComponent(id));
+    } catch (e) {
+      console.warn("OpenAlex work fetch failed:", e);
+      throw e;
+    }
   }
   async function fetchSourceFromPaper(p){
     var srcId = get(p, "host_venue.id", null) || get(p, "primary_location.source.id", null);
@@ -110,15 +116,25 @@
       return "https://openalex.org/" + tail;
     }).join("|");
     var url = API + "/works?filter=ids.openalex:" + encodeURIComponent(ids) + "&per_page=200";
-    var data = await getJSON(url);
-    return Array.isArray(data.results) ? data.results : [];
+    try {
+      var data = await getJSON(url);
+      return Array.isArray(data.results) ? data.results : [];
+    } catch (e) {
+      console.warn("OpenAlex cited works fetch failed:", e);
+      return [];
+    }
   }
   async function fetchCitingPapers(paperOpenAlexIdOrUrl){
     var s = String(paperOpenAlexIdOrUrl || "");
     var idTail = s.replace(/^https?:\/\/openalex\.org\//i, "");
     var url = API + "/works?filter=cites:" + encodeURIComponent(idTail) + "&per_page=200&sort=cited_by_count:desc";
-    var data = await getJSON(url);
-    return Array.isArray(data.results) ? data.results : [];
+    try {
+      var data = await getJSON(url);
+      return Array.isArray(data.results) ? data.results : [];
+    } catch (e) {
+      console.warn("OpenAlex citing works fetch failed:", e);
+      return [];
+    }
   }
 
   // ---------- Research Objects ----------
@@ -1370,18 +1386,18 @@
     }
 
     list.innerHTML = filtered.map(c => `
-      <article class="citation-context" style="padding:1rem; margin-bottom:1rem; background:#f9f9f9; border-left:3px solid ${c.isInfluential ? "#f39c12" : "#3498db"}; border-radius:4px;">
-        <p class="snippet" style="margin:0 0 .5rem; font-size:1rem; line-height:1.6;">
+      <article class="citation-context">
+        <p class="citation-snippet">
           "${escapeHtml(c.snippet)}"
         </p>
-        <cite style="display:block; font-style:normal; color:#666; font-size:.9rem;">
-          <strong>→ From:</strong> <a href="${c.url || "#"}" target="_blank" rel="noopener">${escapeHtml(c.title)}</a>
+        <cite class="citation-meta">
+          <strong>From:</strong> <a href="${c.url || "#"}" target="_blank" rel="noopener">${escapeHtml(c.title)}</a>
           ${c.authors ? ` by ${escapeHtml(c.authors)}` : ""}
           ${c.year ? ` (${escapeHtml(c.year)})` : ""}
-          <div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap;">
-            ${c.intent ? `<span class="badge" style="background:#ecf0f1; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">${escapeHtml(c.intent)}</span>` : ""}
-            ${c.isInfluential ? '<span class="badge" style="background:#f39c12; color:#fff; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">Influential</span>' : ""}
-            ${c.openAccessPdf ? `<a href="${c.openAccessPdf}" target="_blank" class="badge" style="background:#27ae60; color:#fff; padding:.2rem .5rem; border-radius:3px; font-size:.8rem;">Read PDF</a>` : ""}
+          <div class="citation-tags">
+            ${c.intent ? `<span class="badge">${escapeHtml(c.intent)}</span>` : ""}
+            ${c.isInfluential ? '<span class="badge badge-warn">Influential</span>' : ""}
+            ${c.openAccessPdf ? `<a href="${c.openAccessPdf}" target="_blank" class="badge badge-ok">Read PDF</a>` : ""}
           </div>
         </cite>
       </article>
@@ -1395,12 +1411,12 @@
 
     section.style.display = "block";
     list.innerHTML = reviews.map(r => `
-      <article style="padding:1rem; margin-bottom:1rem; background:#f0f8ff; border-radius:4px;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:.5rem;">
+      <article class="peer-review">
+        <div class="peer-review-head">
           <strong>${escapeHtml(r.reviewer)}</strong>
           <span>${r.rating ? `Rating: ${r.rating}/5` : ""}</span>
         </div>
-        <p style="margin:0; color:#555;">${escapeHtml(r.comment || "No comment")}</p>
+        <p class="peer-review-text">${escapeHtml(r.comment || "No comment")}</p>
         <small class="muted">${r.date ? new Date(r.date).toLocaleDateString() : ""}</small>
       </article>
     `).join("");
