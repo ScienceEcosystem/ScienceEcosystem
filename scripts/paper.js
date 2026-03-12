@@ -469,10 +469,13 @@
     var oaLanding = get(p,"open_access.oa_url",null) || get(p,"best_oa_location.url",null) || get(p,"primary_location.landing_page_url",null);
     var idTail = idTailFrom(p.id);
     var pdfViewer = oaPdf ? ("/pdf-viewer.html?id=" + encodeURIComponent(idTail) + "&pdf=" + encodeURIComponent(oaPdf)) : null;
+    if (typeof console !== "undefined" && console.log) {
+      console.log("DEBUG PDF URLs:", { oaPdf: oaPdf, idTail: idTail, pdfViewer: pdfViewer });
+    }
 
     var chips = [
       badge(doiUrl, "DOI"),
-      badge(pdfViewer, "PDF", "badge-oa"),
+      badge(pdfViewer, "Read PDF", "badge-oa"),
       badge(oaLanding, "Open access", "badge-oa"),
       badge(p.id, "OpenAlex")
     ];
