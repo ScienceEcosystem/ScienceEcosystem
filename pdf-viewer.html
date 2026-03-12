@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Reader | ScienceEcosystem</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .pdf-container {
+      display: flex;
+      height: calc(100vh - 60px);
+      margin-top: 60px;
+    }
+
+    .pdf-sidebar {
+      width: 320px;
+      background: #f8f9fa;
+      border-right: 1px solid #dee2e6;
+      overflow-y: auto;
+      padding: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .pdf-main {
+      flex: 1;
+      background: #525252;
+      overflow: hidden;
+    }
+
+    .pdf-viewer-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .reference-item {
+      padding: 0.875rem;
+      margin-bottom: 0.75rem;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .reference-item:hover {
+      border-left-color: #2e7f9f;
+      background: #f8f9fa;
+      transform: translateX(2px);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    }
+
+    .reference-number {
+      font-weight: 700;
+      color: #2e7f9f;
+      margin-right: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    .reference-title {
+      font-weight: 600;
+      color: #212529;
+      font-size: 0.95rem;
+      line-height: 1.4;
+      margin-bottom: 0.25rem;
+    }
+
+    .paper-metadata {
+      background: white;
+      padding: 1rem;
+      border-radius: 6px;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .paper-metadata h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+      color: #212529;
+    }
+
+    .loading-spinner {
+      text-align: center;
+      padding: 2rem;
+      color: #6c757d;
+    }
+  </style>
+</head>
+<body data-page="pdf-viewer">
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
+      </div>
+
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+
+      <div class="nav-right">
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <img class="orcid-icon" src="https://orcid.org/sites/default/files/images/orcid_24x24.png" alt="" />
+          <span>Login with ORCID</span>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="pdf-container">
+    <aside class="pdf-sidebar">
+      <div id="pdfMetadata" class="paper-metadata">
+        <div class="loading-spinner">Loading paper info...</div>
+      </div>
+
+      <h3 style="margin: 0 0 1rem 0; font-size: 1.1rem; color: #212529;">References</h3>
+      <div id="pdfReferences">
+        <div class="loading-spinner">Extracting references...</div>
+      </div>
+    </aside>
+
+    <main class="pdf-main">
+      <iframe
+        id="pdfViewer"
+        class="pdf-viewer-iframe"
+        title="PDF Viewer"
+      ></iframe>
+    </main>
+  </div>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/pdf-reader.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+</body>
+</html>

@@ -84,6 +84,7 @@
     var x = String(input).trim();
     x = x.replace(/^https?:\/\/(dx\.)?doi\.org\//i,"");
     x = x.replace(/^doi:/i,"");
+    x = x.replace(/_\d+(\.[a-z0-9]+)$/i, "$1");
     return x;
   }
   function doiFromWork(p){
@@ -162,6 +163,7 @@
     }catch(e){ return []; }
   }
   async function fetchDataCiteBacklinks(doi){
+    doi = normalizeDOI(doi);
     if (!doi) return [];
     var q = 'relatedIdentifiers.identifier:"' + doi.replace(/"/g,'\\"') + '"';
     try{
@@ -184,6 +186,7 @@
     }catch(e){ return []; }
   }
   async function fetchZenodoBacklinks(doi){
+    doi = normalizeDOI(doi);
     if (!doi) return [];
     try{
       var q1 = 'related.identifiers.identifier:"' + doi.replace(/"/g,'\\"') + '"';
@@ -464,10 +467,12 @@
 
     var oaPdf = get(p,"best_oa_location.url_for_pdf",null) || get(p,"primary_location.pdf_url",null);
     var oaLanding = get(p,"open_access.oa_url",null) || get(p,"best_oa_location.url",null) || get(p,"primary_location.landing_page_url",null);
+    var idTail = idTailFrom(p.id);
+    var pdfViewer = oaPdf ? ("/pdf-viewer.html?id=" + encodeURIComponent(idTail) + "&pdf=" + encodeURIComponent(oaPdf)) : null;
 
     var chips = [
       badge(doiUrl, "DOI"),
-      badge(oaPdf, "PDF", "badge-oa"),
+      badge(pdfViewer, "PDF", "badge-oa"),
       badge(oaLanding, "Open access", "badge-oa"),
       badge(p.id, "OpenAlex")
     ];
@@ -1397,7 +1402,7 @@
           <div class="citation-tags">
             ${c.intent ? `<span class="badge">${escapeHtml(c.intent)}</span>` : ""}
             ${c.isInfluential ? '<span class="badge badge-warn">Influential</span>' : ""}
-            ${c.openAccessPdf ? `<a href="${c.openAccessPdf}" target="_blank" class="badge badge-ok">Read PDF</a>` : ""}
+            ${c.openAccessPdf ? `<a href="/pdf-viewer.html?pdf=${encodeURIComponent(c.openAccessPdf)}" target="_blank" class="badge badge-ok">Read PDF</a>` : ""}
           </div>
         </cite>
       </article>

@@ -517,9 +517,11 @@ async function bootstrap() {
     let libItems = [];
     try {
       libItems = await api("/api/library");
-      console.log("Library items loaded:", Array.isArray(libItems) ? libItems.length : 0, libItems);
+      console.log("DEBUG: Library items loaded:", libItems);
+      console.log("DEBUG: Count:", Array.isArray(libItems) ? libItems.length : 0);
     } catch (e) {
-      console.error("Library load error:", e);
+      console.error("DEBUG: Library load error:", e);
+      libItems = [];
     }
     if (Array.isArray(libItems)) {
       const total = libItems.length || 0;
@@ -527,9 +529,24 @@ async function bootstrap() {
       if (libCountBadge) libCountBadge.textContent = `${total} papers`;
       if (libCountEl) libCountEl.textContent = String(total);
 
-      fillBucket(libRecent, sortByDate(libItems).slice(0, 5), "saved_at");
-      fillBucket(libToRead, libItems.filter(i => hasLabel(i, "to-read")).slice(0, 5));
-      fillBucket(libStarred, libItems.filter(i => hasLabel(i, "starred")).slice(0, 5));
+      console.log("DEBUG: Filling buckets with", libItems.length, "items");
+      if (libCountEl) console.log("DEBUG: Set count to", libItems.length);
+
+      const recent = sortByDate(libItems).slice(0, 5);
+      const toRead = libItems.filter(i => hasLabel(i, "to-read")).slice(0, 5);
+      const starred = libItems.filter(i => hasLabel(i, "starred")).slice(0, 5);
+
+      console.log("DEBUG: Recent:", recent.length, "To Read:", toRead.length, "Starred:", starred.length);
+
+      fillBucket(libRecent, recent, "saved_at");
+      fillBucket(libToRead, toRead);
+      fillBucket(libStarred, starred);
+
+      if (!libItems.length) {
+        if (libRecent) libRecent.innerHTML = '<li class="muted">No papers saved yet.</li>';
+        if (libToRead) libToRead.innerHTML = '<li class="muted">No papers marked to read.</li>';
+        if (libStarred) libStarred.innerHTML = '<li class="muted">No starred papers.</li>';
+      }
     }
 
     await loadOrcidProfile();
