@@ -78,7 +78,10 @@ function addMailto(u) {
 
 async function fetchFollows() {
   try {
-    const list = await api("/api/follows");
+    const res = await fetch("/api/follows", { credentials: "include" });
+    if (res.status === 401) return [];
+    if (!res.ok) throw new Error("Follows fetch failed");
+    const list = await res.json();
     return Array.isArray(list) ? list.map((f) => ({ id: f.author_id || f.id, name: f.name || f.author_id })) : [];
   } catch (e) {
     console.warn("Could not load follows", e);
@@ -516,7 +519,14 @@ async function bootstrap() {
     // Library overview
     let libItems = [];
     try {
-      libItems = await api("/api/library");
+      const res = await fetch("/api/library/full", { credentials: "include" });
+      if (res.status === 401) {
+        libItems = [];
+      } else if (res.ok) {
+        libItems = await res.json();
+      } else {
+        throw new Error("Library load failed");
+      }
       console.log("DEBUG: Library items loaded:", libItems);
       console.log("DEBUG: Count:", Array.isArray(libItems) ? libItems.length : 0);
     } catch (e) {
@@ -532,7 +542,7 @@ async function bootstrap() {
       console.log("DEBUG: Filling buckets with", libItems.length, "items");
       if (libCountEl) console.log("DEBUG: Set count to", libItems.length);
 
-      const recent = sortByDate(libItems).slice(0, 5);
+      const recent = libItems.slice(0, 5);
       const toRead = libItems.filter(i => hasLabel(i, "to-read")).slice(0, 5);
       const starred = libItems.filter(i => hasLabel(i, "starred")).slice(0, 5);
 
