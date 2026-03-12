@@ -21,6 +21,97 @@ router.get('/api/paper/:doi(*)', async (req, res) => {
   }
 });
 
+// POST /api/pdf/extract
+// Extract structured data from PDF using GROBID cloud service
+router.post('/api/pdf/extract', async (req, res) => {
+  const { pdfUrl } = req.body || {};
+  if (!pdfUrl) return res.status(400).json({ error: 'pdfUrl required' });
+
+  try {
+    const pdfResponse = await fetch(pdfUrl);
+    if (!pdfResponse.ok) throw new Error('Failed to fetch PDF');
+    const pdfBuffer = await pdfResponse.arrayBuffer();
+
+    const formData = new FormData();
+    formData.append('input', new Blob([pdfBuffer]), 'paper.pdf');
+
+    const grobidResponse = await fetch('https://cloud.science-miner.com/grobid/api/processFulltextDocument', {
+      method: 'POST',
+      body: formData
+    });
+    if (!grobidResponse.ok) throw new Error('GROBID processing failed');
+
+    const teiXml = await grobidResponse.text();
+    const parsed = parseGrobidTEI(teiXml);
+    res.json(parsed);
+  } catch (e) {
+    console.error('PDF extraction error:', e);
+    res.status(500).json({ error: 'Failed to extract PDF data' });
+  }
+});
+
+function stripTags(s) {
+  return String(s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Helper function to parse GROBID TEI XML
+function parseGrobidTEI(teiXml) {
+  const references = [];
+  const figures = [];
+
+  const refMatches = teiXml.matchAll(/<biblStruct[^>]*>(.*?)<\/biblStruct>/gs);
+  let refNumber = 1;
+
+  for (const match of refMatches) {
+    const refXml = match[1] || '';
+
+    const titleMatch = refXml.match(/<title[^>]*level="a"[^>]*>(.*?)<\/title>/s);
+    const title = titleMatch ? stripTags(titleMatch[1]) : '';
+
+    const authorMatches = refXml.matchAll(/<author>(.*?)<\/author>/gs);
+    const authors = [];
+    for (const authorMatch of authorMatches) {
+      const authorXml = authorMatch[1] || '';
+      const forename = authorXml.match(/<forename[^>]*>(.*?)<\/forename>/s)?.[1] || '';
+      const surname = authorXml.match(/<surname[^>]*>(.*?)<\/surname>/s)?.[1] || '';
+      const name = stripTags(`${forename} ${surname}`);
+      if (name) authors.push(name);
+    }
+
+    const doiMatch = refXml.match(/<idno[^>]*type="DOI"[^>]*>(.*?)<\/idno>/);
+    const doi = doiMatch ? stripTags(doiMatch[1]) : null;
+
+    const yearMatch = refXml.match(/<date[^>]*when="(\d{4})/);
+    const year = yearMatch ? yearMatch[1] : null;
+
+    references.push({
+      number: refNumber++,
+      title: title,
+      authors: authors,
+      doi: doi,
+      year: year
+    });
+  }
+
+  const figMatches = teiXml.matchAll(/<figure[^>]*>(.*?)<\/figure>/gs);
+  let figNumber = 1;
+  for (const match of figMatches) {
+    const figXml = match[1] || '';
+    const captionMatch = figXml.match(/<figDesc>(.*?)<\/figDesc>/s);
+    const caption = captionMatch ? stripTags(captionMatch[1]) : '';
+    figures.push({ number: figNumber++, caption: caption });
+  }
+
+  return {
+    references: references,
+    figures: figures,
+    metadata: {
+      totalReferences: references.length,
+      totalFigures: figures.length
+    }
+  };
+}
+
 // Semantic Scholar API
 async function getSemanticScholarCitations(doi) {
   try {

@@ -491,20 +491,13 @@
         + '<span class="wrap-text" id="authorsShort">'+aList.shortHtml+(aList.moreCount?(' <button class="link-btn" id="authorsShowMore">Show more</button>'):'')+'</span>'
         + '<span class="wrap-text" id="authorsFull" style="display:none;">'+aList.allHtml+' <button class="link-btn" id="authorsShowLess">Show less</button></span>'
       + '</p>'
-      + '<p class="meta-row"><strong>Affiliations:</strong> '
-        + '<span class="wrap-text" id="affShort">'+affList.shortHtml+(affList.moreCount?(' <button class="link-btn" id="affShowMore">Show more</button>'):'')+'</span>'
-        + '<span class="wrap-text" id="affFull" style="display:none;">'+affList.allHtml+' <button class="link-btn" id="affShowLess">Show less</button></span>'
-      + '</p>'
       + (fundingRow || "")
       + '<p class="chips">'+chips.filter(Boolean).join(" ")+'</p>';
   }
   function wireHeaderToggles(){
     var asMore = $("authorsShowMore"), asLess = $("authorsShowLess");
-    var afMore = $("affShowMore"), afLess = $("affShowLess");
     if (asMore) asMore.onclick = function(){ $("authorsShort").style.display="none"; $("authorsFull").style.display="inline"; };
     if (asLess) asLess.onclick = function(){ $("authorsFull").style.display="none"; $("authorsShort").style.display="inline"; };
-    if (afMore) afMore.onclick = function(){ $("affShort").style.display="none"; $("affFull").style.display="inline"; };
-    if (afLess) afLess.onclick = function(){ $("affFull").style.display="none"; $("affShort").style.display="inline"; };
   }
 
   function collectCiteDataForHeader(work){
@@ -592,6 +585,80 @@
         '<span aria-label="Journal rating">'+starStr+'</span> <span class="muted">('+stars+'/5)</span>'+
       '</div>' +
       checks;
+  }
+
+  function calculateReproducibilityScore(paperData, researchObjects){
+    var score = 0;
+    var checks = [];
+
+    var hasOpenAccess = !!(get(paperData,"open_access.is_oa",false) || get(paperData,"best_oa_location.url_for_pdf",null) || get(paperData,"primary_location.pdf_url",null));
+    if (hasOpenAccess) { score += 20; checks.push({ label:"Open access PDF", status:"yes" }); }
+    else { checks.push({ label:"Open access PDF", status:"no" }); }
+
+    var hasData = Array.isArray(researchObjects) && researchObjects.some(function(x){ return String(x?.type || "").toLowerCase() === "dataset"; });
+    if (hasData) { score += 30; checks.push({ label:"Data available", status:"yes" }); }
+    else { checks.push({ label:"Data available", status:"no" }); }
+
+    var hasCode = Array.isArray(researchObjects) && researchObjects.some(function(x){ return String(x?.type || "").toLowerCase() === "software"; });
+    if (hasCode) { score += 30; checks.push({ label:"Code available", status:"yes" }); }
+    else { checks.push({ label:"Code available", status:"no" }); }
+
+    var hasDocs = Array.isArray(researchObjects) && researchObjects.some(function(x){
+      var t = String(x?.title || "").toLowerCase();
+      var u = String(x?.url || "").toLowerCase();
+      return t.includes("readme") || u.includes("readme") || u.includes("documentation");
+    });
+    if (hasDocs) { score += 10; checks.push({ label:"Documentation", status:"yes" }); }
+    else if (hasCode) { checks.push({ label:"Documentation", status:"partial" }); }
+
+    var hasEnv = Array.isArray(researchObjects) && researchObjects.some(function(x){
+      var t = String(x?.title || "").toLowerCase();
+      var u = String(x?.url || "").toLowerCase();
+      return t.includes("docker") || t.includes("conda") || t.includes("requirements") || u.includes("docker") || u.includes("conda") || u.includes("requirements");
+    });
+    if (hasEnv) { score += 10; checks.push({ label:"Environment specs", status:"yes" }); }
+    else if (hasCode) { checks.push({ label:"Environment specs", status:"no" }); }
+
+    var grade = "Poor", color = "#c0392b";
+    if (score >= 90) { grade = "Excellent"; color = "#27ae60"; }
+    else if (score >= 70) { grade = "Good"; color = "#2e7f9f"; }
+    else if (score >= 50) { grade = "Fair"; color = "#f39c12"; }
+    else if (score >= 30) { grade = "Limited"; color = "#e67e22"; }
+
+    return { score: score, grade: grade, color: color, checks: checks };
+  }
+
+  function renderReproducibilityScore(paperData, researchObjects){
+    var block = $("reproducibilityBlock");
+    if (!block) return;
+    var result = calculateReproducibilityScore(paperData, researchObjects);
+
+    block.innerHTML = '' +
+      '<div class="repro-score" style="text-align:center; margin-bottom:1rem;">' +
+        '<div style="font-size:3rem; font-weight:700; color:'+result.color+';">'+result.score+'%</div>' +
+        '<div style="font-size:1rem; font-weight:600; color:'+result.color+';">'+result.grade+'</div>' +
+        '<div class="progress-bar" style="background:#eee; height:8px; border-radius:4px; margin-top:0.5rem; overflow:hidden;">' +
+          '<div style="background:'+result.color+'; width:'+result.score+'%; height:100%;"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="repro-checklist">' +
+        result.checks.map(function(check){ return '' +
+          '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
+            '<span style="font-size:1.2rem;">'+(check.status==="yes" ? "OK" : (check.status==="partial" ? "~" : "X"))+'</span>' +
+            '<span style="flex:1; color:'+(check.status==="yes" ? "#333" : "#999")+';">'+escapeHtml(check.label)+'</span>' +
+          '</div>'; }).join('') +
+      '</div>' +
+      '<details style="margin-top:1rem;">' +
+        '<summary style="cursor:pointer; color:#2e7f9f; font-size:0.9rem;">How is this calculated?</summary>' +
+        '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">' +
+          'Reproducibility score is based on:<br>' +
+          '• Open access PDF (20%)<br>' +
+          '• Public data (30%)<br>' +
+          '• Public code (30%)<br>' +
+          '• Documentation (10%)<br>' +
+          '• Environment specs (10%)' +
+        '</p>' +
+      '</details>';
   }
 
   // ---------- Abstract ----------
@@ -1162,14 +1229,16 @@
     }
 
     $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">Looking for code & data…</p>';
+    var ros = [];
     try{
-      var ros = await harvestAndFilterResearchObjects(p);
+      ros = await harvestAndFilterResearchObjects(p);
       renderResearchObjectsUI(ros);
     }catch(e){
       $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">Could not retrieve links.</p>';
     }
 
     renderJournalBlockSimple(p, source);
+    renderReproducibilityScore(p, ros);
 
     var doi = doiFromWork(p);
     if (doi) {
