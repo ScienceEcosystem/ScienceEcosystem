@@ -572,7 +572,14 @@
 
     var stars = computeJournalScore(source || {});
     var starStr = "★".repeat(stars) + "☆".repeat(5 - stars);
-    var percent = Math.round((stars / 5) * 100);
+    // Weighted quality score (0-100)
+    var peerReviewScore = 0;
+    if (peerText === "Peer reviewed") peerReviewScore = 40;
+    else if (peerText === "Editorial review only") peerReviewScore = 20;
+    var journalRankScore = Math.round((stars / 5) * 40);
+    var openAccessScore = get(p, "open_access.is_oa", false) ? 20 : 0;
+    var percent = peerReviewScore + journalRankScore + openAccessScore;
+
     var grade = "Poor", color = "#c0392b";
     if (percent >= 90) { grade = "Excellent"; color = "#27ae60"; }
     else if (percent >= 70) { grade = "Good"; color = "#2e7f9f"; }
@@ -591,6 +598,28 @@
     checks += ' · <a href="'+escapeHtml(rwHrefTitle)+'" target="_blank" rel="noopener">Retraction Watch</a>';
     checks += '</div>';
 
+    // Build indicators
+    var indicators = [];
+    if (peerText === "Peer reviewed") indicators.push({ icon: "OK", label: "Peer reviewed", status: "yes" });
+    else if (peerText === "Editorial review only") indicators.push({ icon: "~", label: "Editorial review only", status: "partial" });
+    else indicators.push({ icon: "X", label: "Not peer reviewed", status: "no" });
+
+    if (stars >= 4) indicators.push({ icon: "OK", label: "High-impact journal ("+stars+"/5)", status: "yes" });
+    else if (stars >= 3) indicators.push({ icon: "~", label: "Mid-tier journal ("+stars+"/5)", status: "partial" });
+    else if (stars > 0) indicators.push({ icon: "~", label: "Lower-tier journal ("+stars+"/5)", status: "partial" });
+    else indicators.push({ icon: "X", label: "Journal rating unknown", status: "no" });
+
+    if (get(p, "open_access.is_oa", false)) indicators.push({ icon: "OK", label: "Open access", status: "yes" });
+    else indicators.push({ icon: "~", label: "Behind paywall", status: "partial" });
+
+    var indicatorsHtml = indicators.map(function(ind){
+      return '' +
+        '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
+          '<span style="font-size:1.2rem;">'+ind.icon+'</span>' +
+          '<span style="flex:1; color:'+(ind.status === "yes" ? "#333" : "#666")+';">'+escapeHtml(ind.label)+'</span>' +
+        '</div>';
+    }).join('');
+
     $("journalBlock").innerHTML =
       '<div class="repro-score" style="text-align:center; margin-bottom:1rem;">' +
         '<div style="font-size:3rem; font-weight:700; color:'+color+';">'+percent+'%</div>' +
@@ -599,24 +628,16 @@
           '<div style="background:'+color+'; width:'+percent+'%; height:100%;"></div>' +
         '</div>' +
       '</div>' +
-      '<div class="repro-checklist">' +
-        '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
-          '<span style="font-size:1.2rem;">OK</span>' +
-          '<span style="flex:1; color:#333;">Published in: '+journalLinkHtml+'</span>' +
-        '</div>' +
-        '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
-          '<span style="font-size:1.2rem;">OK</span>' +
-          '<span style="flex:1; color:#333;">Peer review: '+escapeHtml(peerText)+'</span>' +
-        '</div>' +
-        '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
-          '<span style="font-size:1.2rem;">OK</span>' +
-          '<span style="flex:1; color:#333;">Journal rating: '+starStr+' <span class="muted">('+stars+'/5)</span></span>' +
-        '</div>' +
-      '</div>' +
+      '<div class="repro-checklist">' + indicatorsHtml + '</div>' +
+      '<p style="margin-top:1rem; font-size:0.9rem; color:#666;"><strong>Journal:</strong> '+journalLinkHtml+'</p>' +
       '<details style="margin-top:1rem;">' +
         '<summary style="cursor:pointer; color:#2e7f9f; font-size:0.9rem;">How is this calculated?</summary>' +
-        '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">' +
-          'Journal score is based on a 0–5 rating derived from venue metadata and ranking signals.' +
+        '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem; line-height:1.5;">' +
+          'Journal quality is based on:<br>' +
+          '• Peer review process (40%)<br>' +
+          '• Journal impact/ranking (40%)<br>' +
+          '• Open access status (20%)<br><br>' +
+          'This helps assess the credibility and accessibility of the publication venue.' +
         '</p>' +
       '</details>' +
       checks;
