@@ -600,16 +600,16 @@
 
     // Build indicators
     var indicators = [];
-    if (peerText === "Peer reviewed") indicators.push({ icon: "OK", label: "Peer reviewed", status: "yes" });
+    if (peerText === "Peer reviewed") indicators.push({ icon: "✅ ", label: "Peer reviewed", status: "yes" });
     else if (peerText === "Editorial review only") indicators.push({ icon: "~", label: "Editorial review only", status: "partial" });
     else indicators.push({ icon: "X", label: "Not peer reviewed", status: "no" });
 
-    if (stars >= 4) indicators.push({ icon: "OK", label: "High-impact journal ("+stars+"/5)", status: "yes" });
+    if (stars >= 4) indicators.push({ icon: "✅ ", label: "High-impact journal ("+stars+"/5)", status: "yes" });
     else if (stars >= 3) indicators.push({ icon: "~", label: "Mid-tier journal ("+stars+"/5)", status: "partial" });
     else if (stars > 0) indicators.push({ icon: "~", label: "Lower-tier journal ("+stars+"/5)", status: "partial" });
     else indicators.push({ icon: "X", label: "Journal rating unknown", status: "no" });
 
-    if (get(p, "open_access.is_oa", false)) indicators.push({ icon: "OK", label: "Open access", status: "yes" });
+    if (get(p, "open_access.is_oa", false)) indicators.push({ icon: "✅ ", label: "Open access", status: "yes" });
     else indicators.push({ icon: "~", label: "Behind paywall", status: "partial" });
 
     var indicatorsHtml = indicators.map(function(ind){
@@ -700,7 +700,7 @@
       '<div class="repro-checklist">' +
         result.checks.map(function(check){ return '' +
           '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
-            '<span style="font-size:1.2rem;">'+(check.status==="yes" ? "OK" : (check.status==="partial" ? "~" : "X"))+'</span>' +
+            '<span style="font-size:1.2rem;">'+(check.status==="yes" ? "✅" : (check.status==="partial" ? "~" : "X"))+'</span>' +
             '<span style="flex:1; color:'+(check.status==="yes" ? "#333" : "#999")+';">'+escapeHtml(check.label)+'</span>' +
           '</div>'; }).join('') +
       '</div>' +
