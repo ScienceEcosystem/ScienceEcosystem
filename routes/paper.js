@@ -21,6 +21,53 @@ router.get('/api/paper/:doi(*)', async (req, res) => {
   }
 });
 
+// GET /api/pdf/proxy?url=<encoded_pdf_url>
+// Proxies external PDFs to bypass CORS restrictions
+router.get('/api/pdf/proxy', async (req, res) => {
+  const pdfUrl = req.query?.url;
+  if (!pdfUrl) return res.status(400).json({ error: 'url parameter required' });
+
+  let target;
+  try {
+    target = new URL(String(pdfUrl));
+  } catch {
+    return res.status(400).json({ error: 'invalid url' });
+  }
+
+  if (!['http:', 'https:'].includes(target.protocol)) {
+    return res.status(400).json({ error: 'unsupported protocol' });
+  }
+
+  const host = target.hostname || '';
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+    return res.status(400).json({ error: 'disallowed host' });
+  }
+
+  try {
+    const response = await fetch(target.toString(), {
+      headers: {
+        'User-Agent': 'ScienceEcosystem/1.0 (https://scienceecosystem.org)'
+      }
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: 'Failed to fetch PDF' });
+    }
+
+    const contentType = response.headers.get('content-type') || 'application/pdf';
+    const contentLength = response.headers.get('content-length');
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (contentLength) res.setHeader('Content-Length', contentLength);
+
+    const buffer = await response.arrayBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (e) {
+    console.error('PDF proxy error:', e);
+    res.status(500).json({ error: 'Failed to fetch PDF' });
+  }
+});
+
 // POST /api/pdf/extract
 // Extract structured data from PDF using GROBID cloud service
 router.post('/api/pdf/extract', async (req, res) => {

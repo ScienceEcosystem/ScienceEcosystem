@@ -17,8 +17,15 @@ function loadPDF(url) {
   const viewer = document.getElementById('pdfViewer');
   if (!viewer) return;
 
-  const encodedUrl = encodeURIComponent(url);
-  viewer.src = `/pdfjs/web/viewer.html?file=${encodedUrl}`;
+  const isExternal = !url.startsWith('/') && !url.startsWith(window.location.origin);
+  let viewerUrl;
+  if (isExternal) {
+    const proxyUrl = `/api/pdf/proxy?url=${encodeURIComponent(url)}`;
+    viewerUrl = `/pdfjs/web/viewer.html?file=${encodeURIComponent(proxyUrl)}`;
+  } else {
+    viewerUrl = `/pdfjs/web/viewer.html?file=${encodeURIComponent(url)}`;
+  }
+  viewer.src = viewerUrl;
 }
 
 async function loadPaperMetadata(paperId) {
@@ -92,6 +99,12 @@ async function extractPDFReferences(pdfUrl) {
     console.error('Reference extraction error:', e);
     refsDiv.innerHTML = '<p class="muted">Could not extract references</p>';
   }
+}
+
+function showReferencesPlaceholder() {
+  const refsDiv = document.getElementById('pdfReferences');
+  if (!refsDiv) return;
+  refsDiv.innerHTML = '<p class="muted">Reference extraction is not available yet.</p>';
 }
 
 async function handleReferenceClick(refNumber) {
@@ -188,7 +201,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   loadPDF(pdfUrl);
-  extractPDFReferences(pdfUrl);
+  showReferencesPlaceholder();
 
   if (paperId) {
     loadPaperMetadata(paperId);
