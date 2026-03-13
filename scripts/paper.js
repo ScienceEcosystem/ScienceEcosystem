@@ -92,6 +92,13 @@
     if (!doiRaw) return null;
     return String(doiRaw).replace(/^doi:/i,"");
   }
+  function getOpenAccessPdf(p){
+    return get(p,"best_oa_location.pdf_url",null)
+      || get(p,"best_oa_location.url_for_pdf",null)
+      || get(p,"primary_location.pdf_url",null)
+      || get(p,"primary_location.url_for_pdf",null)
+      || null;
+  }
 
   // ---------- Fetchers ----------
   async function fetchPaperData(paperId){
@@ -278,7 +285,7 @@
       });
     }); } catch(e){}
     try { (await fetchDataCiteBacklinks(doi)).forEach(function(r){ all.push(r); }); } catch(e){}
-    try { (await fetchZenodoBacklinks(doi)).forEach(function(r){ all.push(r); }); } catch(e){}
+    // Avoid direct Zenodo calls in the browser to prevent noisy 400s. Use /api/paper/artifacts instead.
     // Publisher page scrape for code/data hosts
     try {
       var landing = paper.primary_location?.landing_page_url || paper.open_access?.oa_url || null;
@@ -465,7 +472,7 @@
     var doiRaw = p.doi || get(p,"ids.doi",null);
     var doiUrl = doiRaw ? (String(doiRaw).indexOf("http")===0 ? doiRaw : ("https://doi.org/" + String(doiRaw).replace(/^doi:/i,""))) : null;
 
-    var oaPdf = get(p,"best_oa_location.url_for_pdf",null) || get(p,"primary_location.pdf_url",null);
+    var oaPdf = getOpenAccessPdf(p);
     var oaLanding = get(p,"open_access.oa_url",null) || get(p,"best_oa_location.url",null) || get(p,"primary_location.landing_page_url",null);
     var idTail = idTailFrom(p.id);
     var pdfViewer = oaPdf ? ("/pdf-viewer.html?id=" + encodeURIComponent(idTail) + "&pdf=" + encodeURIComponent(oaPdf)) : null;
@@ -591,7 +598,7 @@
     var score = 0;
     var checks = [];
 
-    var hasOpenAccess = !!(get(paperData,"open_access.is_oa",false) || get(paperData,"best_oa_location.url_for_pdf",null) || get(paperData,"primary_location.pdf_url",null));
+    var hasOpenAccess = !!(get(paperData,"open_access.is_oa",false) || getOpenAccessPdf(paperData));
     if (hasOpenAccess) { score += 20; checks.push({ label:"Open access PDF", status:"yes" }); }
     else { checks.push({ label:"Open access PDF", status:"no" }); }
 
@@ -1244,7 +1251,7 @@
     if (doi) {
       if (!abstractHtml) loadAbstractFallback(doi);
       loadLinkedResources(doi);
-      var oaPdf = get(p,"best_oa_location.url_for_pdf",null) || get(p,"primary_location.pdf_url",null);
+      var oaPdf = getOpenAccessPdf(p);
       var hasOpenAccess = !!(get(p,"open_access.is_oa",false) || get(p,"best_oa_location.is_oa",false) || oaPdf);
       loadCitationContexts(doi, hasOpenAccess);
     }

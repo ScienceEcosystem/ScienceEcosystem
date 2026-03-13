@@ -468,8 +468,20 @@
   async function enhancePaperCards(container){
     var root = container || document;
 
-    // Try to build saved cache (non-fatal if not present)
-    try { await globalThis.SE_LIB?.loadLibraryOnce?.(); } catch(e){ console.warn("SE_LIB preload:", e); }
+    // Try to build saved cache only when signed in (avoid 401s)
+    try {
+      if (!globalThis.SE_SESSION_READY && !globalThis.SE_SESSION_PROMISE) {
+        for (var i = 0; i < 20; i++) {
+          await new Promise(function(r){ setTimeout(r, 25); });
+          if (globalThis.SE_SESSION_READY || globalThis.SE_SESSION_PROMISE) break;
+        }
+      }
+      if (globalThis.SE_SESSION_PROMISE) {
+        await globalThis.SE_SESSION_PROMISE;
+      }
+      if (!globalThis.SE_SESSION) return;
+      await globalThis.SE_LIB?.loadLibraryOnce?.();
+    } catch(e){ console.warn("SE_LIB preload:", e); }
 
     // 1) Add Unpaywall PDF chips asynchronously
     var cards = Array.prototype.slice.call(root.querySelectorAll(".paper-card[data-doi]"));

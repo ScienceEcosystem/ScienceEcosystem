@@ -48,6 +48,13 @@ async function checkSession() {
   }
 }
 
+globalThis.SE_SESSION_PROMISE = (async function(){
+  const me = await checkSession();
+  globalThis.SE_SESSION = me || null;
+  globalThis.SE_SESSION_READY = true;
+  return globalThis.SE_SESSION;
+})();
+
 (async function () {
   // Finds elements if present on the page
   const loginBtn  = document.getElementById("orcidLoginBtn");
@@ -55,7 +62,7 @@ async function checkSession() {
   const profileLink = document.getElementById("profileLink"); // optional <a> to profile
 
   try {
-    const me = await checkSession();
+    const me = await globalThis.SE_SESSION_PROMISE;
     if (!me) throw new Error("not signed in");
 
     // Toggle nav: show Profile + Logout, hide Login

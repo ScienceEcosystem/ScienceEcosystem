@@ -487,7 +487,7 @@ async function bootstrap() {
     if (profileAffiliation) profileAffiliation.textContent = me?.affiliation ? `• ${me.affiliation}` : "";
     if (viewOrcidBtn) viewOrcidBtn.href = orcidUrl;
     if (orcidEditLink) orcidEditLink.href = orcidUrl;
-    setAvatar(\"\", me?.name || \"\");
+    setAvatar("", me?.name || "");
 
     // Identity / linking status
     try {
