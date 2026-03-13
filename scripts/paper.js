@@ -572,6 +572,12 @@
 
     var stars = computeJournalScore(source || {});
     var starStr = "★".repeat(stars) + "☆".repeat(5 - stars);
+    var percent = Math.round((stars / 5) * 100);
+    var grade = "Poor", color = "#c0392b";
+    if (percent >= 90) { grade = "Excellent"; color = "#27ae60"; }
+    else if (percent >= 70) { grade = "Good"; color = "#2e7f9f"; }
+    else if (percent >= 50) { grade = "Fair"; color = "#f39c12"; }
+    else if (percent >= 30) { grade = "Limited"; color = "#e67e22"; }
 
     var doi = doiFromWork(p);
     var pubpeerHref = doi ? ("https://pubpeer.com/search?q=" + encodeURIComponent(doi)) : "";
@@ -586,11 +592,33 @@
     checks += '</div>';
 
     $("journalBlock").innerHTML =
-      '<p><strong>Published in:</strong> '+journalLinkHtml+'</p>' +
-      '<p class="meta"><strong>Peer review:</strong> '+escapeHtml(peerText)+'</p>' +
-      '<div class="panel light" style="margin-top:.5rem;"><strong>Journal rating:</strong> '+
-        '<span aria-label="Journal rating">'+starStr+'</span> <span class="muted">('+stars+'/5)</span>'+
+      '<div class="repro-score" style="text-align:center; margin-bottom:1rem;">' +
+        '<div style="font-size:3rem; font-weight:700; color:'+color+';">'+percent+'%</div>' +
+        '<div style="font-size:1rem; font-weight:600; color:'+color+';">'+grade+'</div>' +
+        '<div class="progress-bar" style="background:#eee; height:8px; border-radius:4px; margin-top:0.5rem; overflow:hidden;">' +
+          '<div style="background:'+color+'; width:'+percent+'%; height:100%;"></div>' +
+        '</div>' +
       '</div>' +
+      '<div class="repro-checklist">' +
+        '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
+          '<span style="font-size:1.2rem;">OK</span>' +
+          '<span style="flex:1; color:#333;">Published in: '+journalLinkHtml+'</span>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
+          '<span style="font-size:1.2rem;">OK</span>' +
+          '<span style="flex:1; color:#333;">Peer review: '+escapeHtml(peerText)+'</span>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
+          '<span style="font-size:1.2rem;">OK</span>' +
+          '<span style="flex:1; color:#333;">Journal rating: '+starStr+' <span class="muted">('+stars+'/5)</span></span>' +
+        '</div>' +
+      '</div>' +
+      '<details style="margin-top:1rem;">' +
+        '<summary style="cursor:pointer; color:#2e7f9f; font-size:0.9rem;">How is this calculated?</summary>' +
+        '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">' +
+          'Journal score is based on a 0–5 rating derived from venue metadata and ranking signals.' +
+        '</p>' +
+      '</details>' +
       checks;
   }
 
