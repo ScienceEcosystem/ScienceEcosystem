@@ -46,8 +46,20 @@ router.get('/api/pdf/proxy', async (req, res) => {
   try {
     const response = await fetch(target.toString(), {
       headers: {
-        'User-Agent': 'ScienceEcosystem/1.0 (https://scienceecosystem.org)'
-      }
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/pdf,*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': target.origin + '/',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0'
+      },
+      redirect: 'follow'
     });
 
     if (!response.ok) {

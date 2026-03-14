@@ -77,7 +77,28 @@ async function loadPDF(url) {
     renderPage(pageNum);
   } catch (error) {
     console.error('Error loading PDF:', error);
-    alert('Failed to load PDF: ' + error.message);
+    const pdfMain = document.querySelector('.pdf-main');
+    if (pdfMain) {
+      pdfMain.innerHTML = `
+        <div style="text-align:center; padding:3rem; color:#666;">
+          <h3 style="color:#c0392b;">Unable to Load PDF</h3>
+          <p style="margin:1rem 0;">This publisher blocks server-side PDF loading.</p>
+
+          <div style="margin-top:2rem; display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+            <a href="${finalUrl}" target="_blank" class="btn" style="display:inline-flex; align-items:center; gap:0.5rem;">
+              Open PDF in New Tab
+            </a>
+            <a href="${finalUrl}" download class="btn btn-secondary" style="display:inline-flex; align-items:center; gap:0.5rem;">
+              Download PDF
+            </a>
+          </div>
+
+          <p style="margin-top:2rem; font-size:0.9rem; color:#999;">
+            Error: ${escapeHtml(error.message || 'Publisher blocking detected')}
+          </p>
+        </div>
+      `;
+    }
   }
 }
 
