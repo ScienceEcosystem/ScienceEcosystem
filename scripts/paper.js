@@ -643,45 +643,149 @@
       checks;
   }
 
+  // ---------- Paper type detection ----------
+  function detectPaperType(paper){
+    var type = String(paper?.type || "").toLowerCase();
+    var title = String(paper?.title || "").toLowerCase();
+    var abstract = "";
+    if (paper && paper.abstract_inverted_index && typeof paper.abstract_inverted_index === "object") {
+      try { abstract = Object.keys(paper.abstract_inverted_index).join(" ").toLowerCase(); } catch(_e){}
+    }
+
+    if (type === "review" || type === "literature-review") {
+      return { category: "review", label: "Literature Review" };
+    }
+    if (type === "editorial" || type === "letter") {
+      return { category: "opinion", label: "Editorial/Opinion" };
+    }
+
+    var reviewKeywords = ["systematic review", "literature review", "scoping review", "meta-analysis", "review of"];
+    var opinionKeywords = ["commentary", "perspective", "opinion", "editorial", "viewpoint"];
+    var theoreticalKeywords = ["theoretical framework", "conceptual model", "mathematical proof"];
+    var computationalKeywords = ["simulation", "computational model", "algorithm", "software"];
+
+    var text = title + " " + abstract;
+
+    if (reviewKeywords.some(function(kw){ return text.includes(kw); })) {
+      return { category: "review", label: "Review Article" };
+    }
+    if (opinionKeywords.some(function(kw){ return text.includes(kw); })) {
+      return { category: "opinion", label: "Opinion/Commentary" };
+    }
+    if (theoreticalKeywords.some(function(kw){ return text.includes(kw); })) {
+      return { category: "theoretical", label: "Theoretical Work" };
+    }
+    if (computationalKeywords.some(function(kw){ return text.includes(kw); })) {
+      return { category: "computational", label: "Computational Study" };
+    }
+    return { category: "empirical", label: "Research Article" };
+  }
+
+  function gradeFromPercent(percent){
+    var grade = "Poor", color = "#c0392b";
+    if (percent >= 90) { grade = "Excellent"; color = "#27ae60"; }
+    else if (percent >= 70) { grade = "Good"; color = "#2e7f9f"; }
+    else if (percent >= 50) { grade = "Fair"; color = "#f39c12"; }
+    else if (percent >= 30) { grade = "Limited"; color = "#e67e22"; }
+    return { grade: grade, color: color };
+  }
+
+  function getReproducibilityExplanation(paperType){
+    var explanations = {
+      "Review Article": "For review articles, we assess transparency and accessibility rather than data/code:<br>• Open access (50%)<br>• Citations available (50%)",
+      "Literature Review": "For review articles, we assess transparency and accessibility rather than data/code:<br>• Open access (50%)<br>• Citations available (50%)",
+      "Opinion/Commentary": "For opinion pieces, we assess accessibility:<br>• Open access (50%)<br>• Citations available (50%)",
+      "Editorial/Opinion": "For opinion pieces, we assess accessibility:<br>• Open access (50%)<br>• Citations available (50%)",
+      "Theoretical Work": "For theoretical work, we assess proof availability:<br>• Open access PDF (40%)<br>• Supplementary materials (60%)",
+      "Computational Study": "For computational studies, code is critical:<br>• Open access PDF (15%)<br>• Code available (50%)<br>• Documentation (20%)<br>• Environment specs (15%)",
+      "Research Article": "For empirical research:<br>• Open access PDF (20%)<br>• Public data (30%)<br>• Public code (30%)<br>• Documentation (10%)<br>• Environment specs (10%)"
+    };
+    return explanations[paperType] || explanations["Research Article"];
+  }
+
   function calculateReproducibilityScore(paperData, researchObjects){
     var score = 0;
     var checks = [];
-
+    var paperType = detectPaperType(paperData);
     var hasOpenAccess = !!(get(paperData,"open_access.is_oa",false) || getOpenAccessPdf(paperData));
-    if (hasOpenAccess) { score += 20; checks.push({ label:"Open access PDF", status:"yes" }); }
-    else { checks.push({ label:"Open access PDF", status:"no" }); }
+    var datasets = Array.isArray(researchObjects) ? researchObjects.filter(function(r){ return String(r?.type || "").toLowerCase() === "dataset"; }) : [];
+    var codeRepos = Array.isArray(researchObjects) ? researchObjects.filter(function(r){
+      var t = String(r?.type || "").toLowerCase();
+      var u = String(r?.url || "").toLowerCase();
+      return t === "software" || t === "code" || u.includes("github.com") || u.includes("gitlab.com");
+    }) : [];
 
-    var hasData = Array.isArray(researchObjects) && researchObjects.some(function(x){ return String(x?.type || "").toLowerCase() === "dataset"; });
-    if (hasData) { score += 30; checks.push({ label:"Data available", status:"yes" }); }
-    else { checks.push({ label:"Data available", status:"no" }); }
+    if (paperType.category === "review" || paperType.category === "opinion") {
+      if (hasOpenAccess) { score += 50; checks.push({ label:"Open access", status:"yes", icon:"OK" }); }
+      else { checks.push({ label:"Open access", status:"no", icon:"X" }); }
+      var citedByCount = paperData?.cited_by_count || 0;
+      if (citedByCount > 0) { score += 50; checks.push({ label:"Citations available", status:"yes", icon:"OK" }); }
+      else { checks.push({ label:"Citations available", status:"no", icon:"X" }); }
+      var g1 = gradeFromPercent(score);
+      return { score: score, grade: g1.grade, color: g1.color, checks: checks, paperType: paperType.label, note: "This is a " + paperType.label.toLowerCase() + ". Data and code requirements do not apply." };
+    }
 
-    var hasCode = Array.isArray(researchObjects) && researchObjects.some(function(x){ return String(x?.type || "").toLowerCase() === "software"; });
-    if (hasCode) { score += 30; checks.push({ label:"Code available", status:"yes" }); }
-    else { checks.push({ label:"Code available", status:"no" }); }
+    if (paperType.category === "theoretical") {
+      if (hasOpenAccess) { score += 40; checks.push({ label:"Open access PDF", status:"yes", icon:"OK" }); }
+      else { checks.push({ label:"Open access PDF", status:"no", icon:"X" }); }
+      var hasSupplementary = Array.isArray(researchObjects) && researchObjects.length > 0;
+      if (hasSupplementary) { score += 60; checks.push({ label:"Supplementary materials", status:"yes", icon:"OK" }); }
+      else { checks.push({ label:"Supplementary materials", status:"no", icon:"X" }); }
+      var g2 = gradeFromPercent(score);
+      return { score: score, grade: g2.grade, color: g2.color, checks: checks, paperType: paperType.label, note: "This is theoretical work. Evaluated on proof and material availability." };
+    }
 
-    var hasDocs = Array.isArray(researchObjects) && researchObjects.some(function(x){
-      var t = String(x?.title || "").toLowerCase();
-      var u = String(x?.url || "").toLowerCase();
+    if (paperType.category === "computational") {
+      if (hasOpenAccess) { score += 15; checks.push({ label:"Open access PDF", status:"yes", icon:"OK" }); }
+      else { checks.push({ label:"Open access PDF", status:"no", icon:"X" }); }
+      var hasCode = codeRepos.length > 0;
+      if (hasCode) { score += 50; checks.push({ label:"Code available", status:"yes", icon:"OK" }); }
+      else { checks.push({ label:"Code available", status:"no", icon:"X" }); }
+      var hasReadme = codeRepos.some(function(r){
+        var t = String(r?.title || "").toLowerCase();
+        var u = String(r?.url || "").toLowerCase();
+        return t.includes("readme") || u.includes("readme") || u.includes("documentation");
+      });
+      if (hasReadme) { score += 20; checks.push({ label:"Documentation", status:"yes", icon:"OK" }); }
+      else if (hasCode) { checks.push({ label:"Documentation", status:"partial", icon:"~" }); }
+      var hasEnv = codeRepos.some(function(r){
+        var t = String(r?.title || "").toLowerCase();
+        var u = String(r?.url || "").toLowerCase();
+        return t.includes("docker") || t.includes("conda") || t.includes("requirements") || u.includes("docker") || u.includes("conda") || u.includes("requirements");
+      });
+      if (hasEnv) { score += 15; checks.push({ label:"Environment specs", status:"yes", icon:"OK" }); }
+      else if (hasCode) { checks.push({ label:"Environment specs", status:"no", icon:"X" }); }
+      var g3 = gradeFromPercent(score);
+      return { score: score, grade: g3.grade, color: g3.color, checks: checks, paperType: paperType.label, note: "Computational study: code availability is critical." };
+    }
+
+    if (hasOpenAccess) { score += 20; checks.push({ label:"Open access PDF", status:"yes", icon:"OK" }); }
+    else { checks.push({ label:"Open access PDF", status:"no", icon:"X" }); }
+
+    var hasData = datasets.length > 0;
+    if (hasData) { score += 30; checks.push({ label:"Data available", status:"yes", icon:"OK" }); }
+    else { checks.push({ label:"Data available", status:"no", icon:"X" }); }
+
+    var hasCode2 = codeRepos.length > 0;
+    if (hasCode2) { score += 30; checks.push({ label:"Code available", status:"yes", icon:"OK" }); }
+    else { checks.push({ label:"Code available", status:"no", icon:"X" }); }
+
+    var hasDocs2 = codeRepos.some(function(r){
+      var t = String(r?.title || "").toLowerCase();
+      var u = String(r?.url || "").toLowerCase();
       return t.includes("readme") || u.includes("readme") || u.includes("documentation");
     });
-    if (hasDocs) { score += 10; checks.push({ label:"Documentation", status:"yes" }); }
-    else if (hasCode) { checks.push({ label:"Documentation", status:"partial" }); }
+    if (hasDocs2) { score += 10; checks.push({ label:"Documentation", status:"yes", icon:"OK" }); }
 
-    var hasEnv = Array.isArray(researchObjects) && researchObjects.some(function(x){
-      var t = String(x?.title || "").toLowerCase();
-      var u = String(x?.url || "").toLowerCase();
+    var hasEnv2 = codeRepos.some(function(r){
+      var t = String(r?.title || "").toLowerCase();
+      var u = String(r?.url || "").toLowerCase();
       return t.includes("docker") || t.includes("conda") || t.includes("requirements") || u.includes("docker") || u.includes("conda") || u.includes("requirements");
     });
-    if (hasEnv) { score += 10; checks.push({ label:"Environment specs", status:"yes" }); }
-    else if (hasCode) { checks.push({ label:"Environment specs", status:"no" }); }
+    if (hasEnv2) { score += 10; checks.push({ label:"Environment specs", status:"yes", icon:"OK" }); }
 
-    var grade = "Poor", color = "#c0392b";
-    if (score >= 90) { grade = "Excellent"; color = "#27ae60"; }
-    else if (score >= 70) { grade = "Good"; color = "#2e7f9f"; }
-    else if (score >= 50) { grade = "Fair"; color = "#f39c12"; }
-    else if (score >= 30) { grade = "Limited"; color = "#e67e22"; }
-
-    return { score: score, grade: grade, color: color, checks: checks };
+    var g4 = gradeFromPercent(score);
+    return { score: score, grade: g4.grade, color: g4.color, checks: checks, paperType: paperType.label, note: null };
   }
 
   function renderReproducibilityScore(paperData, researchObjects){
@@ -690,29 +794,26 @@
     var result = calculateReproducibilityScore(paperData, researchObjects);
 
     block.innerHTML = '' +
+      (result.paperType ? '<p style="font-size:0.85rem; color:#666; margin-bottom:0.5rem; text-align:center;"><strong>Paper type:</strong> '+escapeHtml(result.paperType)+'</p>' : '') +
       '<div class="repro-score" style="text-align:center; margin-bottom:1rem;">' +
         '<div style="font-size:3rem; font-weight:700; color:'+result.color+';">'+result.score+'%</div>' +
-        '<div style="font-size:1rem; font-weight:600; color:'+result.color+';">'+result.grade+'</div>' +
+        '<div style="font-size:1rem; font-weight:600; color:'+result.color+';">'+escapeHtml(result.grade)+'</div>' +
         '<div class="progress-bar" style="background:#eee; height:8px; border-radius:4px; margin-top:0.5rem; overflow:hidden;">' +
           '<div style="background:'+result.color+'; width:'+result.score+'%; height:100%;"></div>' +
         '</div>' +
       '</div>' +
+      (result.note ? '<p style="font-size:0.85rem; color:#2e7f9f; background:#f0f8ff; padding:0.75rem; border-radius:4px; margin-bottom:1rem;">'+escapeHtml(result.note)+'</p>' : '') +
       '<div class="repro-checklist">' +
         result.checks.map(function(check){ return '' +
           '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
-            '<span style="font-size:1.2rem;">'+(check.status==="yes" ? "✅" : (check.status==="partial" ? "~" : "X"))+'</span>' +
+            '<span style="font-size:1.2rem;">'+escapeHtml(check.icon || (check.status==="yes" ? "OK" : (check.status==="partial" ? "~" : "X")))+'</span>' +
             '<span style="flex:1; color:'+(check.status==="yes" ? "#333" : "#999")+';">'+escapeHtml(check.label)+'</span>' +
           '</div>'; }).join('') +
       '</div>' +
       '<details style="margin-top:1rem;">' +
         '<summary style="cursor:pointer; color:#2e7f9f; font-size:0.9rem;">How is this calculated?</summary>' +
         '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">' +
-          'Reproducibility score is based on:<br>' +
-          '• Open access PDF (20%)<br>' +
-          '• Public data (30%)<br>' +
-          '• Public code (30%)<br>' +
-          '• Documentation (10%)<br>' +
-          '• Environment specs (10%)' +
+          getReproducibilityExplanation(result.paperType) +
         '</p>' +
       '</details>';
   }
