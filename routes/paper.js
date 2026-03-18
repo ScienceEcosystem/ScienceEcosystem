@@ -44,21 +44,42 @@ router.get('/api/pdf/proxy', async (req, res) => {
   }
 
   try {
-    const response = await fetch(target.toString(), {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/pdf,*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
+    const host = target.hostname || '';
+    const baseHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept': 'application/pdf,*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Referer': target.origin + '/',
+      'DNT': '1',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Cache-Control': 'max-age=0'
+    };
+
+    const hostHeaders = {
+      'academic.oup.com': {
+        'Accept': 'text/html,application/pdf,application/xhtml+xml,*/*',
         'Referer': target.origin + '/',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Cache-Control': 'max-age=0'
+        'Sec-Fetch-Site': 'same-origin'
       },
+      'arxiv.org': {
+        'Accept': 'application/pdf,*/*',
+        'Referer': 'https://arxiv.org/'
+      },
+      'doi.org': {
+        'Accept': 'text/html,application/xhtml+xml,application/pdf,*/*',
+        'Referer': 'https://doi.org/'
+      }
+    };
+
+    const mergedHeaders = Object.assign({}, baseHeaders, (hostHeaders[host] || {}));
+
+    const response = await fetch(target.toString(), {
+      headers: mergedHeaders,
       redirect: 'follow'
     });
 
@@ -117,6 +138,7 @@ function stripTags(s) {
 function parseGrobidTEI(teiXml) {
   const references = [];
   const figures = [];
+  const tables = [];
 
   const refMatches = teiXml.matchAll(/<biblStruct[^>]*>(.*?)<\/biblStruct>/gs);
   let refNumber = 1;
@@ -161,12 +183,33 @@ function parseGrobidTEI(teiXml) {
     figures.push({ number: figNumber++, caption: caption });
   }
 
+  const tableFigureMatches = teiXml.matchAll(/<figure[^>]*type=\"table\"[^>]*>(.*?)<\/figure>/gs);
+  let tableNumber = 1;
+  for (const match of tableFigureMatches) {
+    const tabXml = match[1] || '';
+    const captionMatch = tabXml.match(/<figDesc>(.*?)<\/figDesc>/s) || tabXml.match(/<head>(.*?)<\/head>/s);
+    const caption = captionMatch ? stripTags(captionMatch[1]) : '';
+    tables.push({ number: tableNumber++, caption: caption });
+  }
+
+  const tableMatches = teiXml.matchAll(/<table[^>]*>(.*?)<\/table>/gs);
+  for (const match of tableMatches) {
+    const tabXml = match[1] || '';
+    const captionMatch = tabXml.match(/<head>(.*?)<\/head>/s) || tabXml.match(/<figDesc>(.*?)<\/figDesc>/s);
+    const caption = captionMatch ? stripTags(captionMatch[1]) : '';
+    if (caption) {
+      tables.push({ number: tableNumber++, caption: caption });
+    }
+  }
+
   return {
     references: references,
     figures: figures,
+    tables: tables,
     metadata: {
       totalReferences: references.length,
-      totalFigures: figures.length
+      totalFigures: figures.length,
+      totalTables: tables.length
     }
   };
 }

@@ -171,6 +171,23 @@ const toolCatalog = [
     baseScore: 1
   },
   {
+    id: 'doi2bib',
+    name: 'DOI2Bib',
+    category: 'Citation helper',
+    summary: 'Generates BibTeX and other citation formats from a DOI.',
+    tags: ['citation', 'bibtex', 'doi', 'reference', 'lookup'],
+    cost: 'Free',
+    ease: 'Easy',
+    open: true,
+    collaboration: false,
+    bestFor: 'Quickly creating BibTeX entries from a DOI.',
+    alternatives: 'Crossref, DataCite, Zotero',
+    link: 'https://www.doi2bib.org/',
+    strengths: ['One-step DOI lookup', 'Multiple formats', 'Minimal UI'],
+    provider: 'doi2bib.org',
+    baseScore: 1
+  },
+  {
     id: 'connected-papers',
     name: 'Connected Papers',
     category: 'Literature review tool',

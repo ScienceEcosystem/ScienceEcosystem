@@ -688,6 +688,45 @@ body[data-page="user-profile"] h3 {
   background: #27ae60;
   color: #fff;
 }
+.pdf-page-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.pdf-text-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+}
+
+.pdf-text-layer span {
+  color: transparent;
+  pointer-events: none;
+}
+
+.citation-highlight {
+  background: rgba(255, 235, 59, 0.6);
+  border-radius: 2px;
+  pointer-events: auto;
+}
+.citation-highlight.active {
+  outline: 2px solid #2e7f9f;
+  outline-offset: 1px;
+}
+
+.citation-tooltip {
+  position: absolute;
+  z-index: 10001;
+  background: #fff;
+  color: #333;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  max-width: 260px;
+  text-align: left;
+  font-size: 0.85rem;
+}
 .reference-item {
   transition: all 0.2s ease;
 }
