@@ -414,6 +414,8 @@
 
     const chip=(href,label,cls="badge")=>href?`<a class="${cls}" href="${href}" target="_blank" rel="noopener">${label}</a>`:"";
     const doiUrl = item.doi ? (`https://doi.org/${item.doi.replace(/^doi:/i,"")}`) : null;
+    const openAlexId = item.openalex_id || item.id || "";
+    const pdfViewer = item.pdf_url ? `pdf-viewer.html?id=${encodeURIComponent(openAlexId)}&pdf=${encodeURIComponent(item.pdf_url)}` : null;
 
     host.innerHTML = `
       <div>
@@ -424,11 +426,11 @@
           <p style="display:flex;gap:.5rem;flex-wrap:wrap;">
             ${chip(doiUrl,"DOI")}
             ${chip(item.openalex_url,"OpenAlex")}
-            ${chip(item.pdf_url,"PDF","badge badge-oa")}
+            ${chip(pdfViewer,"Read PDF","badge badge-oa")}
           </p>
           <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.5rem 0;">
             <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(item.openalex_id||item.id||"")}">Open paper page</a>
-            ${item.pdf_url?`<a class="btn btn-secondary" href="${item.pdf_url}" target="_blank" rel="noopener">Open PDF</a>`:""}
+            ${pdfViewer?`<a class="btn btn-secondary" href="${pdfViewer}" target="_blank" rel="noopener">Open PDF</a>`:""}
             <button class="btn btn-secondary" id="addToCollectionBtn">Add to collection…</button>
             ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn">Move to Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn">Restore</button>`}
             ${item.deleted_at?`<button class="btn btn-secondary" id="deleteForeverBtn">Delete permanently</button>`:""}

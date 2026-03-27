@@ -11,7 +11,6 @@ import pkg from "pg";
 const { Pool } = pkg;
 const fsp = fs.promises;
 import paperRoutes from "../routes/paper.js";
-import libraryRoutes from "../routes/library.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -623,7 +622,6 @@ async function hydrateWorkMeta(idTail) {
 app.get("/health", (_req, res) => res.type("text").send("ok"));
 
 app.use(paperRoutes);
-app.use(libraryRoutes);
 
 const staticRoot = path.resolve(__dirname, STATIC_DIR);
 const uploadDir = path.join(staticRoot, "uploads", "materials");

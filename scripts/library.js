@@ -38,7 +38,7 @@ function isSaved(id) {
 
 function markSavedButton(btn) {
   if (!btn) return;
-  btn.textContent = "Saved ✓";
+  btn.textContent = "Saved";
   btn.classList.add("btn-success");
   btn.disabled = true;
 }
