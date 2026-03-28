@@ -108,7 +108,22 @@ router.post('/api/pdf/extract', async (req, res) => {
   if (!pdfUrl) return res.status(400).json({ error: 'pdfUrl required' });
 
   try {
-    const pdfResponse = await fetch(pdfUrl);
+    const absoluteUrl = pdfUrl.startsWith('/')
+      ? `${req.protocol}://${req.get('host')}${pdfUrl}`
+      : pdfUrl;
+
+    const pdfResponse = await fetch(absoluteUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/pdf,*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': (new URL(absoluteUrl)).origin + '/',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
+      }
+    });
     if (!pdfResponse.ok) throw new Error('Failed to fetch PDF');
     const pdfBuffer = await pdfResponse.arrayBuffer();
 
@@ -126,7 +141,17 @@ router.post('/api/pdf/extract', async (req, res) => {
     res.json(parsed);
   } catch (e) {
     console.error('PDF extraction error:', e);
-    res.status(500).json({ error: 'Failed to extract PDF data' });
+    res.json({
+      references: [],
+      figures: [],
+      tables: [],
+      metadata: {
+        totalReferences: 0,
+        totalFigures: 0,
+        totalTables: 0,
+        message: 'Reference extraction failed for this PDF.'
+      }
+    });
   }
 });
 

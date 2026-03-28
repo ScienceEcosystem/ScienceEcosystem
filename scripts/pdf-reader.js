@@ -13,6 +13,7 @@ let pdfjsLib = null;
 let extractedReferences = [];
 let currentTextLayer = null;
 let refMatchCache = null;
+let pdfViewerLib = null;
 
 function escapeHtml(s) {
   return String(s ?? "")
@@ -38,28 +39,20 @@ function setupCanvas() {
         <button id="zoomIn" class="btn btn-small">Zoom In</button>
         <button id="zoomOut" class="btn btn-small">Zoom Out</button>
       </div>
-      <div id="pdfPageWrap" class="pdf-page-wrap" style="margin-top: 1rem;">
-        <canvas id="pdfCanvas" style="box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></canvas>
-        <div id="textLayer" class="pdf-text-layer"></div>
-        <div id="citationTooltip" class="citation-tooltip" style="display:none;"></div>
-      </div>
+      <div id="pdfPages" class="pdf-pages" style="margin-top: 1rem;"></div>
     </div>
   `;
-
-  canvas = document.getElementById('pdfCanvas');
-  ctx = canvas.getContext('2d');
-  currentTextLayer = document.getElementById('textLayer');
 
   document.getElementById('prevPage').addEventListener('click', onPrevPage);
   document.getElementById('nextPage').addEventListener('click', onNextPage);
   document.getElementById('zoomIn').addEventListener('click', () => {
     scale += 0.25;
-    renderPage(pageNum);
+    renderAllPages();
   });
   document.getElementById('zoomOut').addEventListener('click', () => {
     if (scale > 0.5) {
       scale -= 0.25;
-      renderPage(pageNum);
+      renderAllPages();
     }
   });
 }
@@ -82,7 +75,7 @@ async function loadPDF(url) {
     const countEl = document.getElementById('pageCount');
     if (countEl) countEl.textContent = String(pdfDoc.numPages);
 
-    renderPage(pageNum);
+    renderAllPages();
   } catch (error) {
     console.error('Error loading PDF:', error);
     const pdfMain = document.querySelector('.pdf-main');
@@ -111,56 +104,50 @@ async function loadPDF(url) {
 }
 
 function renderPage(num) {
-  pageRendering = true;
-
-  pdfDoc.getPage(num).then(page => {
-    const viewport = page.getViewport({ scale: scale });
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-
-    const renderContext = {
-      canvasContext: ctx,
-      viewport: viewport
-    };
-
-    const renderTask = page.render(renderContext);
-
-    renderTask.promise.then(async () => {
-      await renderTextLayer(page, viewport);
-      pageRendering = false;
-      if (pageNumPending !== null) {
-        renderPage(pageNumPending);
-        pageNumPending = null;
-      }
-    });
-  });
-
+  pageNum = num;
   const numEl = document.getElementById('pageNum');
   if (numEl) numEl.textContent = String(num);
 }
 
-async function renderTextLayer(page, viewport) {
-  if (!currentTextLayer || !pdfjsLib) return;
-  currentTextLayer.innerHTML = '';
-  currentTextLayer.style.width = viewport.width + 'px';
-  currentTextLayer.style.height = viewport.height + 'px';
+async function ensureViewerLib() {
+  if (!pdfViewerLib) {
+    try {
+      pdfViewerLib = await import('/pdfjs/web/viewer.mjs');
+    } catch (e) {
+      console.error('Failed to load pdfjs viewer helpers:', e);
+      pdfViewerLib = null;
+    }
+  }
+  return pdfViewerLib;
+}
+
+async function renderTextLayer(page, viewport, layerEl, tooltipEl) {
+  if (!layerEl || !pdfjsLib) return;
+  layerEl.innerHTML = '';
+  layerEl.style.width = viewport.width + 'px';
+  layerEl.style.height = viewport.height + 'px';
 
   const textContent = await page.getTextContent();
-  const render = pdfjsLib.renderTextLayer({
+  const viewerLib = await ensureViewerLib();
+  const renderFn = viewerLib && typeof viewerLib.renderTextLayer === 'function' ? viewerLib.renderTextLayer : null;
+  if (!renderFn) {
+    return;
+  }
+  const render = renderFn({
     textContent: textContent,
-    container: currentTextLayer,
+    container: layerEl,
     viewport: viewport,
     textDivs: []
   });
   if (render && render.promise) await render.promise;
-  applyCitationHighlights();
-  wireCitationHover();
+  applyCitationHighlightsToLayer(layerEl);
+  wireCitationHover(layerEl, tooltipEl);
 }
 
-function applyCitationHighlights() {
-  if (!currentTextLayer || !extractedReferences.length) return;
+function applyCitationHighlightsToLayer(layerEl) {
+  if (!layerEl || !extractedReferences.length) return;
   const refSet = new Set(extractedReferences.map(r => String(r.number)));
-  const spans = currentTextLayer.querySelectorAll('span');
+  const spans = layerEl.querySelectorAll('span');
   spans.forEach(span => {
     const text = span.textContent || '';
     if (!text || (!text.includes('[') && !text.includes('('))) return;
@@ -174,15 +161,13 @@ function applyCitationHighlights() {
 }
 
 function clearCitationActive() {
-  if (!currentTextLayer) return;
-  currentTextLayer.querySelectorAll('.citation-highlight.active').forEach(el => {
+  document.querySelectorAll('.citation-highlight.active').forEach(el => {
     el.classList.remove('active');
   });
 }
 
 function jumpToCitation(refNumber) {
-  if (!currentTextLayer) return;
-  const target = currentTextLayer.querySelector(`.citation-highlight[data-ref-number="${refNumber}"]`);
+  const target = document.querySelector(`.citation-highlight[data-ref-number="${refNumber}"]`);
   clearCitationActive();
   if (target) {
     target.classList.add('active');
@@ -196,32 +181,29 @@ function getRefByNumber(n) {
   return extractedReferences.find(r => String(r.number) === String(n));
 }
 
-function wireCitationHover() {
-  if (!currentTextLayer) return;
-  const tooltip = document.getElementById('citationTooltip');
-  if (!tooltip) return;
-
-  currentTextLayer.onmousemove = function (e) {
+function wireCitationHover(layerEl, tooltipEl) {
+  if (!layerEl || !tooltipEl) return;
+  layerEl.onmousemove = function (e) {
     const target = e.target.closest('.citation-highlight');
     if (!target) {
-      tooltip.style.display = 'none';
+      tooltipEl.style.display = 'none';
       return;
     }
     const refNum = target.getAttribute('data-ref-number');
     const ref = getRefByNumber(refNum);
     if (!ref) return;
-    tooltip.innerHTML = `
+    tooltipEl.innerHTML = `
       <div style="font-weight:600; margin-bottom:0.25rem;">[${escapeHtml(ref.number)}] ${escapeHtml(ref.title || 'Untitled')}</div>
       ${ref.authors && ref.authors.length ? `<div style="font-size:0.85rem; color:#555;">${escapeHtml(ref.authors.slice(0, 5).join(', '))}</div>` : ''}
       ${ref.year ? `<div style="font-size:0.85rem; color:#555;">${escapeHtml(ref.year)}</div>` : ''}
     `;
-    tooltip.style.display = 'block';
-    tooltip.style.left = (e.offsetX + 12) + 'px';
-    tooltip.style.top = (e.offsetY + 12) + 'px';
+    tooltipEl.style.display = 'block';
+    tooltipEl.style.left = (e.offsetX + 12) + 'px';
+    tooltipEl.style.top = (e.offsetY + 12) + 'px';
   };
 
-  currentTextLayer.onmouseleave = function () {
-    tooltip.style.display = 'none';
+  layerEl.onmouseleave = function () {
+    tooltipEl.style.display = 'none';
   };
 }
 
@@ -230,6 +212,7 @@ function queueRenderPage(num) {
     pageNumPending = num;
   } else {
     renderPage(num);
+    scrollToPage(num);
   }
 }
 
@@ -243,6 +226,50 @@ function onNextPage() {
   if (!pdfDoc || pageNum >= pdfDoc.numPages) return;
   pageNum++;
   queueRenderPage(pageNum);
+}
+
+async function renderAllPages() {
+  if (!pdfDoc) return;
+  pageRendering = true;
+  const pagesHost = document.getElementById('pdfPages');
+  if (!pagesHost) return;
+  pagesHost.innerHTML = '';
+
+  for (let i = 1; i <= pdfDoc.numPages; i++) {
+    const page = await pdfDoc.getPage(i);
+    const viewport = page.getViewport({ scale: scale });
+    const wrap = document.createElement('div');
+    wrap.className = 'pdf-page-wrap';
+    wrap.setAttribute('data-page', String(i));
+    wrap.style.marginBottom = '24px';
+    wrap.innerHTML = `
+      <canvas class="pdf-page-canvas" style="box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></canvas>
+      <div class="pdf-text-layer"></div>
+      <div class="citation-tooltip" style="display:none;"></div>
+    `;
+    pagesHost.appendChild(wrap);
+
+    const pageCanvas = wrap.querySelector('canvas');
+    const pageCtx = pageCanvas.getContext('2d');
+    pageCanvas.height = viewport.height;
+    pageCanvas.width = viewport.width;
+
+    const renderContext = { canvasContext: pageCtx, viewport: viewport };
+    const renderTask = page.render(renderContext);
+    await renderTask.promise;
+
+    const layerEl = wrap.querySelector('.pdf-text-layer');
+    const tooltipEl = wrap.querySelector('.citation-tooltip');
+    await renderTextLayer(page, viewport, layerEl, tooltipEl);
+  }
+
+  renderPage(pageNum);
+  pageRendering = false;
+}
+
+function scrollToPage(num) {
+  const el = document.querySelector(`.pdf-page-wrap[data-page="${num}"]`);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function loadPaperMetadata(paperId) {

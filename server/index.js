@@ -284,6 +284,7 @@ async function pgInit() {
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS abstract    TEXT`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS pdf_url     TEXT`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS meta_fresh  BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
 }
 try {
   await pgInit();
@@ -927,6 +928,47 @@ app.delete("/api/library", async (req, res) => {
   res.status(204).end();
 });
 
+/* ---------------------------
+   Trash endpoints (items)
+----------------------------*/
+app.post("/api/trash/items", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const id = String(req.body?.id || "");
+  if (!id) return res.status(400).json({ error: "id required" });
+  await pool.query(`UPDATE library_items SET deleted_at = NOW() WHERE orcid = $1 AND id = $2`, [sess.orcid, id]);
+  res.json({ ok: true });
+});
+
+app.post("/api/trash/restore", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const scope = req.body?.scope || null;
+  const type = req.body?.type || null;
+  const id = String(req.body?.id || "");
+  if (scope === "all") {
+    await pool.query(`UPDATE library_items SET deleted_at = NULL WHERE orcid = $1`, [sess.orcid]);
+    return res.json({ ok: true });
+  }
+  if (type === "item" && id) {
+    await pool.query(`UPDATE library_items SET deleted_at = NULL WHERE orcid = $1 AND id = $2`, [sess.orcid, id]);
+    return res.json({ ok: true });
+  }
+  return res.status(400).json({ error: "invalid restore request" });
+});
+
+app.post("/api/trash/empty", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  await pool.query(`DELETE FROM library_items WHERE orcid = $1 AND deleted_at IS NOT NULL`, [sess.orcid]);
+  res.json({ ok: true });
+});
+
+app.delete("/api/trash/items", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const id = String(req.body?.id || "");
+  if (!id) return res.status(400).json({ error: "id required" });
+  await pool.query(`DELETE FROM library_items WHERE orcid = $1 AND id = $2`, [sess.orcid, id]);
+  res.json({ ok: true });
+});
+
 // Publisher landing links (code/data hosts)
 app.get("/api/paper/links", async (req, res) => {
   const { url, doi } = req.query || {};
@@ -1287,6 +1329,7 @@ app.get("/api/library/full", async (req, res) => {
         li.cited_by,
         li.abstract,
         li.pdf_url,
+        li.deleted_at,
         COALESCE(li.meta_fresh, FALSE) AS meta_fresh,
         COALESCE(ARRAY_AGG(ci.collection_id) FILTER (WHERE ci.collection_id IS NOT NULL), '{}') AS collection_ids
       FROM library_items li
@@ -1295,7 +1338,7 @@ app.get("/api/library/full", async (req, res) => {
       WHERE li.orcid = $1
       GROUP BY
         li.id, li.title, li.openalex_id, li.openalex_url, li.doi, li.year,
-        li.venue, li.authors, li.cited_by, li.abstract, li.pdf_url, li.meta_fresh
+        li.venue, li.authors, li.cited_by, li.abstract, li.pdf_url, li.deleted_at, li.meta_fresh
       ORDER BY li.title;
       `,
       [sess.orcid]
