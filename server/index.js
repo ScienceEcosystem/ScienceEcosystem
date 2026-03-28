@@ -168,6 +168,7 @@ async function pgInit() {
       PRIMARY KEY (orcid, collection_id, paper_id)
     );
   `);
+  await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
 
   // New: notes
   await pool.query(`
@@ -939,6 +940,27 @@ app.post("/api/trash/items", async (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/trash/collections", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const id = Number(req.body?.id || 0);
+  if (!id) return res.status(400).json({ error: "id required" });
+  await pool.query(
+    `
+    WITH RECURSIVE sub AS (
+      SELECT id FROM collections WHERE orcid = $1 AND id = $2
+      UNION ALL
+      SELECT c.id FROM collections c
+      INNER JOIN sub s ON c.parent_id = s.id
+      WHERE c.orcid = $1
+    )
+    UPDATE collections SET deleted_at = NOW()
+    WHERE orcid = $1 AND id IN (SELECT id FROM sub)
+    `,
+    [sess.orcid, id]
+  );
+  res.json({ ok: true });
+});
+
 app.post("/api/trash/restore", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   const scope = req.body?.scope || null;
@@ -946,10 +968,28 @@ app.post("/api/trash/restore", async (req, res) => {
   const id = String(req.body?.id || "");
   if (scope === "all") {
     await pool.query(`UPDATE library_items SET deleted_at = NULL WHERE orcid = $1`, [sess.orcid]);
+    await pool.query(`UPDATE collections SET deleted_at = NULL WHERE orcid = $1`, [sess.orcid]);
     return res.json({ ok: true });
   }
   if (type === "item" && id) {
     await pool.query(`UPDATE library_items SET deleted_at = NULL WHERE orcid = $1 AND id = $2`, [sess.orcid, id]);
+    return res.json({ ok: true });
+  }
+  if (type === "collection" && id) {
+    await pool.query(
+      `
+      WITH RECURSIVE sub AS (
+        SELECT id FROM collections WHERE orcid = $1 AND id = $2
+        UNION ALL
+        SELECT c.id FROM collections c
+        INNER JOIN sub s ON c.parent_id = s.id
+        WHERE c.orcid = $1
+      )
+      UPDATE collections SET deleted_at = NULL
+      WHERE orcid = $1 AND id IN (SELECT id FROM sub)
+      `,
+      [sess.orcid, Number(id)]
+    );
     return res.json({ ok: true });
   }
   return res.status(400).json({ error: "invalid restore request" });
@@ -958,6 +998,7 @@ app.post("/api/trash/restore", async (req, res) => {
 app.post("/api/trash/empty", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   await pool.query(`DELETE FROM library_items WHERE orcid = $1 AND deleted_at IS NOT NULL`, [sess.orcid]);
+  await pool.query(`DELETE FROM collections WHERE orcid = $1 AND deleted_at IS NOT NULL`, [sess.orcid]);
   res.json({ ok: true });
 });
 
@@ -1236,7 +1277,7 @@ app.delete("/api/follows/:authorId", async (req, res) => {
 app.get("/api/collections", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   const { rows } = await pool.query(
-    `SELECT id, name, parent_id FROM collections WHERE orcid=$1 ORDER BY name`,
+    `SELECT id, name, parent_id, deleted_at FROM collections WHERE orcid=$1 ORDER BY name`,
     [sess.orcid]
   );
   res.json(rows);

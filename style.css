@@ -720,6 +720,34 @@ body[data-page="user-profile"] h3 {
   align-items: center;
   gap: 24px;
 }
+.pdf-page-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.pdf-annotation-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+}
+
+.pdf-annot {
+  position: absolute;
+  border-radius: 2px;
+}
+
+.pdf-text-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+}
+
+.pdf-text-layer span {
+  color: transparent;
+  pointer-events: auto;
+}
 
 .citation-tooltip {
   position: absolute;

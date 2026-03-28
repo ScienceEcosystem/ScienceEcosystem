@@ -13,6 +13,9 @@ let pdfjsLib = null;
 let extractedReferences = [];
 let currentTextLayer = null;
 let refMatchCache = null;
+let annotMode = 'highlight';
+let annotations = [];
+let annotationKey = '';
 let pdfViewerLib = null;
 
 function escapeHtml(s) {
@@ -28,8 +31,9 @@ function setupCanvas() {
   const pdfMain = document.querySelector('.pdf-main');
   if (!pdfMain) return;
 
-  pdfMain.innerHTML = `
-    <div style="text-align: center; padding: 2rem; overflow: auto; height: 100%;">
+  const body = pdfMain.querySelector('.pdf-main-body') || pdfMain;
+  body.innerHTML = `
+    <div class="pdf-scroll" style="text-align: center; padding: 2rem; overflow: auto; height: 100%;">
       <div>
         <button id="prevPage" class="btn btn-small">Previous</button>
         <span style="margin: 0 1rem;">
@@ -55,6 +59,8 @@ function setupCanvas() {
       renderAllPages();
     }
   });
+
+  bindAnnotationToolbar();
 }
 
 async function loadPDF(url) {
@@ -142,6 +148,7 @@ async function renderTextLayer(page, viewport, layerEl, tooltipEl) {
   if (render && render.promise) await render.promise;
   applyCitationHighlightsToLayer(layerEl);
   wireCitationHover(layerEl, tooltipEl);
+  wireAnnotationSelection(layerEl);
 }
 
 function applyCitationHighlightsToLayer(layerEl) {
@@ -245,6 +252,7 @@ async function renderAllPages() {
     wrap.innerHTML = `
       <canvas class="pdf-page-canvas" style="box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></canvas>
       <div class="pdf-text-layer"></div>
+      <div class="pdf-annotation-layer"></div>
       <div class="citation-tooltip" style="display:none;"></div>
     `;
     pagesHost.appendChild(wrap);
@@ -261,6 +269,7 @@ async function renderAllPages() {
     const layerEl = wrap.querySelector('.pdf-text-layer');
     const tooltipEl = wrap.querySelector('.citation-tooltip');
     await renderTextLayer(page, viewport, layerEl, tooltipEl);
+    renderAnnotationsForPage(i);
   }
 
   renderPage(pageNum);
@@ -487,6 +496,9 @@ window.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  annotationKey = `se_annotations_${encodeURIComponent(pdfUrl)}`;
+  loadAnnotations();
+
   loadPDF(pdfUrl);
   extractPDFReferences(pdfUrl);
 
@@ -494,6 +506,132 @@ window.addEventListener('DOMContentLoaded', () => {
     loadPaperMetadata(paperId);
   }
 });
+
+function bindAnnotationToolbar() {
+  const h = document.getElementById('annotHighlightBtn');
+  const n = document.getElementById('annotNoteBtn');
+  const e = document.getElementById('annotEraseBtn');
+  const c = document.getElementById('annotClearBtn');
+  const setMode = (m) => { annotMode = m; updateAnnotButtons(); };
+  h?.addEventListener('click', () => setMode('highlight'));
+  n?.addEventListener('click', () => setMode('note'));
+  e?.addEventListener('click', () => setMode('erase'));
+  c?.addEventListener('click', () => { if (confirm('Clear all annotations?')) { annotations = []; saveAnnotations(); renderAnnotationsAll(); } });
+  updateAnnotButtons();
+}
+
+function updateAnnotButtons() {
+  const map = {
+    highlight: 'annotHighlightBtn',
+    note: 'annotNoteBtn',
+    erase: 'annotEraseBtn'
+  };
+  Object.keys(map).forEach(k => {
+    const el = document.getElementById(map[k]);
+    if (!el) return;
+    if (annotMode === k) el.classList.add('btn-primary');
+    else el.classList.remove('btn-primary');
+  });
+}
+
+function wireAnnotationSelection(layerEl) {
+  layerEl.onmouseup = (ev) => {
+    if (annotMode === 'erase') return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    if (!layerEl.contains(sel.anchorNode) || !layerEl.contains(sel.focusNode)) return;
+    const range = sel.getRangeAt(0);
+    const rects = Array.from(range.getClientRects());
+    if (!rects.length) return;
+
+    const wrap = layerEl.closest('.pdf-page-wrap');
+    if (!wrap) return;
+    const page = Number(wrap.getAttribute('data-page') || '0');
+    const wrapRect = wrap.getBoundingClientRect();
+    const normRects = rects.map(r => ({
+      x: r.left - wrapRect.left,
+      y: r.top - wrapRect.top,
+      w: r.width,
+      h: r.height
+    }));
+
+    const quote = sel.toString().trim();
+    if (!quote) return;
+
+    let note = '';
+    if (annotMode === 'note') {
+      note = prompt('Note:', '') || '';
+    }
+
+    annotations.push({
+      id: String(Date.now()) + '_' + Math.random().toString(16).slice(2),
+      page: page,
+      type: annotMode,
+      rects: normRects,
+      quote: quote,
+      note: note
+    });
+    saveAnnotations();
+    renderAnnotationsForPage(page);
+    sel.removeAllRanges();
+  };
+
+  layerEl.onclick = (ev) => {
+    if (annotMode !== 'erase') return;
+    const target = ev.target.closest('.pdf-annot');
+    if (!target) return;
+    const id = target.getAttribute('data-annot-id');
+    if (!id) return;
+    annotations = annotations.filter(a => a.id !== id);
+    saveAnnotations();
+    renderAnnotationsAll();
+  };
+}
+
+function renderAnnotationsAll() {
+  document.querySelectorAll('.pdf-page-wrap').forEach(w => {
+    const page = Number(w.getAttribute('data-page') || '0');
+    renderAnnotationsForPage(page);
+  });
+}
+
+function renderAnnotationsForPage(page) {
+  const wrap = document.querySelector(`.pdf-page-wrap[data-page="${page}"]`);
+  if (!wrap) return;
+  const layer = wrap.querySelector('.pdf-annotation-layer');
+  if (!layer) return;
+  layer.innerHTML = '';
+  const pageAnnots = annotations.filter(a => a.page === page);
+  pageAnnots.forEach(a => {
+    a.rects.forEach(r => {
+      const d = document.createElement('div');
+      d.className = 'pdf-annot';
+      d.setAttribute('data-annot-id', a.id);
+      d.style.left = `${r.x}px`;
+      d.style.top = `${r.y}px`;
+      d.style.width = `${r.w}px`;
+      d.style.height = `${r.h}px`;
+      d.style.background = a.type === 'note' ? 'rgba(46,127,159,0.25)' : 'rgba(255,235,59,0.55)';
+      if (a.note) d.setAttribute('title', a.note);
+      layer.appendChild(d);
+    });
+  });
+}
+
+function loadAnnotations() {
+  try {
+    const raw = localStorage.getItem(annotationKey);
+    annotations = raw ? JSON.parse(raw) : [];
+  } catch (_e) {
+    annotations = [];
+  }
+}
+
+function saveAnnotations() {
+  try {
+    localStorage.setItem(annotationKey, JSON.stringify(annotations));
+  } catch (_e) {}
+}
 
 async function findScienceEcosystemLink(ref) {
   const cache = (refMatchCache ||= loadRefMatchCache());

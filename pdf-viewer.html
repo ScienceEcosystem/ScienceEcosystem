@@ -145,11 +145,14 @@
     </aside>
 
     <main class="pdf-main">
-      <iframe
-        id="pdfViewer"
-        class="pdf-viewer-iframe"
-        title="PDF Viewer"
-      ></iframe>
+      <div class="pdf-annot-toolbar" style="display:flex; gap:.5rem; align-items:center; padding:.75rem 1rem; background:#f8f9fa; border-bottom:1px solid #dee2e6;">
+        <span class="muted" style="font-size:.9rem;">Annotate:</span>
+        <button id="annotHighlightBtn" class="btn btn-secondary btn-xs">Highlight</button>
+        <button id="annotNoteBtn" class="btn btn-secondary btn-xs">Note</button>
+        <button id="annotEraseBtn" class="btn btn-secondary btn-xs">Erase</button>
+        <button id="annotClearBtn" class="btn btn-secondary btn-xs">Clear All</button>
+      </div>
+      <div class="pdf-main-body" style="height: calc(100% - 46px); overflow: auto;"></div>
     </main>
   </div>
 
