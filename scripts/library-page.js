@@ -81,7 +81,81 @@
     },0);
     openMenu=m;
   }
+  function buildContextMenuAt(defs, x, y){
+    closeAnyMenu();
+    const m=document.createElement("div");
+    m.className="context-menu";
+    m.innerHTML=`<ul>${defs.map(d=>`<li data-act="${d.act}">${esc(d.label)}</li>`).join("")}</ul>`;
+    document.body.appendChild(m);
+    requestAnimationFrame(()=>{
+      const left = Math.min(x, window.innerWidth - m.offsetWidth - 12);
+      const top  = Math.min(y, window.innerHeight - m.offsetHeight - 12);
+      m.style.left = `${left}px`;
+      m.style.top  = `${top}px`;
+    });
+    m.addEventListener("click",ev=>{
+      const act=ev.target?.dataset?.act; if(!act) return;
+      defs.find(d=>d.act===act)?.onClick?.();
+      closeAnyMenu();
+    });
+    setTimeout(()=>{
+      const onDoc=(ev)=>{ if(!m.contains(ev.target)) closeAnyMenu(); };
+      const onEsc =(ev)=>{ if(ev.key==="Escape") closeAnyMenu(); };
+      document.addEventListener("click",onDoc,{once:true});
+      document.addEventListener("keydown",onEsc,{once:true});
+    },0);
+    openMenu=m;
+  }
   function closeAnyMenu(){ if(openMenu){ openMenu.remove(); openMenu=null; } }
+
+  async function addItemToCollectionPrompt(id){
+    const names=collections.filter(c=>!c.deleted_at).map(c=>`${c.id}: ${c.name}`).join("\n");
+    const pick=prompt(`Add to which collection?\n${names}\n\nEnter ID:`); if(!pick) return;
+    const cid=Number(pick);
+    if(!collections.some(c=>c.id===cid)) return alert("Invalid collection id.");
+    await api(`/api/collections/${cid}/items`,{method:"POST",body:JSON.stringify({id})});
+    await safeRefreshItems(); renderTable(); alert("Added.");
+  }
+
+  async function removeItemFromCollection(id, collectionId){
+    if(!collectionId) return;
+    await api(`/api/collections/${collectionId}/items/${encodeURIComponent(id)}`,{method:"DELETE"});
+    await safeRefreshItems(); renderTable();
+  }
+
+  async function moveItemToTrash(id){
+    try{ await api(`/api/trash/items`,{method:"POST",body:JSON.stringify({id})}); }
+    catch{ try{ await api(`/api/library/${encodeURIComponent(id)}`,{method:"PATCH",body:JSON.stringify({deleted_at:new Date().toISOString()})}); }catch{} }
+    await safeRefreshItems(); renderTable(); await renderInspector(id);
+  }
+
+  async function restoreItem(id){
+    try{ await api(`/api/trash/restore`,{method:"POST",body:JSON.stringify({type:"item",id})}); }
+    catch{ try{ await api(`/api/library/${encodeURIComponent(id)}`,{method:"PATCH",body:JSON.stringify({deleted_at:null})}); }catch{} }
+    await safeRefreshItems(); renderTable(); await renderInspector(id);
+  }
+
+  async function deleteItemForever(id){
+    if(!confirm("Permanently delete this item?")) return;
+    try{ await api(`/api/library/${encodeURIComponent(id)}`,{method:"DELETE"}); }
+    catch{ try{ await api(`/api/trash/items`,{method:"DELETE",body:JSON.stringify({id})}); }catch{} }
+    items = items.filter(x=>String(x.id)!==String(id));
+    renderTable(); $("#inspectorBody").innerHTML=`<p class="muted" style="padding:.75rem;">Select an item…</p>`;
+  }
+
+  function buildMenuForItem(item, ev){
+    const openAlexId = item.openalex_id || item.id || "";
+    const pdfViewer = item.pdf_url ? `pdf-viewer.html?id=${encodeURIComponent(openAlexId)}&pdf=${encodeURIComponent(item.pdf_url)}` : null;
+    const defs=[
+      {act:"open-paper",label:"Open paper page",onClick: ()=>{ location.href=`paper.html?id=${encodeURIComponent(openAlexId)}`; }},
+      ...(pdfViewer ? [{act:"open-pdf",label:"Open PDF",onClick: ()=>{ window.open(pdfViewer,"_blank"); }}] : []),
+      {act:"add-col",label:"Add to collection…",onClick: async()=>{ await addItemToCollectionPrompt(item.id); }},
+      ...((currentCollectionId && typeof currentCollectionId==="number") ? [{act:"remove-col",label:"Remove from this collection",onClick: async()=>{ await removeItemFromCollection(item.id, currentCollectionId); }}] : []),
+      ...(!item.deleted_at ? [{act:"trash",label:"Move to Trash",onClick: async()=>{ await moveItemToTrash(item.id); }}] : [{act:"restore",label:"Restore",onClick: async()=>{ await restoreItem(item.id); }}]),
+      ...(item.deleted_at ? [{act:"delete",label:"Delete permanently",onClick: async()=>{ await deleteItemForever(item.id); }}] : [])
+    ];
+    buildContextMenuAt(defs, ev.clientX, ev.clientY);
+  }
 
   function buildMenuForCollection(c, anchorEl){
     const defs=[
@@ -229,6 +303,7 @@
     host.innerHTML="";
     host.appendChild(buildTreeDom());
     setupRootKebab();
+    wireCollectionDropTargets();
   }
 
   // new buttons (header + sidebar)
@@ -376,7 +451,7 @@
       const authorsDisplay = firstAuthorLastName(it.authors);
       const authors = cols.has("authors")?`<td>${esc(authorsDisplay)}${tagsHtml}</td>`:"";
       const year    = cols.has("year")   ?`<td>${esc(it.year??"-")}</td>`:"";
-      return `<tr data-id="${esc(it.id)}">
+      return `<tr data-id="${esc(it.id)}" draggable="true">
         <td>${esc(it.title||"-")}</td>
         ${authors}${year}
       </tr>`;
@@ -384,10 +459,51 @@
 
     // row click -> select
     $$("#itemsTbody tr").forEach(tr=>{
-      tr.onclick=async()=>{
+      tr.addEventListener("click", async(ev)=>{
         currentSelection = tr.getAttribute("data-id");
         await renderInspector(currentSelection);
-      };
+        const item = items.find(x=>String(x.id)===String(currentSelection));
+        if(item) buildMenuForItem(item, ev);
+      });
+      tr.addEventListener("contextmenu", async(ev)=>{
+        ev.preventDefault();
+        currentSelection = tr.getAttribute("data-id");
+        await renderInspector(currentSelection);
+        const item = items.find(x=>String(x.id)===String(currentSelection));
+        if(item) buildMenuForItem(item, ev);
+      });
+      tr.addEventListener("dragstart",(ev)=>{
+        const id = tr.getAttribute("data-id");
+        if(ev.dataTransfer && id){
+          ev.dataTransfer.setData("text/plain", id);
+          ev.dataTransfer.effectAllowed = "copy";
+        }
+        tr.classList.add("dragging");
+      });
+      tr.addEventListener("dragend",()=>{
+        tr.classList.remove("dragging");
+      });
+    });
+  }
+
+  function wireCollectionDropTargets(){
+    $$("#collectionsTree .row[data-id]").forEach(row=>{
+      row.addEventListener("dragover",(ev)=>{
+        ev.preventDefault();
+        row.classList.add("drag-over");
+      });
+      row.addEventListener("dragleave",()=>{
+        row.classList.remove("drag-over");
+      });
+      row.addEventListener("drop",async(ev)=>{
+        ev.preventDefault();
+        row.classList.remove("drag-over");
+        const itemId = ev.dataTransfer?.getData("text/plain");
+        const cid = row.getAttribute("data-id");
+        if(!itemId || !cid) return;
+        await api(`/api/collections/${cid}/items`,{method:"POST",body:JSON.stringify({id:itemId})});
+        await safeRefreshItems(); renderTable();
+      });
     });
   }
 
