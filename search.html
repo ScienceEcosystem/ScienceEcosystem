@@ -56,6 +56,56 @@
         <input id="unifiedSearchInput" class="input" type="text" placeholder="Search papers, people, datasets..." />
         <button class="btn btn-primary" type="submit">Search</button>
       </form>
+      <details style="margin-top:1rem;">
+        <summary style="cursor:pointer; color:#2e7f9f; font-size:0.95rem;">Advanced librarian filters</summary>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:0.75rem; margin-top:0.75rem;">
+          <label>DOI (exact)
+            <input id="filterDoi" class="input" type="text" placeholder="10.xxxx/xxxxx" />
+          </label>
+          <label>Title contains
+            <input id="filterTitle" class="input" type="text" placeholder="Title keywords" />
+          </label>
+          <label>Author contains
+            <input id="filterAuthor" class="input" type="text" placeholder="Author name" />
+          </label>
+          <label>Journal contains
+            <input id="filterJournal" class="input" type="text" placeholder="Journal name" />
+          </label>
+          <label>Publisher contains
+            <input id="filterPublisher" class="input" type="text" placeholder="Publisher name" />
+          </label>
+          <label>Institution contains
+            <input id="filterInstitution" class="input" type="text" placeholder="Institution name" />
+          </label>
+          <label>Funder contains
+            <input id="filterFunder" class="input" type="text" placeholder="Funder name" />
+          </label>
+          <label>Minimum citations
+            <input id="filterCitedMin" class="input" type="number" min="0" placeholder="0" />
+          </label>
+          <label>Literature type
+            <select id="filterLiterature" class="input">
+              <option value="">Any</option>
+              <option value="scholarly">Scholarly journal</option>
+              <option value="preprint">Preprint / repository</option>
+              <option value="conference">Conference</option>
+              <option value="book">Book / chapter</option>
+              <option value="thesis">Thesis / dissertation</option>
+              <option value="report">Report / working paper</option>
+              <option value="dataset">Dataset</option>
+              <option value="gray">Gray literature</option>
+            </select>
+          </label>
+          <label style="display:flex; align-items:center; gap:.5rem; margin-top:0.25rem;">
+            <input id="filterHasPdf" type="checkbox" />
+            <span>Has PDF</span>
+          </label>
+        </div>
+        <div style="margin-top:0.75rem; display:flex; gap:.5rem;">
+          <button class="btn btn-secondary btn-xs" type="button" id="applyAdvancedFilters">Apply filters</button>
+          <button class="btn btn-secondary btn-xs" type="button" id="clearAdvancedFilters">Clear</button>
+        </div>
+      </details>
     </section>
 
     <div class="layout-grid">

@@ -77,6 +77,19 @@ let searchAbort = null;
 
 // Facets
 let facet = { oa:false, types: new Set(), yearMin:null, yearMax:null };
+let advanced = {
+  doi: "",
+  title: "",
+  author: "",
+  journal: "",
+  publisher: "",
+  institution: "",
+  funder: "",
+  citedMin: null,
+  hasPdf: false,
+  literature: ""
+};
+let advancedActive = false;
 
 // Utils
 function escapeHtml(str = "") {
@@ -98,6 +111,135 @@ function setBusy(busy){
   const region = $("resultsRegion");
   if (!region) return;
   region.setAttribute("aria-busy", busy ? "true" : "false");
+}
+
+function readAdvancedFilters() {
+  advanced.doi = ($("filterDoi")?.value || "").trim();
+  advanced.title = ($("filterTitle")?.value || "").trim();
+  advanced.author = ($("filterAuthor")?.value || "").trim();
+  advanced.journal = ($("filterJournal")?.value || "").trim();
+  advanced.publisher = ($("filterPublisher")?.value || "").trim();
+  advanced.institution = ($("filterInstitution")?.value || "").trim();
+  advanced.funder = ($("filterFunder")?.value || "").trim();
+  const cmin = parseInt(($("filterCitedMin")?.value || "").trim(), 10);
+  advanced.citedMin = Number.isFinite(cmin) ? cmin : null;
+  advanced.hasPdf = !!$("filterHasPdf")?.checked;
+  advanced.literature = ($("filterLiterature")?.value || "").trim();
+  advancedActive = !!(
+    advanced.doi || advanced.title || advanced.author || advanced.journal ||
+    advanced.publisher || advanced.institution || advanced.funder ||
+    advanced.citedMin != null || advanced.hasPdf || advanced.literature
+  );
+}
+
+function clearAdvancedFilters() {
+  ["filterDoi","filterTitle","filterAuthor","filterJournal","filterPublisher","filterInstitution","filterFunder","filterCitedMin"].forEach(id=>{
+    const el = $(id); if (el) el.value = "";
+  });
+  const lit = $("filterLiterature"); if (lit) lit.value = "";
+  const hp = $("filterHasPdf"); if (hp) hp.checked = false;
+  readAdvancedFilters();
+}
+
+function isDoiQuery(q) {
+  const s = (q || "").trim();
+  if (!s) return false;
+  const m = s.match(/10\.\d{4,9}\/\S+/i);
+  return !!m;
+}
+
+function normalizeDoi(s) {
+  return String(s || "")
+    .trim()
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//i,"")
+    .replace(/^doi:/i,"");
+}
+
+async function fetchPaperByDoi(doi, signal) {
+  try {
+    const clean = normalizeDoi(doi);
+    if (!clean) return [];
+    const url = `${API_BASE}/works?filter=doi:${encodeURIComponent(clean)}&per_page=1`;
+    const data = await fetchJSON(url, signal);
+    return data.results || [];
+  } catch (err) {
+    if (err.name !== "AbortError") console.warn("DOI fetch failed", err.message);
+    return [];
+  }
+}
+
+function applyAdvancedFilters(works) {
+  if (!advancedActive) return works;
+  const t = advanced.title.toLowerCase();
+  const a = advanced.author.toLowerCase();
+  const j = advanced.journal.toLowerCase();
+  const p = advanced.publisher.toLowerCase();
+  const inst = advanced.institution.toLowerCase();
+  const f = advanced.funder.toLowerCase();
+  const doiExact = normalizeDoi(advanced.doi);
+
+  return (works || []).filter(w => {
+    if (doiExact) {
+      const wdoi = normalizeDoi(w.doi || w.ids?.doi || "");
+      if (wdoi !== doiExact) return false;
+    }
+    if (t) {
+      const title = (w.display_name || "").toLowerCase();
+      if (!title.includes(t)) return false;
+    }
+    if (a) {
+      const names = (w.authorships || []).map(x => x.author?.display_name || "").join(" ").toLowerCase();
+      if (!names.includes(a)) return false;
+    }
+    if (j) {
+      const venue = (w.primary_location?.source?.display_name || w.host_venue?.display_name || "").toLowerCase();
+      if (!venue.includes(j)) return false;
+    }
+    if (p) {
+      const pub = (w.host_organization_name || w.host_venue?.publisher || "").toLowerCase();
+      if (!pub.includes(p)) return false;
+    }
+    if (inst) {
+      const insts = (w.authorships || []).flatMap(x => x.institutions || []).map(i => i.display_name || "").join(" ").toLowerCase();
+      if (!insts.includes(inst)) return false;
+    }
+    if (f) {
+      const funds = (w.grants || []).map(g => g.funder?.display_name || "").join(" ").toLowerCase();
+      if (!funds.includes(f)) return false;
+    }
+    if (advanced.citedMin != null) {
+      const c = w.cited_by_count || 0;
+      if (c < advanced.citedMin) return false;
+    }
+    if (advanced.hasPdf) {
+      const hasPdf = !!(w.best_oa_location?.pdf_url || w.primary_location?.pdf_url);
+      if (!hasPdf) return false;
+    }
+    if (advanced.literature) {
+      const tpe = (w.type || "").toLowerCase();
+      const src = (w.primary_location?.source?.type || w.host_venue?.type || "").toLowerCase();
+      const isJournal = (src === "journal") || (tpe === "article");
+      const isPreprint = (src === "repository") || (tpe === "posted-content") || (tpe === "preprint");
+      const isConference = (src === "conference") || (tpe === "proceedings-article");
+      const isBook = tpe.startsWith("book") || src === "book";
+      const isThesis = (tpe === "dissertation") || (tpe === "thesis");
+      const isReport = (tpe === "report") || (tpe === "working-paper");
+      const isDataset = (tpe === "dataset");
+      const isGray = isPreprint || isReport || isThesis;
+      const map = {
+        scholarly: isJournal,
+        preprint: isPreprint,
+        conference: isConference,
+        book: isBook,
+        thesis: isThesis,
+        report: isReport,
+        dataset: isDataset,
+        gray: isGray
+      };
+      if (!map[advanced.literature]) return false;
+    }
+    return true;
+  });
 }
 
 /* ---------- Lookups (each uses throttled, retrying fetchJSON) ---------- */
@@ -202,12 +344,15 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
     if (page === 1) totalResults = dataG.meta?.count || generalWorks.length || 0;
 
     const seen = new Set();
-    const merged = [...works, ...generalWorks].filter(w => {
+    let merged = [...works, ...generalWorks].filter(w => {
       const id = w.id || w.doi || w.display_name;
       if (seen.has(id)) return false;
       seen.add(id);
       return true;
     });
+
+    merged = applyAdvancedFilters(merged);
+    if (advancedActive && page === 1) totalResults = merged.length;
 
     if (currentFilter === "citations") {
       merged.sort((a,b)=> {
@@ -468,6 +613,10 @@ function renderPapers(works, append = false) {
   const pagination = $("pagination");
   const resultsShown = currentPage * 100;
   if (pagination) {
+    if (advancedActive) {
+      pagination.innerHTML = `<p class="muted">Advanced filters applied to current page results.</p>`;
+      return;
+    }
     if (resultsShown < totalResults) {
       pagination.innerHTML = `<button id="loadMoreBtn" class="btn btn-secondary">Load more</button>`;
       const loadMoreBtn = $("loadMoreBtn");
@@ -550,6 +699,7 @@ async function runUnifiedSearch(){
   if (searchAbort) searchAbort.abort();
   searchAbort = new AbortController();
 
+  readAdvancedFilters();
   currentQuery = query;
   currentPage = 1;
   setURLState(currentQuery, currentFilter);
@@ -572,6 +722,20 @@ async function runUnifiedSearch(){
   setBusy(true);
 
   try {
+    const doiOverride = advanced.doi || (isDoiQuery(query) ? query : "");
+    if (doiOverride) {
+      const papers = await fetchPaperByDoi(doiOverride, searchAbort.signal);
+      totalResults = papers.length;
+      renderPapers(papers);
+      if (rList) rList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
+      if (tList) tList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
+      if (iList) iList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
+      if (jList) jList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
+      if (pList) pList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
+      if (fList) fList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
+      return;
+    }
+
     // 1) Authors (for bias) → Papers
     const authors = await fetchAuthors(query, searchAbort.signal);
     renderAuthors(authors);
@@ -646,6 +810,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  $("applyAdvancedFilters")?.addEventListener("click", () => handleUnifiedSearch(true));
+  $("clearAdvancedFilters")?.addEventListener("click", () => { clearAdvancedFilters(); handleUnifiedSearch(true); });
 });
 
 // Expose highlight to components (optional)
