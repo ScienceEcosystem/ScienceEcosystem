@@ -100,6 +100,73 @@
       || null;
   }
 
+  async function fetchOaResolver(doi, openalexId){
+    if (!doi && !openalexId) return null;
+    var qs = [];
+    if (doi) qs.push("doi=" + encodeURIComponent(doi));
+    if (openalexId) qs.push("openalex_id=" + encodeURIComponent(openalexId));
+    var controller = new AbortController();
+    var t = setTimeout(function(){ controller.abort(); }, 5000);
+    try{
+      var res = await fetch("/api/paper/oa?" + qs.join("&"), { signal: controller.signal });
+      if (!res.ok) throw new Error(res.status + " " + res.statusText);
+      return await res.json();
+    }catch(e){
+      return null;
+    }finally{
+      clearTimeout(t);
+    }
+  }
+
+  function addOaResolverToHeader(p, oa){
+    if (!oa) return;
+    var header = $("paperHeaderMain");
+    if (!header) return;
+    var chipsWrap = header.querySelector(".chips");
+    if (!chipsWrap) return;
+
+    if (oa.best_pdf_url && !chipsWrap.querySelector('[data-src="oa-resolver"]')){
+      var idTail = idTailFrom(p.id);
+      var pdfHref = idTail
+        ? ("/pdf-viewer.html?id=" + encodeURIComponent(idTail) + "&pdf=" + encodeURIComponent(oa.best_pdf_url))
+        : oa.best_pdf_url;
+      var a = document.createElement("a");
+      a.className = "badge badge-oa";
+      a.href = pdfHref;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.setAttribute("data-src","oa-resolver");
+      a.textContent = "PDF (Open Access)";
+      chipsWrap.prepend(a);
+    }
+
+    if (Array.isArray(oa.sources) && oa.sources.length && !chipsWrap.querySelector(".oa-sources")){
+      var details = document.createElement("details");
+      details.className = "oa-sources";
+      details.style.display = "inline-block";
+      details.style.marginLeft = ".35rem";
+      var summary = document.createElement("summary");
+      summary.className = "badge badge-neutral";
+      summary.textContent = "Sources";
+      var menu = document.createElement("div");
+      menu.style.marginTop = ".35rem";
+      menu.style.padding = ".35rem .5rem";
+      menu.style.border = "1px solid #e5e7eb";
+      menu.style.borderRadius = "8px";
+      menu.style.background = "#fff";
+      menu.style.boxShadow = "0 8px 18px rgba(0,0,0,.12)";
+      var links = oa.sources.map(function(s){
+        var href = s.pdf_url || s.landing_url || "";
+        if (!href) return "";
+        return '<a href="'+escapeHtml(href)+'" target="_blank" rel="noopener">'+escapeHtml(s.source || "Source")+'</a>';
+      }).filter(Boolean).join(" · ");
+      menu.innerHTML = links || '<span class="muted">No sources found.</span>';
+      details.appendChild(summary);
+      details.appendChild(menu);
+      chipsWrap.appendChild(details);
+    }
+  }
+
   // ---------- Fetchers ----------
   async function fetchPaperData(paperId){
     var id = normalizePaperId(paperId);
@@ -1367,6 +1434,17 @@
     __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
     wireHeaderToggles();
     startHeaderObserver();
+
+    // Aggressive OA resolver (additive)
+    try{
+      var doiResolver = doiFromWork(p);
+      var oaId = idTailFrom(p.id);
+      fetchOaResolver(doiResolver, oaId).then(function(oa){
+        if (!oa) return;
+        addOaResolverToHeader(p, oa);
+        __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
+      }).catch(function(){});
+    }catch(e){}
 
     var guardUntil = Date.now() + 15000;
     (function loopGuard(){

@@ -292,6 +292,28 @@
     }
   }
 
+  // ---------- OA Resolver (server-side aggregation) ----------
+  var oaResolverCache = Object.create(null);
+  async function fetchOaResolver(doi){
+    if (!doi) return null;
+    var key = String(doi).toLowerCase().replace(/^doi:/,"");
+    if (oaResolverCache[key]) return oaResolverCache[key];
+    var controller = new AbortController();
+    var t = setTimeout(function(){ controller.abort(); }, 5000);
+    try{
+      var res = await fetch("/api/paper/oa?doi=" + encodeURIComponent(key), { signal: controller.signal });
+      if (!res.ok) throw new Error(res.status + " " + res.statusText);
+      var data = await res.json();
+      oaResolverCache[key] = data;
+      return data;
+    }catch(e){
+      oaResolverCache[key] = null;
+      return null;
+    }finally{
+      clearTimeout(t);
+    }
+  }
+
   // ---------- Authors ----------
   function authorLinks(authorships, limit){
     if (!Array.isArray(authorships) || !authorships.length) return "Unknown authors";
@@ -505,6 +527,30 @@
           }
         }catch(e){}
       })(cards[i]);
+    }
+
+    // 1b) Add OA resolver PDF chips for cards missing a PDF badge
+    for (var j=0;j<cards.length;j++){
+      (async function(card){
+        var doi = card.getAttribute("data-doi");
+        if (!doi) return;
+        var chips = card.querySelector(".chip-row") || card.querySelector("[data-chips]");
+        if (!chips) return;
+        if (chips.querySelector(".badge-oa")) return;
+        try{
+          var info = await fetchOaResolver(doi);
+          if (info && info.best_pdf_url){
+            var a = document.createElement("a");
+            a.className = "badge badge-oa";
+            a.href = info.best_pdf_url;
+            a.target = "_blank";
+            a.rel = "noopener";
+            a.setAttribute("data-src","oa-resolver");
+            a.textContent = "PDF";
+            chips.prepend(a);
+          }
+        }catch(e){}
+      })(cards[j]);
     }
 
     // 2) If we have a cache, mark already-saved buttons

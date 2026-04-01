@@ -549,9 +549,50 @@ async function ownedMaterial(orcid, materialId) {
 ------------------------------*/
 const OPENALEX = "https://api.openalex.org";
 const UNPAYWALL_EMAIL = "scienceecosystem@icloud.com";
+const OA_CACHE = new Map();
+const OA_TTL_MS = 24 * 60 * 60 * 1000;
 
 async function fetchJSON(url) {
   const r = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(()=>r.statusText)}`);
+  return r.json();
+}
+function cacheGet(key) {
+  if (!key) return null;
+  const entry = OA_CACHE.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    OA_CACHE.delete(key);
+    return null;
+  }
+  return entry.value || null;
+}
+function cacheSet(key, value) {
+  if (!key) return;
+  OA_CACHE.set(key, { value, expiresAt: Date.now() + OA_TTL_MS });
+}
+function normalizeDoi(raw) {
+  if (!raw) return "";
+  return String(raw)
+    .trim()
+    .replace(/^doi:/i, "")
+    .replace(/^https?:\/\/doi.org\//i, "");
+}
+function normalizeOpenAlexId(raw) {
+  if (!raw) return "";
+  return String(raw).trim().replace(/^https?:\/\/openalex\.org\//i, "");
+}
+async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+async function fetchJSONTimeout(url, options = {}, timeoutMs = 5000) {
+  const r = await fetchWithTimeout(url, { ...options, headers: { "Accept": "application/json", ...(options.headers || {}) } }, timeoutMs);
   if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(()=>r.statusText)}`);
   return r.json();
 }
@@ -1131,6 +1172,200 @@ app.get("/api/paper/artifacts", async (req, res) => {
     unique.push(item);
   });
   res.json(unique);
+});
+
+// Aggressive Open Access resolver
+app.get("/api/paper/oa", async (req, res) => {
+  const doiParam = normalizeDoi(req.query?.doi || "");
+  const openalexIdParam = normalizeOpenAlexId(req.query?.openalex_id || "");
+  if (!doiParam && !openalexIdParam) {
+    return res.status(400).json({ error: "doi or openalex_id required" });
+  }
+
+  const cacheKey = (doiParam || (openalexIdParam ? `openalex:${openalexIdParam.toLowerCase()}` : "")).toLowerCase();
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const sources = [];
+  function pushSource(entry) {
+    if (!entry) return;
+    const pdfUrl = entry.pdf_url || "";
+    const landingUrl = entry.landing_url || "";
+    if (!pdfUrl && !landingUrl) return;
+    sources.push({
+      source: entry.source || "Unknown",
+      pdf_url: pdfUrl || null,
+      landing_url: landingUrl || null,
+      license: entry.license || null
+    });
+  }
+
+  let work = null;
+  try {
+    if (openalexIdParam) {
+      work = await fetchJSONTimeout(`${OPENALEX}/works/${encodeURIComponent(openalexIdParam)}`);
+    } else if (doiParam) {
+      const doiUrl = `https://doi.org/${encodeURIComponent(doiParam)}`;
+      work = await fetchJSONTimeout(`${OPENALEX}/works/${encodeURIComponent(doiUrl)}`);
+    }
+  } catch (_) {}
+
+  const doiFromWork = normalizeDoi(work?.doi || work?.ids?.doi || "");
+  const doi = doiParam || doiFromWork;
+
+  // 1) OpenAlex
+  try {
+    const best = work?.best_oa_location || null;
+    const primary = work?.primary_location || null;
+    const pdf = (best && (best.url_for_pdf || best.pdf_url)) || (primary && primary.pdf_url) || null;
+    const landing = (best && (best.url || best.landing_page_url)) || (primary && (primary.landing_page_url || primary.url)) || work?.open_access?.oa_url || null;
+    if (pdf || landing) {
+      pushSource({
+        source: "OpenAlex",
+        pdf_url: pdf,
+        landing_url: landing,
+        license: best?.license || work?.open_access?.oa_status || null
+      });
+    }
+  } catch (_) {}
+
+  // 2) Unpaywall
+  if (doi) {
+    try {
+      const up = await fetchJSONTimeout(`https://api.unpaywall.org/v2/${encodeURIComponent(doi)}?email=${encodeURIComponent("info@scienceecosystem.org")}`);
+      const best = up?.best_oa_location || null;
+      const pdf = best?.url_for_pdf || null;
+      const landing = best?.url || null;
+      if (pdf || landing) {
+        pushSource({ source: "Unpaywall", pdf_url: pdf, landing_url: landing, license: best?.license || null });
+      }
+    } catch (_) {}
+  }
+
+  // 3-9) Parallel sources
+  const coreKey = process.env.CORE_API_KEY || "";
+  const pmcid = work?.ids?.pmcid || "";
+  const arxivId = work?.ids?.arxiv_id || "";
+  const preprintNames = [
+    "arxiv","biorxiv","medrxiv","chemrxiv","osf preprints","psyarxiv","engrXiv".toLowerCase(),
+    "eartharxiv","socarxiv","lawarxiv","paleorxiv","agrixiv","research square","preprints.org","ssrn"
+  ];
+
+  const tasks = [
+    // CORE
+    async () => {
+      if (!doi) return null;
+      const headers = coreKey ? { "X-API-Key": coreKey } : {};
+      const core = await fetchJSONTimeout(`https://api.core.ac.uk/v3/search/works?q=doi:${encodeURIComponent(doi)}&limit=1`, { headers });
+      const hit = Array.isArray(core?.results) ? core.results[0] : null;
+      const pdf = hit?.downloadUrl || hit?.fullTextIdentifier || null;
+      if (!pdf) return null;
+      return { source: "CORE", pdf_url: pdf, landing_url: hit?.fullTextIdentifier || hit?.sourceFulltextUrls?.[0] || null };
+    },
+    // Europe PMC
+    async () => {
+      if (!doi) return null;
+      const epmc = await fetchJSONTimeout(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:${encodeURIComponent(doi)}&format=json&resultType=core`);
+      const results = Array.isArray(epmc?.resultList?.result) ? epmc.resultList.result : [];
+      for (const r of results) {
+        const list = Array.isArray(r?.fullTextUrlList?.fullTextUrl) ? r.fullTextUrlList.fullTextUrl : [];
+        const oa = list.find(x => String(x?.availability || "").toLowerCase() === "open access");
+        if (oa?.url) return { source: "Europe PMC", pdf_url: oa.url, landing_url: r?.pmcHtmlUrl || r?.fullTextUrl || null };
+      }
+      return null;
+    },
+    // Semantic Scholar
+    async () => {
+      if (!doi) return null;
+      const ss = await fetchJSONTimeout(`https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=openAccessPdf`);
+      const pdf = ss?.openAccessPdf?.url || null;
+      if (!pdf) return null;
+      return { source: "Semantic Scholar", pdf_url: pdf, landing_url: ss?.openAccessPdf?.url || null };
+    },
+    // BASE
+    async () => {
+      if (!doi) return null;
+      const base = await fetchJSONTimeout(`https://api.base-search.net/cgi-bin/BaseHttpSearchInterface.fcgi?func=PerformSearch&query=dcdoi:${encodeURIComponent(doi)}&format=json`);
+      const doc = base?.response?.docs?.[0] || null;
+      const link = Array.isArray(doc?.dclink) ? doc.dclink[0] : doc?.dclink || null;
+      if (!link) return null;
+      return { source: "BASE", pdf_url: link, landing_url: link };
+    },
+    // PubMed Central
+    async () => {
+      if (!pmcid) return null;
+      const pmcId = String(pmcid).replace(/^PMC/i, "PMC");
+      const pdf = `https://www.ncbi.nlm.nih.gov/pmc/articles/${encodeURIComponent(pmcId)}/pdf/`;
+      const landing = `https://www.ncbi.nlm.nih.gov/pmc/articles/${encodeURIComponent(pmcId)}/`;
+      return { source: "PubMed Central", pdf_url: pdf, landing_url: landing };
+    },
+    // arXiv
+    async () => {
+      if (!arxivId) return null;
+      const id = String(arxivId).replace(/^arxiv:/i, "");
+      return {
+        source: "arXiv",
+        pdf_url: `https://arxiv.org/pdf/${encodeURIComponent(id)}`,
+        landing_url: `https://arxiv.org/abs/${encodeURIComponent(id)}`
+      };
+    },
+    // Preprint servers from OpenAlex locations
+    async () => {
+      const locs = Array.isArray(work?.locations) ? work.locations : [];
+      if (!locs.length) return null;
+      const out = [];
+      for (const loc of locs) {
+        const name = String(loc?.source?.display_name || "").toLowerCase();
+        if (!name) continue;
+        if (!preprintNames.some(p => name.includes(p))) continue;
+        const pdf = loc?.pdf_url || loc?.url_for_pdf || null;
+        const landing = loc?.landing_page_url || loc?.url || null;
+        if (pdf || landing) {
+          out.push({
+            source: `Preprint: ${loc?.source?.display_name || "Preprint server"}`,
+            pdf_url: pdf,
+            landing_url: landing,
+            license: loc?.license || null
+          });
+        }
+      }
+      return out.length ? out : null;
+    }
+  ];
+
+  const settled = await Promise.allSettled(tasks.map(fn => fn().catch(() => null)));
+  settled.forEach((res, idx) => {
+    if (res.status !== "fulfilled") return;
+    const val = res.value;
+    if (!val) return;
+    if (Array.isArray(val)) {
+      val.forEach(v => pushSource(v));
+    } else {
+      pushSource(val);
+    }
+  });
+
+  // Deduplicate by URL
+  const seen = new Set();
+  const unique = [];
+  sources.forEach(s => {
+    const key = (s.pdf_url || s.landing_url || "").toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    unique.push(s);
+  });
+
+  const best = unique.find(s => s.pdf_url) || unique.find(s => s.landing_url) || null;
+  const payload = {
+    best_pdf_url: best?.pdf_url || null,
+    best_landing_url: best?.landing_url || null,
+    sources: unique,
+    is_oa: !!(best && best.pdf_url)
+  };
+
+  if (doi) cacheSet(doi.toLowerCase(), payload);
+  if (cacheKey && (!doi || cacheKey !== doi.toLowerCase())) cacheSet(cacheKey, payload);
+  res.json(payload);
 });
 
 /* ---------------------------
