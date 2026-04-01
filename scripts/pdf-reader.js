@@ -16,7 +16,6 @@ let refMatchCache = null;
 let annotMode = 'highlight';
 let annotations = [];
 let annotationKey = '';
-let pdfViewerLib = null;
 
 function escapeHtml(s) {
   return String(s ?? "")
@@ -115,18 +114,6 @@ function renderPage(num) {
   if (numEl) numEl.textContent = String(num);
 }
 
-async function ensureViewerLib() {
-  if (!pdfViewerLib) {
-    try {
-      pdfViewerLib = await import('/pdfjs/web/viewer.mjs');
-    } catch (e) {
-      console.error('Failed to load pdfjs viewer helpers:', e);
-      pdfViewerLib = null;
-    }
-  }
-  return pdfViewerLib;
-}
-
 async function renderTextLayer(page, viewport, layerEl, tooltipEl) {
   if (!layerEl || !pdfjsLib) return;
   layerEl.innerHTML = '';
@@ -134,18 +121,14 @@ async function renderTextLayer(page, viewport, layerEl, tooltipEl) {
   layerEl.style.height = viewport.height + 'px';
 
   const textContent = await page.getTextContent();
-  const viewerLib = await ensureViewerLib();
-  const renderFn = viewerLib && typeof viewerLib.renderTextLayer === 'function' ? viewerLib.renderTextLayer : null;
-  if (!renderFn) {
-    return;
-  }
-  const render = renderFn({
-    textContent: textContent,
+  if (typeof pdfjsLib.TextLayer !== 'function') return;
+  const textLayer = new pdfjsLib.TextLayer({
+    textContentSource: textContent,
     container: layerEl,
     viewport: viewport,
     textDivs: []
   });
-  if (render && render.promise) await render.promise;
+  await textLayer.render();
   applyCitationHighlightsToLayer(layerEl);
   wireCitationHover(layerEl, tooltipEl);
   wireAnnotationSelection(layerEl);
@@ -532,6 +515,7 @@ function updateAnnotButtons() {
     if (annotMode === k) el.classList.add('btn-primary');
     else el.classList.remove('btn-primary');
   });
+  document.body.classList.toggle('annot-erase', annotMode === 'erase');
 }
 
 function wireAnnotationSelection(layerEl) {
