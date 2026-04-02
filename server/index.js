@@ -28,7 +28,8 @@ const {
   STATIC_DIR = "../",
   NODE_ENV = "development",
   COOKIE_DOMAIN,                // optional: ".scienceecosystem.org"
-  DATABASE_URL                  // Neon: postgresql://... ?sslmode=require
+  DATABASE_URL,                 // Neon: postgresql://... ?sslmode=require
+  ZOTERO_SYNC_INTERVAL_MS = 3600000
 } = process.env;
 
 if (!ORCID_CLIENT_ID || !ORCID_CLIENT_SECRET || !ORCID_REDIRECT_URI) {
@@ -181,6 +182,23 @@ async function pgInit() {
     );
   `);
 
+  // Library PDFs (user-scoped)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS library_pdfs (
+      id BIGSERIAL PRIMARY KEY,
+      orcid TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      paper_id TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      storage_path TEXT NOT NULL,
+      file_size BIGINT,
+      mime_type TEXT DEFAULT 'application/pdf',
+      source TEXT DEFAULT 'upload',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(orcid, paper_id)
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS library_pdfs_orcid_idx ON library_pdfs(orcid)`);
+
   // Identity linking status
   await pool.query(`
     CREATE TABLE IF NOT EXISTS identity_links (
@@ -286,6 +304,41 @@ async function pgInit() {
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS pdf_url     TEXT`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS meta_fresh  BOOLEAN DEFAULT FALSE`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS local_pdf_path TEXT`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS zotero_key TEXT`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS zotero_version INTEGER`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS tags TEXT[]`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS notes_raw TEXT`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS collection_ids_zotero TEXT[]`);
+
+  // Zotero connections + sync log
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zotero_connections (
+      orcid TEXT PRIMARY KEY REFERENCES users(orcid) ON DELETE CASCADE,
+      zotero_user_id TEXT NOT NULL,
+      api_key TEXT NOT NULL,
+      last_sync_version INTEGER DEFAULT 0,
+      last_synced_at TIMESTAMPTZ,
+      sync_enabled BOOLEAN DEFAULT TRUE,
+      sync_pdfs BOOLEAN DEFAULT TRUE,
+      conflict_resolution TEXT DEFAULT 'zotero_wins'
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zotero_sync_log (
+      id BIGSERIAL PRIMARY KEY,
+      orcid TEXT,
+      started_at TIMESTAMPTZ,
+      finished_at TIMESTAMPTZ,
+      items_synced INTEGER,
+      errors JSONB
+    );
+  `);
+
+  // Collections: map Zotero keys (optional)
+  await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS zotero_key TEXT`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS collections_orcid_zotero_key_idx ON collections(orcid, zotero_key) WHERE zotero_key IS NOT NULL`);
 }
 try {
   await pgInit();
@@ -659,6 +712,276 @@ async function hydrateWorkMeta(idTail) {
   };
 }
 
+/* -----------------------------
+   Zotero sync helpers
+------------------------------*/
+const ZOTERO_BASE = "https://api.zotero.org";
+const ZOTERO_UA = "ScholarsEdge/1.0 (https://scienceecosystem.org)";
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function zoteroFetch(url, apiKey, options = {}, attempt = 0) {
+  const maxAttempts = 5;
+  const opts = {
+    ...options,
+    headers: {
+      "Zotero-API-Key": apiKey,
+      "User-Agent": ZOTERO_UA,
+      ...(options.headers || {})
+    }
+  };
+  const res = await fetchWithTimeout(url, opts, 10000);
+  if (res.status === 429 && attempt < maxAttempts) {
+    const retryAfter = Number(res.headers.get("Retry-After")) || Math.min(2 ** attempt, 30);
+    await sleep(retryAfter * 1000);
+    return zoteroFetch(url, apiKey, options, attempt + 1);
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Zotero ${res.status}: ${text || res.statusText}`);
+  }
+  return res;
+}
+
+function zoteroItemToLibrary(item) {
+  const data = item?.data || {};
+  const doi = normalizeDoi(data.DOI || "");
+  const yearMatch = String(data.date || "").match(/\b(19|20)\d{2}\b/);
+  const creators = Array.isArray(data.creators) ? data.creators : [];
+  const authors = creators.map(c => {
+    if (c.name) return c.name;
+    return [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
+  }).filter(Boolean).join(", ");
+  const url = String(data.url || "").trim();
+  const isOpenAlexUrl = url.includes("openalex.org");
+  const tags = Array.isArray(data.tags) ? data.tags.map(t => t?.tag).filter(Boolean) : [];
+
+  return {
+    id: doi ? `doi:${doi}` : `zotero:${item.key}`,
+    title: data.title || data.shortTitle || "Untitled",
+    openalex_url: isOpenAlexUrl ? url : null,
+    pdf_url: !isOpenAlexUrl && url ? url : null,
+    doi: doi || null,
+    year: yearMatch ? Number(yearMatch[0]) : null,
+    venue: data.publicationTitle || data.conferenceName || null,
+    authors: authors || null,
+    abstract: data.abstractNote || null,
+    tags,
+    zotero_key: item.key,
+    zotero_version: item.version || null,
+    collection_ids_zotero: Array.isArray(data.collections) ? data.collections : []
+  };
+}
+
+async function ensureZoteroCollections(orcid, zoteroUserId, apiKey) {
+  const res = await zoteroFetch(`${ZOTERO_BASE}/users/${zoteroUserId}/collections`, apiKey);
+  const collections = await res.json();
+  if (!Array.isArray(collections) || !collections.length) return new Map();
+
+  // First pass: ensure each collection row exists
+  for (const c of collections) {
+    const key = c?.key;
+    if (!key) continue;
+    const name = c?.data?.name || "Untitled";
+    await pool.query(
+      `INSERT INTO collections (orcid, name, parent_id, zotero_key)
+       VALUES ($1, $2, NULL, $3)
+       ON CONFLICT (orcid, zotero_key) DO UPDATE SET name = EXCLUDED.name`,
+      [orcid, name, key]
+    );
+  }
+
+  const { rows } = await pool.query(
+    `SELECT id, zotero_key FROM collections WHERE orcid=$1 AND zotero_key IS NOT NULL`,
+    [orcid]
+  );
+  const map = new Map(rows.map(r => [r.zotero_key, r.id]));
+
+  // Second pass: update parents
+  for (const c of collections) {
+    const key = c?.key;
+    if (!key) continue;
+    const parentKey = c?.data?.parentCollection || null;
+    const parentId = parentKey ? map.get(parentKey) || null : null;
+    await pool.query(
+      `UPDATE collections SET parent_id=$1 WHERE orcid=$2 AND zotero_key=$3`,
+      [parentId, orcid, key]
+    );
+  }
+  return map;
+}
+
+async function syncZoteroForUser(orcid) {
+  const startedAt = new Date();
+  const errors = [];
+  let itemsSynced = 0;
+  const conn = await pool.query(
+    `SELECT zotero_user_id, api_key, last_sync_version, sync_enabled, sync_pdfs
+     FROM zotero_connections WHERE orcid=$1`,
+    [orcid]
+  );
+  if (!conn.rowCount) return { synced: 0, errors: ["No Zotero connection"] };
+  const { zotero_user_id: zid, api_key: apiKey, last_sync_version: lastVersion, sync_enabled, sync_pdfs } = conn.rows[0];
+  if (!sync_enabled) return { synced: 0, errors: ["Sync disabled"] };
+
+  try {
+    const versionsRes = await zoteroFetch(
+      `${ZOTERO_BASE}/users/${zid}/items?since=${Number(lastVersion || 0)}&format=versions`,
+      apiKey
+    );
+    const versions = await versionsRes.json();
+    const changedKeys = Object.keys(versions || {});
+    const newVersion = Number(versionsRes.headers.get("Last-Modified-Version")) || Number(lastVersion || 0);
+
+    const collectionMap = await ensureZoteroCollections(orcid, zid, apiKey);
+    const zoteroCollectionIds = Array.from(collectionMap.values());
+
+    const batches = [];
+    for (let i = 0; i < changedKeys.length; i += 25) {
+      batches.push(changedKeys.slice(i, i + 25));
+    }
+
+    for (const batch of batches) {
+      const fetched = await Promise.all(batch.map(async (key) => {
+        try {
+          const itemRes = await zoteroFetch(`${ZOTERO_BASE}/users/${zid}/items/${key}`, apiKey);
+          return await itemRes.json();
+        } catch (e) {
+          errors.push(`Item ${key}: ${e.message}`);
+          return null;
+        }
+      }));
+
+      for (const item of fetched.filter(Boolean)) {
+        if (item?.data?.itemType === "attachment" || item?.data?.itemType === "note") {
+          continue;
+        }
+        const mapped = zoteroItemToLibrary(item);
+        await pool.query(
+          `INSERT INTO library_items (
+            orcid, id, title, openalex_url, doi, year, venue, authors, abstract, pdf_url,
+            zotero_key, zotero_version, last_synced_at, tags, notes_raw, collection_ids_zotero, meta_fresh, deleted_at
+          )
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13,$14,$15,TRUE,NULL)
+           ON CONFLICT (orcid, id) DO UPDATE SET
+             title=EXCLUDED.title,
+             openalex_url=EXCLUDED.openalex_url,
+             doi=EXCLUDED.doi,
+             year=EXCLUDED.year,
+             venue=EXCLUDED.venue,
+             authors=EXCLUDED.authors,
+             abstract=EXCLUDED.abstract,
+             pdf_url=EXCLUDED.pdf_url,
+             zotero_key=EXCLUDED.zotero_key,
+             zotero_version=EXCLUDED.zotero_version,
+             last_synced_at=now(),
+             tags=EXCLUDED.tags,
+             notes_raw=EXCLUDED.notes_raw,
+             collection_ids_zotero=EXCLUDED.collection_ids_zotero,
+             meta_fresh=TRUE`,
+          [
+            orcid, mapped.id, mapped.title, mapped.openalex_url, mapped.doi, mapped.year, mapped.venue,
+            mapped.authors, mapped.abstract, mapped.pdf_url,
+            mapped.zotero_key, mapped.zotero_version, mapped.tags, null, mapped.collection_ids_zotero
+          ]
+        );
+        itemsSynced += 1;
+
+        if (zoteroCollectionIds.length) {
+          await pool.query(
+            `DELETE FROM collection_items
+             WHERE orcid=$1 AND paper_id=$2 AND collection_id = ANY($3::int[])`,
+            [orcid, mapped.id, zoteroCollectionIds]
+          );
+        }
+        for (const zk of mapped.collection_ids_zotero || []) {
+          const cid = collectionMap.get(zk);
+          if (!cid) continue;
+          await pool.query(
+            `INSERT INTO collection_items (orcid, collection_id, paper_id)
+             VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+            [orcid, cid, mapped.id]
+          );
+        }
+
+        if (sync_pdfs) {
+          try {
+            const childrenRes = await zoteroFetch(
+              `${ZOTERO_BASE}/users/${zid}/items/${item.key}/children?itemType=attachment`,
+              apiKey
+            );
+            const children = await childrenRes.json();
+            const pdfChild = Array.isArray(children)
+              ? children.find(c => (c?.data?.contentType === "application/pdf") || String(c?.data?.filename || "").toLowerCase().endsWith(".pdf"))
+              : null;
+            if (pdfChild?.key) {
+              const fileRes = await zoteroFetch(`${ZOTERO_BASE}/users/${zid}/items/${pdfChild.key}/file`, apiKey);
+              const buf = Buffer.from(await fileRes.arrayBuffer());
+              await fsp.mkdir(path.join(pdfUploadDir, orcid), { recursive: true });
+              const safeKey = String(item.key).replace(/[^\w.\-]/g, "_");
+              const safeAttach = String(pdfChild.key).replace(/[^\w.\-]/g, "_");
+              const fname = `zotero_${safeKey}_${safeAttach}.pdf`;
+              const fullPath = path.join(pdfUploadDir, orcid, fname);
+              await fsp.writeFile(fullPath, buf);
+              const safePath = ensureSafePath(pdfUploadDir, fullPath);
+              const urlPath = `/uploads/pdfs/${orcid}/${fname}`;
+              await pool.query(
+                `INSERT INTO library_pdfs (orcid, paper_id, filename, storage_path, file_size, mime_type, source)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)
+                 ON CONFLICT (orcid, paper_id) DO UPDATE SET
+                   filename=EXCLUDED.filename,
+                   storage_path=EXCLUDED.storage_path,
+                   file_size=EXCLUDED.file_size,
+                   mime_type=EXCLUDED.mime_type,
+                   source=EXCLUDED.source`,
+                [orcid, mapped.id, fname, safePath, buf.length, "application/pdf", "zotero"]
+              );
+              await pool.query(
+                `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
+                [urlPath, orcid, mapped.id]
+              );
+            }
+          } catch (e) {
+            errors.push(`PDF ${item.key}: ${e.message}`);
+          }
+        }
+      }
+    }
+
+    try {
+      const delRes = await zoteroFetch(`${ZOTERO_BASE}/users/${zid}/deleted?since=${Number(lastVersion || 0)}`, apiKey);
+      const del = await delRes.json();
+      const deletedKeys = Array.isArray(del?.items) ? del.items : [];
+      if (deletedKeys.length) {
+        await pool.query(
+          `UPDATE library_items SET deleted_at = now()
+           WHERE orcid=$1 AND zotero_key = ANY($2::text[])`,
+          [orcid, deletedKeys]
+        );
+      }
+    } catch (e) {
+      errors.push(`Deleted items: ${e.message}`);
+    }
+
+    await pool.query(
+      `UPDATE zotero_connections SET last_sync_version=$1, last_synced_at=now()
+       WHERE orcid=$2`,
+      [newVersion, orcid]
+    );
+  } catch (e) {
+    errors.push(e.message);
+  } finally {
+    const finishedAt = new Date();
+    await pool.query(
+      `INSERT INTO zotero_sync_log (orcid, started_at, finished_at, items_synced, errors)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [orcid, startedAt, finishedAt, itemsSynced, JSON.stringify(errors)]
+    );
+  }
+
+  return { synced: itemsSynced, errors };
+}
+
 /* ---------------------------
    Health + static
 ----------------------------*/
@@ -668,10 +991,26 @@ app.use(paperRoutes);
 
 const staticRoot = path.resolve(__dirname, STATIC_DIR);
 const uploadDir = path.join(staticRoot, "uploads", "materials");
+const pdfUploadDir = path.join(staticRoot, "uploads", "pdfs");
 app.use(express.static(staticRoot, {
   extensions: ["html"],
   maxAge: NODE_ENV === "production" ? "1h" : 0
 }));
+
+function isPathInside(baseDir, targetPath) {
+  const rel = path.relative(baseDir, targetPath);
+  return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+function ensureSafePath(baseDir, targetPath) {
+  const resolved = path.resolve(targetPath);
+  const baseResolved = path.resolve(baseDir);
+  if (!isPathInside(baseResolved, resolved)) {
+    const err = new Error("Invalid file path");
+    err.code = "INVALID_PATH";
+    throw err;
+  }
+  return resolved;
+}
 
 /* ---------------------------
    ORCID OAuth
@@ -858,8 +1197,10 @@ async function parseMultipartForm(req, maxSize = 15 * 1024 * 1024) {
         const content = rawBody.replace(/^\r\n/, "").replace(/\r\n--$/, "").replace(/\r\n$/, "");
 
         if (filenameMatch && filenameMatch[1]) {
+          const typeLine = headerLines.find(l => l.toLowerCase().startsWith("content-type"));
+          const contentType = typeLine ? typeLine.split(":").slice(1).join(":").trim() : null;
           const buf = Buffer.from(content, "binary");
-          files.push({ field: nameMatch?.[1] || "file", filename: filenameMatch[1], buffer: buf, size: buf.length });
+          files.push({ field: nameMatch?.[1] || "file", filename: filenameMatch[1], buffer: buf, size: buf.length, contentType });
         } else if (nameMatch) {
           fields[nameMatch[1]] = content.trim();
         }
@@ -968,6 +1309,292 @@ app.delete("/api/library", async (req, res) => {
   if (!sess) return res.status(401).json({ error: "Not signed in" });
   await libraryClear(sess.orcid);
   res.status(204).end();
+});
+
+/* ---------------------------
+   Library PDFs API
+----------------------------*/
+app.post("/api/library/pdf", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const { fields, files } = await parseMultipartForm(req, 50 * 1024 * 1024);
+    const paperId = String(fields?.paper_id || "").trim();
+    if (!paperId) return res.status(400).json({ error: "paper_id required" });
+    const file = (files || []).find(f => f.field === "file") || files?.[0];
+    if (!file?.buffer?.length) return res.status(400).json({ error: "file required" });
+
+    const filename = file.filename || "upload.pdf";
+    const extOk = filename.toLowerCase().endsWith(".pdf");
+    const mimeOk = String(file.contentType || "").toLowerCase() === "application/pdf";
+    if (!extOk && !mimeOk) return res.status(400).json({ error: "Only PDF files allowed" });
+    if (file.size > 50 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
+
+    const safePaper = paperId.replace(/[^\w.\-]/g, "_");
+    await fsp.mkdir(path.join(pdfUploadDir, sess.orcid), { recursive: true });
+    const fname = `${safePaper}_${Date.now()}.pdf`;
+    const fullPath = path.join(pdfUploadDir, sess.orcid, fname);
+    await fsp.writeFile(fullPath, file.buffer);
+    const safePath = ensureSafePath(pdfUploadDir, fullPath);
+    const urlPath = `/uploads/pdfs/${sess.orcid}/${fname}`;
+
+    await pool.query(
+      `INSERT INTO library_pdfs (orcid, paper_id, filename, storage_path, file_size, mime_type, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (orcid, paper_id) DO UPDATE SET
+         filename=EXCLUDED.filename,
+         storage_path=EXCLUDED.storage_path,
+         file_size=EXCLUDED.file_size,
+         mime_type=EXCLUDED.mime_type,
+         source=EXCLUDED.source`,
+      [sess.orcid, paperId, filename, safePath, file.size, file.contentType || "application/pdf", "upload"]
+    );
+    await pool.query(
+      `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
+      [urlPath, sess.orcid, paperId]
+    );
+    res.json({ ok: true, url: urlPath, paper_id: paperId });
+  } catch (e) {
+    console.error("POST /api/library/pdf failed:", e);
+    res.status(500).json({ error: "Failed to upload PDF" });
+  }
+});
+
+app.get("/api/library/pdf/:paperId", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const paperId = String(req.params.paperId || "");
+  const { rows } = await pool.query(
+    `SELECT storage_path FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
+    [sess.orcid, paperId]
+  );
+  if (!rows.length) return res.status(404).json({ error: "PDF not found" });
+  try {
+    const safePath = ensureSafePath(pdfUploadDir, rows[0].storage_path);
+    return res.sendFile(safePath);
+  } catch (e) {
+    return res.status(404).json({ error: "PDF not found" });
+  }
+});
+
+app.delete("/api/library/pdf/:paperId", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const paperId = String(req.params.paperId || "");
+  const { rows } = await pool.query(
+    `SELECT id, storage_path FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
+    [sess.orcid, paperId]
+  );
+  if (!rows.length) return res.status(404).json({ error: "PDF not found" });
+  try {
+    const safePath = ensureSafePath(pdfUploadDir, rows[0].storage_path);
+    await fsp.unlink(safePath).catch(e => { if (e.code !== "ENOENT") throw e; });
+    await pool.query(`DELETE FROM library_pdfs WHERE id=$1`, [rows[0].id]);
+    await pool.query(
+      `UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`,
+      [sess.orcid, paperId]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE /api/library/pdf failed:", e);
+    res.status(500).json({ error: "Failed to delete PDF" });
+  }
+});
+
+/* ---------------------------
+   PDF import -> new library item
+----------------------------*/
+app.post("/api/library/import-pdf", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const { files } = await parseMultipartForm(req, 50 * 1024 * 1024);
+    const file = (files || []).find(f => f.field === "file") || files?.[0];
+    if (!file?.buffer?.length) return res.status(400).json({ error: "file required" });
+
+    const filename = file.filename || "import.pdf";
+    const extOk = filename.toLowerCase().endsWith(".pdf");
+    const mimeOk = String(file.contentType || "").toLowerCase() === "application/pdf";
+    if (!extOk && !mimeOk) return res.status(400).json({ error: "Only PDF files allowed" });
+    if (file.size > 50 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
+
+    await fsp.mkdir(path.join(pdfUploadDir, sess.orcid), { recursive: true });
+    const fname = `import_${Date.now()}.pdf`;
+    const fullPath = path.join(pdfUploadDir, sess.orcid, fname);
+    await fsp.writeFile(fullPath, file.buffer);
+    const safePath = ensureSafePath(pdfUploadDir, fullPath);
+    const urlPath = `/uploads/pdfs/${sess.orcid}/${fname}`;
+
+    const sniff = file.buffer.slice(0, 8192).toString("latin1");
+    const doiMatch = sniff.match(/10\.\d{4,9}\/[^\s"<>]+/);
+    const doi = doiMatch ? normalizeDoi(doiMatch[0]) : "";
+
+    let item = {
+      id: doi ? `doi:${doi}` : `upload:${Date.now()}`,
+      title: filename.replace(/\.pdf$/i, "") || "Imported PDF",
+      openalex_id: null,
+      openalex_url: null,
+      doi: doi || null,
+      year: null,
+      venue: null,
+      authors: null,
+      cited_by: null,
+      abstract: null,
+      pdf_url: null,
+      meta_fresh: false
+    };
+
+    if (doi) {
+      try {
+        const work = await fetchJSONTimeout(`${OPENALEX}/works/doi:${encodeURIComponent(doi)}`, {}, 10000);
+        const authors = (work.authorships || []).map(a => a?.author?.display_name).filter(Boolean).join(", ");
+        const venue = work?.host_venue?.display_name || work?.primary_location?.source?.display_name || null;
+        item = {
+          ...item,
+          id: `doi:${doi}`,
+          title: work.display_name || work.title || item.title,
+          openalex_id: normalizeOpenAlexId(work.id || ""),
+          openalex_url: work.id || null,
+          year: work.publication_year ?? null,
+          venue,
+          authors: authors || null,
+          cited_by: work.cited_by_count ?? 0,
+          abstract: work.abstract_inverted_index ? invertAbstract(work.abstract_inverted_index) : null,
+          meta_fresh: true
+        };
+      } catch (e) {
+        // keep fallback item
+      }
+    }
+
+    await pool.query(
+      `INSERT INTO library_items (
+        orcid, id, title, openalex_id, openalex_url, doi, year, venue, authors, cited_by, abstract, pdf_url, meta_fresh
+      )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (orcid, id) DO UPDATE SET
+         title=EXCLUDED.title,
+         openalex_id=EXCLUDED.openalex_id,
+         openalex_url=EXCLUDED.openalex_url,
+         doi=EXCLUDED.doi,
+         year=EXCLUDED.year,
+         venue=EXCLUDED.venue,
+         authors=EXCLUDED.authors,
+         cited_by=EXCLUDED.cited_by,
+         abstract=EXCLUDED.abstract,
+         meta_fresh=EXCLUDED.meta_fresh`,
+      [
+        sess.orcid, item.id, item.title, item.openalex_id, item.openalex_url, item.doi,
+        item.year, item.venue, item.authors, item.cited_by, item.abstract, item.pdf_url, item.meta_fresh
+      ]
+    );
+
+    await pool.query(
+      `INSERT INTO library_pdfs (orcid, paper_id, filename, storage_path, file_size, mime_type, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (orcid, paper_id) DO UPDATE SET
+         filename=EXCLUDED.filename,
+         storage_path=EXCLUDED.storage_path,
+         file_size=EXCLUDED.file_size,
+         mime_type=EXCLUDED.mime_type,
+         source=EXCLUDED.source`,
+      [sess.orcid, item.id, filename, safePath, file.size, file.contentType || "application/pdf", "import"]
+    );
+    await pool.query(
+      `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
+      [urlPath, sess.orcid, item.id]
+    );
+
+    res.json({ item: { ...item, local_pdf_path: urlPath }, pdf_url: urlPath });
+  } catch (e) {
+    console.error("POST /api/library/import-pdf failed:", e);
+    res.status(500).json({ error: "Failed to import PDF" });
+  }
+});
+
+/* ---------------------------
+   Zotero integrations
+----------------------------*/
+app.post("/api/integrations/zotero/connect", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { zotero_user_id, api_key } = req.body || {};
+  if (!zotero_user_id || !api_key) return res.status(400).json({ error: "zotero_user_id and api_key required" });
+  try {
+    await zoteroFetch(`${ZOTERO_BASE}/users/${zotero_user_id}/items?limit=1`, api_key);
+    await pool.query(
+      `INSERT INTO zotero_connections (orcid, zotero_user_id, api_key)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (orcid) DO UPDATE SET zotero_user_id=EXCLUDED.zotero_user_id, api_key=EXCLUDED.api_key`,
+      [sess.orcid, String(zotero_user_id), String(api_key)]
+    );
+    res.json({ ok: true, zotero_user_id: String(zotero_user_id) });
+  } catch (e) {
+    res.status(400).json({ error: `Zotero validation failed: ${e.message}` });
+  }
+});
+
+app.patch("/api/integrations/zotero/settings", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { sync_enabled, sync_pdfs, conflict_resolution } = req.body || {};
+  const fields = [];
+  const params = [];
+  if (sync_enabled !== undefined) { fields.push(`sync_enabled=$${fields.length + 1}`); params.push(!!sync_enabled); }
+  if (sync_pdfs !== undefined) { fields.push(`sync_pdfs=$${fields.length + 1}`); params.push(!!sync_pdfs); }
+  if (conflict_resolution !== undefined) { fields.push(`conflict_resolution=$${fields.length + 1}`); params.push(String(conflict_resolution)); }
+  if (!fields.length) return res.status(400).json({ error: "No settings provided" });
+  params.push(sess.orcid);
+  await pool.query(
+    `UPDATE zotero_connections SET ${fields.join(", ")} WHERE orcid=$${fields.length + 1}`,
+    params
+  );
+  res.json({ ok: true });
+});
+
+app.delete("/api/integrations/zotero/disconnect", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  await pool.query(`DELETE FROM zotero_connections WHERE orcid=$1`, [sess.orcid]);
+  res.status(204).end();
+});
+
+app.get("/api/integrations/zotero/status", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { rows } = await pool.query(
+    `SELECT zotero_user_id, last_sync_version, last_synced_at, sync_enabled, sync_pdfs, conflict_resolution
+     FROM zotero_connections WHERE orcid=$1`,
+    [sess.orcid]
+  );
+  if (!rows.length) return res.json({ connected: false });
+  const countRes = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM library_items WHERE orcid=$1 AND zotero_key IS NOT NULL`,
+    [sess.orcid]
+  );
+  res.json({
+    connected: true,
+    zotero_user_id: rows[0].zotero_user_id,
+    last_sync_version: rows[0].last_sync_version,
+    last_synced_at: rows[0].last_synced_at,
+    sync_enabled: rows[0].sync_enabled,
+    sync_pdfs: rows[0].sync_pdfs,
+    conflict_resolution: rows[0].conflict_resolution,
+    item_count: countRes.rows[0]?.count ?? 0
+  });
+});
+
+app.post("/api/integrations/zotero/sync", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const result = await syncZoteroForUser(sess.orcid);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: "Sync failed", details: String(e.message || e) });
+  }
+});
+
+app.get("/api/integrations/zotero/sync/status", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { rows } = await pool.query(
+    `SELECT started_at, finished_at, items_synced, errors
+     FROM zotero_sync_log WHERE orcid=$1
+     ORDER BY started_at DESC LIMIT 1`,
+    [sess.orcid]
+  );
+  res.json(rows[0] || null);
 });
 
 /* ---------------------------
@@ -1605,6 +2232,13 @@ app.get("/api/library/full", async (req, res) => {
         li.cited_by,
         li.abstract,
         li.pdf_url,
+        li.local_pdf_path,
+        li.zotero_key,
+        li.zotero_version,
+        li.last_synced_at,
+        li.tags,
+        li.notes_raw,
+        li.collection_ids_zotero,
         li.deleted_at,
         COALESCE(li.meta_fresh, FALSE) AS meta_fresh,
         COALESCE(ARRAY_AGG(ci.collection_id) FILTER (WHERE ci.collection_id IS NOT NULL), '{}') AS collection_ids
@@ -1614,7 +2248,9 @@ app.get("/api/library/full", async (req, res) => {
       WHERE li.orcid = $1
       GROUP BY
         li.id, li.title, li.openalex_id, li.openalex_url, li.doi, li.year,
-        li.venue, li.authors, li.cited_by, li.abstract, li.pdf_url, li.deleted_at, li.meta_fresh
+        li.venue, li.authors, li.cited_by, li.abstract, li.pdf_url, li.local_pdf_path, li.zotero_key,
+        li.zotero_version, li.last_synced_at, li.tags, li.notes_raw, li.collection_ids_zotero,
+        li.deleted_at, li.meta_fresh
       ORDER BY li.title;
       `,
       [sess.orcid]
@@ -2095,6 +2731,30 @@ app.delete("/api/claims/merge", async (req, res) => {
   await mergeDel(sess.orcid, String(primary_author_id), String(merged_author_id));
   res.status(204).end();
 });
+
+/* ---------------------------
+   Zotero background scheduler
+----------------------------*/
+const zoteroIntervalMs = Math.max(60 * 1000, Number(ZOTERO_SYNC_INTERVAL_MS) || 3600000);
+const zoteroIntervalSeconds = Math.round(zoteroIntervalMs / 1000);
+setInterval(async () => {
+  if (!pool) return;
+  try {
+    const { rows } = await pool.query(
+      `SELECT orcid FROM zotero_connections
+       WHERE sync_enabled = TRUE
+       AND (last_synced_at IS NULL OR last_synced_at < now() - ($1 * interval '1 second'))`,
+      [zoteroIntervalSeconds]
+    );
+    for (const row of rows) {
+      await syncZoteroForUser(row.orcid).catch(e =>
+        console.error(`Zotero sync failed for ${row.orcid}:`, e.message)
+      );
+    }
+  } catch (e) {
+    console.error("Zotero scheduler error:", e.message);
+  }
+}, zoteroIntervalMs);
 
 /* ---------------------------
    SPA fallback

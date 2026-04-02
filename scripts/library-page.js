@@ -25,6 +25,8 @@
   let currentSelection=null;
   let openMenu=null;
   let tagFilterTerms=[];
+  let zoteroStatus=null;
+  let zoteroUserId=null;
 
   // Bootstrap
   window.addEventListener("DOMContentLoaded", async()=>{
@@ -34,7 +36,7 @@
   });
 
   async function refreshEverything(){
-    await Promise.all([safeRefreshCollections(), safeRefreshItems()]);
+    await Promise.all([safeRefreshCollections(), safeRefreshItems(), safeRefreshZoteroStatus()]);
     renderTree();
     renderTable();
   }
@@ -145,10 +147,11 @@
 
   function buildMenuForItem(item, ev){
     const openAlexId = item.openalex_id || item.id || "";
-    const pdfViewer = item.pdf_url ? `pdf-viewer.html?id=${encodeURIComponent(openAlexId)}&pdf=${encodeURIComponent(item.pdf_url)}` : null;
+    const localPdf = item.local_pdf_path ? `/api/library/pdf/${encodeURIComponent(item.id)}` : null;
+    const pdfUrl = localPdf || item.pdf_url || null;
     const defs=[
       {act:"open-paper",label:"Open paper page",onClick: ()=>{ location.href=`paper.html?id=${encodeURIComponent(openAlexId)}`; }},
-      ...(pdfViewer ? [{act:"open-pdf",label:"Open PDF",onClick: ()=>{ window.open(pdfViewer,"_blank"); }}] : []),
+      ...(pdfUrl ? [{act:"open-pdf",label:"Open PDF",onClick: ()=>{ window.open(pdfUrl,"_blank"); }}] : []),
       {act:"add-col",label:"Add to collection…",onClick: async()=>{ await addItemToCollectionPrompt(item.id); }},
       ...((currentCollectionId && typeof currentCollectionId==="number") ? [{act:"remove-col",label:"Remove from this collection",onClick: async()=>{ await removeItemFromCollection(item.id, currentCollectionId); }}] : []),
       ...(!item.deleted_at ? [{act:"trash",label:"Move to Trash",onClick: async()=>{ await moveItemToTrash(item.id); }}] : [{act:"restore",label:"Restore",onClick: async()=>{ await restoreItem(item.id); }}]),
@@ -328,6 +331,17 @@
     }
   }
 
+  async function safeRefreshZoteroStatus(){
+    try{
+      const data = await api("/api/integrations/zotero/status");
+      zoteroStatus = data || null;
+      zoteroUserId = data?.zotero_user_id || null;
+    }catch(e){
+      zoteroStatus = null;
+      zoteroUserId = null;
+    }
+  }
+
   function visibleColumns(){
     const cols=new Set(["title"]);
     $$(".cols-menu input[type=checkbox]").forEach(cb=>{ if(cb.checked) cols.add(cb.dataset.col); });
@@ -451,8 +465,9 @@
       const authorsDisplay = firstAuthorLastName(it.authors);
       const authors = cols.has("authors")?`<td>${esc(authorsDisplay)}${tagsHtml}</td>`:"";
       const year    = cols.has("year")   ?`<td>${esc(it.year??"-")}</td>`:"";
+      const zoteroBadge = it.zotero_key ? `<span class="badge badge-zotero" title="Synced from Zotero">Z</span>` : "";
       return `<tr data-id="${esc(it.id)}" draggable="true">
-        <td>${esc(it.title||"-")}</td>
+        <td>${zoteroBadge}${esc(it.title||"-")}</td>
         ${authors}${year}
       </tr>`;
     }).join("");
@@ -531,7 +546,9 @@
     const chip=(href,label,cls="badge")=>href?`<a class="${cls}" href="${href}" target="_blank" rel="noopener">${label}</a>`:"";
     const doiUrl = item.doi ? (`https://doi.org/${item.doi.replace(/^doi:/i,"")}`) : null;
     const openAlexId = item.openalex_id || item.id || "";
-    const pdfViewer = item.pdf_url ? `pdf-viewer.html?id=${encodeURIComponent(openAlexId)}&pdf=${encodeURIComponent(item.pdf_url)}` : null;
+    const localPdf = item.local_pdf_path ? `/api/library/pdf/${encodeURIComponent(item.id)}` : null;
+    const pdfUrl = localPdf || item.pdf_url || null;
+    const zoteroLink = (item.zotero_key && zoteroUserId) ? `https://www.zotero.org/users/${encodeURIComponent(zoteroUserId)}/items/${encodeURIComponent(item.zotero_key)}` : null;
 
     host.innerHTML = `
       <div>
@@ -542,15 +559,26 @@
           <p style="display:flex;gap:.5rem;flex-wrap:wrap;">
             ${chip(doiUrl,"DOI")}
             ${chip(item.openalex_url,"OpenAlex")}
-            ${chip(pdfViewer,"Read PDF","badge badge-oa")}
+            ${chip(pdfUrl,"Read PDF","badge badge-oa")}
+            ${zoteroLink ? `<a class="badge badge-zotero" href="${zoteroLink}" target="_blank" rel="noopener">Synced from Zotero</a>` : (item.zotero_key ? `<span class="badge badge-zotero">Synced from Zotero</span>` : "")}
           </p>
           <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.5rem 0;">
             <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(item.openalex_id||item.id||"")}">Open paper page</a>
-            ${pdfViewer?`<a class="btn btn-secondary" href="${pdfViewer}" target="_blank" rel="noopener">Open PDF</a>`:""}
+            ${pdfUrl?`<a class="btn btn-secondary" href="${pdfUrl}" target="_blank" rel="noopener">Open PDF</a>`:""}
             <button class="btn btn-secondary" id="addToCollectionBtn">Add to collection…</button>
             ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn">Move to Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn">Restore</button>`}
             ${item.deleted_at?`<button class="btn btn-secondary" id="deleteForeverBtn">Delete permanently</button>`:""}
           </div>
+          <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.25rem 0;">
+            ${localPdf ? `
+              <a class="btn btn-secondary" href="${localPdf}" target="_blank" rel="noopener">Open stored PDF</a>
+              <button class="btn btn-secondary" id="deletePdfBtn">Delete PDF</button>
+            ` : `
+              <button class="btn btn-secondary" id="uploadPdfBtn">Upload PDF</button>
+              <input id="uploadPdfInput" type="file" accept="application/pdf" style="display:none;">
+            `}
+          </div>
+          ${!pdfUrl?`<p class="muted" style="margin:.25rem 0;">No PDF available — Upload one or sync from Zotero.</p>`:""}
           <div class="panel" style="padding:.5rem; margin-top:.5rem;">
             <strong>Abstract</strong>
             <p style="margin:.25rem 0;">${esc(item.abstract||"-")}</p>
@@ -591,6 +619,33 @@
       catch{ try{ await api(`/api/trash/items`,{method:"DELETE",body:JSON.stringify({id})}); }catch{} }
       items = items.filter(x=>String(x.id)!==String(id));
       renderTable(); $("#inspectorBody").innerHTML=`<p class="muted" style="padding:.75rem;">Select an item…</p>`;
+    });
+
+    // PDF upload / delete
+    $("#uploadPdfBtn")?.addEventListener("click",()=>$("#uploadPdfInput")?.click());
+    $("#uploadPdfInput")?.addEventListener("change", async(ev)=>{
+      const file = ev.target.files && ev.target.files[0];
+      if(!file) return;
+      const form = new FormData();
+      form.append("paper_id", id);
+      form.append("file", file);
+      try{
+        await api("/api/library/pdf",{ method:"POST", body:form });
+        await safeRefreshItems(); renderTable(); await renderInspector(id);
+      }catch(e){
+        alert("Failed to upload PDF.");
+      }finally{
+        ev.target.value="";
+      }
+    });
+    $("#deletePdfBtn")?.addEventListener("click", async()=>{
+      if(!confirm("Delete stored PDF for this item?")) return;
+      try{
+        await api(`/api/library/pdf/${encodeURIComponent(id)}`,{method:"DELETE"});
+        await safeRefreshItems(); renderTable(); await renderInspector(id);
+      }catch(e){
+        alert("Failed to delete PDF.");
+      }
     });
 
     // Related section
