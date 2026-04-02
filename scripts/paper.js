@@ -16,6 +16,7 @@
   // ---------- Globals ----------
   var __CURRENT_PAPER__ = null;
   var __HEADER_HTML_SNAPSHOT__ = null;
+  var __SUPP_LINKS__ = [];
   window.__GRAPH_CTX__ = { main: null, cited: [], citing: [] };
   var __HEADER_OBSERVER__ = null;
 
@@ -98,6 +99,9 @@
       || get(p,"primary_location.pdf_url",null)
       || get(p,"primary_location.url_for_pdf",null)
       || null;
+  }
+  function setSupplementaryLinks(list){
+    __SUPP_LINKS__ = Array.isArray(list) ? list : [];
   }
 
   async function fetchOaResolver(doi, openalexId){
@@ -291,6 +295,38 @@
       });
     }catch(e){ return []; }
   }
+  async function fetchPdfReferenceDois(pdfUrl){
+    if (!pdfUrl) return [];
+    try{
+      var resp = await fetch("/api/pdf/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfUrl: pdfUrl })
+      });
+      if (!resp.ok) return [];
+      var data = await resp.json();
+      var refs = Array.isArray(data.references) ? data.references : [];
+      if (Array.isArray(data.supplementaryLinks)) setSupplementaryLinks(data.supplementaryLinks);
+      return refs.filter(function(r){ return r && r.doi; });
+    }catch(e){ return []; }
+  }
+  function isLikelyDataCodeRef(ref){
+    var doi = String(ref?.doi || "").toLowerCase();
+    var title = String(ref?.title || "").toLowerCase();
+    var hostHints = ["zenodo","figshare","osf","dataverse","dryad"];
+    if (hostHints.some(function(h){ return doi.includes(h) || title.includes(h); })) return true;
+    if (title.includes("dataset") || title.includes("data set") || title.includes("data") || title.includes("source data")) return true;
+    if (title.includes("code") || title.includes("software")) return true;
+    return false;
+  }
+  function classifyRefType(ref){
+    var title = String(ref?.title || "").toLowerCase();
+    if (title.includes("code") || title.includes("software")) return "Software";
+    if (title.includes("dataset") || title.includes("data set") || title.includes("data") || title.includes("source data")) return "Dataset";
+    var doi = String(ref?.doi || "").toLowerCase();
+    if (doi.includes("zenodo") || doi.includes("figshare") || doi.includes("dryad") || doi.includes("dataverse") || doi.includes("osf")) return "Dataset";
+    return "Other";
+  }
   function tokenize(s){
     return String(s||"").toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(Boolean);
   }
@@ -329,9 +365,11 @@
     return out;
   }
   async function harvestAndFilterResearchObjects(paper){
+    setSupplementaryLinks([]);
     var doi = normalizeDOI(paper.doi || get(paper,"ids.doi",""));
     var title = paper.display_name || "";
     var all = [];
+    var pdfRefs = [];
     // Backend-backed artifacts to avoid browser CORS and catch Zenodo/DataCite quickly
     if (doi) {
       try {
@@ -370,6 +408,32 @@
             });
           });
         }
+      }
+    } catch(_) {}
+
+    // Always attempt to extract supplementary/peer-review links from PDF text
+    try {
+      var pdfUrl = getOpenAccessPdf(paper) || get(paper, "best_oa_location.url_for_pdf", null) || get(paper, "primary_location.pdf_url", null);
+      if (pdfUrl) {
+        pdfRefs = await fetchPdfReferenceDois(pdfUrl);
+      }
+    } catch(_) {}
+
+    // If we still don't have data/code, inspect PDF references for repository DOIs
+    try {
+      var hasDataOrCode = all.some(function(x){ return x && (x.type === "Dataset" || x.type === "Software"); });
+      if (!hasDataOrCode) {
+        pdfRefs.forEach(function(ref){
+          if (!isLikelyDataCodeRef(ref)) return;
+          var doiRef = String(ref.doi || "").replace(/^doi:/i, "");
+          all.push({
+            provenance: "PDF References",
+            type: classifyRefType(ref),
+            title: ref.title || doiRef,
+            doi: doiRef,
+            url: doiRef ? ("https://doi.org/" + doiRef) : ""
+          });
+        });
       }
     } catch(_) {}
 
@@ -478,9 +542,14 @@
   function isPreprintVenue(name, type){
     name = String(name || "").toLowerCase();
     type = String(type || "").toLowerCase();
-    if (type.includes("repository") || type.includes("preprint")) return true;
+    if (type.includes("journal") || type.includes("conference") || type.includes("book")) return false;
     for (var i=0;i<PREPRINT_VENUES.length;i++){
       if (name.includes(PREPRINT_VENUES[i].toLowerCase())) return true;
+    }
+    if (type.includes("preprint")) return true;
+    if (type.includes("repository")) {
+      if (!name) return true;
+      if (name.includes("preprint") || name.includes("repository") || name.includes("arxiv") || name.includes("rxiv")) return true;
     }
     return false;
   }
@@ -1406,7 +1475,14 @@
   // ---------- Research Objects UI ----------
   function renderResearchObjectsUI(items){
     if (!Array.isArray(items) || !items.length){
-      $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">No code/data records matched this paper.</p>';
+      var suppHtmlEmpty = "";
+      if (Array.isArray(__SUPP_LINKS__) && __SUPP_LINKS__.length){
+        var suppRows = __SUPP_LINKS__.map(function(s){
+          return '<li class="ro-item"><span class="badge badge-neutral">'+escapeHtml(s.label || "Supplementary")+'</span> <a href="'+escapeHtml(s.url)+'" target="_blank" rel="noopener">'+escapeHtml(s.url)+'</a> <span class="muted">('+"PDF text"+')</span></li>';
+        }).join("");
+        suppHtmlEmpty = '<h3 style="margin-top:1rem;">Supplementary / Publisher Links</h3><ul>'+suppRows+'</ul>';
+      }
+      $("objectsBlock").innerHTML = '<h2>Research Objects</h2><p class="muted">No code/data records matched this paper.</p>' + suppHtmlEmpty;
       return;
     }
     var rows = [];
@@ -1421,7 +1497,14 @@
       var url  = x.url || (x.doi ? ("https://doi.org/"+x.doi) : "");
       rows.push('<li class="ro-item">'+typ+' <a href="'+escapeHtml(url)+'" target="_blank" rel="noopener">'+escapeHtml(x.title || x.doi || "Item")+'</a>'+ver+lic+doi+' '+prov+repo+'</li>');
     }
-    $("objectsBlock").innerHTML = '<h2>Research Objects</h2><ul>'+rows.join("")+'</ul>';
+    var suppHtml = "";
+    if (Array.isArray(__SUPP_LINKS__) && __SUPP_LINKS__.length){
+      var suppRows2 = __SUPP_LINKS__.map(function(s){
+        return '<li class="ro-item"><span class="badge badge-neutral">'+escapeHtml(s.label || "Supplementary")+'</span> <a href="'+escapeHtml(s.url)+'" target="_blank" rel="noopener">'+escapeHtml(s.url)+'</a> <span class="muted">('+"PDF text"+')</span></li>';
+      }).join("");
+      suppHtml = '<h3 style="margin-top:1rem;">Supplementary / Publisher Links</h3><ul>'+suppRows2+'</ul>';
+    }
+    $("objectsBlock").innerHTML = '<h2>Research Objects</h2><ul>'+rows.join("")+'</ul>' + suppHtml;
   }
 
   // ---------- Render pipeline ----------

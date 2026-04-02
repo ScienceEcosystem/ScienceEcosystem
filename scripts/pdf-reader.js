@@ -16,6 +16,8 @@ let refMatchCache = null;
 let annotMode = 'highlight';
 let annotations = [];
 let annotationKey = '';
+let pdfLinkIndex = [];
+let pageTextIndex = new Map();
 
 function escapeHtml(s) {
   return String(s ?? "")
@@ -129,9 +131,125 @@ async function renderTextLayer(page, viewport, layerEl, tooltipEl) {
     textDivs: []
   });
   await textLayer.render();
+  indexTextLayer(layerEl);
   applyCitationHighlightsToLayer(layerEl);
   wireCitationHover(layerEl, tooltipEl);
   wireAnnotationSelection(layerEl);
+}
+
+function indexTextLayer(layerEl) {
+  try {
+    const wrap = layerEl.closest('.pdf-page-wrap');
+    if (!wrap) return;
+    const page = Number(wrap.getAttribute('data-page') || '0');
+    const wrapRect = wrap.getBoundingClientRect();
+    const spans = Array.from(layerEl.querySelectorAll('span'));
+    const entries = spans.map(s => {
+      const r = s.getBoundingClientRect();
+      return {
+        text: (s.textContent || '').trim(),
+        rect: {
+          left: r.left - wrapRect.left,
+          top: r.top - wrapRect.top,
+          right: r.right - wrapRect.left,
+          bottom: r.bottom - wrapRect.top
+        }
+      };
+    }).filter(e => e.text);
+    pageTextIndex.set(page, entries);
+  } catch (_) {}
+}
+
+function labelFromTextHits(text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  const fig = t.match(/(fig(ure)?\.?\s*\d+[a-z]?)/i);
+  if (fig) return fig[1].replace(/\s+/g, ' ').replace(/fig/i, 'Figure');
+  const tbl = t.match(/(table\s*\d+[a-z]?)/i);
+  if (tbl) return tbl[1].replace(/\s+/g, ' ').replace(/table/i, 'Table');
+  const cit = t.match(/(\[\s*\d{1,3}\s*\])/);
+  if (cit) return `Citation ${cit[1].replace(/\s+/g,'')}`;
+  return t.length > 60 ? t.slice(0, 57) + '…' : t;
+}
+
+async function resolveDestToPage(dest) {
+  if (!pdfDoc || !dest) return null;
+  try {
+    let destArray = dest;
+    if (typeof dest === 'string') {
+      destArray = await pdfDoc.getDestination(dest);
+    }
+    if (!Array.isArray(destArray) || !destArray.length) return null;
+    const pageRef = destArray[0];
+    const pageIndex = await pdfDoc.getPageIndex(pageRef);
+    return pageIndex + 1;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function renderLinkLayer(page, viewport, layerEl, pageNumber) {
+  if (!layerEl || !pdfjsLib) return;
+  layerEl.innerHTML = '';
+  layerEl.style.width = viewport.width + 'px';
+  layerEl.style.height = viewport.height + 'px';
+
+  let annotationsList = [];
+  try {
+    annotationsList = await page.getAnnotations({ intent: 'display' });
+  } catch (_) {
+    annotationsList = [];
+  }
+
+  for (const ann of annotationsList) {
+    if (!ann || ann.subtype !== 'Link' || !ann.rect) continue;
+    const rect = viewport.convertToViewportRectangle(ann.rect);
+    const left = Math.min(rect[0], rect[2]);
+    const top = Math.min(rect[1], rect[3]);
+    const width = Math.abs(rect[0] - rect[2]);
+    const height = Math.abs(rect[1] - rect[3]);
+    if (!width || !height) continue;
+
+    const linkEl = document.createElement('a');
+    linkEl.className = 'pdf-link';
+    linkEl.style.left = `${left}px`;
+    linkEl.style.top = `${top}px`;
+    linkEl.style.width = `${width}px`;
+    linkEl.style.height = `${height}px`;
+
+    const url = ann.url || null;
+    const dest = ann.dest || null;
+    let inferredLabel = '';
+    try {
+      const hits = (pageTextIndex.get(pageNumber) || []).filter(s => {
+        return !(s.rect.right < left || s.rect.left > left + width || s.rect.bottom < top || s.rect.top > top + height);
+      });
+      const text = hits.map(h => h.text).join(' ');
+      inferredLabel = labelFromTextHits(text);
+    } catch (_) {}
+    if (url) {
+      linkEl.href = url;
+      linkEl.target = '_blank';
+      linkEl.rel = 'noopener';
+      linkEl.title = url;
+      pdfLinkIndex.push({ page: pageNumber, label: inferredLabel || url, url });
+    } else if (dest) {
+      linkEl.href = '#';
+      linkEl.title = 'Jump to linked section';
+      linkEl.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        const targetPage = await resolveDestToPage(dest);
+        if (targetPage) {
+          pageNum = targetPage;
+          queueRenderPage(targetPage);
+        }
+      });
+      pdfLinkIndex.push({ page: pageNumber, label: inferredLabel || 'Internal link', dest });
+    } else {
+      continue;
+    }
+    layerEl.appendChild(linkEl);
+  }
 }
 
 function applyCitationHighlightsToLayer(layerEl) {
@@ -224,6 +342,8 @@ async function renderAllPages() {
   const pagesHost = document.getElementById('pdfPages');
   if (!pagesHost) return;
   pagesHost.innerHTML = '';
+  pdfLinkIndex = [];
+  pageTextIndex = new Map();
 
   for (let i = 1; i <= pdfDoc.numPages; i++) {
     const page = await pdfDoc.getPage(i);
@@ -235,6 +355,7 @@ async function renderAllPages() {
     wrap.innerHTML = `
       <canvas class="pdf-page-canvas" style="box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></canvas>
       <div class="pdf-text-layer"></div>
+      <div class="pdf-link-layer"></div>
       <div class="pdf-annotation-layer"></div>
       <div class="citation-tooltip" style="display:none;"></div>
     `;
@@ -250,12 +371,15 @@ async function renderAllPages() {
     await renderTask.promise;
 
     const layerEl = wrap.querySelector('.pdf-text-layer');
+    const linkLayerEl = wrap.querySelector('.pdf-link-layer');
     const tooltipEl = wrap.querySelector('.citation-tooltip');
     await renderTextLayer(page, viewport, layerEl, tooltipEl);
+    await renderLinkLayer(page, viewport, linkLayerEl, i);
     renderAnnotationsForPage(i);
   }
 
   renderPage(pageNum);
+  renderPdfLinksSidebar();
   pageRendering = false;
 }
 
@@ -386,6 +510,59 @@ function renderFiguresAndTables(data) {
   }
 }
 
+function renderPdfLinksSidebar() {
+  const linksDiv = document.getElementById('pdfLinks');
+  if (!linksDiv) return;
+  if (!pdfLinkIndex.length) {
+    linksDiv.innerHTML = '<p class="muted">No links detected.</p>';
+    return;
+  }
+
+  const max = 80;
+  const items = pdfLinkIndex.slice(0, max).map((item, idx) => {
+    const label = item.url ? item.label : `Internal link (p.${item.page})`;
+    const safe = escapeHtml(label);
+    if (item.url) {
+      return `
+        <div class="reference-item">
+          <span class="reference-number">Link</span>
+          <div>
+            <strong>${safe}</strong>
+            <div style="display:flex; gap:0.5rem; margin-top:0.25rem; flex-wrap:wrap;">
+              <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener" class="badge badge-ok">Open</a>
+              <span class="badge">p.${item.page}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="reference-item" data-link-index="${idx}" onclick="jumpToInternalLink(${idx})">
+        <span class="reference-number">Link</span>
+        <div>
+          <strong>${safe}</strong>
+          <div style="display:flex; gap:0.5rem; margin-top:0.25rem; flex-wrap:wrap;">
+            <button class="badge badge-warn" onclick="event.stopPropagation(); jumpToInternalLink(${idx});">Jump</button>
+            <span class="badge">p.${item.page}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  linksDiv.innerHTML = items;
+}
+
+async function jumpToInternalLink(index) {
+  const item = pdfLinkIndex[index];
+  if (!item || !item.dest) return;
+  const target = await resolveDestToPage(item.dest);
+  if (target) {
+    pageNum = target;
+    queueRenderPage(target);
+  }
+}
+
 function wireReferenceButtons() {
   document.querySelectorAll('.jump-ref-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -467,6 +644,7 @@ function closeReferencePopup() {
 
 window.handleReferenceClick = handleReferenceClick;
 window.closeReferencePopup = closeReferencePopup;
+window.jumpToInternalLink = jumpToInternalLink;
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeReferencePopup();

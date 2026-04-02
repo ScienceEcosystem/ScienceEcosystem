@@ -731,6 +731,23 @@ body[data-page="user-profile"] h3 {
   left: 0;
   pointer-events: none;
 }
+.pdf-link-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+}
+.pdf-link {
+  position: absolute;
+  cursor: pointer;
+  background: rgba(46, 127, 159, 0.08);
+  border: 1px solid rgba(46, 127, 159, 0.2);
+  border-radius: 2px;
+  text-decoration: none;
+}
+.pdf-link:hover {
+  background: rgba(46, 127, 159, 0.18);
+}
 
 .pdf-annot {
   position: absolute;

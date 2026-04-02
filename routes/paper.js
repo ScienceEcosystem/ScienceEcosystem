@@ -164,6 +164,7 @@ function parseGrobidTEI(teiXml) {
   const references = [];
   const figures = [];
   const tables = [];
+  const supplementaryLinks = [];
 
   const refMatches = teiXml.matchAll(/<biblStruct[^>]*>(.*?)<\/biblStruct>/gs);
   let refNumber = 1;
@@ -227,10 +228,50 @@ function parseGrobidTEI(teiXml) {
     }
   }
 
+  try {
+    const text = stripTags(teiXml);
+    const urlRegex = /https?:\/\/[^\s)]+/g;
+    const doiRegex = /10\.\d{4,9}\/[^\s)]+/g;
+    const found = new Set();
+    let match;
+
+    function pushLink(rawUrl, context) {
+      if (!rawUrl) return;
+      const url = rawUrl.replace(/[).,;]+$/g, '');
+      if (found.has(url)) return;
+      found.add(url);
+      const ctx = String(context || '').toLowerCase();
+      let label = '';
+      if (ctx.includes('peer review')) label = 'Peer review file';
+      else if (ctx.includes('supplementary')) label = 'Supplementary material';
+      else if (ctx.includes('reprints') || ctx.includes('permissions') || ctx.includes('correspondence')) label = 'Publisher info';
+      if (!label) return;
+      supplementaryLinks.push({ url, label });
+    }
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      const url = match[0];
+      const start = Math.max(0, match.index - 120);
+      const end = Math.min(text.length, match.index + url.length + 120);
+      const context = text.slice(start, end);
+      pushLink(url, context);
+    }
+
+    while ((match = doiRegex.exec(text)) !== null) {
+      const doi = match[0].replace(/[).,;]+$/g, '');
+      const url = `https://doi.org/${doi}`;
+      const start = Math.max(0, match.index - 120);
+      const end = Math.min(text.length, match.index + doi.length + 120);
+      const context = text.slice(start, end);
+      pushLink(url, context);
+    }
+  } catch (_) {}
+
   return {
     references: references,
     figures: figures,
     tables: tables,
+    supplementaryLinks,
     metadata: {
       totalReferences: references.length,
       totalFigures: figures.length,
