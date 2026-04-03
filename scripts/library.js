@@ -1,6 +1,14 @@
 // scripts/library.js
 let SE_LIB_MAP = null; // { [paperId: string]: true }
 
+function normalizeDoi(raw){
+  if (!raw) return "";
+  return String(raw)
+    .trim()
+    .replace(/^doi:/i, "")
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "");
+}
+
 async function seApi(path, opts = {}) {
   const res = await fetch(path, {
     credentials: "include",
@@ -23,7 +31,16 @@ async function loadLibraryOnce() {
     if (!res.ok) throw new Error("Library check failed");
     const items = await res.json();
     SE_LIB_MAP = Object.create(null);
-    for (const it of items) SE_LIB_MAP[String(it.id)] = true;
+    for (const it of items) {
+      if (!it) continue;
+      if (it.id) SE_LIB_MAP[String(it.id)] = true;
+      if (it.openalex_id) SE_LIB_MAP[String(it.openalex_id)] = true;
+      const doi = normalizeDoi(it.doi);
+      if (doi) {
+        SE_LIB_MAP["doi:" + doi] = true;
+        SE_LIB_MAP[doi] = true;
+      }
+    }
   } catch (e) {
     console.warn("Library check error:", e);
     // Not signed in or server error → empty cache (don’t throw)

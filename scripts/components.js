@@ -559,7 +559,9 @@
         root.querySelectorAll('[data-action="save-paper"]').forEach(function(btn){
           var card = btn.closest(".paper-card, .header-card, .result-card, article");
           var id = card?.getAttribute("data-paper-id");
+          var doi = card?.getAttribute("data-doi");
           if (id && globalThis.SE_LIB.isSaved(id)) markSavedButton(btn);
+          else if (doi && globalThis.SE_LIB.isSaved("doi:" + doi)) markSavedButton(btn);
         });
       }
     } catch(e){ console.warn("Mark saved failed:", e); }
@@ -589,7 +591,11 @@
       if (!id){ alert("Cannot determine paper id."); return; }
 
       // Already saved? reflect and bail
-      if (globalThis.SE_LIB?.isSaved?.(id)) { markSavedButton(btn); return; }
+      var doi = card?.getAttribute("data-doi");
+      if (globalThis.SE_LIB?.isSaved?.(id) || (doi && globalThis.SE_LIB?.isSaved?.("doi:" + doi))) {
+        markSavedButton(btn);
+        return;
+      }
 
       if (typeof globalThis.savePaper === "function") {
         globalThis.savePaper({ id, title }, btn);

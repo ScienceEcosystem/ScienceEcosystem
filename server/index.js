@@ -445,7 +445,11 @@ async function updateProfile(orcid, payload) {
   return payload;
 }
 async function libraryList(orcid) {
-  const { rows } = await pool.query(`SELECT id, title FROM library_items WHERE orcid = $1 ORDER BY title`, [orcid]);
+  const { rows } = await pool.query(
+    `SELECT id, title, doi, openalex_id
+     FROM library_items WHERE orcid = $1 ORDER BY title`,
+    [orcid]
+  );
   return rows;
 }
 async function libraryAdd(orcid, id, title) {
