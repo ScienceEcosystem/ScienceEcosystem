@@ -147,7 +147,7 @@
 
   function buildMenuForItem(item, ev){
     const openAlexId = item.openalex_id || item.id || "";
-    const localPdf = item.local_pdf_path ? `/api/library/pdf/${encodeURIComponent(item.id)}` : null;
+    const localPdf = item.local_pdf_path ? `/api/library/pdf?paper_id=${encodeURIComponent(item.id)}` : null;
     const pdfUrl = localPdf || item.pdf_url || null;
     const defs=[
       {act:"open-paper",label:"Open paper page",onClick: ()=>{ location.href=`paper.html?id=${encodeURIComponent(openAlexId)}`; }},
@@ -546,7 +546,7 @@
     const chip=(href,label,cls="badge")=>href?`<a class="${cls}" href="${href}" target="_blank" rel="noopener">${label}</a>`:"";
     const doiUrl = item.doi ? (`https://doi.org/${item.doi.replace(/^doi:/i,"")}`) : null;
     const openAlexId = item.openalex_id || item.id || "";
-    const localPdf = item.local_pdf_path ? `/api/library/pdf/${encodeURIComponent(item.id)}` : null;
+    const localPdf = item.local_pdf_path ? `/api/library/pdf?paper_id=${encodeURIComponent(item.id)}` : null;
     const pdfUrl = localPdf || item.pdf_url || null;
     const zoteroLink = (item.zotero_key && zoteroUserId) ? `https://www.zotero.org/users/${encodeURIComponent(zoteroUserId)}/items/${encodeURIComponent(item.zotero_key)}` : null;
 
@@ -641,7 +641,7 @@
     $("#deletePdfBtn")?.addEventListener("click", async()=>{
       if(!confirm("Delete stored PDF for this item?")) return;
       try{
-        await api(`/api/library/pdf/${encodeURIComponent(id)}`,{method:"DELETE"});
+        await api(`/api/library/pdf?paper_id=${encodeURIComponent(id)}`,{method:"DELETE"});
         await safeRefreshItems(); renderTable(); await renderInspector(id);
       }catch(e){
         alert("Failed to delete PDF.");

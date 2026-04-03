@@ -1364,17 +1364,63 @@ app.post("/api/library/pdf", async (req, res) => {
   }
 });
 
-app.get("/api/library/pdf/:paperId", async (req, res) => {
-  const sess = await requireAuth(req, res); if (!sess) return;
-  const paperId = String(req.params.paperId || "");
+async function sendLibraryPdf(res, orcid, paperId) {
   const { rows } = await pool.query(
     `SELECT storage_path FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
-    [sess.orcid, paperId]
+    [orcid, paperId]
   );
-  if (!rows.length) return res.status(404).json({ error: "PDF not found" });
+  let storagePath = rows[0]?.storage_path || null;
+  if (!storagePath) {
+    const fallback = await pool.query(
+      `SELECT local_pdf_path FROM library_items WHERE orcid=$1 AND id=$2`,
+      [orcid, paperId]
+    );
+    storagePath = fallback.rows[0]?.local_pdf_path || null;
+  }
+  if (!storagePath) {
+    try {
+      const safePaper = String(paperId).replace(/[^\w.\-]/g, "_");
+      const userDir = path.join(pdfUploadDir, orcid);
+      const files = await fsp.readdir(userDir).catch(() => []);
+      const matches = files.filter(f => f.toLowerCase().endsWith(".pdf") && f.includes(safePaper + "_"));
+      if (matches.length) {
+        let newest = null;
+        let newestMtime = 0;
+        for (const fname of matches) {
+          const full = path.join(userDir, fname);
+          try {
+            const st = await fsp.stat(full);
+            if (st.mtimeMs > newestMtime) {
+              newestMtime = st.mtimeMs;
+              newest = full;
+            }
+          } catch {}
+        }
+        if (newest) {
+          storagePath = newest;
+          const urlPath = `/uploads/pdfs/${orcid}/${path.basename(newest)}`;
+          await pool.query(
+            `INSERT INTO library_pdfs (orcid, paper_id, filename, storage_path, file_size, mime_type, source)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)
+             ON CONFLICT (orcid, paper_id) DO UPDATE SET
+               filename=EXCLUDED.filename,
+               storage_path=EXCLUDED.storage_path,
+               file_size=EXCLUDED.file_size,
+               mime_type=EXCLUDED.mime_type`,
+            [orcid, paperId, path.basename(newest), storagePath, null, "application/pdf", "upload"]
+          );
+          await pool.query(
+            `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
+            [urlPath, orcid, paperId]
+          );
+        }
+      }
+    } catch {}
+  }
+  if (!storagePath) return res.status(404).json({ error: "PDF not found" });
+
   try {
-    const stored = rows[0].storage_path;
-    let candidate = stored;
+    let candidate = storagePath;
     if (!path.isAbsolute(candidate)) {
       const rel = candidate.startsWith("/") ? candidate.slice(1) : candidate;
       candidate = path.join(staticRoot, rel);
@@ -1389,6 +1435,49 @@ app.get("/api/library/pdf/:paperId", async (req, res) => {
     });
   } catch (e) {
     return res.status(404).json({ error: "PDF not found" });
+  }
+}
+
+app.get("/api/library/pdf", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const paperId = String(req.query?.paper_id || "");
+  if (!paperId) return res.status(400).json({ error: "paper_id required" });
+  return sendLibraryPdf(res, sess.orcid, paperId);
+});
+
+app.get("/api/library/pdf/:paperId", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const paperId = String(req.params.paperId || "");
+  return sendLibraryPdf(res, sess.orcid, paperId);
+});
+
+app.delete("/api/library/pdf", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const paperId = String(req.query?.paper_id || "");
+  if (!paperId) return res.status(400).json({ error: "paper_id required" });
+  const { rows } = await pool.query(
+    `SELECT id, storage_path FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
+    [sess.orcid, paperId]
+  );
+  if (!rows.length) return res.status(404).json({ error: "PDF not found" });
+  try {
+    const stored = rows[0].storage_path;
+    let candidate = stored;
+    if (!path.isAbsolute(candidate)) {
+      const rel = candidate.startsWith("/") ? candidate.slice(1) : candidate;
+      candidate = path.join(staticRoot, rel);
+    }
+    const safePath = ensureSafePath(pdfUploadDir, candidate);
+    await fsp.unlink(safePath).catch(e => { if (e.code !== "ENOENT") throw e; });
+    await pool.query(`DELETE FROM library_pdfs WHERE id=$1`, [rows[0].id]);
+    await pool.query(
+      `UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`,
+      [sess.orcid, paperId]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE /api/library/pdf failed:", e);
+    res.status(500).json({ error: "Failed to delete PDF" });
   }
 });
 

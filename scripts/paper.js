@@ -416,6 +416,35 @@
       }
     } catch(_) {}
 
+    // If still empty or low confidence, scan PDF references for repository DOIs
+    try {
+      var hasHigh = all.some(function(x){ return (x.type === "Dataset" || x.type === "Software") && (x.confidence || 0) >= 70; });
+      if (!hasHigh) {
+        var pdfUrl = getOpenAccessPdf(paper) || get(paper, "best_oa_location.url_for_pdf", null) || get(paper, "primary_location.pdf_url", null);
+        if (pdfUrl) {
+          var pdfRefs = await fetchPdfReferenceDois(pdfUrl);
+          var repoPrefixes = ["10.5281","10.6084","10.17605","10.7910","10.26008"];
+          pdfRefs.forEach(function(ref){
+            if (!ref || !ref.doi) return;
+            if (!isLikelyDataCodeRef(ref)) return;
+            var doiRef = String(ref.doi || "").replace(/^doi:/i, "");
+            var prefix = doiRef.split("/")[0];
+            if (!repoPrefixes.includes(prefix)) return;
+            var exists = all.some(function(x){ return x.doi && String(x.doi).toLowerCase() === String(doiRef).toLowerCase(); });
+            if (exists) return;
+            all.push({
+              provenance: "PDF References",
+              type: classifyRefType(ref),
+              title: ref.title || doiRef,
+              doi: doiRef,
+              url: doiRef ? ("https://doi.org/" + doiRef) : "",
+              confidence: 75
+            });
+          });
+        }
+      }
+    } catch(_) {}
+
     var typeOrder = { Software: 0, Dataset: 1, Workflow: 2, Other: 3, Preprint: 4 };
     all.sort(function(a, b){
       var c = (b.confidence||0) - (a.confidence||0);
@@ -496,6 +525,15 @@
   function isPreprintVenue(name, type){
     name = String(name || "").toLowerCase();
     type = String(type || "").toLowerCase();
+    var alwaysPeerReviewed = [
+      "nature communications",
+      "nature",
+      "science",
+      "cell"
+    ];
+    for (var k=0;k<alwaysPeerReviewed.length;k++){
+      if (name.includes(alwaysPeerReviewed[k])) return false;
+    }
     if (type.includes("journal") || type.includes("conference") || type.includes("book")) return false;
     for (var i=0;i<PREPRINT_VENUES.length;i++){
       if (name.includes(PREPRINT_VENUES[i].toLowerCase())) return true;
@@ -806,58 +844,58 @@
     }) : [];
 
     if (paperType.category === "review" || paperType.category === "opinion") {
-      if (hasOpenAccess) { score += 50; checks.push({ label:"Open access", status:"yes", icon:"OK" }); }
+      if (hasOpenAccess) { score += 50; checks.push({ label:"Open access", status:"yes", icon:"✅ " }); }
       else { checks.push({ label:"Open access", status:"no", icon:"X" }); }
       var citedByCount = paperData?.cited_by_count || 0;
-      if (citedByCount > 0) { score += 50; checks.push({ label:"Citations available", status:"yes", icon:"OK" }); }
+      if (citedByCount > 0) { score += 50; checks.push({ label:"Citations available", status:"yes", icon:"✅ " }); }
       else { checks.push({ label:"Citations available", status:"no", icon:"X" }); }
       var g1 = gradeFromPercent(score);
       return { score: score, grade: g1.grade, color: g1.color, checks: checks, paperType: paperType.label, note: "This is a " + paperType.label.toLowerCase() + ". Data and code requirements do not apply." };
     }
 
     if (paperType.category === "theoretical") {
-      if (hasOpenAccess) { score += 40; checks.push({ label:"Open access PDF", status:"yes", icon:"OK" }); }
+      if (hasOpenAccess) { score += 40; checks.push({ label:"Open access PDF", status:"yes", icon:"✅ " }); }
       else { checks.push({ label:"Open access PDF", status:"no", icon:"X" }); }
       var hasSupplementary = Array.isArray(researchObjects) && researchObjects.length > 0;
-      if (hasSupplementary) { score += 60; checks.push({ label:"Supplementary materials", status:"yes", icon:"OK" }); }
+      if (hasSupplementary) { score += 60; checks.push({ label:"Supplementary materials", status:"yes", icon:"✅ " }); }
       else { checks.push({ label:"Supplementary materials", status:"no", icon:"X" }); }
       var g2 = gradeFromPercent(score);
       return { score: score, grade: g2.grade, color: g2.color, checks: checks, paperType: paperType.label, note: "This is theoretical work. Evaluated on proof and material availability." };
     }
 
     if (paperType.category === "computational") {
-      if (hasOpenAccess) { score += 15; checks.push({ label:"Open access PDF", status:"yes", icon:"OK" }); }
+      if (hasOpenAccess) { score += 15; checks.push({ label:"Open access PDF", status:"yes", icon:"✅ " }); }
       else { checks.push({ label:"Open access PDF", status:"no", icon:"X" }); }
       var hasCode = codeRepos.length > 0;
-      if (hasCode) { score += 50; checks.push({ label:"Code available", status:"yes", icon:"OK" }); }
+      if (hasCode) { score += 50; checks.push({ label:"Code available", status:"yes", icon:"✅ " }); }
       else { checks.push({ label:"Code available", status:"no", icon:"X" }); }
       var hasReadme = codeRepos.some(function(r){
         var t = String(r?.title || "").toLowerCase();
         var u = String(r?.url || "").toLowerCase();
         return t.includes("readme") || u.includes("readme") || u.includes("documentation");
       });
-      if (hasReadme) { score += 20; checks.push({ label:"Documentation", status:"yes", icon:"OK" }); }
+      if (hasReadme) { score += 20; checks.push({ label:"Documentation", status:"yes", icon:"✅ " }); }
       else if (hasCode) { checks.push({ label:"Documentation", status:"partial", icon:"~" }); }
       var hasEnv = codeRepos.some(function(r){
         var t = String(r?.title || "").toLowerCase();
         var u = String(r?.url || "").toLowerCase();
         return t.includes("docker") || t.includes("conda") || t.includes("requirements") || u.includes("docker") || u.includes("conda") || u.includes("requirements");
       });
-      if (hasEnv) { score += 15; checks.push({ label:"Environment specs", status:"yes", icon:"OK" }); }
+      if (hasEnv) { score += 15; checks.push({ label:"Environment specs", status:"yes", icon:"✅ " }); }
       else if (hasCode) { checks.push({ label:"Environment specs", status:"no", icon:"X" }); }
       var g3 = gradeFromPercent(score);
       return { score: score, grade: g3.grade, color: g3.color, checks: checks, paperType: paperType.label, note: "Computational study: code availability is critical." };
     }
 
-    if (hasOpenAccess) { score += 20; checks.push({ label:"Open access PDF", status:"yes", icon:"OK" }); }
+    if (hasOpenAccess) { score += 20; checks.push({ label:"Open access PDF", status:"yes", icon:"✅ " }); }
     else { checks.push({ label:"Open access PDF", status:"no", icon:"X" }); }
 
     var hasData = datasets.length > 0;
-    if (hasData) { score += 30; checks.push({ label:"Data available", status:"yes", icon:"OK" }); }
+    if (hasData) { score += 30; checks.push({ label:"Data available", status:"yes", icon:"✅ " }); }
     else { checks.push({ label:"Data available", status:"no", icon:"X" }); }
 
     var hasCode2 = codeRepos.length > 0;
-    if (hasCode2) { score += 30; checks.push({ label:"Code available", status:"yes", icon:"OK" }); }
+    if (hasCode2) { score += 30; checks.push({ label:"Code available", status:"yes", icon:"✅ " }); }
     else { checks.push({ label:"Code available", status:"no", icon:"X" }); }
 
     var hasDocs2 = codeRepos.some(function(r){
@@ -865,14 +903,14 @@
       var u = String(r?.url || "").toLowerCase();
       return t.includes("readme") || u.includes("readme") || u.includes("documentation");
     });
-    if (hasDocs2) { score += 10; checks.push({ label:"Documentation", status:"yes", icon:"OK" }); }
+    if (hasDocs2) { score += 10; checks.push({ label:"Documentation", status:"yes", icon:"✅ " }); }
 
     var hasEnv2 = codeRepos.some(function(r){
       var t = String(r?.title || "").toLowerCase();
       var u = String(r?.url || "").toLowerCase();
       return t.includes("docker") || t.includes("conda") || t.includes("requirements") || u.includes("docker") || u.includes("conda") || u.includes("requirements");
     });
-    if (hasEnv2) { score += 10; checks.push({ label:"Environment specs", status:"yes", icon:"OK" }); }
+    if (hasEnv2) { score += 10; checks.push({ label:"Environment specs", status:"yes", icon:"✅ " }); }
 
     var g4 = gradeFromPercent(score);
     return { score: score, grade: g4.grade, color: g4.color, checks: checks, paperType: paperType.label, note: null };
@@ -896,7 +934,7 @@
       '<div class="repro-checklist">' +
         result.checks.map(function(check){ return '' +
           '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
-            '<span style="font-size:1.2rem;">'+escapeHtml(check.icon || (check.status==="yes" ? "OK" : (check.status==="partial" ? "~" : "X")))+'</span>' +
+            '<span style="font-size:1.2rem;">'+escapeHtml(check.icon || (check.status==="yes" ? "✅ " : (check.status==="partial" ? "~" : "X")))+'</span>' +
             '<span style="flex:1; color:'+(check.status==="yes" ? "#333" : "#999")+';">'+escapeHtml(check.label)+'</span>' +
           '</div>'; }).join('') +
       '</div>' +
