@@ -367,109 +367,63 @@
   async function harvestAndFilterResearchObjects(paper){
     setSupplementaryLinks([]);
     var doi = normalizeDOI(paper.doi || get(paper,"ids.doi",""));
-    var title = paper.display_name || "";
+    var title = paper.display_name || paper.title || "";
+    var openAlexId = paper.id || "";
+    var authors = (get(paper, "authorships", []) || [])
+      .slice(0, 3)
+      .map(function(a){ return get(a, "author.display_name", ""); })
+      .filter(Boolean)
+      .join(", ");
+
     var all = [];
-    var pdfRefs = [];
-    // Backend-backed artifacts to avoid browser CORS and catch Zenodo/DataCite quickly
-    if (doi) {
+    if (doi || title) {
       try {
-        var back = await fetch("/api/paper/artifacts?doi="+encodeURIComponent(doi));
+        var qs = [];
+        if (doi) qs.push("doi="+encodeURIComponent(doi));
+        if (title) qs.push("title="+encodeURIComponent(title));
+        if (authors) qs.push("authors="+encodeURIComponent(authors));
+        if (openAlexId) qs.push("id="+encodeURIComponent(openAlexId));
+        var back = await fetch("/api/paper/artifacts?" + qs.join("&"));
         if (back.ok) {
           var arr = await back.json();
           if (Array.isArray(arr)) arr.forEach(function(x){ all.push(x); });
         }
       } catch(_) {}
     }
-    try { (await fetchCrossrefRelations(doi)).forEach(function(r){
-      all.push({
-        provenance:"Crossref",
-        type: classifyROKind(r.typeHint || ""),
-        title: r.title || r.doi || "",
-        doi: r.doi || "",
-        url: r.url || (r.doi ? ("https://doi.org/"+r.doi) : "")
-      });
-    }); } catch(e){}
-    try { (await fetchDataCiteBacklinks(doi)).forEach(function(r){ all.push(r); }); } catch(e){}
-    // Avoid direct Zenodo calls in the browser to prevent noisy 400s. Use /api/paper/artifacts instead.
-    // Publisher page scrape for code/data hosts
+
+    // Publisher page scrape for code/data hosts (catches inline links)
     try {
       var landing = paper.primary_location?.landing_page_url || paper.open_access?.oa_url || null;
-      var scrapeUrl = landing || (doi ? `https://doi.org/${encodeURIComponent(doi)}` : null);
+      var scrapeUrl = landing || (doi ? ("https://doi.org/" + encodeURIComponent(doi)) : null);
       if (scrapeUrl){
         var resp = await fetch(`/api/paper/links?${doi ? ("doi="+encodeURIComponent(doi)) : ("url="+encodeURIComponent(scrapeUrl))}`);
         if (resp.ok){
           var links = await resp.json();
           links.forEach(function(h){
+            if (!h.url) return;
+            var exists = all.some(function(x){ return x.url && String(x.url).toLowerCase() === String(h.url).toLowerCase(); });
+            if (exists) return;
             all.push({
               provenance: h.provenance || "Publisher page",
               type: classifyROKind(h.url || ""),
               title: h.url,
-              url: h.url
+              url: h.url,
+              doi: "",
+              confidence: 50
             });
           });
         }
       }
     } catch(_) {}
 
-    // Always attempt to extract supplementary/peer-review links from PDF text
-    try {
-      var pdfUrl = getOpenAccessPdf(paper) || get(paper, "best_oa_location.url_for_pdf", null) || get(paper, "primary_location.pdf_url", null);
-      if (pdfUrl) {
-        pdfRefs = await fetchPdfReferenceDois(pdfUrl);
-      }
-    } catch(_) {}
-
-    // If we still don't have data/code, inspect PDF references for repository DOIs
-    try {
-      var hasDataOrCode = all.some(function(x){ return x && (x.type === "Dataset" || x.type === "Software"); });
-      if (!hasDataOrCode) {
-        pdfRefs.forEach(function(ref){
-          if (!isLikelyDataCodeRef(ref)) return;
-          var doiRef = String(ref.doi || "").replace(/^doi:/i, "");
-          all.push({
-            provenance: "PDF References",
-            type: classifyRefType(ref),
-            title: ref.title || doiRef,
-            doi: doiRef,
-            url: doiRef ? ("https://doi.org/" + doiRef) : ""
-          });
-        });
-      }
-    } catch(_) {}
-
-    var dedup = uniqueByKey(all, function(x){
-      return (x.doi && x.doi.toLowerCase()) || (String(x.title||"").toLowerCase()+"|"+String(x.url||"").toLowerCase());
+    var typeOrder = { Software: 0, Dataset: 1, Workflow: 2, Other: 3, Preprint: 4 };
+    all.sort(function(a, b){
+      var c = (b.confidence||0) - (a.confidence||0);
+      if (c !== 0) return c;
+      return (typeOrder[a.type] ?? 5) - (typeOrder[b.type] ?? 5);
     });
 
-    var trustedHosts = ["zenodo.org","figshare.com","osf.io","github.com","gitlab.com","doi.org"];
-    var filtered = dedup.filter(function(x){
-      if (!x) return false;
-      // Always keep direct DOI match
-      if (x.doi && doi && normalizeDOI(x.doi) === doi) return true;
-      // Prefer keeping known repositories even if title similarity is low
-      try {
-        var urlHost = x.url ? new URL(x.url, "https://example.org").hostname : "";
-        if (trustedHosts.some(function(h){ return urlHost.includes(h); })) return true;
-      } catch(_){}
-      if (x.provenance === "Zenodo" || x.provenance === "DataCite") return true;
-
-      var sim = jaccardTokens(title, x.title || "");
-      if (x.type === "Other") return sim >= 0.28;
-      return sim >= 0.18;
-    });
-
-    var provRank = { DataCite:3, Zenodo:2, Crossref:1 };
-    filtered.sort(function(a,b){
-      var ta = (a.type==="Dataset"||a.type==="Software") ? 1 : 0;
-      var tb = (b.type==="Dataset"||b.type==="Software") ? 1 : 0;
-      if (ta!==tb) return tb - ta;
-      var pa = provRank[a.provenance] || 0;
-      var pb = provRank[b.provenance] || 0;
-      if (pa!==pb) return pb - pa;
-      return (a.title||"").localeCompare(b.title||"");
-    });
-
-    return filtered;
+    return all;
   }
 
   // ---------- Header & Funding ----------
@@ -1489,13 +1443,20 @@
     for (var i=0;i<items.length;i++){
       var x = items[i];
       var prov = x.provenance ? ('<span class="badge badge-neutral" title="Source">'+escapeHtml(x.provenance)+'</span>') : '';
-      var typ  = x.type ? ('<span class="badge">'+escapeHtml(x.type)+'</span>') : '';
+      var typeCls = x.type === "Software" ? "badge-oa" : (x.type === "Dataset" ? "badge" : "badge-neutral");
+      var typ  = x.type ? ('<span class="badge '+typeCls+'">'+escapeHtml(x.type)+'</span>') : '';
       var repo = x.repository ? ('<span class="muted" style="margin-left:.25rem;">'+escapeHtml(x.repository)+'</span>') : '';
       var doi  = x.doi ? (' · <a href="https://doi.org/'+escapeHtml(x.doi)+'" target="_blank" rel="noopener">DOI</a>') : '';
       var ver  = x.version ? (' <span class="muted">v'+escapeHtml(x.version)+'</span>') : '';
       var lic  = x.licence ? (' <span class="muted">('+escapeHtml(x.licence)+')</span>') : '';
+      var conf = (typeof x.confidence === "number" && x.confidence < 80)
+        ? ('<span class="muted" style="font-size:.8rem;" title="Match confidence">'+x.confidence+'% match</span> ')
+        : '';
       var url  = x.url || (x.doi ? ("https://doi.org/"+x.doi) : "");
-      rows.push('<li class="ro-item">'+typ+' <a href="'+escapeHtml(url)+'" target="_blank" rel="noopener">'+escapeHtml(x.title || x.doi || "Item")+'</a>'+ver+lic+doi+' '+prov+repo+'</li>');
+      var gh = (x.provenance === "GitHub" && x.stars !== undefined)
+        ? (' <span class="muted">★ ' + x.stars + (x.language ? (" · " + escapeHtml(x.language)) : "") + '</span>')
+        : '';
+      rows.push('<li class="ro-item">'+conf+typ+' <a href="'+escapeHtml(url)+'" target="_blank" rel="noopener">'+escapeHtml(x.title || x.doi || "Item")+'</a>'+ver+lic+doi+gh+' '+prov+repo+'</li>');
     }
     var suppHtml = "";
     if (Array.isArray(__SUPP_LINKS__) && __SUPP_LINKS__.length){

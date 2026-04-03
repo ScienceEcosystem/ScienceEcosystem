@@ -8,6 +8,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import pkg from "pg";
+import { resolveArtifacts } from "./artifacts-resolver.js";
 const { Pool } = pkg;
 const fsp = fs.promises;
 import paperRoutes from "../routes/paper.js";
@@ -1372,8 +1373,20 @@ app.get("/api/library/pdf/:paperId", async (req, res) => {
   );
   if (!rows.length) return res.status(404).json({ error: "PDF not found" });
   try {
-    const safePath = ensureSafePath(pdfUploadDir, rows[0].storage_path);
-    return res.sendFile(safePath);
+    const stored = rows[0].storage_path;
+    let candidate = stored;
+    if (!path.isAbsolute(candidate)) {
+      const rel = candidate.startsWith("/") ? candidate.slice(1) : candidate;
+      candidate = path.join(staticRoot, rel);
+    }
+    const safePath = ensureSafePath(pdfUploadDir, candidate);
+    return res.sendFile(safePath, err => {
+      if (err) {
+        if (err.code === "ENOENT") return res.status(404).json({ error: "PDF not found" });
+        console.error("sendFile error:", err);
+        return res.status(500).json({ error: "Failed to load PDF" });
+      }
+    });
   } catch (e) {
     return res.status(404).json({ error: "PDF not found" });
   }
@@ -1714,95 +1727,25 @@ function classifyROKind(str) {
 
 app.get("/api/paper/artifacts", async (req, res) => {
   const doiRaw = (req.query?.doi || "").trim();
-  if (!doiRaw) return res.status(400).json({ error: "doi required" });
-  const doi = String(doiRaw).replace(/^doi:/i, "").replace(/^https?:\/\/doi.org\//i, "");
-  const out = [];
+  const titleRaw = (req.query?.title || "").trim();
+  const authorsRaw = (req.query?.authors || "").trim();
+  const openAlexId = (req.query?.id || "").trim();
+  if (!doiRaw && !titleRaw) return res.status(400).json({ error: "doi or title required" });
+
   try {
-    // DataCite backlinks
-    const dc = await fetchJSONSafe(`https://api.datacite.org/works?query=${encodeURIComponent('relatedIdentifiers.identifier:"' + doi.replace(/"/g,'\\"') + '"')}&page[size]=200`);
-    const hits = Array.isArray(dc.data) ? dc.data : [];
-    hits.forEach(rec => {
-      const a = rec.attributes || {};
-      const title = Array.isArray(a.titles) && a.titles[0]?.title ? a.titles[0].title : (a.title || "");
-      const typeGen = String(a.types?.resourceTypeGeneral || "").toLowerCase();
-      const kind = typeGen.includes("software") ? "Software" : (typeGen.includes("dataset") ? "Dataset" : "Other");
-      out.push({
-        provenance: "DataCite",
-        type: kind,
-        title: title || a.doi || "Related item",
-        doi: a.doi || "",
-        url: a.url || (a.doi ? `https://doi.org/${a.doi}` : ""),
-        repository: a.publisher || ""
-      });
+    const results = await resolveArtifacts({
+      doi: doiRaw,
+      title: titleRaw,
+      authors: authorsRaw,
+      openAlexId,
+      minConfidence: 25
     });
-  } catch (_) {}
-
-  try {
-    // Zenodo backlinks
-    const doiEsc = doi.replace(/"/g, '\\"');
-    const zenQueries = [
-      `metadata.related_identifiers.identifier:"${doiEsc}"`,
-      `related.identifiers.identifier:"${doiEsc}"`,
-      `doi:"${doiEsc}" OR metadata.related_identifiers.identifier:"${doiEsc}"`,
-      `"${doiEsc}"`,
-      doiEsc.split("/").pop() || doiEsc
-    ];
-    for (const qRaw of zenQueries) {
-      try {
-        const zn = await fetchJSONSafe(`https://zenodo.org/api/records/?q=${encodeURIComponent(qRaw)}&size=200`);
-        const hits = Array.isArray(zn.hits?.hits) ? zn.hits.hits : [];
-        hits.forEach(h => {
-          const md = h.metadata || {};
-          const typeGen = String(md.resource_type?.type || "").toLowerCase();
-          const kind = typeGen.includes("software") ? "Software" : (typeGen.includes("dataset") ? "Dataset" : "Other");
-          const title = md.title || h.doi || "";
-          const doiZ = md.doi || h.doi || "";
-          const urlZ = h.links?.html || (doiZ ? `https://doi.org/${doiZ}` : "");
-          out.push({
-            provenance: "Zenodo",
-            type: kind,
-            title: title || "Zenodo record",
-            doi: doiZ,
-            url: urlZ,
-            repository: "Zenodo",
-            version: md.version || "",
-            licence: (md.license && (md.license.id || md.license)) || ""
-          });
-        });
-        if (hits.length) break;
-      } catch (_) { /* try next */ }
-    }
-  } catch (_) {}
-
-  try {
-    // Publisher page scrape fallback (re-use existing endpoint logic)
-    const r = await fetch(`${req.protocol}://${req.get("host")}/api/paper/links?doi=${encodeURIComponent(doi)}`, {
-      headers: { "Accept": "application/json" }
-    });
-    if (r.ok) {
-      const links = await r.json();
-      links.forEach(h => {
-        out.push({
-          provenance: h.provenance || "Publisher page",
-          type: classifyROKind(h.url || ""),
-          title: h.url,
-          url: h.url
-        });
-      });
-    }
-  } catch (_) {}
-
-  if (!out.length) return res.json([]);
-  // Deduplicate by URL
-  const seen = new Set();
-  const unique = [];
-  out.forEach(item => {
-    const key = item.url || item.doi;
-    if (key && seen.has(key)) return;
-    if (key) seen.add(key);
-    unique.push(item);
-  });
-  res.json(unique);
+    res.set("Cache-Control", "public, max-age=3600");
+    return res.json(results);
+  } catch (err) {
+    console.error("GET /api/paper/artifacts failed:", err);
+    return res.status(500).json({ error: String(err?.message || err) });
+  }
 });
 
 // Aggressive Open Access resolver
