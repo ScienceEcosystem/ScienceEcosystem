@@ -62,6 +62,9 @@ function normDOI(raw) {
   return String(raw)
     .replace(/^doi:/i, "")
     .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
+    .replace(/&[^;]+;/g, "")
+    .replace(/&#xa/gi, "")
+    .replace(/[\s\u00a0\u2028\u2029]+/g, "")
     .trim()
     .toLowerCase();
 }
@@ -217,7 +220,8 @@ async function fetchOpenAlexCitedRepos(openAlexId) {
 
 async function fetchFigshare(doi, title) {
   const out = [];
-  if (doi) {
+  const prefix = doiPrefix(normDOI(doi || ""));
+  if (doi && prefix === "10.6084") {
     const data = await safeFetch(`https://api.figshare.com/v2/articles/search`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -226,7 +230,7 @@ async function fetchFigshare(doi, title) {
     if (data?.length) {
       for (const item of data) {
         const sim = title ? jaccard(title, item.title || "") : 0;
-        if (title && sim < 0.35) continue;
+        if (title && sim < 0.7) continue;
         out.push({
           source: "Figshare",
           type: classifyType(item.defined_type_name || item.defined_type || ""),
@@ -248,10 +252,10 @@ async function fetchFigshare(doi, title) {
         body: JSON.stringify({ search_for: q, page_size: 5 })
       });
       if (data?.length) {
-        for (const item of data) {
-          const sim = jaccard(title, item.title || "");
-          if (sim < 0.3) continue;
-          out.push({
+      for (const item of data) {
+        const sim = jaccard(title, item.title || "");
+        if (sim < 0.7) continue;
+        out.push({
             source: "Figshare",
             type: classifyType(item.defined_type_name || ""),
             title: item.title || "Figshare item",
@@ -282,6 +286,7 @@ async function fetchPublisherDoiLinks(doi) {
     const prefix = doiPrefix(clean);
     const repo = REPO_PREFIXES[prefix];
     if (!repo) continue;
+    if (clean.includes("\\xa") || clean.includes("xa")) continue;
     out.push({
       source: "Publisher page",
       type: repo.type === "auto" ? "Dataset" : repo.type,
