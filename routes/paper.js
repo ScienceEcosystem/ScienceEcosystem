@@ -2,6 +2,8 @@ import express from 'express';
 import fetch from 'node-fetch';
 
 const router = express.Router();
+const OPENALEX_BASE = "https://api.openalex.org";
+const OPENALEX_MAILTO = "info@scienceecosystem.org";
 
 // Get paper with linked resources
 router.get('/api/paper/:doi(*)', async (req, res, next) => {
@@ -9,9 +11,11 @@ router.get('/api/paper/:doi(*)', async (req, res, next) => {
   if (raw.startsWith("artifacts")) return next();
   if (raw.startsWith("oa")) return next();
   if (raw.startsWith("links")) return next();
+  if (raw.startsWith("citation-contexts")) return next();
   if (raw.startsWith("artifacts?")) return next();
   if (raw.startsWith("oa?")) return next();
   if (raw.startsWith("links?")) return next();
+  if (raw.startsWith("citation-contexts?")) return next();
   const doi = decodeURIComponent(raw);
   
   try {
@@ -288,20 +292,42 @@ function parseGrobidTEI(teiXml) {
 }
 
 // Semantic Scholar API
+const S2_API_BASE = "https://api.semanticscholar.org/graph/v1";
+const S2_API_KEY = process.env.SEMANTIC_SCHOLAR_API_KEY || "";
+
+async function s2FetchJson(url) {
+  const headers = { "Accept": "application/json" };
+  if (S2_API_KEY) headers["x-api-key"] = S2_API_KEY;
+  const res = await fetch(url, { headers });
+  const text = await res.text().catch(() => "");
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (_) {}
+  return { ok: res.ok, status: res.status, data, text };
+}
+
 async function getSemanticScholarCitations(doi) {
   try {
-    const paperRes = await fetch(`https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=paperId`);
+    const paperRes = await s2FetchJson(`${S2_API_BASE}/paper/DOI:${encodeURIComponent(doi)}?fields=paperId`);
     if (!paperRes.ok) return null;
-    const { paperId } = await paperRes.json();
+    const { paperId } = paperRes.data || {};
     if (!paperId) return null;
 
-    const citationsRes = await fetch(
-      `https://api.semanticscholar.org/graph/v1/paper/${paperId}/citations?fields=contexts,intents,isInfluential,citingPaper&limit=100`
-    );
-    if (!citationsRes.ok) return null;
-    const data = await citationsRes.json();
+    return getSemanticScholarCitationsByPaperId(paperId);
+  } catch (e) {
+    console.error('Semantic Scholar API error:', e);
+    return null;
+  }
+}
 
-    return (data.data || [])
+async function getSemanticScholarCitationsByPaperId(paperId) {
+  try {
+    const citationsRes = await s2FetchJson(
+      `${S2_API_BASE}/paper/${encodeURIComponent(paperId)}/citations?fields=contexts,intents,isInfluential,citingPaper&limit=100`
+    );
+    if (!citationsRes.ok) return { items: null, error: `s2 citations ${citationsRes.status}` };
+    const data = citationsRes.data || {};
+
+    const items = (data.data || [])
       .filter(c => c.citingPaper?.isOpenAccess && c.contexts?.length > 0)
       .map(c => ({
         source: 'semantic_scholar',
@@ -314,10 +340,143 @@ async function getSemanticScholarCitations(doi) {
         url: c.citingPaper.url || (c.citingPaper.externalIds?.DOI ? `https://doi.org/${c.citingPaper.externalIds.DOI}` : null),
         openAccessPdf: c.citingPaper.openAccessPdf?.url || null
       }));
+    return { items, error: null };
   } catch (e) {
     console.error('Semantic Scholar API error:', e);
-    return null;
+    return { items: null, error: 's2 fetch error' };
   }
+}
+
+function normalizeTitleForSearch(input) {
+  return String(input || "")
+    .replace(/[-_/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function jaccardTitle(a, b) {
+  const toks = s => new Set(String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean));
+  const A = toks(a), B = toks(b);
+  let inter = 0;
+  A.forEach(t => { if (B.has(t)) inter++; });
+  const uni = A.size + B.size - inter;
+  return uni ? inter / uni : 0;
+}
+
+function invertAbstract(idx) {
+  const words = [];
+  Object.keys(idx || {}).forEach(word => {
+    const positions = idx[word] || [];
+    for (const pos of positions) words[pos] = word;
+  });
+  return words.join(" ").replace(/\s+/g, " ").trim();
+}
+function firstSentences(text, maxSentences = 2) {
+  const parts = String(text || "").split(/(?<=[.!?])\s+/).filter(Boolean);
+  return parts.slice(0, maxSentences).join(" ").trim();
+}
+
+async function getOpenAlexCitingAbstractSnippets(doi) {
+  if (!doi) return [];
+  try {
+    const workRes = await fetch(`${OPENALEX_BASE}/works/doi:${encodeURIComponent(doi)}?mailto=${encodeURIComponent(OPENALEX_MAILTO)}`);
+    if (!workRes.ok) return [];
+    const work = await workRes.json();
+    const idTail = String(work?.id || "").replace(/^https?:\/\/openalex\.org\//i, "");
+    if (!idTail) return [];
+
+    const citeRes = await fetch(`${OPENALEX_BASE}/works?filter=cites:${encodeURIComponent(idTail)}&per_page=20&select=id,display_name,authorships,publication_year,open_access,primary_location,best_oa_location,doi,ids,abstract_inverted_index&mailto=${encodeURIComponent(OPENALEX_MAILTO)}`);
+    if (!citeRes.ok) return [];
+    const data = await citeRes.json();
+    const results = Array.isArray(data?.results) ? data.results : [];
+
+    const items = [];
+    for (const r of results) {
+      if (!r?.open_access?.is_oa) continue;
+      const abstract = r.abstract_inverted_index ? invertAbstract(r.abstract_inverted_index) : "";
+      if (!abstract) continue;
+      const snippet = firstSentences(abstract, 2);
+      if (!snippet) continue;
+      const doiC = String(r.doi || r?.ids?.doi || "").replace(/^doi:/i, "");
+      const pdfUrl = r?.best_oa_location?.pdf_url || r?.primary_location?.pdf_url || r?.best_oa_location?.url_for_pdf || null;
+      const authors = Array.isArray(r.authorships) ? r.authorships.map(a => a?.author?.display_name).filter(Boolean).join(", ") : "";
+      const url = r?.primary_location?.landing_page_url || (doiC ? `https://doi.org/${doiC}` : null);
+      items.push({
+        source: "openalex_abstract",
+        title: r.display_name || "OpenAlex work",
+        year: r.publication_year || null,
+        authors,
+        snippet,
+        intent: "background",
+        isInfluential: false,
+        url,
+        openAccessPdf: pdfUrl
+      });
+      if (items.length >= 5) break;
+    }
+    return items;
+  } catch (e) {
+    console.error("OpenAlex citing abstracts error:", e);
+    return [];
+  }
+}
+
+async function resolveSemanticScholarPaperId({ doi, title, s2url, s2id }) {
+  // 1) DOI lookup
+  if (doi) {
+    const paperRes = await s2FetchJson(`${S2_API_BASE}/paper/DOI:${encodeURIComponent(doi)}?fields=paperId,title,externalIds`);
+    if (paperRes.ok) {
+      const data = paperRes.data || {};
+      if (data?.paperId) return { paperId: data.paperId, source: "doi" };
+    }
+  }
+
+  // 2) Try direct ID
+  if (s2id) {
+    const paperRes = await s2FetchJson(`${S2_API_BASE}/paper/${encodeURIComponent(String(s2id))}?fields=paperId,title,externalIds`);
+    if (paperRes.ok) {
+      const data = paperRes.data || {};
+      if (data?.paperId) return { paperId: data.paperId, source: "id" };
+    }
+    // Try CorpusID if numeric
+    if (/^\d+$/.test(String(s2id))) {
+      const corpRes = await s2FetchJson(`${S2_API_BASE}/paper/CorpusID:${encodeURIComponent(String(s2id))}?fields=paperId,title,externalIds`);
+      if (corpRes.ok) {
+        const data = corpRes.data || {};
+        if (data?.paperId) return { paperId: data.paperId, source: "corpus" };
+      }
+    }
+  }
+
+  // 3) Search by title or URL slug
+  let query = "";
+  if (title) query = String(title);
+  if (!query && s2url) {
+    try {
+      const u = new URL(String(s2url));
+      const parts = u.pathname.split("/").filter(Boolean);
+      const slug = parts.length >= 2 ? parts[1] : "";
+      query = normalizeTitleForSearch(slug);
+    } catch (_) {}
+  }
+  if (!query) return { paperId: null, source: "none" };
+
+  const searchRes = await s2FetchJson(`${S2_API_BASE}/paper/search?query=${encodeURIComponent(query)}&limit=5&fields=paperId,title,externalIds`);
+  if (!searchRes.ok) return { paperId: null, source: `search_error_${searchRes.status}` };
+  const search = searchRes.data || {};
+  const items = Array.isArray(search?.data) ? search.data : [];
+  if (!items.length) return { paperId: null, source: "search_empty" };
+
+  let best = null;
+  let bestScore = 0;
+  for (const it of items) {
+    const score = jaccardTitle(query, it.title || "");
+    if (score > bestScore) {
+      bestScore = score;
+      best = it;
+    }
+  }
+  if (best && bestScore >= 0.35) return { paperId: best.paperId, source: "search" };
+  return { paperId: null, source: "search_low" };
 }
 
 // OpenCitations API
@@ -452,16 +611,43 @@ router.get('/api/paper/abstract', async (req, res) => {
 // GET /api/paper/citation-contexts?doi=10.xxxx
 router.get('/api/paper/citation-contexts', async (req, res) => {
   const doi = req.query?.doi;
-  if (!doi) return res.status(400).json({ error: 'doi required' });
+  const s2id = req.query?.s2id;
+  const s2url = req.query?.s2url;
+  const title = req.query?.title;
+  if (!doi && !s2id && !s2url && !title) return res.status(400).json({ error: 'doi, s2id, s2url, or title required' });
 
   try {
-    const [semanticScholar, openCitations, core, scienceOpen, lensImpact] = await Promise.all([
-      getSemanticScholarCitations(doi),
-      getOpenCitations(doi),
-      getCORECitations(doi, process.env.CORE_API_KEY),
-      getScienceOpenReviews(doi),
-      getLensImpact(doi, process.env.LENS_API_KEY)
+    let semanticScholar = null;
+    let semanticError = null;
+    if (s2id || s2url || title || doi) {
+      const resolved = await resolveSemanticScholarPaperId({ doi, title, s2url, s2id });
+      if (resolved.paperId) {
+        const s2 = await getSemanticScholarCitationsByPaperId(resolved.paperId);
+        semanticScholar = s2.items;
+        semanticError = s2.error ? `${s2.error} (resolved via ${resolved.source})` : null;
+      } else if (doi) {
+        semanticScholar = await getSemanticScholarCitations(doi);
+      } else {
+        semanticError = `resolve_failed:${resolved.source}`;
+      }
+    }
+
+    const [openCitations, core, scienceOpen, lensImpact] = await Promise.all([
+      doi ? getOpenCitations(doi) : null,
+      doi ? getCORECitations(doi, process.env.CORE_API_KEY) : null,
+      doi ? getScienceOpenReviews(doi) : null,
+      doi ? getLensImpact(doi, process.env.LENS_API_KEY) : null
     ]);
+
+    if (semanticScholar && !Array.isArray(semanticScholar) && typeof semanticScholar === "object" && "items" in semanticScholar) {
+      if (!semanticError && semanticScholar.error) semanticError = semanticScholar.error;
+      semanticScholar = semanticScholar.items || [];
+    }
+
+    if ((!semanticScholar || semanticScholar.length === 0) && doi) {
+      const oaFallback = await getOpenAlexCitingAbstractSnippets(doi);
+      if (oaFallback.length) semanticScholar = oaFallback;
+    }
 
     const result = {
       citationContexts: semanticScholar || [],
@@ -470,13 +656,16 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
       peerReviews: scienceOpen || [],
       impact: lensImpact || null,
       sources: {
-        semanticScholar: !!semanticScholar,
-        openCitations: !!openCitations,
-        core: !!core,
-        scienceOpen: !!scienceOpen,
+        semanticScholar: Array.isArray(semanticScholar) && semanticScholar.length > 0,
+        openCitations: Array.isArray(openCitations) && openCitations.length > 0,
+        core: Array.isArray(core) && core.length > 0,
+        scienceOpen: Array.isArray(scienceOpen) && scienceOpen.length > 0,
         lens: !!lensImpact
       }
     };
+    if (req.query?.debug === "1") {
+      result.debug = { semanticError, s2HasKey: !!S2_API_KEY };
+    }
 
     res.json(result);
   } catch (e) {

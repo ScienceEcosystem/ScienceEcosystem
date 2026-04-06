@@ -1708,11 +1708,6 @@
     const section = document.getElementById("citationContextsSection");
     if (!section || !doi) return;
 
-    if (hasOpenAccess) {
-      section.style.display = "none";
-      return;
-    }
-
     const list = document.getElementById("citationContextsList");
     if (list) list.innerHTML = "<p class='muted'>Loading citation contexts…</p>";
 
@@ -1725,7 +1720,18 @@
       const hasPeerReviews = data.peerReviews && data.peerReviews.length > 0;
       const hasImpact = data.impact && (data.impact.patentCitations > 0 || (data.impact.clinicalTrials && data.impact.clinicalTrials.length > 0));
 
+      if (!contexts.length && !hasPeerReviews && !hasImpact) {
+        section.style.display = "none";
+        return;
+      }
+
       section.style.display = "block";
+      const subtitle = section.querySelector("p.muted");
+      if (subtitle) {
+        subtitle.innerHTML = hasOpenAccess
+          ? `Here’s how other researchers describe it in <strong id="citationCount">0</strong> open-access papers:`
+          : `Since this paper is behind a paywall, here’s how other researchers describe it in <strong id="citationCount">0</strong> open-access papers:`;
+      }
       document.getElementById("citationCount").textContent = contexts.length;
       document.getElementById("countAll").textContent = contexts.length;
       document.getElementById("countInfluential").textContent = contexts.filter(c => c.isInfluential).length;
