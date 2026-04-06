@@ -4,8 +4,15 @@ import fetch from 'node-fetch';
 const router = express.Router();
 
 // Get paper with linked resources
-router.get('/api/paper/:doi(*)', async (req, res) => {
-  const doi = decodeURIComponent(req.params.doi);
+router.get('/api/paper/:doi(*)', async (req, res, next) => {
+  const raw = String(req.params.doi || "");
+  if (raw.startsWith("artifacts")) return next();
+  if (raw.startsWith("oa")) return next();
+  if (raw.startsWith("links")) return next();
+  if (raw.startsWith("artifacts?")) return next();
+  if (raw.startsWith("oa?")) return next();
+  if (raw.startsWith("links?")) return next();
+  const doi = decodeURIComponent(raw);
   
   try {
     const linkedResources = await findLinkedResources(doi);

@@ -36,6 +36,27 @@ async function safeFetch(url, opts = {}, timeoutMs = 8000) {
   }
 }
 
+async function safeFetchText(url, opts = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, {
+      ...opts,
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "ScienceEcosystem/1.0 (+https://scienceecosystem.org)",
+        ...(opts.headers || {})
+      }
+    });
+    if (!r.ok) return null;
+    return await r.text();
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 function normDOI(raw) {
   if (!raw) return "";
   return String(raw)
@@ -204,6 +225,8 @@ async function fetchFigshare(doi, title) {
     });
     if (data?.length) {
       for (const item of data) {
+        const sim = title ? jaccard(title, item.title || "") : 0;
+        if (title && sim < 0.35) continue;
         out.push({
           source: "Figshare",
           type: classifyType(item.defined_type_name || item.defined_type || ""),
@@ -211,7 +234,7 @@ async function fetchFigshare(doi, title) {
           doi: item.doi ? normDOI(item.doi) : "",
           url: item.url_public_html || (item.doi ? `https://doi.org/${normDOI(item.doi)}` : ""),
           repository: "Figshare",
-          confidence: 82
+          confidence: Math.max(60, Math.round(sim * 80))
         });
       }
     }
@@ -240,6 +263,34 @@ async function fetchFigshare(doi, title) {
         }
       }
     }
+  }
+  return out;
+}
+
+async function fetchPublisherDoiLinks(doi) {
+  if (!doi) return [];
+  const html = await safeFetchText(`https://doi.org/${encodeURIComponent(doi)}`, {
+    headers: { "Accept": "text/html,application/xhtml+xml" }
+  });
+  if (!html) return [];
+  const out = [];
+  const re = /10\.(5281|6084|17605|7910|26008|15468)\/[^\s"<>]+/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const raw = String(m[0]).replace(/[),.;]+$/g, "");
+    const clean = normDOI(raw);
+    const prefix = doiPrefix(clean);
+    const repo = REPO_PREFIXES[prefix];
+    if (!repo) continue;
+    out.push({
+      source: "Publisher page",
+      type: repo.type === "auto" ? "Dataset" : repo.type,
+      title: clean,
+      doi: clean,
+      url: `https://doi.org/${clean}`,
+      repository: repo.name,
+      confidence: 70
+    });
   }
   return out;
 }
@@ -341,14 +392,16 @@ export async function resolveArtifacts({ doi, title, authors, openAlexId, minCon
     crossref,
     openalexCited,
     figshare,
-    github
+    github,
+    publisherDois
   ] = await Promise.all([
     fetchDataCite(cleanDOI),
     fetchZenodoByDOI(cleanDOI),
     fetchCrossrefRelations(cleanDOI),
     fetchOpenAlexCitedRepos(openAlexId || ""),
     fetchFigshare(cleanDOI, title || ""),
-    fetchGitHub(title || "", authors || "", cleanDOI)
+    fetchGitHub(title || "", authors || "", cleanDOI),
+    fetchPublisherDoiLinks(cleanDOI)
   ]);
 
   let all = [
@@ -357,7 +410,8 @@ export async function resolveArtifacts({ doi, title, authors, openAlexId, minCon
     ...crossref,
     ...openalexCited,
     ...figshare,
-    ...github
+    ...github,
+    ...publisherDois
   ];
 
   const hasHighConfidence = all.some(x => x.confidence >= 70);
