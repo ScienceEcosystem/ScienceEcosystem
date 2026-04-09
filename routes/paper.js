@@ -293,11 +293,11 @@ function parseGrobidTEI(teiXml) {
 
 // Semantic Scholar API
 const S2_API_BASE = "https://api.semanticscholar.org/graph/v1";
-const S2_API_KEY = process.env.SEMANTIC_SCHOLAR_API_KEY || "";
 
 async function s2FetchJson(url) {
   const headers = { "Accept": "application/json" };
-  if (S2_API_KEY) headers["x-api-key"] = S2_API_KEY;
+  const key = process.env.SEMANTIC_SCHOLAR_API_KEY || "";
+  if (key) headers["x-api-key"] = key;
   const res = await fetch(url, { headers });
   const text = await res.text().catch(() => "");
   let data = null;
@@ -664,7 +664,7 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
       }
     };
     if (req.query?.debug === "1") {
-      result.debug = { semanticError, s2HasKey: !!S2_API_KEY };
+      result.debug = { semanticError, s2HasKey: !!(process.env.SEMANTIC_SCHOLAR_API_KEY) };
     }
 
     res.json(result);

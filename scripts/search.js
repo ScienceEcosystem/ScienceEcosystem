@@ -416,7 +416,10 @@ function renderAuthors(authors) {
   el.innerHTML = authors.length
     ? authors.map(a => {
         const id = a.id.split("/").pop();
-        const inst = a.last_known_institution?.display_name || "No affiliation";
+        const inst =
+          a.last_known_institution?.display_name ||
+          a.last_known_institutions?.[0]?.display_name ||
+          "No affiliation";
         return `
           <li class="list-item list-card" onclick="location.href='profile.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(a.display_name)}">
             <div class="title">${escapeHtml(a.display_name)}</div>
