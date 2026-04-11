@@ -87,3 +87,58 @@ globalThis.SE_SESSION_PROMISE = (async function(){
     if (logoutBtn) logoutBtn.style.display = "none";
   }
 })();
+
+// PWA Service Worker Registration
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker
+      .register("/service-worker.js", { scope: "/" })
+      .then(function (reg) {
+        console.log("[PWA] Service worker registered, scope:", reg.scope);
+
+        // Check for updates every time the page loads
+        reg.addEventListener("updatefound", function () {
+          const newWorker = reg.installing;
+          newWorker.addEventListener("statechange", function () {
+            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+              // New version available — optionally show a toast
+              console.log("[PWA] New version available. Refresh to update.");
+              // Uncomment to show a banner:
+              // showUpdateBanner();
+            }
+          });
+        });
+      })
+      .catch(function (err) {
+        console.warn("[PWA] Service worker registration failed:", err);
+      });
+  });
+}
+
+// Optional: "Install app" prompt handler
+// Saves the beforeinstallprompt event so you can trigger it with a button
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", function (e) {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Show your install button if you have one
+  const installBtn = document.getElementById("installAppBtn");
+  if (installBtn) installBtn.style.display = "inline-flex";
+});
+
+window.addEventListener("appinstalled", function () {
+  deferredInstallPrompt = null;
+  const installBtn = document.getElementById("installAppBtn");
+  if (installBtn) installBtn.style.display = "none";
+  console.log("[PWA] App installed successfully");
+});
+
+// Call this function from an "Install App" button click
+window.installPWA = function () {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.then(function (result) {
+    console.log("[PWA] Install choice:", result.outcome);
+    deferredInstallPrompt = null;
+  });
+};

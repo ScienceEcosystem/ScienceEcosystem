@@ -1,0 +1,59 @@
+{
+  "name": "ScienceEcosystem",
+  "short_name": "ScienceEco",
+  "description": "Open science platform unifying research papers, data, code, peer review, and funding.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "categories": ["education", "science", "research"],
+  "icons": [
+    {
+      "src": "/assets/logos_se/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/logos_se/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Search Papers",
+      "short_name": "Search",
+      "description": "Search for research papers",
+      "url": "/search.html",
+      "icons": [{ "src": "/assets/logos_se/logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Library",
+      "short_name": "Library",
+      "description": "View your saved papers",
+      "url": "/library.html",
+      "icons": [{ "src": "/assets/logos_se/logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Profile",
+      "short_name": "Profile",
+      "description": "Your researcher profile",
+      "url": "/user-profile.html",
+      "icons": [{ "src": "/assets/logos_se/logo.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/assets/logos_se/logo.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "ScienceEcosystem home page"
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Offline | ScienceEcosystem</title>
+  <style>
+    :root { --bg:#0f172a; --surface:#1e293b; --ink:#e2e8f0; --muted:#94a3b8; --primary:#0284c7; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body {
+      font-family:'Inter', system-ui, sans-serif;
+      background:var(--bg); color:var(--ink);
+      min-height:100vh; display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      padding:2rem; text-align:center;
+    }
+    .logo { width:80px; height:80px; margin-bottom:1.5rem; opacity:.9; }
+    h1 { font-size:1.75rem; font-weight:700; margin-bottom:.75rem; }
+    p { color:var(--muted); margin-bottom:1.5rem; max-width:400px; line-height:1.6; }
+    .btn {
+      display:inline-block; padding:.75rem 1.5rem;
+      background:var(--primary); color:#fff;
+      border-radius:8px; text-decoration:none;
+      font-weight:600; transition:background .2s;
+    }
+    .btn:hover { background:#0369a1; }
+    .cached-pages { margin-top:2.5rem; text-align:left; max-width:400px; width:100%; }
+    .cached-pages h2 { font-size:1rem; color:var(--muted); margin-bottom:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+    .cached-pages a {
+      display:block; padding:.6rem .75rem;
+      background:var(--surface); border-radius:8px;
+      color:var(--ink); text-decoration:none;
+      margin-bottom:.5rem; font-weight:500;
+      transition:background .15s;
+    }
+    .cached-pages a:hover { background:#334155; }
+    .status { margin-top:1.5rem; font-size:.85rem; color:var(--muted); }
+  </style>
+<link rel="manifest" href="/manifest.json"/>
+<meta name="theme-color" content="#0f172a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="ScienceEco"/>
+<link rel="apple-touch-icon" href="/assets/logos_se/logo.png"/>
+</head>
+<body>
+  <img src="/assets/logos_se/logo.png" alt="ScienceEcosystem" class="logo"/>
+  <h1>You're offline</h1>
+  <p>No internet connection detected. Some pages you've visited recently are still available below.</p>
+  <a href="/" class="btn" onclick="location.reload(); return false;">Try again</a>
+
+  <div class="cached-pages">
+    <h2>Available offline</h2>
+    <a href="/">Home</a>
+    <a href="/search.html">Search</a>
+    <a href="/library.html">My Library</a>
+    <a href="/user-profile.html">My Profile</a>
+  </div>
+
+  <p class="status" id="status">Checking connection…</p>
+
+  <script>
+    // Check if back online and auto-reload
+    window.addEventListener("online", () => {
+      document.getElementById("status").textContent = "Connection restored — reloading…";
+      setTimeout(() => location.reload(), 800);
+    });
+    window.addEventListener("offline", () => {
+      document.getElementById("status").textContent = "Still offline.";
+    });
+    document.getElementById("status").textContent = navigator.onLine
+      ? "Connection available — try reloading."
+      : "No connection detected.";
+  </script>
+</body>
+</html>
