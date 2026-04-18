@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import pkg from "pg";
 import { resolveArtifacts } from "./artifacts-resolver.js";
+import { checkJournalIntegrity } from "./journal-integrity.js";
 const { Pool } = pkg;
 const fsp = fs.promises;
 import paperRoutes from "../routes/paper.js";
@@ -993,6 +994,31 @@ async function syncZoteroForUser(orcid) {
 app.get("/health", (_req, res) => res.type("text").send("ok"));
 
 app.use(paperRoutes);
+
+app.get("/api/journal/integrity", async (req, res) => {
+  const issn = (req.query.issn || "").trim();
+  const issnL = (req.query.issnl || "").trim();
+  const journalName = (req.query.name || "").trim();
+  const sourceId = (req.query.id || "").trim();
+
+  if (!issn && !issnL && !journalName && !sourceId) {
+    return res.status(400).json({ error: "issn, issnl, name, or id required" });
+  }
+
+  try {
+    const result = await checkJournalIntegrity({
+      issn,
+      issnL,
+      journalName,
+      openAlexSourceId: sourceId
+    });
+    res.set("Cache-Control", "public, max-age=86400");
+    res.json(result);
+  } catch (err) {
+    console.error("GET /api/journal/integrity failed:", err);
+    res.status(500).json({ error: String(err?.message || err) });
+  }
+});
 
 const staticRoot = path.resolve(__dirname, STATIC_DIR);
 const uploadDir = path.join(staticRoot, "uploads", "materials");

@@ -1484,3 +1484,46 @@ body.annot-erase .pdf-annotation-layer {
   .finder-grid { grid-template-columns: 1fr; }
   .rec-head { flex-direction: column; align-items: flex-start; }
 }
+
+.integrity-banner {
+  border-radius: 10px;
+  border: 1px solid;
+  padding: .75rem 1rem;
+  margin-bottom: .75rem;
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+}
+.integrity-icon { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
+.integrity-label { font-weight: 700; font-size: 1rem; }
+.integrity-score { font-size: .9rem; color: var(--ink-dim); margin-top: .1rem; }
+.integrity-bar-wrap {
+  height: 6px; border-radius: 3px; background: #e5e7eb;
+  margin-top: .5rem; overflow: hidden;
+}
+.integrity-bar { height: 100%; border-radius: 3px; transition: width .4s ease; }
+.integrity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .35rem .75rem;
+  margin: .5rem 0;
+  font-size: .88rem;
+}
+.integrity-grid dt { color: var(--ink-dim); }
+.integrity-grid dd { margin: 0; font-weight: 600; }
+.integrity-flags {
+  margin: .35rem 0 .5rem 0;
+  padding-left: 1.1rem;
+  font-size: .85rem;
+  color: var(--ink-dim);
+}
+.integrity-disclaimer {
+  font-size: .78rem;
+  color: var(--ink-dim);
+  margin-top: .5rem;
+  font-style: italic;
+}
+.integrity-links {
+  display: flex; gap: .5rem; flex-wrap: wrap;
+  margin-top: .5rem;
+}
