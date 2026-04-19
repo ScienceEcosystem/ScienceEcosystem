@@ -121,21 +121,34 @@ let deferredInstallPrompt = null;
 window.addEventListener("beforeinstallprompt", function (e) {
   e.preventDefault();
   deferredInstallPrompt = e;
-  // Show your install button if you have one
-  const installBtn = document.getElementById("installAppBtn");
-  if (installBtn) installBtn.style.display = "inline-flex";
 });
 
 window.addEventListener("appinstalled", function () {
   deferredInstallPrompt = null;
   const installBtn = document.getElementById("installAppBtn");
-  if (installBtn) installBtn.style.display = "none";
+  if (installBtn) {
+    installBtn.textContent = "App Installed";
+    installBtn.disabled = true;
+  }
   console.log("[PWA] App installed successfully");
 });
 
 // Call this function from an "Install App" button click
 window.installPWA = function () {
-  if (!deferredInstallPrompt) return;
+  if (!deferredInstallPrompt) {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+    if (isStandalone) {
+      alert("ScienceEcosystem is already installed on this device.");
+      return;
+    }
+    if (isIOS) {
+      alert('To install ScienceEcosystem on iPhone or iPad, tap Share and then choose "Add to Home Screen".');
+      return;
+    }
+    alert("Install is not available in this browser yet. If supported, the prompt will appear after the site becomes installable.");
+    return;
+  }
   deferredInstallPrompt.prompt();
   deferredInstallPrompt.userChoice.then(function (result) {
     console.log("[PWA] Install choice:", result.outcome);

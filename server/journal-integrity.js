@@ -18,6 +18,59 @@ const LEGITIMATE_JOURNALS = [
   "eLife"
 ];
 
+const KNOWN_PREDATORY_PUBLISHERS = [
+  "magnus med club",
+  "mmc",
+  "omics international",
+  "omics publishing",
+  "medwin publishers",
+  "sciforschenonline",
+  "sci forschen",
+  "longdom publishing",
+  "hilavina",
+  "crimson publishers",
+  "lupine publishers",
+  "austin publishing group",
+  "medcrave",
+  "gavin publishers",
+  "remedy publications",
+  "peertechz",
+  "scholars.direct",
+  "opast publishing",
+  "annex publishers",
+  "open access pub",
+  "pulsus group",
+  "herald scholarly open access",
+  "scitechnol",
+  "jscimedcentral",
+  "symbiosisonlinepublishing",
+  "imedpub",
+  "innovare academic sciences",
+  "rroij",
+  "scientific research and community",
+  "science domain international",
+  "scielo predatory",
+  "ejmanager"
+];
+
+const KNOWN_PREDATORY_DOMAINS = [
+  "magnusmedclub.com",
+  "mmcemails.com",
+  "omicsonline.org",
+  "omicsonline.com",
+  "longdom.org",
+  "medcraveonline.com",
+  "gavinpublishers.com",
+  "remedypublications.com",
+  "peertechz.com",
+  "austinpublishinggroup.com",
+  "lupinepublishers.com",
+  "crimsonpublishers.com",
+  "scitechnol.com",
+  "imedpub.com",
+  "hilarispublisher.com"
+];
+
 const DEFAULT_OPENALEX = {
   works_count: 0,
   cited_by_count: 0,
@@ -61,23 +114,6 @@ function jaccardSimilarity(a, b) {
   return union ? intersection / union : 0;
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} ${response.statusText}`);
-    }
-    return response;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 function cacheKeyFor({ issn, issnL, journalName, openAlexSourceId }) {
   return (
     normalizeIssn(issn) ||
@@ -100,147 +136,22 @@ function getCachedResult(key) {
 
 function setCachedResult(key, result) {
   if (!key) return;
+  if (Number(result && result.checksCompleted) < 2) return;
   integrityCache.set(key, {
     savedAt: Date.now(),
     result: { ...result }
   });
 }
 
-function extractDoajCount(payload) {
-  if (!payload || typeof payload !== "object") return 0;
-  if (typeof payload.total === "number") return payload.total;
-  if (typeof payload.count === "number") return payload.count;
-  if (typeof payload.totalResults === "number") return payload.totalResults;
-  if (Array.isArray(payload.results)) return payload.results.length;
-  if (Array.isArray(payload.hits)) return payload.hits.length;
-  if (payload.results && typeof payload.results === "object" && Array.isArray(payload.results.items)) {
-    return payload.results.items.length;
-  }
-  return 0;
+function clampScore(score) {
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
-async function checkDoaj({ issn, issnL, journalName }) {
-  try {
-    const urls = [];
-    if (issn) urls.push(`https://doaj.org/api/search/journals/issn:${encodeURIComponent(issn)}`);
-    if (issnL && normalizeIssn(issnL) !== normalizeIssn(issn)) {
-      urls.push(`https://doaj.org/api/search/journals/issn:${encodeURIComponent(issnL)}`);
-    }
-    if (journalName) {
-      urls.push(`https://doaj.org/api/search/journals/${encodeURIComponent(journalName)}`);
-    }
-    for (const url of urls) {
-      const response = await fetchWithTimeout(url, {
-        headers: { Accept: "application/json" }
-      });
-      const data = await response.json();
-      if (extractDoajCount(data) > 0) {
-        return { checked: true, inDOAJ: true };
-      }
-    }
-    return { checked: urls.length > 0, inDOAJ: false };
-  } catch (_err) {
-    return { checked: false, inDOAJ: false };
-  }
-}
-
-function parseSimpleYamlRecords(yamlText) {
-  const records = [];
-  let current = null;
-
-  for (const rawLine of String(yamlText || "").split(/\r?\n/)) {
-    const line = rawLine.replace(/\t/g, "  ");
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    if (/^- /.test(trimmed)) {
-      if (current && Object.keys(current).length) records.push(current);
-      current = {};
-      const rest = trimmed.slice(2).trim();
-      if (!rest) continue;
-      const kv = rest.match(/^([A-Za-z0-9_ -]+):\s*(.*)$/);
-      if (kv) {
-        current[kv[1].trim()] = kv[2].trim();
-      } else {
-        current.value = rest;
-      }
-      continue;
-    }
-
-    const kv = trimmed.match(/^([A-Za-z0-9_ -]+):\s*(.*)$/);
-    if (!kv) continue;
-    if (!current) current = {};
-    current[kv[1].trim()] = kv[2].trim();
-  }
-
-  if (current && Object.keys(current).length) records.push(current);
-  return records;
-}
-
-function recordMatches(record, journalName, issnSet) {
-  const normalizedJournal = normalizeText(journalName);
-  const exactNames = new Set();
-  const partialNames = new Set();
-  const recordIssns = new Set();
-
-  for (const [key, value] of Object.entries(record || {})) {
-    const textValue = String(value || "").trim();
-    if (!textValue) continue;
-    const normalizedValue = normalizeText(textValue);
-    const issnValue = normalizeIssn(textValue);
-    const keyName = normalizeText(key);
-
-    if (issnValue && /^[0-9]{7}[0-9X]$/.test(issnValue)) {
-      recordIssns.add(issnValue);
-    }
-    if (normalizedValue) {
-      partialNames.add(normalizedValue);
-      if (keyName === "name" || keyName === "journal" || keyName === "title" || keyName === "publisher") {
-        exactNames.add(normalizedValue);
-      }
-    }
-  }
-
-  if (normalizedJournal) {
-    if (exactNames.has(normalizedJournal)) return true;
-    for (const candidate of partialNames) {
-      if (candidate === normalizedJournal) return true;
-      if (candidate.includes(normalizedJournal) || normalizedJournal.includes(candidate)) return true;
-    }
-  }
-
-  for (const issn of issnSet) {
-    if (recordIssns.has(issn)) return true;
-  }
-
-  return false;
-}
-
-async function checkPredatoryList({ issn, issnL, journalName }) {
-  try {
-    const [publishersRes, journalsRes] = await Promise.all([
-      fetchWithTimeout("https://raw.githubusercontent.com/stop-predatory-journals/stop-predatory-journals.github.io/master/_data/publishers.yaml"),
-      fetchWithTimeout("https://raw.githubusercontent.com/stop-predatory-journals/stop-predatory-journals.github.io/master/_data/journals.yaml")
-    ]);
-    const [publishersText, journalsText] = await Promise.all([
-      publishersRes.text(),
-      journalsRes.text()
-    ]);
-
-    const publisherRecords = parseSimpleYamlRecords(publishersText);
-    const journalRecords = parseSimpleYamlRecords(journalsText);
-    const issnSet = new Set([normalizeIssn(issn), normalizeIssn(issnL)].filter(Boolean));
-
-    if (journalRecords.some((record) => recordMatches(record, journalName, issnSet))) {
-      return { checked: true, onPredatoryList: true, predatoryListSource: "journal" };
-    }
-    if (publisherRecords.some((record) => recordMatches(record, journalName, issnSet))) {
-      return { checked: true, onPredatoryList: true, predatoryListSource: "publisher" };
-    }
-    return { checked: true, onPredatoryList: false, predatoryListSource: null };
-  } catch (_err) {
-    return { checked: false, onPredatoryList: false, predatoryListSource: null };
-  }
+function verdictForScore(score) {
+  if (score >= 75) return { verdict: "trusted", label: "Appears legitimate" };
+  if (score >= 50) return { verdict: "caution", label: "Use caution" };
+  if (score >= 25) return { verdict: "suspicious", label: "Likely predatory or low-quality" };
+  return { verdict: "predatory", label: "High risk - possible predatory journal" };
 }
 
 function extractApcUsd(sourceData) {
@@ -258,18 +169,168 @@ function computeIsNewJournal(countsByYear) {
   return !rows.some((row) => Number(row && row.year) < 2018);
 }
 
+function extractHostname(url) {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch (_err) {
+    return "";
+  }
+}
+
+async function safeFetch(url, options = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "ScienceEcosystem/1.0",
+        ...(options.headers || {})
+      }
+    });
+    clearTimeout(timer);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (_err) {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+async function safeFetchText(url, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { "User-Agent": "ScienceEcosystem/1.0" }
+    });
+    clearTimeout(timer);
+    if (!response.ok) return null;
+    return await response.text();
+  } catch (_err) {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+async function checkDOAJ(issn, issnL, journalName) {
+  try {
+    const tryISSN = async (id) => {
+      if (!id) return null;
+      const clean = id.replace(/[^0-9X]/gi, "");
+      if (clean.length < 7) return null;
+      const formatted = clean.slice(0, 4) + "-" + clean.slice(4);
+      const url = "https://doaj.org/api/search/journals/issn:" + formatted;
+      const result = await safeFetch(url, {}, 8000);
+      return result && Array.isArray(result.results) && result.results.length > 0 ? result.results[0] : null;
+    };
+
+    let result = (await tryISSN(issn)) || (await tryISSN(issnL));
+
+    if (result) {
+      const doajName = String(result.bibjson && result.bibjson.title || "").toLowerCase();
+      const ourName = String(journalName || "").toLowerCase();
+      const ourWords = ourName.split(/\s+/).filter((word) => word.length > 3);
+      const nameMatches = ourWords.length ? ourWords.some((word) => doajName.includes(word)) : false;
+      if (!nameMatches) {
+        result = null;
+      }
+    }
+
+    if (!result && journalName && journalName.length > 4) {
+      const url = "https://doaj.org/api/search/journals/" + encodeURIComponent(`"${journalName}"`);
+      const response = await safeFetch(url, {}, 8000);
+      if (response && Array.isArray(response.results) && response.results.length > 0) {
+        const match = response.results.find((journal) => {
+          const doajTitle = String(journal.bibjson && journal.bibjson.title || "").toLowerCase();
+          const ourTitle = String(journalName || "").toLowerCase();
+          return doajTitle === ourTitle || doajTitle.includes(ourTitle) || ourTitle.includes(doajTitle);
+        });
+        result = match || null;
+      }
+    }
+
+    const attempted = !!(issn || issnL || journalName);
+    return { checked: attempted, inDOAJ: !!result, doajRecord: result || null };
+  } catch (_err) {
+    return { checked: false, inDOAJ: false, doajRecord: null };
+  }
+}
+
+async function fetchPredatoryLists() {
+  const [publishersRaw, journalsRaw] = await Promise.all([
+    safeFetchText("https://raw.githubusercontent.com/stop-predatory-journals/stop-predatory-journals.github.io/master/_data/publishers.yaml"),
+    safeFetchText("https://raw.githubusercontent.com/stop-predatory-journals/stop-predatory-journals.github.io/master/_data/journals.yaml")
+  ]);
+
+  const extractNames = (raw) => {
+    if (!raw) return [];
+    return raw
+      .split("\n")
+      .map((line) => {
+        const nameMatch = line.match(/(?:name|title):\s*["']?([^"'\n]+)["']?/i);
+        if (nameMatch) return nameMatch[1].trim().toLowerCase();
+        const bareMatch = line.match(/^\s*-\s+["']?([^"'\n]+)["']?/);
+        if (bareMatch && !bareMatch[1].startsWith("url:") && !bareMatch[1].startsWith("http")) {
+          return bareMatch[1].trim().toLowerCase();
+        }
+        return null;
+      })
+      .filter(Boolean);
+  };
+
+  const extractURLs = (raw) => {
+    if (!raw) return [];
+    return raw
+      .split("\n")
+      .map((line) => {
+        const urlMatch = line.match(/url:\s*["']?(https?:\/\/[^\s"']+)["']?/i);
+        if (urlMatch) return urlMatch[1].trim().toLowerCase();
+        return null;
+      })
+      .filter(Boolean);
+  };
+
+  return {
+    publisherNames: extractNames(publishersRaw),
+    publisherURLs: extractURLs(publishersRaw),
+    journalNames: extractNames(journalsRaw),
+    journalURLs: extractURLs(journalsRaw)
+  };
+}
+
 async function checkOpenAlex({ openAlexSourceId }) {
   try {
     if (!openAlexSourceId) {
-      return { checked: false, openAlex: { ...DEFAULT_OPENALEX } };
+      return {
+        checked: false,
+        openAlex: { ...DEFAULT_OPENALEX },
+        publisherName: "",
+        homepageUrl: ""
+      };
     }
-    const response = await fetchWithTimeout(
+
+    const data = await safeFetch(
       `https://api.openalex.org/sources/${encodeURIComponent(openAlexSourceId)}?mailto=info@scienceecosystem.org`,
-      { headers: { Accept: "application/json" } }
+      {},
+      8000
     );
-    const data = await response.json();
+
+    if (!data || typeof data !== "object") {
+      return {
+        checked: false,
+        openAlex: { ...DEFAULT_OPENALEX },
+        publisherName: "",
+        homepageUrl: ""
+      };
+    }
+
     const worksCount = Number(data.works_count || 0);
     const citedByCount = Number(data.cited_by_count || 0);
+
     return {
       checked: true,
       openAlex: {
@@ -282,19 +343,118 @@ async function checkOpenAlex({ openAlexSourceId }) {
         type: String(data.type || ""),
         apc_usd: extractApcUsd(data),
         country_code: data.country_code || null
-      }
+      },
+      publisherName: String(data.host_organization_name || data.host_organization || data.publisher || ""),
+      homepageUrl: String(data.homepage_url || "")
     };
   } catch (_err) {
-    return { checked: false, openAlex: { ...DEFAULT_OPENALEX } };
+    return {
+      checked: false,
+      openAlex: { ...DEFAULT_OPENALEX },
+      publisherName: "",
+      homepageUrl: ""
+    };
   }
 }
 
-async function checkNameSimilarity({ journalName }) {
+async function checkPredatoryList({ journalName, openAlexPromise }) {
+  try {
+    const [lists, openAlexResult] = await Promise.all([
+      fetchPredatoryLists(),
+      openAlexPromise
+    ]);
+
+    const publisherName = String(openAlexResult && openAlexResult.publisherName || "");
+    const homepageUrl = String(openAlexResult && openAlexResult.homepageUrl || "").toLowerCase();
+    const homepageDomain = extractHostname(homepageUrl);
+    const normalizedPublisher = normalizeText(publisherName);
+    const normalizedJournal = normalizeText(journalName);
+
+    const publisherYamlMatch = normalizedPublisher
+      ? lists.publisherNames.some((name) => normalizedPublisher.includes(name) || name.includes(normalizedPublisher))
+      : false;
+    const journalYamlMatch = normalizedJournal
+      ? lists.journalNames.some((name) => normalizedJournal.includes(name) || name.includes(normalizedJournal))
+      : false;
+    const publisherUrlMatch = homepageUrl
+      ? lists.publisherURLs.some((url) => homepageUrl.includes(url))
+      : false;
+    const journalUrlMatch = homepageUrl
+      ? lists.journalURLs.some((url) => homepageUrl.includes(url))
+      : false;
+
+    const hardcodedPublisher = normalizedPublisher
+      ? KNOWN_PREDATORY_PUBLISHERS.find((name) => normalizedPublisher.includes(name) || name.includes(normalizedPublisher))
+      : null;
+    const hardcodedDomain = homepageDomain
+      ? KNOWN_PREDATORY_DOMAINS.find((domain) => homepageDomain === domain || homepageDomain.endsWith("." + domain))
+      : null;
+
+    if (hardcodedPublisher) {
+      return {
+        checked: true,
+        onPredatoryList: true,
+        predatoryListSource: "publisher-hardcoded",
+        publisherName,
+        homepageUrl
+      };
+    }
+
+    if (hardcodedDomain) {
+      return {
+        checked: true,
+        onPredatoryList: true,
+        predatoryListSource: "domain-hardcoded",
+        publisherName,
+        homepageUrl
+      };
+    }
+
+    if (publisherYamlMatch || publisherUrlMatch) {
+      return {
+        checked: true,
+        onPredatoryList: true,
+        predatoryListSource: "publisher",
+        publisherName,
+        homepageUrl
+      };
+    }
+
+    if (journalYamlMatch || journalUrlMatch) {
+      return {
+        checked: true,
+        onPredatoryList: true,
+        predatoryListSource: "journal",
+        publisherName,
+        homepageUrl
+      };
+    }
+
+    return {
+      checked: true,
+      onPredatoryList: false,
+      predatoryListSource: null,
+      publisherName,
+      homepageUrl
+    };
+  } catch (_err) {
+    return {
+      checked: false,
+      onPredatoryList: false,
+      predatoryListSource: null,
+      publisherName: "",
+      homepageUrl: ""
+    };
+  }
+}
+
+async function checkNameSimilarity({ journalName, inDOAJ }) {
   try {
     const normalizedJournal = normalizeText(journalName);
     if (!normalizedJournal) {
-      return { checked: true, similarity: 0, mimickedJournal: null, isRealJournal: false };
+      return { checked: false, namesMimicsLegitimate: false, mimickedJournal: null };
     }
+
     let bestScore = 0;
     let bestJournal = null;
     for (const journal of LEGITIMATE_JOURNALS) {
@@ -304,15 +464,17 @@ async function checkNameSimilarity({ journalName }) {
         bestJournal = journal;
       }
     }
+
     const isRealJournal = LEGITIMATE_JOURNALS.some((journal) => normalizeText(journal) === normalizedJournal);
+    const namesMimicsLegitimate = !!(bestScore >= 0.4 && !inDOAJ && !isRealJournal && bestJournal);
+
     return {
       checked: true,
-      similarity: bestScore,
-      mimickedJournal: bestJournal,
-      isRealJournal
+      namesMimicsLegitimate,
+      mimickedJournal: namesMimicsLegitimate ? bestJournal : null
     };
   } catch (_err) {
-    return { checked: false, similarity: 0, mimickedJournal: null, isRealJournal: false };
+    return { checked: false, namesMimicsLegitimate: false, mimickedJournal: null };
   }
 }
 
@@ -330,80 +492,103 @@ async function buildRetractionWatchLink({ journalName }) {
   }
 }
 
-function clampScore(score) {
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
-function verdictForScore(score) {
-  if (score >= 75) return { verdict: "trusted", label: "Appears legitimate" };
-  if (score >= 50) return { verdict: "caution", label: "Use caution" };
-  if (score >= 25) return { verdict: "suspicious", label: "Likely predatory or low-quality" };
-  return { verdict: "predatory", label: "High risk — possible predatory journal" };
-}
-
 export async function checkJournalIntegrity({ issn, issnL, journalName, openAlexSourceId }) {
   const key = cacheKeyFor({ issn, issnL, journalName, openAlexSourceId });
   const cached = getCachedResult(key);
   if (cached) return cached;
 
-  const [doajResult, predatoryResult, openAlexResult, similarityResult, retractionResult] = await Promise.all([
-    checkDoaj({ issn, issnL, journalName }),
-    checkPredatoryList({ issn, issnL, journalName }),
-    checkOpenAlex({ openAlexSourceId }),
-    checkNameSimilarity({ journalName }),
-    buildRetractionWatchLink({ journalName })
+  const openAlexPromise = checkOpenAlex({ openAlexSourceId });
+  const doajPromise = checkDOAJ(issn, issnL, journalName);
+  const predatoryPromise = checkPredatoryList({ journalName, openAlexPromise });
+  const retractionPromise = buildRetractionWatchLink({ journalName });
+
+  const [openAlexResult, doajResult, predatoryResult, retractionResult] = await Promise.all([
+    openAlexPromise,
+    doajPromise,
+    predatoryPromise,
+    retractionPromise
   ]);
+
+  const similarityResult = await checkNameSimilarity({
+    journalName,
+    inDOAJ: !!doajResult.inDOAJ
+  });
+
+  const checksCompleted = [
+    doajResult.checked,
+    predatoryResult.checked,
+    openAlexResult.checked,
+    similarityResult.checked,
+    retractionResult.checked
+  ].filter(Boolean).length;
 
   const inDOAJ = !!doajResult.inDOAJ;
   const onPredatoryList = !!predatoryResult.onPredatoryList;
   const predatoryListSource = predatoryResult.predatoryListSource || null;
+  const namesMimicsLegitimate = !!similarityResult.namesMimicsLegitimate;
+  const mimickedJournal = similarityResult.mimickedJournal || null;
+  const publisherName = predatoryResult.publisherName || openAlexResult.publisherName || "";
   const openAlex = openAlexResult.openAlex || { ...DEFAULT_OPENALEX };
-
-  const namesMimicsLegitimate = !!(
-    similarityResult.checked &&
-    doajResult.checked &&
-    similarityResult.similarity >= 0.4 &&
-    !inDOAJ &&
-    !similarityResult.isRealJournal &&
-    similarityResult.mimickedJournal
-  );
-  const mimickedJournal = namesMimicsLegitimate ? similarityResult.mimickedJournal : null;
 
   const flags = [];
   let score = 100;
 
   if (doajResult.checked && !inDOAJ) {
-    score -= 35;
+    score -= 40;
     flags.push("Journal not found in DOAJ.");
   }
+
   if (predatoryResult.checked && onPredatoryList && predatoryListSource === "journal") {
     score -= 50;
-    flags.push("Journal appears on the Stop Predatory Journals journal list.");
+    flags.push("Journal appears on predatory journal lists.");
   }
+
   if (predatoryResult.checked && onPredatoryList && predatoryListSource === "publisher") {
     score -= 40;
-    flags.push("Journal or publisher appears on the Stop Predatory Journals publisher list.");
+    flags.push(`Publisher (${publisherName || "Unknown"}) appears on predatory publisher lists.`);
   }
-  if (
-    openAlexResult.checked &&
-    openAlex.avgCitationsPerPaper < 0.5 &&
-    openAlex.works_count > 50
-  ) {
-    score -= 15;
+
+  if (predatoryResult.checked && onPredatoryList && predatoryListSource === "publisher-hardcoded") {
+    score -= 55;
+    flags.push(`Publisher (${publisherName || "Unknown"}) appears on predatory publisher lists.`);
+  }
+
+  if (predatoryResult.checked && onPredatoryList && predatoryListSource === "domain-hardcoded") {
+    score -= 55;
+    flags.push("Journal homepage uses a domain associated with predatory publishers.");
+  }
+
+  if (openAlexResult.checked && openAlex.avgCitationsPerPaper < 0.1 && openAlex.works_count > 10) {
+    score -= 30;
+    flags.push("Very low citation rate relative to publication volume.");
+  } else if (openAlexResult.checked && openAlex.avgCitationsPerPaper < 0.5 && openAlex.works_count > 20) {
+    score -= 20;
     flags.push("Low citation rate relative to publication volume.");
   }
+
   if (openAlexResult.checked && openAlex.isNewJournal && doajResult.checked && !inDOAJ) {
     score -= 10;
     flags.push("Newer journal without DOAJ indexing.");
   }
+
+  if (
+    openAlexResult.checked &&
+    openAlex.type === "journal" &&
+    openAlex.works_count > 10 &&
+    (openAlex.cited_by_count / Math.max(openAlex.works_count, 1)) < 0.3 &&
+    doajResult.checked &&
+    !inDOAJ
+  ) {
+    score -= 15;
+    flags.push("Journal has weak citation performance for its size and is not indexed in DOAJ.");
+  }
+
   if (namesMimicsLegitimate) {
     score -= 20;
     flags.push(`Journal name may mimic "${mimickedJournal}".`);
   }
-  if (
-    openAlexResult.checked &&
-    (openAlex.type === "repository" || openAlex.type === "preprint")
-  ) {
+
+  if (openAlexResult.checked && (openAlex.type === "repository" || openAlex.type === "preprint")) {
     score -= 5;
     flags.push("Venue is a repository or preprint source rather than a conventional journal.");
   }
@@ -411,12 +596,15 @@ export async function checkJournalIntegrity({ issn, issnL, journalName, openAlex
   if (doajResult.checked && inDOAJ) {
     score += 20;
   }
+
   if (openAlexResult.checked && openAlex.is_in_doaj) {
     score += 10;
   }
+
   if (openAlexResult.checked && openAlex.avgCitationsPerPaper > 5) {
     score += 10;
   }
+
   if (openAlexResult.checked && openAlex.works_count > 10000) {
     score += 5;
   }
@@ -446,7 +634,8 @@ export async function checkJournalIntegrity({ issn, issnL, journalName, openAlex
       country_code: openAlex.country_code || null
     },
     flags,
-    checkedAt: new Date().toISOString()
+    checkedAt: new Date().toISOString(),
+    checksCompleted
   };
 
   setCachedResult(key, result);
