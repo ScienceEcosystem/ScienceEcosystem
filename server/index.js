@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import pkg from "pg";
 import { resolveArtifacts } from "./artifacts-resolver.js";
-import { checkJournalIntegrity } from "./journal-integrity.js";
+import { checkJournalIntegrity, clearJournalIntegrityCache } from "./journal-integrity.js";
 const { Pool } = pkg;
 const fsp = fs.promises;
 import paperRoutes from "../routes/paper.js";
@@ -994,6 +994,11 @@ async function syncZoteroForUser(orcid) {
 app.get("/health", (_req, res) => res.type("text").send("ok"));
 
 app.use(paperRoutes);
+
+app.get("/api/journal/integrity/clear-cache", (_req, res) => {
+  clearJournalIntegrityCache();
+  res.json({ ok: true, message: "Cache cleared" });
+});
 
 app.get("/api/journal/integrity", async (req, res) => {
   const issn = (req.query.issn || "").trim();

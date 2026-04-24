@@ -781,7 +781,9 @@
     var issnL = source && source.issn_l ? source.issn_l : null;
     var issn = source && Array.isArray(source.issn) && source.issn[0] ? source.issn[0] : null;
     var journalName = (source && source.display_name) || get(p, "host_venue.display_name", "") || get(p, "primary_location.source.display_name", "");
-    var sourceId = source && source.id ? String(source.id).replace(/^https?:\/\/openalex\.org\//i, "") : "";
+    var sourceId = source && source.id
+      ? String(source.id).replace(/^https?:\/\/openalex\.org\//i, "")
+      : (get(p, "primary_location.source.id", "") || "").split("/").pop();
 
     var wrap = document.createElement("div");
     wrap.id = "integrityBlock";

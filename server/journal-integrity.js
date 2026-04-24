@@ -54,6 +54,13 @@ const KNOWN_PREDATORY_PUBLISHERS = [
 ];
 
 const KNOWN_PREDATORY_DOMAINS = [
+  "jcases.org",
+  "jneonatal.com",
+  "jdiabetic.com",
+  "jclinical.com",
+  "jdermis.com",
+  "jobese.com",
+  "jcatalytic.com",
   "magnusmedclub.com",
   "mmcemails.com",
   "omicsonline.org",
@@ -115,12 +122,18 @@ function jaccardSimilarity(a, b) {
 }
 
 function cacheKeyFor({ issn, issnL, journalName, openAlexSourceId }) {
-  return (
-    normalizeIssn(issn) ||
-    normalizeIssn(issnL) ||
-    normalizeText(journalName) ||
-    String(openAlexSourceId || "").trim().toUpperCase()
-  );
+  const parts = [];
+  const normalizedIssn = normalizeIssn(issn);
+  const normalizedIssnL = normalizeIssn(issnL);
+  const normalizedName = normalizeText(journalName);
+  const normalizedSourceId = String(openAlexSourceId || "").trim().toUpperCase();
+
+  if (normalizedIssn) parts.push(`issn:${normalizedIssn}`);
+  if (normalizedIssnL) parts.push(`issnl:${normalizedIssnL}`);
+  if (normalizedName) parts.push(`name:${normalizedName}`);
+  if (normalizedSourceId) parts.push(`source:${normalizedSourceId}`);
+
+  return parts.join("|");
 }
 
 function getCachedResult(key) {
@@ -145,6 +158,10 @@ function setCachedResult(key, result) {
 
 function clampScore(score) {
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+export function clearJournalIntegrityCache() {
+  integrityCache.clear();
 }
 
 function verdictForScore(score) {
