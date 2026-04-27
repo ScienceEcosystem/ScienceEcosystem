@@ -784,11 +784,12 @@
     var sourceId = source && source.id
       ? String(source.id).replace(/^https?:\/\/openalex\.org\//i, "")
       : (get(p, "primary_location.source.id", "") || "").split("/").pop();
+    var homepageUrl = (source && source.homepage_url) || get(p, "primary_location.landing_page_url", "") || "";
 
     var wrap = document.createElement("div");
     wrap.id = "integrityBlock";
     wrap.style.marginTop = ".75rem";
-    wrap.innerHTML = '<div class="muted small">Checking journal integrity…</div>';
+    wrap.innerHTML = '<div class="muted small">Checking predatory list…</div>';
     journalBlock.appendChild(wrap);
 
     var params = new URLSearchParams();
@@ -796,33 +797,7 @@
     params.set("issnl", issnL || "");
     params.set("name", journalName || "");
     params.set("id", sourceId || "");
-
-    var verdictStyles = {
-      trusted: {
-        bg: "#f0fdf4",
-        border: "#86efac",
-        icon: "✅",
-        bar: "#22c55e"
-      },
-      caution: {
-        bg: "#fefce8",
-        border: "#fde047",
-        icon: "⚠️",
-        bar: "#eab308"
-      },
-      suspicious: {
-        bg: "#fff7ed",
-        border: "#fdba74",
-        icon: "🚩",
-        bar: "#f97316"
-      },
-      predatory: {
-        bg: "#fef2f2",
-        border: "#fca5a5",
-        icon: "☠️",
-        bar: "#ef4444"
-      }
-    };
+    params.set("url", homepageUrl || "");
 
     var controller = new AbortController();
     var timer = setTimeout(function(){ controller.abort(); }, 10000);
@@ -834,44 +809,12 @@
       });
       if (!res.ok) throw new Error(res.status + " " + res.statusText);
       var data = await res.json();
-      var view = verdictStyles[data.verdict] || verdictStyles.caution;
-      var flagsHtml = Array.isArray(data.flags) && data.flags.length
-        ? '<ul class="integrity-flags">' + data.flags.map(function(flag){
-            return '<li class="muted small">' + escapeHtml(flag) + '</li>';
-          }).join("") + '</ul>'
-        : "";
-      var predatoryLinkHtml = data.onPredatoryList
-        ? '<a href="https://stop-predatory-journals.github.io" target="_blank" rel="noopener">View predatory list entry</a>'
-        : "";
-      var avgCitations = get(data, "openAlex.avgCitationsPerPaper", 0);
-      var journalType = get(data, "openAlex.type", "") || "Unknown";
-      var apcUsd = get(data, "openAlex.apc_usd", null);
-
+      var statusText = data.onPredatoryList ? "Yes" : "No";
+      var statusColor = data.onPredatoryList ? "#b91c1c" : "var(--ink-dim)";
       wrap.innerHTML =
-        '<h4 style="margin:0 0 .5rem;">Journal Integrity Check</h4>' +
-        '<div class="integrity-banner" style="background:'+view.bg+'; border-color:'+view.border+';">' +
-          '<div class="integrity-icon">'+view.icon+'</div>' +
-          '<div style="flex:1; min-width:0;">' +
-            '<div class="integrity-label">' + escapeHtml(data.label || "Use caution") + '</div>' +
-            '<div class="integrity-score">Integrity score: ' + escapeHtml(String(data.score || 0)) + '/100</div>' +
-            '<div class="integrity-bar-wrap"><div class="integrity-bar" style="width:' + Math.max(0, Math.min(100, Number(data.score || 0))) + '%; background:' + view.bar + ';"></div></div>' +
-          '</div>' +
-        '</div>' +
-        flagsHtml +
-        '<dl class="integrity-grid">' +
-          '<dt>DOAJ indexed</dt><dd>' + (data.inDOAJ ? 'Yes ✅' : 'No ❌') + '</dd>' +
-          '<dt>Predatory list</dt><dd>' + (data.onPredatoryList ? 'Yes ☠️' : 'No ✅') + '</dd>' +
-          '<dt>Avg citations/paper</dt><dd>' + escapeHtml(Number(avgCitations || 0).toFixed(1)) + '</dd>' +
-          '<dt>Journal type</dt><dd>' + escapeHtml(journalType) + '</dd>' +
-          '<dt>APC (USD)</dt><dd>' + escapeHtml(apcUsd == null ? "Unknown" : String(apcUsd)) + '</dd>' +
-        '</dl>' +
-        '<div class="integrity-links">' +
-          '<a href="' + escapeHtml(data.retractionWatchUrl || "https://retractionwatch.com/") + '" target="_blank" rel="noopener">Check Retraction Watch</a>' +
-          predatoryLinkHtml +
-        '</div>' +
-        '<div class="integrity-disclaimer">Integrity signals are automated checks and may not be complete. Always verify manually before citing or publishing.</div>';
+        '<div class="muted small"><strong>Predatory list:</strong> <span style="color:' + statusColor + ';">' + statusText + '</span></div>';
     } catch (_err) {
-      wrap.innerHTML = '<h4 style="margin:0 0 .5rem;">Journal Integrity Check</h4><div class="muted small">Integrity check unavailable.</div>';
+      wrap.innerHTML = '<div class="muted small"><strong>Predatory list:</strong> Unavailable</div>';
     } finally {
       clearTimeout(timer);
     }

@@ -1005,9 +1005,10 @@ app.get("/api/journal/integrity", async (req, res) => {
   const issnL = (req.query.issnl || "").trim();
   const journalName = (req.query.name || "").trim();
   const sourceId = (req.query.id || "").trim();
+  const homepageUrl = (req.query.url || "").trim();
 
-  if (!issn && !issnL && !journalName && !sourceId) {
-    return res.status(400).json({ error: "issn, issnl, name, or id required" });
+  if (!issn && !issnL && !journalName && !sourceId && !homepageUrl) {
+    return res.status(400).json({ error: "issn, issnl, name, id, or url required" });
   }
 
   try {
@@ -1015,7 +1016,8 @@ app.get("/api/journal/integrity", async (req, res) => {
       issn,
       issnL,
       journalName,
-      openAlexSourceId: sourceId
+      openAlexSourceId: sourceId,
+      homepageUrl
     });
     res.set("Cache-Control", "public, max-age=86400");
     res.json(result);

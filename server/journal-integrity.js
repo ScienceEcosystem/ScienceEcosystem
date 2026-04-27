@@ -121,17 +121,19 @@ function jaccardSimilarity(a, b) {
   return union ? intersection / union : 0;
 }
 
-function cacheKeyFor({ issn, issnL, journalName, openAlexSourceId }) {
+function cacheKeyFor({ issn, issnL, journalName, openAlexSourceId, homepageUrl }) {
   const parts = [];
   const normalizedIssn = normalizeIssn(issn);
   const normalizedIssnL = normalizeIssn(issnL);
   const normalizedName = normalizeText(journalName);
   const normalizedSourceId = String(openAlexSourceId || "").trim().toUpperCase();
+  const normalizedHomepage = extractHostname(homepageUrl || "");
 
   if (normalizedIssn) parts.push(`issn:${normalizedIssn}`);
   if (normalizedIssnL) parts.push(`issnl:${normalizedIssnL}`);
   if (normalizedName) parts.push(`name:${normalizedName}`);
   if (normalizedSourceId) parts.push(`source:${normalizedSourceId}`);
+  if (normalizedHomepage) parts.push(`host:${normalizedHomepage}`);
 
   return parts.join("|");
 }
@@ -374,7 +376,7 @@ async function checkOpenAlex({ openAlexSourceId }) {
   }
 }
 
-async function checkPredatoryList({ journalName, openAlexPromise }) {
+async function checkPredatoryList({ journalName, homepageUrl, openAlexPromise }) {
   try {
     const [lists, openAlexResult] = await Promise.all([
       fetchPredatoryLists(),
@@ -382,8 +384,10 @@ async function checkPredatoryList({ journalName, openAlexPromise }) {
     ]);
 
     const publisherName = String(openAlexResult && openAlexResult.publisherName || "");
-    const homepageUrl = String(openAlexResult && openAlexResult.homepageUrl || "").toLowerCase();
-    const homepageDomain = extractHostname(homepageUrl);
+    const resolvedHomepageUrl = String(
+      (openAlexResult && openAlexResult.homepageUrl) || homepageUrl || ""
+    ).toLowerCase();
+    const homepageDomain = extractHostname(resolvedHomepageUrl);
     const normalizedPublisher = normalizeText(publisherName);
     const normalizedJournal = normalizeText(journalName);
 
@@ -393,11 +397,11 @@ async function checkPredatoryList({ journalName, openAlexPromise }) {
     const journalYamlMatch = normalizedJournal
       ? lists.journalNames.some((name) => normalizedJournal.includes(name) || name.includes(normalizedJournal))
       : false;
-    const publisherUrlMatch = homepageUrl
-      ? lists.publisherURLs.some((url) => homepageUrl.includes(url))
+    const publisherUrlMatch = resolvedHomepageUrl
+      ? lists.publisherURLs.some((url) => resolvedHomepageUrl.includes(url))
       : false;
-    const journalUrlMatch = homepageUrl
-      ? lists.journalURLs.some((url) => homepageUrl.includes(url))
+    const journalUrlMatch = resolvedHomepageUrl
+      ? lists.journalURLs.some((url) => resolvedHomepageUrl.includes(url))
       : false;
 
     const hardcodedPublisher = normalizedPublisher
@@ -423,7 +427,7 @@ async function checkPredatoryList({ journalName, openAlexPromise }) {
         onPredatoryList: true,
         predatoryListSource: "domain-hardcoded",
         publisherName,
-        homepageUrl
+        homepageUrl: resolvedHomepageUrl
       };
     }
 
@@ -433,7 +437,7 @@ async function checkPredatoryList({ journalName, openAlexPromise }) {
         onPredatoryList: true,
         predatoryListSource: "publisher",
         publisherName,
-        homepageUrl
+        homepageUrl: resolvedHomepageUrl
       };
     }
 
@@ -443,7 +447,7 @@ async function checkPredatoryList({ journalName, openAlexPromise }) {
         onPredatoryList: true,
         predatoryListSource: "journal",
         publisherName,
-        homepageUrl
+        homepageUrl: resolvedHomepageUrl
       };
     }
 
@@ -452,7 +456,7 @@ async function checkPredatoryList({ journalName, openAlexPromise }) {
       onPredatoryList: false,
       predatoryListSource: null,
       publisherName,
-      homepageUrl
+      homepageUrl: resolvedHomepageUrl
     };
   } catch (_err) {
     return {
@@ -509,14 +513,14 @@ async function buildRetractionWatchLink({ journalName }) {
   }
 }
 
-export async function checkJournalIntegrity({ issn, issnL, journalName, openAlexSourceId }) {
-  const key = cacheKeyFor({ issn, issnL, journalName, openAlexSourceId });
+export async function checkJournalIntegrity({ issn, issnL, journalName, openAlexSourceId, homepageUrl }) {
+  const key = cacheKeyFor({ issn, issnL, journalName, openAlexSourceId, homepageUrl });
   const cached = getCachedResult(key);
   if (cached) return cached;
 
   const openAlexPromise = checkOpenAlex({ openAlexSourceId });
   const doajPromise = checkDOAJ(issn, issnL, journalName);
-  const predatoryPromise = checkPredatoryList({ journalName, openAlexPromise });
+  const predatoryPromise = checkPredatoryList({ journalName, homepageUrl, openAlexPromise });
   const retractionPromise = buildRetractionWatchLink({ journalName });
 
   const [openAlexResult, doajResult, predatoryResult, retractionResult] = await Promise.all([
