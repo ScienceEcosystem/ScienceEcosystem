@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_VERSION = "v3"; // bump whenever KNOWN_PREDATORY_* lists change
 const integrityCache = new Map();
 
 const LEGITIMATE_JOURNALS = [
@@ -78,6 +79,12 @@ const KNOWN_PREDATORY_DOMAINS = [
   "hilarispublisher.com"
 ];
 
+// ISSNs (digits only, no hyphen) for journals confirmed predatory
+const KNOWN_PREDATORY_ISSNS = [
+  "26401770", "26401762", // Cases — Magnus Med Club
+  "26402890", "26402882"  // Journal of Neonatal Biology — Magnus Med Club
+];
+
 const DEFAULT_OPENALEX = {
   works_count: 0,
   cited_by_count: 0,
@@ -122,7 +129,7 @@ function jaccardSimilarity(a, b) {
 }
 
 function cacheKeyFor({ issn, issnL, journalName, openAlexSourceId, homepageUrl }) {
-  const parts = [];
+  const parts = [CACHE_VERSION];
   const normalizedIssn = normalizeIssn(issn);
   const normalizedIssnL = normalizeIssn(issnL);
   const normalizedName = normalizeText(journalName);
@@ -376,8 +383,18 @@ async function checkOpenAlex({ openAlexSourceId }) {
   }
 }
 
-async function checkPredatoryList({ journalName, homepageUrl, openAlexPromise }) {
+async function checkPredatoryList({ journalName, homepageUrl, openAlexPromise, issn, issnL }) {
   try {
+    // Fast path: ISSN in hardcoded list (no network needed)
+    const normIssn = normalizeIssn(issn);
+    const normIssnL = normalizeIssn(issnL);
+    const issnHit = KNOWN_PREDATORY_ISSNS.find(
+      (i) => (normIssn && normIssn === i) || (normIssnL && normIssnL === i)
+    );
+    if (issnHit) {
+      return { checked: true, onPredatoryList: true, predatoryListSource: "issn-hardcoded", publisherName: "", homepageUrl };
+    }
+
     const [lists, openAlexResult] = await Promise.all([
       fetchPredatoryLists(),
       openAlexPromise
@@ -520,7 +537,7 @@ export async function checkJournalIntegrity({ issn, issnL, journalName, openAlex
 
   const openAlexPromise = checkOpenAlex({ openAlexSourceId });
   const doajPromise = checkDOAJ(issn, issnL, journalName);
-  const predatoryPromise = checkPredatoryList({ journalName, homepageUrl, openAlexPromise });
+  const predatoryPromise = checkPredatoryList({ journalName, homepageUrl, openAlexPromise, issn, issnL });
   const retractionPromise = buildRetractionWatchLink({ journalName });
 
   const [openAlexResult, doajResult, predatoryResult, retractionResult] = await Promise.all([
@@ -577,6 +594,11 @@ export async function checkJournalIntegrity({ issn, issnL, journalName, openAlex
   if (predatoryResult.checked && onPredatoryList && predatoryListSource === "domain-hardcoded") {
     score -= 55;
     flags.push("Journal homepage uses a domain associated with predatory publishers.");
+  }
+
+  if (predatoryResult.checked && onPredatoryList && predatoryListSource === "issn-hardcoded") {
+    score -= 60;
+    flags.push("Journal ISSN matches a known predatory journal.");
   }
 
   if (openAlexResult.checked && openAlex.avgCitationsPerPaper < 0.1 && openAlex.works_count > 10) {
