@@ -79,7 +79,13 @@ globalThis.savePaper = async function savePaper(paper, btnEl) {
     (SE_LIB_MAP ??= Object.create(null));
     SE_LIB_MAP[String(paper.id)] = true;
     if (btnEl) markSavedButton(btnEl);
-    alert(`Saved "${paper.title}" to your library`);
+    // Non-blocking confirmation
+    const saved = document.createElement("div");
+    saved.textContent = `Saved to library`;
+    Object.assign(saved.style, { position:"fixed", bottom:"1.25rem", right:"1.25rem", background:"#15803d", color:"#fff", padding:".6rem 1rem", borderRadius:"8px", fontSize:".9rem", zIndex:"9000", boxShadow:"0 4px 12px rgba(0,0,0,.2)", opacity:"0", transition:"opacity .2s" });
+    document.body.appendChild(saved);
+    requestAnimationFrame(()=>{ saved.style.opacity="1"; });
+    setTimeout(()=>{ saved.style.opacity="0"; setTimeout(()=>saved.remove(),200); }, 2500);
   } catch (e) {
     const msg = String(e?.message || "");
     if (msg.includes("Not signed in")) {

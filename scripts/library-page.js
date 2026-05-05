@@ -5,6 +5,91 @@
   const $=(s,r=document)=>r.querySelector(s);
   const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
   const esc=(s)=>String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+
+  // ---- Toast notifications (replaces alert()) ----
+  function toast(msg, type="info", ms=3000){
+    const c=$("#toastContainer"); if(!c) return;
+    const t=document.createElement("div");
+    const bg=type==="error"?"#b91c1c":type==="success"?"#15803d":"#1e3a5f";
+    t.style.cssText=`background:${bg};color:#fff;padding:.65rem 1rem;border-radius:8px;font-size:.9rem;max-width:320px;box-shadow:0 4px 12px rgba(0,0,0,.2);pointer-events:auto;opacity:0;transition:opacity .2s;`;
+    t.textContent=msg;
+    c.appendChild(t);
+    requestAnimationFrame(()=>{ t.style.opacity="1"; });
+    setTimeout(()=>{ t.style.opacity="0"; setTimeout(()=>t.remove(), 200); }, ms);
+  }
+
+  // ---- Collection picker modal (replaces prompt()) ----
+  function showCollectionPicker(onPick){
+    const overlay=$("#colPickerOverlay"); if(!overlay) return;
+    const list=$("#colPickerList");
+    const search=$("#colPickerSearch");
+    search.value="";
+    overlay.style.display="flex";
+    search.focus();
+
+    function renderList(filter=""){
+      const f=filter.toLowerCase();
+      const active=collections.filter(c=>!c.deleted_at&&(!f||c.name.toLowerCase().includes(f)));
+      list.innerHTML=active.length
+        ? active.map(c=>`<li data-id="${c.id}" style="padding:.6rem 1rem;cursor:pointer;border-bottom:1px solid #f3f4f6;user-select:none;" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">${esc(c.name)}</li>`).join("")
+        : `<li style="padding:.6rem 1rem;color:#6b7280;">No collections</li>`;
+    }
+    renderList();
+    search.oninput=()=>renderList(search.value);
+
+    function close(){ overlay.style.display="none"; search.oninput=null; list.onclick=null; }
+    $("#colPickerCancel").onclick=close;
+    overlay.onclick=(e)=>{ if(e.target===overlay) close(); };
+
+    list.onclick=(e)=>{
+      const li=e.target.closest("li[data-id]"); if(!li) return;
+      close();
+      onPick(Number(li.getAttribute("data-id")));
+    };
+
+    $("#colPickerNew").onclick=async()=>{
+      const nm=search.value.trim()||prompt("New collection name:");
+      if(!nm) return;
+      close();
+      const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:nm,parent_id:null})});
+      await safeRefreshCollections(); renderTree();
+      onPick(col.id);
+    };
+  }
+
+  // ---- Citation formatters (lightweight, no deps) ----
+  function splitName(full){
+    const s=String(full||"").trim();
+    if(s.includes(",")){ const [f,...r]=s.split(","); return {family:f.trim(),given:r.join(",").trim()}; }
+    const parts=s.split(/\s+/); const family=parts.pop()||""; return {family,given:parts.join(" ")};
+  }
+  function fmtBibTeX(item){
+    const authors=(item.authors||"").split(/;| and /i).map(a=>{ const p=splitName(a.trim()); return p.family+(p.given?", "+p.given:""); });
+    const key=((authors[0]||"").split(",")[0]||"key").replace(/\s+/g,"")+(item.year||"")+(item.title||"").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,10);
+    return ["@article{"+key+",",
+      "  title={"+esc(item.title||"")+"},",
+      authors.length?"  author={"+authors.join(" and ")+"},":"",
+      item.venue?"  journal={"+item.venue+"},":"",
+      item.year?"  year={"+item.year+"},":"",
+      item.doi?"  doi={"+item.doi+"},":"",
+      "}"].filter(Boolean).join("\n");
+  }
+  function fmtRIS(item){
+    const authors=(item.authors||"").split(/;| and /i);
+    return ["TY  - JOUR",
+      ...authors.map(a=>{ const p=splitName(a.trim()); return "AU  - "+p.family+(p.given?", "+p.given:""); }),
+      "TI  - "+(item.title||""),
+      item.venue?"JO  - "+item.venue:"",
+      item.year?"PY  - "+item.year:"",
+      item.doi?"DO  - "+item.doi:"",
+      "ER  - "].filter(Boolean).join("\n");
+  }
+  function downloadText(filename, content, mime="text/plain"){
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([content],{type:mime}));
+    a.download=filename; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(a.href); },500);
+  }
   async function api(path, opts={}){
     const isFormData = opts.body instanceof FormData;
     const defaultHeaders = isFormData ? {} : { "Content-Type":"application/json" };
@@ -110,13 +195,15 @@
   }
   function closeAnyMenu(){ if(openMenu){ openMenu.remove(); openMenu=null; } }
 
-  async function addItemToCollectionPrompt(id){
-    const names=collections.filter(c=>!c.deleted_at).map(c=>`${c.id}: ${c.name}`).join("\n");
-    const pick=prompt(`Add to which collection?\n${names}\n\nEnter ID:`); if(!pick) return;
-    const cid=Number(pick);
-    if(!collections.some(c=>c.id===cid)) return alert("Invalid collection id.");
-    await api(`/api/collections/${cid}/items`,{method:"POST",body:JSON.stringify({id})});
-    await safeRefreshItems(); renderTable(); alert("Added.");
+  async function addItemToCollection(id){
+    showCollectionPicker(async(cid)=>{
+      try{
+        await api(`/api/collections/${cid}/items`,{method:"POST",body:JSON.stringify({id})});
+        await safeRefreshItems(); renderTable();
+        const col=collections.find(c=>c.id===cid);
+        toast(`Added to "${col?.name||"collection"}"`, "success");
+      }catch(e){ toast("Could not add to collection: "+e.message,"error"); }
+    });
   }
 
   async function removeItemFromCollection(id, collectionId){
@@ -152,7 +239,7 @@
     const defs=[
       {act:"open-paper",label:"Open paper page",onClick: ()=>{ location.href=`paper.html?id=${encodeURIComponent(openAlexId)}`; }},
       ...(pdfUrl ? [{act:"open-pdf",label:"Open PDF",onClick: ()=>{ window.open(pdfUrl,"_blank"); }}] : []),
-      {act:"add-col",label:"Add to collection…",onClick: async()=>{ await addItemToCollectionPrompt(item.id); }},
+      {act:"add-col",label:"Add to collection…",onClick: async()=>{ await addItemToCollection(item.id); }},
       ...((currentCollectionId && typeof currentCollectionId==="number") ? [{act:"remove-col",label:"Remove from this collection",onClick: async()=>{ await removeItemFromCollection(item.id, currentCollectionId); }}] : []),
       ...(!item.deleted_at ? [{act:"trash",label:"Move to Trash",onClick: async()=>{ await moveItemToTrash(item.id); }}] : [{act:"restore",label:"Restore",onClick: async()=>{ await restoreItem(item.id); }}]),
       ...(item.deleted_at ? [{act:"delete",label:"Delete permanently",onClick: async()=>{ await deleteItemForever(item.id); }}] : [])
@@ -166,21 +253,20 @@
         const nm=prompt("New subcollection name:"); if(!nm) return;
         await api("/api/collections",{method:"POST",body:JSON.stringify({name:nm,parent_id:c.id})});
         await safeRefreshCollections(); renderTree();
+        toast("Collection created","success");
       }},
       {act:"ren",label:"Rename",onClick: async()=>{
         const nm=prompt("Rename collection:",c.name); if(!nm) return;
         await api(`/api/collections/${c.id}`,{method:"PATCH",body:JSON.stringify({name:nm})});
         await safeRefreshCollections(); renderTree();
+        toast("Renamed","success");
       }},
-      {act:"move",label:"Move…",onClick: async()=>{
-        const listing=collections.map(cc=>`${cc.id}: ${cc.name}`).join("\n");
-        const input=prompt(`Move "${c.name}" under which parent?\n\nEnter parent ID (blank for root):\n\n${listing}`);
-        if(input===null) return;
-        const parent_id=input.trim()===""?null:Number(input.trim());
-        if(parent_id!==null && !collections.some(cc=>cc.id===parent_id)) return alert("Invalid parent id.");
-        if(parent_id===c.id) return alert("Cannot move under itself.");
-        await api(`/api/collections/${c.id}`,{method:"PATCH",body:JSON.stringify({parent_id})});
-        await safeRefreshCollections(); renderTree();
+      {act:"move",label:"Move to…",onClick: async()=>{
+        showCollectionPicker(async(parent_id)=>{
+          if(parent_id===c.id){ toast("Cannot move under itself","error"); return; }
+          await api(`/api/collections/${c.id}`,{method:"PATCH",body:JSON.stringify({parent_id})});
+          await safeRefreshCollections(); renderTree(); toast("Moved","success");
+        });
       }},
       {act:"trash",label:"Move to Trash",onClick: async()=>{
         // Soft delete collection
@@ -204,7 +290,7 @@
         {act:"new-root",label:"New collection",onClick: async()=>{
           const nm=prompt("New collection name:"); if(!nm) return;
           await api("/api/collections",{method:"POST",body:JSON.stringify({name:nm,parent_id:null})});
-          await safeRefreshCollections(); renderTree();
+          await safeRefreshCollections(); renderTree(); toast("Collection created","success");
         }},
         {act:"empty-trash",label:"Empty Trash",onClick: async()=>{
           if(!confirm("Permanently delete all items & collections in Trash?")) return;
@@ -273,7 +359,7 @@
         {act:"new-root",label:"New collection",onClick: async()=>{
           const nm=prompt("New collection name:"); if(!nm) return;
           await api("/api/collections",{method:"POST",body:JSON.stringify({name:nm,parent_id:null})});
-          await safeRefreshCollections(); renderTree();
+          await safeRefreshCollections(); renderTree(); toast("Collection created","success");
         }},
       ], ev.currentTarget);
     });
@@ -450,6 +536,10 @@
     let view=applyFilters(currentViewItems());
 
     view.sort((a,b)=>{
+      if(sortBy==="year"){
+        const A=Number(a.year||0), B=Number(b.year||0);
+        return sortDir==="asc" ? A-B : B-A;
+      }
       const A=(a?.[sortBy]??"").toString().toLowerCase();
       const B=(b?.[sortBy]??"").toString().toLowerCase();
       if(A<B) return sortDir==="asc"?-1:1;
@@ -550,68 +640,116 @@
     const pdfUrl = localPdf || item.pdf_url || null;
     const zoteroLink = (item.zotero_key && zoteroUserId) ? `https://www.zotero.org/users/${encodeURIComponent(zoteroUserId)}/items/${encodeURIComponent(item.zotero_key)}` : null;
 
+    const currentTags = Array.isArray(item.tags) ? [...item.tags] : [];
+
     host.innerHTML = `
-      <div>
-        <div style="padding:.75rem 1rem;">
-          <h4 style="margin:0 0 .25rem 0;">${esc(item.title)}</h4>
-          <p class="muted" style="margin:.25rem 0;">${esc(item.authors||"-")}</p>
-          <p class="meta"><strong>${esc(item.year??"-")}</strong> · ${esc(item.venue||"-")}</p>
-          <p style="display:flex;gap:.5rem;flex-wrap:wrap;">
-            ${chip(doiUrl,"DOI")}
-            ${chip(item.openalex_url,"OpenAlex")}
-            ${chip(pdfUrl,"Read PDF","badge badge-oa")}
-            ${zoteroLink ? `<a class="badge badge-zotero" href="${zoteroLink}" target="_blank" rel="noopener">Synced from Zotero</a>` : (item.zotero_key ? `<span class="badge badge-zotero">Synced from Zotero</span>` : "")}
-          </p>
-          <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.5rem 0;">
-            <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(item.openalex_id||item.id||"")}">Open paper page</a>
-            ${pdfUrl?`<a class="btn btn-secondary" href="${pdfUrl}" target="_blank" rel="noopener">Open PDF</a>`:""}
-            <button class="btn btn-secondary" id="addToCollectionBtn">Add to collection…</button>
-            ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn">Move to Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn">Restore</button>`}
-            ${item.deleted_at?`<button class="btn btn-secondary" id="deleteForeverBtn">Delete permanently</button>`:""}
-          </div>
-          <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.25rem 0;">
-            ${localPdf ? `
-              <a class="btn btn-secondary" href="${localPdf}" target="_blank" rel="noopener">Open stored PDF</a>
-              <button class="btn btn-secondary" id="deletePdfBtn">Delete PDF</button>
-            ` : `
-              <button class="btn btn-secondary" id="uploadPdfBtn">Upload PDF</button>
-              <input id="uploadPdfInput" type="file" accept="application/pdf" style="display:none;">
-            `}
-          </div>
-          ${!pdfUrl?`<p class="muted" style="margin:.25rem 0;">No PDF available — Upload one or sync from Zotero.</p>`:""}
-          <div class="panel" style="padding:.5rem; margin-top:.5rem;">
-            <strong>Abstract</strong>
-            <p style="margin:.25rem 0;">${esc(item.abstract||"-")}</p>
-          </div>
-          ${Array.isArray(item.tags)&&item.tags.length?`
-            <div class="panel" style="padding:.5rem; margin-top:.5rem;">
-              <strong>Tags</strong>
-              <p>${item.tags.map(t=>`<span class="tag-chip">${esc(t)}</span>`).join(" ")}</p>
-            </div>`:""}
+      <div style="padding:.75rem 1rem;">
+        <h4 style="margin:0 0 .25rem 0;">${esc(item.title)}</h4>
+        <p class="muted" style="margin:.25rem 0;">${esc(item.authors||"-")}</p>
+        <p class="meta"><strong>${esc(item.year??"-")}</strong> · ${esc(item.venue||"-")}</p>
+        <p style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.25rem 0;">
+          ${chip(doiUrl,"DOI")}
+          ${chip(item.openalex_url,"OpenAlex")}
+          ${chip(pdfUrl,"Read PDF","badge badge-oa")}
+          ${zoteroLink?`<a class="badge badge-zotero" href="${zoteroLink}" target="_blank" rel="noopener">Zotero</a>`:(item.zotero_key?`<span class="badge badge-zotero">Zotero</span>`:"")}
+        </p>
+
+        <!-- Actions row 1 -->
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0;">
+          <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(item.openalex_id||item.id||"")}">View</a>
+          ${pdfUrl?`<a class="btn btn-secondary" href="${pdfUrl}" target="_blank" rel="noopener">Open PDF</a>`:""}
+          <button class="btn btn-secondary" id="addToCollectionBtn">+ Collection</button>
+          ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn">Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn">Restore</button>`}
+          ${item.deleted_at?`<button class="btn btn-secondary" id="deleteForeverBtn">Delete forever</button>`:""}
         </div>
+
+        <!-- PDF row -->
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.25rem 0;">
+          ${localPdf?`
+            <a class="btn btn-secondary" href="${localPdf}" target="_blank" rel="noopener">Stored PDF</a>
+            <button class="btn btn-secondary" id="deletePdfBtn">Remove PDF</button>
+          `:`
+            <button class="btn btn-secondary" id="uploadPdfBtn">Attach PDF</button>
+            <input id="uploadPdfInput" type="file" accept="application/pdf" style="display:none;">
+          `}
+        </div>
+
+        <!-- Citation export -->
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0;">
+          <button class="btn btn-secondary" id="exportBibBtn">↓ BibTeX</button>
+          <button class="btn btn-secondary" id="exportRisBtn">↓ RIS</button>
+        </div>
+
+        <!-- Tags editor -->
+        <div style="margin:.5rem 0;">
+          <strong style="font-size:.85rem;">Tags</strong>
+          <div id="tagEditorWrap" style="margin:.35rem 0;display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;">
+            ${currentTags.map(t=>`<span class="tag-chip" data-tag="${esc(t)}">${esc(t)} <button class="tag-del" data-tag="${esc(t)}" title="Remove tag" style="background:none;border:none;cursor:pointer;font-size:.8rem;padding:0 0 0 3px;color:inherit;">×</button></span>`).join("")}
+            <input id="tagInput" class="input" placeholder="Add tag…" style="width:90px;padding:.25rem .4rem;font-size:.85rem;"/>
+          </div>
+        </div>
+
+        <!-- Abstract -->
+        <details style="margin-top:.5rem;">
+          <summary style="cursor:pointer;font-size:.85rem;font-weight:600;color:#374151;">Abstract</summary>
+          <p style="margin:.35rem 0;font-size:.85rem;">${esc(item.abstract||"No abstract available.")}</p>
+        </details>
       </div>
     `;
 
     // Add to collection
-    $("#addToCollectionBtn").onclick=async()=>{
-      const names=collections.filter(c=>!c.deleted_at).map(c=>`${c.id}: ${c.name}`).join("\n");
-      const pick=prompt(`Add to which collection?\n${names}\n\nEnter ID:`); if(!pick) return;
-      const cid=Number(pick);
-      if(!collections.some(c=>c.id===cid)) return alert("Invalid collection id.");
-      await api(`/api/collections/${cid}/items`,{method:"POST",body:JSON.stringify({id})});
-      await safeRefreshItems(); renderTable(); alert("Added.");
-    };
+    $("#addToCollectionBtn").onclick=()=>addItemToCollection(id);
+
+    // Citation export
+    $("#exportBibBtn")?.addEventListener("click",()=>{
+      const safe=(item.title||"citation").replace(/[^a-z0-9]/gi,"_").slice(0,40);
+      downloadText(safe+".bib", fmtBibTeX(item));
+      toast("BibTeX downloaded","success");
+    });
+    $("#exportRisBtn")?.addEventListener("click",()=>{
+      const safe=(item.title||"citation").replace(/[^a-z0-9]/gi,"_").slice(0,40);
+      downloadText(safe+".ris", fmtRIS(item), "application/x-research-info-systems");
+      toast("RIS downloaded","success");
+    });
+
+    // Tag editing
+    async function saveTags(tags){
+      try{
+        await api(`/api/library/${encodeURIComponent(id)}`,{method:"PATCH",body:JSON.stringify({tags})});
+        const it=items.find(x=>String(x.id)===String(id)); if(it) it.tags=tags;
+        renderTable();
+      }catch(e){ toast("Could not save tags: "+e.message,"error"); }
+    }
+    $("#tagEditorWrap")?.addEventListener("click",async(e)=>{
+      const btn=e.target.closest(".tag-del"); if(!btn) return;
+      const tag=btn.getAttribute("data-tag");
+      const newTags=currentTags.filter(t=>t!==tag);
+      currentTags.length=0; newTags.forEach(t=>currentTags.push(t));
+      await saveTags([...currentTags]);
+      await renderInspector(id);
+    });
+    const tagInput=$("#tagInput");
+    tagInput?.addEventListener("keydown",async(e)=>{
+      if(e.key!=="Enter"&&e.key!==",") return;
+      e.preventDefault();
+      const val=tagInput.value.trim(); if(!val) return;
+      if(!currentTags.includes(val)){ currentTags.push(val); await saveTags([...currentTags]); }
+      tagInput.value="";
+      await renderInspector(id);
+    });
 
     // Trash / Restore / Delete forever
     $("#trashItemBtn")?.addEventListener("click", async()=>{
       try{ await api(`/api/trash/items`,{method:"POST",body:JSON.stringify({id})}); }
       catch{ try{ await api(`/api/library/${encodeURIComponent(id)}`,{method:"PATCH",body:JSON.stringify({deleted_at:new Date().toISOString()})}); }catch{} }
       await safeRefreshItems(); renderTable(); await renderInspector(id);
+      toast("Moved to Trash");
     });
     $("#restoreItemBtn")?.addEventListener("click", async()=>{
       try{ await api(`/api/trash/restore`,{method:"POST",body:JSON.stringify({type:"item",id})}); }
       catch{ try{ await api(`/api/library/${encodeURIComponent(id)}`,{method:"PATCH",body:JSON.stringify({deleted_at:null})}); }catch{} }
       await safeRefreshItems(); renderTable(); await renderInspector(id);
+      toast("Restored","success");
     });
     $("#deleteForeverBtn")?.addEventListener("click", async()=>{
       if(!confirm("Permanently delete this item?")) return;
@@ -619,6 +757,7 @@
       catch{ try{ await api(`/api/trash/items`,{method:"DELETE",body:JSON.stringify({id})}); }catch{} }
       items = items.filter(x=>String(x.id)!==String(id));
       renderTable(); $("#inspectorBody").innerHTML=`<p class="muted" style="padding:.75rem;">Select an item…</p>`;
+      toast("Deleted permanently");
     });
 
     // PDF upload / delete
@@ -626,26 +765,24 @@
     $("#uploadPdfInput")?.addEventListener("change", async(ev)=>{
       const file = ev.target.files && ev.target.files[0];
       if(!file) return;
+      const btn=$("#uploadPdfBtn"); if(btn){ btn.textContent="Uploading…"; btn.disabled=true; }
       const form = new FormData();
       form.append("paper_id", id);
       form.append("file", file);
       try{
         await api("/api/library/pdf",{ method:"POST", body:form });
         await safeRefreshItems(); renderTable(); await renderInspector(id);
-      }catch(e){
-        alert("Failed to upload PDF.");
-      }finally{
-        ev.target.value="";
-      }
+        toast("PDF attached","success");
+      }catch(e){ toast("Failed to upload PDF: "+e.message,"error"); }
+      finally{ ev.target.value=""; }
     });
     $("#deletePdfBtn")?.addEventListener("click", async()=>{
-      if(!confirm("Delete stored PDF for this item?")) return;
+      if(!confirm("Remove stored PDF?")) return;
       try{
         await api(`/api/library/pdf?paper_id=${encodeURIComponent(id)}`,{method:"DELETE"});
         await safeRefreshItems(); renderTable(); await renderInspector(id);
-      }catch(e){
-        alert("Failed to delete PDF.");
-      }
+        toast("PDF removed");
+      }catch(e){ toast("Failed to remove PDF: "+e.message,"error"); }
     });
 
     // Related section
@@ -654,30 +791,29 @@
     await renderNotes(id);
   }
 
-  // ---- Related items ----
+  // ---- Related items: show collection siblings ----
   async function renderRelated(itemId){
     const ul=$("#relatedList");
-    ul.innerHTML=`<li class="muted">Loading…</li>`;
-    let related=[];
-    try{
-      const data = await api(`/api/related?item_id=${encodeURIComponent(itemId)}`);
-      related = Array.isArray(data)?data:(Array.isArray(data?.items)?data.items:[]);
-    }catch{ related=[]; }
-    ul.innerHTML = related.length
-      ? related.map(r=>`<li><a href="#" data-open="${esc(r.id)}">${esc(r.title||r.id)}</a> <span class="muted">· ${esc(r.year??"")}</span></li>`).join("")
-      : `<li class="muted">No related items yet.</li>`;
+    const addBtn=$("#addRelatedBtn");
+    if(addBtn) addBtn.style.display="none"; // not applicable for collection-based related
+
+    const item=items.find(x=>String(x.id)===String(itemId));
+    const colIds=(item?.collection_ids||[]);
+
+    // Papers in the same collection(s), excluding self
+    const siblings=items.filter(x=>
+      String(x.id)!==String(itemId) &&
+      !x.deleted_at &&
+      colIds.some(cid=>(x.collection_ids||[]).includes(cid))
+    ).slice(0,8);
+
+    ul.innerHTML = siblings.length
+      ? siblings.map(r=>`<li style="padding:.3rem 0;border-bottom:1px solid #f3f4f6;"><a href="#" data-open="${esc(r.id)}" style="font-size:.85rem;">${esc(r.title||r.id)}</a> <span class="muted" style="font-size:.8rem;">${esc(r.year??"")}</span></li>`).join("")
+      : `<li class="muted" style="font-size:.85rem;">No items in the same collection.</li>`;
 
     ul.onclick=(e)=>{
       const a=e.target.closest("a[data-open]"); if(!a) return;
-      e.preventDefault(); const id=a.getAttribute("data-open"); renderInspector(id);
-    };
-
-    $("#addRelatedBtn").onclick=async()=>{
-      const pick=prompt("Enter the ID of the item to relate:"); if(!pick) return;
-      try{
-        await api(`/api/related`,{method:"POST",body:JSON.stringify({item_id:itemId, related_id:pick})});
-        await renderRelated(itemId);
-      }catch{ alert("Could not add relation."); }
+      e.preventDefault(); renderInspector(a.getAttribute("data-open"));
     };
   }
 

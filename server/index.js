@@ -1343,6 +1343,26 @@ app.post("/api/library", async (req, res) => {
   res.status(201).json({ ok: true });
 });
 
+app.patch("/api/library/:id", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const id = String(req.params.id);
+  const body = req.body || {};
+  const sets = [], vals = [sess.orcid, id];
+  if (Array.isArray(body.tags)) {
+    vals.push(body.tags); sets.push(`tags = $${vals.length}`);
+  }
+  if (typeof body.notes_raw === "string") {
+    vals.push(body.notes_raw); sets.push(`notes_raw = $${vals.length}`);
+  }
+  if (!sets.length) return res.status(400).json({ error: "Nothing to update" });
+  const { rows } = await pool.query(
+    `UPDATE library_items SET ${sets.join(",")} WHERE orcid=$1 AND id=$2 RETURNING *`,
+    vals
+  );
+  res.json(rows[0] || {});
+});
+
 app.delete("/api/library/:id", async (req, res) => {
   const sess = await getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });

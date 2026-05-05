@@ -238,6 +238,22 @@
     </div>
   </footer>
 
+  <!-- Toast container -->
+  <div id="toastContainer" style="position:fixed;bottom:1.25rem;right:1.25rem;z-index:9000;display:flex;flex-direction:column;gap:.5rem;pointer-events:none;"></div>
+
+  <!-- Collection picker modal -->
+  <div id="colPickerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:8000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:1.25rem;width:min(92vw,380px);box-shadow:0 8px 30px rgba(0,0,0,.2);">
+      <h4 style="margin:0 0 .75rem;">Add to collection</h4>
+      <input id="colPickerSearch" class="input" placeholder="Search collections…" style="margin-bottom:.5rem;width:100%;"/>
+      <ul id="colPickerList" style="list-style:none;margin:0;padding:0;max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;"></ul>
+      <div style="display:flex;gap:.5rem;margin-top:.75rem;justify-content:flex-end;">
+        <button id="colPickerCancel" class="btn btn-secondary">Cancel</button>
+        <button id="colPickerNew" class="btn btn-secondary">+ New collection</button>
+      </div>
+    </div>
+  </div>
+
   <script src="scripts/search.js" defer></script>
   <script src="scripts/session.js" defer></script>
   <script src="scripts/library.js" defer></script>
