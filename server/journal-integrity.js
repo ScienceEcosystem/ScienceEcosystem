@@ -79,10 +79,10 @@ const KNOWN_PREDATORY_DOMAINS = [
   "hilarispublisher.com"
 ];
 
-// ISSNs (digits only, no hyphen) for journals confirmed predatory
+// ISSNs (digits only, no hyphen) for journals confirmed predatory.
+// Bump CACHE_VERSION above whenever this list changes.
 const KNOWN_PREDATORY_ISSNS = [
-  "26401770", "26401762", // Cases — Magnus Med Club
-  "26402890", "26402882"  // Journal of Neonatal Biology — Magnus Med Club
+  "28361555" // Cases (jcases.org) — Magnus Med Club; OpenAlex S4387288622
 ];
 
 const DEFAULT_OPENALEX = {
