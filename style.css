@@ -693,27 +693,6 @@ body[data-page="user-profile"] h3 {
   display: inline-block;
 }
 
-.pdf-text-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: auto;
-}
-
-.pdf-text-layer span {
-  color: transparent;
-  pointer-events: none;
-}
-
-.citation-highlight {
-  background: rgba(255, 235, 59, 0.6);
-  border-radius: 2px;
-  pointer-events: auto;
-}
-.citation-highlight.active {
-  outline: 2px solid #2e7f9f;
-  outline-offset: 1px;
-}
 .pdf-pages {
   display: flex;
   flex-direction: column;
@@ -725,29 +704,46 @@ body[data-page="user-profile"] h3 {
   display: inline-block;
 }
 
-.pdf-annotation-layer {
+/* Layer stacking: canvas → text → link → annotation */
+.pdf-text-layer {
+  position: absolute; top: 0; left: 0;
+  z-index: 2;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.pdf-text-layer span {
+  color: transparent;
   position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
+  white-space: pre;
+  cursor: text;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .pdf-link-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: auto;
+  position: absolute; top: 0; left: 0;
+  z-index: 3;
+  pointer-events: none; /* container transparent; children handle clicks */
 }
 .pdf-link {
   position: absolute;
+  z-index: 3;
   cursor: pointer;
+  pointer-events: auto;
   background: rgba(46, 127, 159, 0.08);
   border: 1px solid rgba(46, 127, 159, 0.2);
   border-radius: 2px;
   text-decoration: none;
 }
-.pdf-link:hover {
-  background: rgba(46, 127, 159, 0.18);
+.pdf-link:hover { background: rgba(46, 127, 159, 0.22); }
+
+.pdf-annotation-layer {
+  position: absolute; top: 0; left: 0;
+  z-index: 4;
+  pointer-events: none;
 }
+body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 
 .pdf-annot {
   position: absolute;
@@ -755,21 +751,39 @@ body[data-page="user-profile"] h3 {
   pointer-events: auto;
 }
 
-body.annot-erase .pdf-annotation-layer {
+.citation-highlight {
+  background: rgba(255, 235, 59, 0.6);
+  border-radius: 2px;
   pointer-events: auto;
+}
+.citation-highlight.active {
+  outline: 2px solid #2e7f9f;
+  outline-offset: 1px;
 }
 
-.pdf-text-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
+/* Floating selection toolbar (appears on text select) */
+.pdf-sel-toolbar {
+  position: fixed;
+  z-index: 10010;
+  background: #1e293b;
+  border-radius: 8px;
+  padding: .3rem .4rem;
+  display: flex;
+  gap: .25rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
   pointer-events: auto;
 }
-
-.pdf-text-layer span {
-  color: transparent;
-  pointer-events: auto;
+.pdf-sel-toolbar button {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: .82rem;
+  padding: .3rem .55rem;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
 }
+.pdf-sel-toolbar button:hover { background: rgba(255,255,255,.15); }
 
 .citation-tooltip {
   position: absolute;

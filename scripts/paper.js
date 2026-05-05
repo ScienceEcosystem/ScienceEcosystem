@@ -778,12 +778,50 @@
     return String(v || "").toUpperCase().replace(/[^0-9X]/g, "");
   }
 
+  function renderPredatoryBlock(journalBlock, journalName, journalLinkHtml, doi, paperTitle) {
+    var pubpeerHref = doi ? ("https://pubpeer.com/search?q=" + encodeURIComponent(doi)) : "";
+    var rwHref = "https://retractionwatch.com/?s=" + encodeURIComponent(paperTitle || "");
+    journalBlock.innerHTML =
+      '<div style="background:#fef2f2;border:2px solid #b91c1c;border-radius:10px;padding:.75rem 1rem;margin-bottom:.75rem;">' +
+        '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;">' +
+          '<span style="font-size:1.4rem;">☠️</span>' +
+          '<strong style="color:#b91c1c;font-size:1rem;">Predatory journal</strong>' +
+        '</div>' +
+        '<p style="margin:0;font-size:.85rem;color:#7f1d1d;">This journal appears on predatory publisher lists. Peer review claims cannot be verified. Treat any content with caution.</p>' +
+      '</div>' +
+      '<div class="repro-score" style="text-align:center;margin-bottom:.75rem;">' +
+        '<div style="font-size:2.5rem;font-weight:700;color:#b91c1c;">0%</div>' +
+        '<div style="font-size:1rem;font-weight:600;color:#b91c1c;">Predatory</div>' +
+        '<div class="progress-bar" style="background:#fecaca;height:8px;border-radius:4px;margin-top:.4rem;overflow:hidden;">' +
+          '<div style="background:#b91c1c;width:0%;height:100%;"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="margin-bottom:.5rem;">' +
+        '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;">' +
+          '<span style="color:#b91c1c;font-size:1.1rem;">✗</span>' +
+          '<span style="color:#b91c1c;">On predatory publisher list</span>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;">' +
+          '<span style="color:#b91c1c;font-size:1.1rem;">✗</span>' +
+          '<span style="color:#b91c1c;">Peer review unverifiable</span>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;">' +
+          '<span style="color:#b91c1c;font-size:1.1rem;">✗</span>' +
+          '<span style="color:#b91c1c;">Not indexed in DOAJ</span>' +
+        '</div>' +
+      '</div>' +
+      '<p style="margin:.5rem 0;font-size:.9rem;color:#666;"><strong>Journal:</strong> ' + (journalLinkHtml || escapeHtml(journalName)) + '</p>' +
+      '<div class="panel light" style="margin-top:.5rem;">' +
+        '<strong>Verify:</strong> ' +
+        (pubpeerHref ? '<a href="'+escapeHtml(pubpeerHref)+'" target="_blank" rel="noopener">PubPeer</a> · ' : '') +
+        '<a href="'+escapeHtml(rwHref)+'" target="_blank" rel="noopener">Retraction Watch</a> · ' +
+        '<a href="https://beallslist.net/" target="_blank" rel="noopener">Beall\'s List</a>' +
+      '</div>';
+  }
+
   async function renderJournalIntegrityBlock(p, source){
     var journalBlock = $("journalBlock");
     if (!journalBlock) return;
-
-    var existing = $("integrityBlock");
-    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
 
     var issnL = source && source.issn_l ? source.issn_l : null;
     var issn = source && Array.isArray(source.issn) && source.issn[0] ? source.issn[0] : null;
@@ -792,24 +830,30 @@
       ? String(source.id).replace(/^https?:\/\/openalex\.org\//i, "")
       : (get(p, "primary_location.source.id", "") || "").split("/").pop();
     var homepageUrl = (source && source.homepage_url) || get(p, "primary_location.landing_page_url", "") || "";
+    var doi = doiFromWork(p);
 
-    var wrap = document.createElement("div");
-    wrap.id = "integrityBlock";
-    wrap.style.marginTop = ".75rem";
-    journalBlock.appendChild(wrap);
+    var sourceTail = source ? idTailFrom(source.id) : sourceTailFromPaper(p);
+    var journalLinkHtml = sourceTail
+      ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'">'+escapeHtml(journalName)+'</a>'
+      : escapeHtml(journalName);
 
-    // Fast client-side check — catches known predatory journals immediately
+    // Fast client-side ISSN check — fires immediately, no network needed
     var normIssn  = normalizeIssn(issn);
     var normIssnL = normalizeIssn(issnL);
     var clientHit = CLIENT_PREDATORY_ISSNS.some(function(i){
       return (normIssn && normIssn === i) || (normIssnL && normIssnL === i);
     });
     if (clientHit) {
-      wrap.innerHTML = '<div class="muted small"><strong>Predatory list:</strong> <span style="color:#b91c1c;">Yes</span></div>';
+      renderPredatoryBlock(journalBlock, journalName, journalLinkHtml, doi, p.display_name);
       return;
     }
 
-    wrap.innerHTML = '<div class="muted small">Checking predatory list…</div>';
+    // Add a small "Checking…" note while waiting for API — don't overwrite the quality block yet
+    var statusNote = document.createElement("div");
+    statusNote.id = "integrityNote";
+    statusNote.style.marginTop = ".5rem";
+    statusNote.innerHTML = '<div class="muted small">Checking predatory list…</div>';
+    journalBlock.appendChild(statusNote);
 
     var params = new URLSearchParams();
     params.set("issn", issn || "");
@@ -828,12 +872,16 @@
       });
       if (!res.ok) throw new Error(res.status + " " + res.statusText);
       var data = await res.json();
-      var statusText = data.onPredatoryList ? "Yes" : "No";
-      var statusColor = data.onPredatoryList ? "#b91c1c" : "var(--ink-dim)";
-      wrap.innerHTML =
-        '<div class="muted small"><strong>Predatory list:</strong> <span style="color:' + statusColor + ';">' + statusText + '</span></div>';
+
+      if (data.onPredatoryList) {
+        // Replace the entire quality block with the predatory warning
+        renderPredatoryBlock(journalBlock, journalName, journalLinkHtml, doi, p.display_name);
+      } else {
+        statusNote.innerHTML =
+          '<div class="muted small"><strong>Predatory list:</strong> <span style="color:var(--ink-dim);">No</span></div>';
+      }
     } catch (_err) {
-      wrap.innerHTML = '<div class="muted small"><strong>Predatory list:</strong> Unavailable</div>';
+      statusNote.innerHTML = '<div class="muted small"><strong>Predatory list:</strong> Unavailable</div>';
     } finally {
       clearTimeout(timer);
     }

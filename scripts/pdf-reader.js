@@ -241,7 +241,9 @@ async function renderLinkLayer(page, viewport, layerEl, pageNumber) {
         const targetPage = await resolveDestToPage(dest);
         if (targetPage) {
           pageNum = targetPage;
-          queueRenderPage(targetPage);
+          renderPage(targetPage);
+          // All pages are pre-rendered — just scroll; use setTimeout to let paint settle
+          setTimeout(() => scrollToPage(targetPage), 30);
         }
       });
       pdfLinkIndex.push({ page: pageNumber, label: inferredLabel || 'Internal link', dest });
@@ -281,7 +283,8 @@ function jumpToCitation(refNumber) {
     target.classList.add('active');
     target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
   } else {
-    alert('Citation not visible on this page.');
+    // Citation not visible — it may be on a different page; nothing to scroll to
+    console.info('Citation [' + refNumber + '] not visible in rendered text layers.');
   }
 }
 
@@ -646,14 +649,12 @@ window.handleReferenceClick = handleReferenceClick;
 window.closeReferencePopup = closeReferencePopup;
 window.jumpToInternalLink = jumpToInternalLink;
 
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeReferencePopup();
-});
+// Escape handled by the combined listener below (removeSelToolbar + closeReferencePopup)
 
 window.addEventListener('DOMContentLoaded', () => {
   if (!pdfUrl) {
-    alert('No PDF URL provided. Please access this page from a paper link.');
-    window.location.href = '/';
+    document.querySelector('.pdf-main-body')?.insertAdjacentHTML('afterbegin',
+      '<p style="padding:2rem;color:#c0392b;">No PDF URL provided. Please open this page from a paper link.</p>');
     return;
   }
 
@@ -696,12 +697,93 @@ function updateAnnotButtons() {
   document.body.classList.toggle('annot-erase', annotMode === 'erase');
 }
 
+// ---- Floating selection toolbar ----
+let _selToolbar = null;
+
+function removeSelToolbar() {
+  if (_selToolbar) { _selToolbar.remove(); _selToolbar = null; }
+}
+
+function showSelToolbar(x, y, quote, page, normRects) {
+  removeSelToolbar();
+  const tb = document.createElement('div');
+  tb.className = 'pdf-sel-toolbar';
+  // Position above the selection, clamped to viewport
+  const TOP_OFFSET = 44;
+  tb.style.left = Math.min(x, window.innerWidth - 220) + 'px';
+  tb.style.top  = Math.max(4, y - TOP_OFFSET) + 'px';
+
+  const btn = (label, onClick) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('mousedown', (e) => { e.preventDefault(); }); // keep selection alive
+    b.addEventListener('click', () => { onClick(); removeSelToolbar(); window.getSelection()?.removeAllRanges(); });
+    return b;
+  };
+
+  tb.appendChild(btn('📋 Copy', () => {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(quote).catch(() => {});
+    } else {
+      // Fallback for browsers without clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = quote; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch(_) {}
+      ta.remove();
+    }
+    showCopiedToast();
+  }));
+
+  tb.appendChild(btn('🖊 Highlight', () => {
+    createAnnotation(page, normRects, quote, 'highlight', '');
+  }));
+
+  tb.appendChild(btn('📝 Note', () => {
+    // Use a small inline prompt inside the toolbar area
+    const note = window.prompt('Add a note:', '') || '';
+    createAnnotation(page, normRects, quote, 'note', note);
+  }));
+
+  tb.appendChild(btn('✕', () => {}));
+
+  document.body.appendChild(tb);
+  _selToolbar = tb;
+
+  // Dismiss on outside click or Escape
+  setTimeout(() => {
+    const onDown = (e) => {
+      if (!tb.contains(e.target)) { removeSelToolbar(); document.removeEventListener('mousedown', onDown); }
+    };
+    document.addEventListener('mousedown', onDown);
+  }, 0);
+}
+
+function showCopiedToast() {
+  const t = document.createElement('div');
+  t.textContent = 'Copied!';
+  Object.assign(t.style, { position:'fixed', bottom:'1.5rem', right:'1.5rem', background:'#15803d', color:'#fff', padding:'.55rem 1rem', borderRadius:'8px', fontSize:'.9rem', zIndex:'10020', boxShadow:'0 4px 12px rgba(0,0,0,.2)', opacity:'0', transition:'opacity .15s' });
+  document.body.appendChild(t);
+  requestAnimationFrame(() => { t.style.opacity = '1'; });
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 150); }, 1800);
+}
+
+function createAnnotation(page, normRects, quote, type, note) {
+  annotations.push({
+    id: String(Date.now()) + '_' + Math.random().toString(16).slice(2),
+    page, type, rects: normRects, quote, note
+  });
+  saveAnnotations();
+  renderAnnotationsForPage(page);
+}
+
 function wireAnnotationSelection(layerEl) {
-  layerEl.onmouseup = (ev) => {
+  layerEl.addEventListener('mouseup', (ev) => {
     if (annotMode === 'erase') return;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) return;
-    if (!layerEl.contains(sel.anchorNode) || !layerEl.contains(sel.focusNode)) return;
+    if (!layerEl.contains(sel.anchorNode) && !layerEl.contains(sel.focusNode)) return;
+
     const range = sel.getRangeAt(0);
     const rects = Array.from(range.getClientRects());
     if (!rects.length) return;
@@ -720,25 +802,12 @@ function wireAnnotationSelection(layerEl) {
     const quote = sel.toString().trim();
     if (!quote) return;
 
-    let note = '';
-    if (annotMode === 'note') {
-      note = prompt('Note:', '') || '';
-    }
+    // Show toolbar at mouse position — selection stays intact so Ctrl+C still works
+    showSelToolbar(ev.clientX, ev.clientY, quote, page, normRects);
+  });
 
-    annotations.push({
-      id: String(Date.now()) + '_' + Math.random().toString(16).slice(2),
-      page: page,
-      type: annotMode,
-      rects: normRects,
-      quote: quote,
-      note: note
-    });
-    saveAnnotations();
-    renderAnnotationsForPage(page);
-    sel.removeAllRanges();
-  };
-
-  layerEl.onclick = (ev) => {
+  // Erase mode: click annotation to remove it
+  layerEl.addEventListener('click', (ev) => {
     if (annotMode !== 'erase') return;
     const target = ev.target.closest('.pdf-annot');
     if (!target) return;
@@ -747,8 +816,12 @@ function wireAnnotationSelection(layerEl) {
     annotations = annotations.filter(a => a.id !== id);
     saveAnnotations();
     renderAnnotationsAll();
-  };
+  });
 }
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { removeSelToolbar(); closeReferencePopup(); }
+});
 
 function renderAnnotationsAll() {
   document.querySelectorAll('.pdf-page-wrap').forEach(w => {
