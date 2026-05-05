@@ -771,6 +771,13 @@
       checks;
   }
 
+  // ISSNs (digits only) confirmed predatory — mirrors server/journal-integrity.js
+  var CLIENT_PREDATORY_ISSNS = ["28361555"];
+
+  function normalizeIssn(v) {
+    return String(v || "").toUpperCase().replace(/[^0-9X]/g, "");
+  }
+
   async function renderJournalIntegrityBlock(p, source){
     var journalBlock = $("journalBlock");
     if (!journalBlock) return;
@@ -789,8 +796,20 @@
     var wrap = document.createElement("div");
     wrap.id = "integrityBlock";
     wrap.style.marginTop = ".75rem";
-    wrap.innerHTML = '<div class="muted small">Checking predatory list…</div>';
     journalBlock.appendChild(wrap);
+
+    // Fast client-side check — catches known predatory journals immediately
+    var normIssn  = normalizeIssn(issn);
+    var normIssnL = normalizeIssn(issnL);
+    var clientHit = CLIENT_PREDATORY_ISSNS.some(function(i){
+      return (normIssn && normIssn === i) || (normIssnL && normIssnL === i);
+    });
+    if (clientHit) {
+      wrap.innerHTML = '<div class="muted small"><strong>Predatory list:</strong> <span style="color:#b91c1c;">Yes</span></div>';
+      return;
+    }
+
+    wrap.innerHTML = '<div class="muted small">Checking predatory list…</div>';
 
     var params = new URLSearchParams();
     params.set("issn", issn || "");
@@ -1907,6 +1926,47 @@
     restoreHeaderIfNeeded();
   }
 
+  // ---------- Related papers ----------
+  async function fetchRelatedPapers(p){
+    var ids = Array.isArray(p.related_works) ? p.related_works.slice(0, 10) : [];
+    if (!ids.length) return [];
+    var idList = ids.map(function(id){ return "https://openalex.org/" + String(id).split("/").pop(); }).join("|");
+    try {
+      var data = await getJSON(API + "/works?filter=ids.openalex:" + encodeURIComponent(idList) + "&per_page=10");
+      return Array.isArray(data.results) ? data.results : [];
+    } catch(e) { return []; }
+  }
+
+  function renderRelatedPapersSection(papers){
+    var block = $("relatedBlock");
+    if (!block) return;
+    if (!papers.length) return;
+
+    var hasComponent = !!(window.SE && SE.components && typeof SE.components.renderPaperCard === "function");
+    var items = papers.slice(0, 8).map(function(w){
+      var idTail = idTailFrom(w.id || "");
+      var title  = escapeHtml(w.display_name || "Untitled");
+      var year   = w.publication_year || "";
+      var venue  = escapeHtml(get(w, "primary_location.source.display_name", "") || get(w, "host_venue.display_name", "") || "");
+      if (hasComponent) return SE.components.renderPaperCard(w, { compact: true });
+      return '<article class="result-card">'
+        + '<h3 class="result-title"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+title+'</a>'
+        + (year ? ' <span class="muted">('+year+')</span>' : '') + '</h3>'
+        + (venue ? '<p class="muted">'+venue+'</p>' : '')
+        + '</article>';
+    });
+
+    var section = document.createElement("section");
+    section.className = "panel light";
+    section.style.marginBottom = "12px";
+    section.innerHTML = '<h3>Papers like this</h3><div class="cards-wrap" id="relatedPapersList">' + items.join("") + '</div>';
+    block.prepend(section);
+
+    if (hasComponent && typeof SE.components.enhancePaperCards === "function") {
+      SE.components.enhancePaperCards(section.querySelector("#relatedPapersList"));
+    }
+  }
+
   // ---------- Boot ----------
   async function boot(){
     var rawId = getParam("id");
@@ -1926,6 +1986,8 @@
 
       window.__GRAPH_CTX__ = { main: paper, cited: cited, citing: citing };
       await renderGraphs(paper, cited, citing);
+
+      fetchRelatedPapers(paper).then(function(related){ renderRelatedPapersSection(related); }).catch(function(){});
 
     } catch (e) {
       console.error(e);

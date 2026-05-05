@@ -781,6 +781,39 @@ function handleSearch(inputId) {
 }
 
 /* ---------- Init ---------- */
+const SEARCH_STATE_KEY = "se_search_state";
+
+function saveSearchState() {
+  try {
+    sessionStorage.setItem(SEARCH_STATE_KEY, JSON.stringify({
+      q: currentQuery,
+      filter: currentFilter,
+      order: currentOrder,
+      facet: { oa: facet.oa, types: Array.from(facet.types), yearMin: facet.yearMin, yearMax: facet.yearMax },
+      page: currentPage
+    }));
+  } catch(_) {}
+}
+
+function restoreSearchState() {
+  try {
+    const raw = sessionStorage.getItem(SEARCH_STATE_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (s.q) currentQuery = s.q;
+    if (s.filter) currentFilter = s.filter;
+    if (s.order) currentOrder = s.order;
+    if (s.facet) {
+      facet.oa = !!s.facet.oa;
+      facet.types = new Set(Array.isArray(s.facet.types) ? s.facet.types : []);
+      facet.yearMin = s.facet.yearMin || null;
+      facet.yearMax = s.facet.yearMax || null;
+    }
+    if (s.page) currentPage = s.page;
+    return true;
+  } catch(_) { return false; }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const params = new URLSearchParams(window.location.search);
   const input = $("unifiedSearchInput");
@@ -788,15 +821,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const pf = $("paperFilter");
   if (params.has("sort")) {
     const s = params.get("sort");
-    if (["relevance","citations","year"].includes(s)) {
-      currentFilter = s;
-    }
+    if (["relevance","citations","year"].includes(s)) currentFilter = s;
   }
   const of = $("orderFilter");
   if (params.has("order")) {
     const o = params.get("order");
     if (["asc","desc"].includes(o)) currentOrder = o;
   }
+
+  // Restore state when navigating back from a paper page
+  const fromPaper = document.referrer && document.referrer.includes("paper.html");
+  const hasQuery  = params.has("q");
+  if (!hasQuery && fromPaper) {
+    const restored = restoreSearchState();
+    if (restored && currentQuery) {
+      if (input) input.value = currentQuery;
+      if (pf) pf.value = currentFilter;
+      if (of) of.value = currentOrder;
+      handleUnifiedSearch(false);
+      return;
+    }
+  }
+
   if (pf) pf.value = currentFilter;
   if (of) of.value = currentOrder;
 
@@ -813,6 +859,12 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  // Save state before leaving for a paper
+  document.addEventListener("click", (e) => {
+    const link = e.target.closest('a[href*="paper.html"]');
+    if (link) saveSearchState();
+  });
 
   $("applyAdvancedFilters")?.addEventListener("click", () => handleUnifiedSearch(true));
   $("clearAdvancedFilters")?.addEventListener("click", () => { clearAdvancedFilters(); handleUnifiedSearch(true); });

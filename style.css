@@ -145,7 +145,7 @@ body {
 }
 .btn-orcid:hover,
 .btn-orcid:focus { background: #15803d; outline: 2px solid var(--ring); outline-offset: 2px; }
-.orcid-icon { height: 20px; width: 20px; }
+.orcid-icon { height: 22px; width: auto; }
 
 /* Buttons & Inputs */
 .btn {

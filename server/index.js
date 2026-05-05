@@ -409,13 +409,13 @@ async function upsertUser({ orcid, name, affiliation, bio = null, keywords = nul
     `INSERT INTO users (orcid, name, affiliation, bio, keywords, languages, links, visibility)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (orcid) DO UPDATE SET
-       name = EXCLUDED.name,
-       affiliation = EXCLUDED.affiliation,
-       bio = COALESCE(EXCLUDED.bio, users.bio),
-       keywords = COALESCE(EXCLUDED.keywords, users.keywords),
-       languages = COALESCE(EXCLUDED.languages, users.languages),
-       links = COALESCE(EXCLUDED.links, users.links),
-       visibility = COALESCE(EXCLUDED.visibility, users.visibility)`,
+       name = COALESCE(users.name, EXCLUDED.name),
+       affiliation = COALESCE(users.affiliation, EXCLUDED.affiliation),
+       bio = COALESCE(users.bio, EXCLUDED.bio),
+       keywords = COALESCE(users.keywords, EXCLUDED.keywords),
+       languages = COALESCE(users.languages, EXCLUDED.languages),
+       links = COALESCE(users.links, EXCLUDED.links),
+       visibility = COALESCE(users.visibility, EXCLUDED.visibility)`,
     [orcid, name, affiliation, bio, keywords, languages, links, visibility]
   );
 }
@@ -1160,18 +1160,26 @@ app.get("/auth/orcid/callback", async (req, res) => {
     const orcid = token.orcid;
     if (!orcid) return sendAuthError(res, "Token response missing ORCID iD");
 
-    // Fetch public profile (best-effort)
-    let name = null, affiliation = null;
+    // Name comes directly from the ORCID token response (always present)
+    let name = (token.name || "").trim() || null;
+    let affiliation = null;
+    // Fetch public record for employment data (pub.orcid.org = public API, no auth needed)
     try {
-      const recRes = await fetch(`${ORCID_API_BASE}/${orcid}/record`, { headers: { Accept: "application/json" } });
+      const recRes = await fetch(`https://pub.orcid.org/v3.0/${orcid}/record`, {
+        headers: { "Accept": "application/json" }
+      });
       if (recRes.ok) {
         const rec = await recRes.json();
-        const person = rec?.person;
-        const given  = person?.name?.["given-names"]?.value || "";
-        const family = person?.name?.["family-name"]?.value || "";
-        const credit = person?.name?.["credit-name"]?.value || "";
-        name = (credit || `${given} ${family}`).trim() || null;
-        const emp = rec?.["activities-summary"]?.employments?.["employment-summary"]?.[0];
+        // Use credit-name or given+family if token didn't supply a name
+        if (!name) {
+          const person = rec?.person;
+          const given  = person?.name?.["given-names"]?.value || "";
+          const family = person?.name?.["family-name"]?.value || "";
+          const credit = person?.name?.["credit-name"]?.value || "";
+          name = (credit || `${given} ${family}`).trim() || null;
+        }
+        const empList = rec?.["activities-summary"]?.employments?.["affiliation-group"];
+        const emp = Array.isArray(empList) && empList[0]?.["summaries"]?.[0]?.["employment-summary"];
         affiliation = emp?.organization?.name || null;
       }
     } catch {}

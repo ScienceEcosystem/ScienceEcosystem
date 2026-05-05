@@ -269,6 +269,41 @@
     return lines.join("\n");
   }
 
+  function fmtRIS(d){
+    var lines = ["TY  - JOUR"];
+    (d.authors || []).forEach(function(full){
+      var p = splitName(full);
+      lines.push("AU  - " + (p.family || full) + (p.given ? ", " + p.given : ""));
+    });
+    if (d.title)  lines.push("TI  - " + d.title);
+    if (d.venue)  lines.push("JO  - " + d.venue);
+    if (d.year)   lines.push("PY  - " + d.year);
+    if (d.volume) lines.push("VL  - " + d.volume);
+    if (d.issue)  lines.push("IS  - " + d.issue);
+    if (d.pages && d.pages.includes("-")) {
+      var pp = d.pages.split("-");
+      lines.push("SP  - " + pp[0].trim());
+      lines.push("EP  - " + pp[1].trim());
+    } else if (d.pages) {
+      lines.push("SP  - " + d.pages);
+    }
+    if (d.doi)     lines.push("DO  - " + d.doi);
+    if (d.doi_url) lines.push("UR  - " + d.doi_url);
+    else if (d.url) lines.push("UR  - " + d.url);
+    lines.push("ER  - ");
+    return lines.join("\n");
+  }
+
+  function triggerDownload(filename, content, mime){
+    var blob = new Blob([content], { type: mime });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+  }
+
   // ---------- Unpaywall (adds "downloadable" PDF info) ----------
   var oaCache = Object.create(null);
   async function fetchUnpaywall(doi){
@@ -421,6 +456,9 @@
     var van = fmtVancouver(d);
     var bib = fmtBibTeX(d);
 
+    var ris = fmtRIS(d);
+    var safeName = (d.title || "citation").replace(/[^a-z0-9]+/gi, "_").slice(0, 40);
+
     var tpl = ''+
       '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">' +
         '<strong style="font-size:1rem;">Cite this</strong>' +
@@ -429,7 +467,8 @@
           '<button class="btn btn-secondary" data-action="close-cite" aria-label="Close">Close</button>' +
         '</div>' +
       '</div>' +
-      '<div style="display:grid; grid-template-columns: 1fr; gap:10px; max-height:55vh; overflow:auto;">' +
+      '<div style="display:grid; grid-template-columns: 1fr; gap:10px; max-height:55vh; overflow:auto;"' +
+        ' data-ris="'+escapeHtml(ris)+'" data-filename="'+escapeHtml(safeName)+'">' +
         citeRow("APA (7th)", apa) +
         citeRow("MLA (9th)", mla) +
         citeRow("Chicago (Notes & Bib)", chi) +
@@ -453,7 +492,11 @@
         '<div class="cite-row-bibtex">' +
           '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">' +
             '<span class="muted" style="font-weight:600;">'+escapeHtml(label)+'</span>' +
-            '<button class="btn btn-secondary" data-role="copy-bibtex" aria-label="Copy BibTeX">Copy</button>' +
+            '<div style="display:flex;gap:6px;">' +
+              '<button class="btn btn-secondary" data-role="copy-bibtex" aria-label="Copy BibTeX">Copy</button>' +
+              '<button class="btn btn-secondary" data-role="download-bibtex" aria-label="Download .bib">↓ .bib</button>' +
+              '<button class="btn btn-secondary" data-role="download-ris" aria-label="Download .ris">↓ .ris</button>' +
+            '</div>' +
           '</div>' +
           '<textarea readonly style="width:100%; min-height:140px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:.9rem; padding:8px; border:1px solid #e5e7eb; border-radius:8px;">'+escapeHtml(text)+'</textarea>' +
         '</div>';
@@ -670,6 +713,28 @@
         try { document.execCommand("copy"); } catch(_){}
         copyBib.textContent = "Copied ✓";
         setTimeout(function(){ copyBib.textContent = "Copy"; }, 1200);
+        return;
+      }
+
+      var dlBib = e.target.closest('[data-role="download-bibtex"]');
+      if (dlBib){
+        var wrapB = dlBib.closest(".cite-row-bibtex");
+        if (!wrapB) return;
+        var taB = wrapB.querySelector("textarea");
+        if (!taB) return;
+        var gridB = dlBib.closest("[data-filename]");
+        var fnB = (gridB && gridB.getAttribute("data-filename")) || "citation";
+        triggerDownload(fnB + ".bib", taB.value, "text/plain");
+        return;
+      }
+
+      var dlRis = e.target.closest('[data-role="download-ris"]');
+      if (dlRis){
+        var gridR = dlRis.closest("[data-ris]");
+        if (!gridR) return;
+        var risText = gridR.getAttribute("data-ris") || "";
+        var fnR = (gridR.getAttribute("data-filename")) || "citation";
+        triggerDownload(fnR + ".ris", risText, "application/x-research-info-systems");
         return;
       }
 
