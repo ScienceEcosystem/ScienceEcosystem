@@ -313,6 +313,7 @@ async function pgInit() {
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS tags TEXT[]`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS notes_raw TEXT`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS collection_ids_zotero TEXT[]`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS annotations JSONB`);
 
   // Zotero connections + sync log
   await pool.query(`
@@ -1361,6 +1362,32 @@ app.patch("/api/library/:id", async (req, res) => {
     vals
   );
   res.json(rows[0] || {});
+});
+
+app.get("/api/library/pdf-annotations", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const paperId = (req.query.paper_id || "").trim();
+  if (!paperId) return res.status(400).json({ error: "paper_id required" });
+  const { rows } = await pool.query(
+    `SELECT annotations FROM library_items WHERE orcid=$1 AND id=$2`,
+    [sess.orcid, paperId]
+  ).catch(() => ({ rows: [] }));
+  const raw = rows[0]?.annotations;
+  const annotations = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : [];
+  res.json({ annotations: Array.isArray(annotations) ? annotations : [] });
+});
+
+app.post("/api/library/pdf-annotations", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const { paper_id, annotations } = req.body || {};
+  if (!paper_id || !Array.isArray(annotations)) return res.status(400).json({ error: "paper_id and annotations[] required" });
+  await pool.query(
+    `UPDATE library_items SET annotations=$3 WHERE orcid=$1 AND id=$2`,
+    [sess.orcid, String(paper_id), JSON.stringify(annotations)]
+  ).catch(() => {});
+  res.json({ ok: true });
 });
 
 app.delete("/api/library/:id", async (req, res) => {

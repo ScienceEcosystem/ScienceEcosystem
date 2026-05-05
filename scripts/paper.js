@@ -1679,7 +1679,7 @@
       loadLinkedResources(doi);
       var oaPdf = getOpenAccessPdf(p);
       var hasOpenAccess = !!(get(p,"open_access.is_oa",false) || get(p,"best_oa_location.is_oa",false) || oaPdf);
-      loadCitationContexts(doi, hasOpenAccess);
+      loadCitationContexts(doi);
     }
 
     await renderJournalIntegrityBlock(p, source);
@@ -1822,7 +1822,7 @@
   }
 
   // ---------- Citation contexts ----------
-  async function loadCitationContexts(doi, hasOpenAccess) {
+  async function loadCitationContexts(doi) {
     const section = document.getElementById("citationContextsSection");
     if (!section || !doi) return;
 
@@ -1844,12 +1844,6 @@
       }
 
       section.style.display = "block";
-      const subtitle = section.querySelector("p.muted");
-      if (subtitle) {
-        subtitle.innerHTML = hasOpenAccess
-          ? `Here’s how other researchers describe it in <strong id="citationCount">0</strong> open-access papers:`
-          : `Since this paper is behind a paywall, here’s how other researchers describe it in <strong id="citationCount">0</strong> open-access papers:`;
-      }
       document.getElementById("citationCount").textContent = contexts.length;
       document.getElementById("countAll").textContent = contexts.length;
       document.getElementById("countInfluential").textContent = contexts.filter(c => c.isInfluential).length;

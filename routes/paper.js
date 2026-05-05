@@ -327,19 +327,29 @@ async function getSemanticScholarCitationsByPaperId(paperId) {
     if (!citationsRes.ok) return { items: null, error: `s2 citations ${citationsRes.status}` };
     const data = citationsRes.data || {};
 
-    const items = (data.data || [])
-      .filter(c => c.citingPaper?.isOpenAccess && c.contexts?.length > 0)
-      .map(c => ({
+    // Expand multiple contexts per citing paper into separate items
+    const items = [];
+    for (const c of (data.data || [])) {
+      if (!c.contexts?.length) continue;
+      const base = {
         source: 'semantic_scholar',
         title: c.citingPaper.title,
         year: c.citingPaper.year,
         authors: c.citingPaper.authors?.map(a => a.name).join(', ') || '',
-        snippet: c.contexts[0],
         intent: c.intents?.[0] || 'background',
         isInfluential: c.isInfluential || false,
         url: c.citingPaper.url || (c.citingPaper.externalIds?.DOI ? `https://doi.org/${c.citingPaper.externalIds.DOI}` : null),
         openAccessPdf: c.citingPaper.openAccessPdf?.url || null
-      }));
+      };
+      // Show every context sentence, deduplicated
+      const seen = new Set();
+      for (const ctx of c.contexts) {
+        const clean = String(ctx || '').trim();
+        if (!clean || seen.has(clean)) continue;
+        seen.add(clean);
+        items.push({ ...base, snippet: clean });
+      }
+    }
     return { items, error: null };
   } catch (e) {
     console.error('Semantic Scholar API error:', e);
@@ -642,11 +652,6 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
     if (semanticScholar && !Array.isArray(semanticScholar) && typeof semanticScholar === "object" && "items" in semanticScholar) {
       if (!semanticError && semanticScholar.error) semanticError = semanticScholar.error;
       semanticScholar = semanticScholar.items || [];
-    }
-
-    if ((!semanticScholar || semanticScholar.length === 0) && doi) {
-      const oaFallback = await getOpenAlexCitingAbstractSnippets(doi);
-      if (oaFallback.length) semanticScholar = oaFallback;
     }
 
     const result = {

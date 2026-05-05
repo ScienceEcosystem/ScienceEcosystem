@@ -384,11 +384,250 @@ async function renderAllPages() {
   renderPage(pageNum);
   renderPdfLinksSidebar();
   pageRendering = false;
+
+  // Post-render features (non-blocking)
+  searchAllText = null; // reset search index so it rebuilds on next search
+  renderOutline();
+  renderThumbnails();
 }
 
 function scrollToPage(num) {
   const el = document.querySelector(`.pdf-page-wrap[data-page="${num}"]`);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Sync thumbnail active state
+  document.querySelectorAll('.pdf-thumb').forEach(t => {
+    t.classList.toggle('active', Number(t.getAttribute('data-page')) === num);
+  });
+}
+
+// ---- Feature 1: Sidebar tab switcher ----
+function bindSidebarTabs() {
+  const btns = document.querySelectorAll('.pdf-tab-btn');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      btns.forEach(b => {
+        b.classList.remove('active');
+        b.style.borderBottomColor = 'transparent';
+      });
+      btn.classList.add('active');
+      btn.style.borderBottomColor = '#2e7f9f';
+      const tab = btn.getAttribute('data-tab');
+      document.querySelectorAll('.pdf-tab-panel').forEach(p => p.style.display = 'none');
+      const panel = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+      if (panel) panel.style.display = '';
+    });
+  });
+}
+
+// ---- Feature 2: Outline / bookmarks ----
+async function renderOutline() {
+  const host = document.getElementById('pdfOutline');
+  if (!host || !pdfDoc) return;
+  try {
+    const outline = await pdfDoc.getOutline();
+    if (!outline || !outline.length) {
+      host.innerHTML = '<p class="muted" style="font-size:.85rem;">No table of contents found.</p>';
+      return;
+    }
+    host.innerHTML = buildOutlineHTML(outline, 0);
+    host.querySelectorAll('[data-outline-dest]').forEach(el => {
+      el.addEventListener('click', async () => {
+        const dest = el.getAttribute('data-outline-dest');
+        const targetPage = await resolveDestToPage(dest);
+        if (targetPage) { renderPage(targetPage); setTimeout(() => scrollToPage(targetPage), 30); }
+      });
+    });
+  } catch (e) {
+    host.innerHTML = '<p class="muted" style="font-size:.85rem;">Could not load outline.</p>';
+  }
+}
+
+function buildOutlineHTML(items, depth) {
+  return '<ul style="list-style:none;margin:0;padding-left:' + (depth * 12) + 'px;">' +
+    items.map(item => {
+      const dest = typeof item.dest === 'string' ? item.dest : JSON.stringify(item.dest || '');
+      const sub = item.items && item.items.length ? buildOutlineHTML(item.items, depth + 1) : '';
+      return '<li style="margin:.15rem 0;">' +
+        '<a href="#" data-outline-dest="' + escapeHtml(dest) + '" style="font-size:.83rem;color:#1e3a5f;text-decoration:none;display:block;padding:.2rem .3rem;border-radius:4px;" ' +
+        'onmouseenter="this.style.background=\'#e8f0f7\'" onmouseleave="this.style.background=\'\'">' +
+        escapeHtml(item.title || 'Section') + '</a>' + sub + '</li>';
+    }).join('') + '</ul>';
+}
+
+// ---- Feature 3: Page thumbnails ----
+async function renderThumbnails() {
+  const strip = document.getElementById('pdfThumbnailStrip');
+  if (!strip || !pdfDoc) return;
+  strip.innerHTML = '';
+  for (let i = 1; i <= pdfDoc.numPages; i++) {
+    const page = await pdfDoc.getPage(i);
+    const vp = page.getViewport({ scale: 0.18 });
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width;
+    canvas.height = vp.height;
+    canvas.className = 'pdf-thumb' + (i === 1 ? ' active' : '');
+    canvas.setAttribute('data-page', String(i));
+    canvas.title = 'Page ' + i;
+    page.render({ canvasContext: canvas.getContext('2d'), viewport: vp });
+    canvas.addEventListener('click', () => { renderPage(i); setTimeout(() => scrollToPage(i), 30); });
+    const label = document.createElement('span');
+    label.className = 'pdf-thumb-label';
+    label.textContent = i;
+    strip.appendChild(canvas);
+    strip.appendChild(label);
+  }
+}
+
+// ---- Feature 4: Full-text search ----
+let searchMatches = [];
+let searchIndex = -1;
+let searchAllText = null; // { page: n, spans: [{el, text}] }[]
+
+async function buildSearchIndex() {
+  if (searchAllText) return;
+  searchAllText = [];
+  document.querySelectorAll('.pdf-page-wrap').forEach(wrap => {
+    const page = Number(wrap.getAttribute('data-page') || 0);
+    const spans = Array.from(wrap.querySelectorAll('.pdf-text-layer span')).map(el => ({
+      el,
+      text: (el.textContent || '').toLowerCase()
+    })).filter(s => s.text.trim());
+    if (spans.length) searchAllText.push({ page, spans });
+  });
+}
+
+async function runSearch(query) {
+  const q = query.trim().toLowerCase();
+  const countEl = document.getElementById('pdfSearchCount');
+  // Clear previous highlights
+  document.querySelectorAll('.pdf-search-highlight').forEach(el => {
+    el.classList.remove('pdf-search-highlight', 'current');
+  });
+  searchMatches = [];
+  searchIndex = -1;
+  if (!q || q.length < 2) { if (countEl) countEl.textContent = ''; return; }
+
+  await buildSearchIndex();
+
+  for (const { spans } of (searchAllText || [])) {
+    for (const { el, text } of spans) {
+      if (text.includes(q)) {
+        el.classList.add('pdf-search-highlight');
+        searchMatches.push(el);
+      }
+    }
+  }
+
+  if (countEl) countEl.textContent = searchMatches.length ? `1/${searchMatches.length}` : '0';
+  if (searchMatches.length) jumpSearchMatch(0);
+}
+
+function jumpSearchMatch(idx) {
+  if (!searchMatches.length) return;
+  idx = ((idx % searchMatches.length) + searchMatches.length) % searchMatches.length;
+  searchMatches.forEach((el, i) => el.classList.toggle('current', i === idx));
+  searchMatches[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  searchIndex = idx;
+  const countEl = document.getElementById('pdfSearchCount');
+  if (countEl) countEl.textContent = `${idx + 1}/${searchMatches.length}`;
+}
+
+function bindSearch() {
+  const input = document.getElementById('pdfSearchInput');
+  const prev  = document.getElementById('pdfSearchPrev');
+  const next  = document.getElementById('pdfSearchNext');
+  if (!input) return;
+
+  let debounceT;
+  input.addEventListener('input', () => {
+    clearTimeout(debounceT);
+    debounceT = setTimeout(() => runSearch(input.value), 300);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.shiftKey ? jumpSearchMatch(searchIndex - 1) : jumpSearchMatch(searchIndex + 1); }
+    if (e.key === 'Escape') { input.value = ''; runSearch(''); }
+  });
+  prev?.addEventListener('click', () => jumpSearchMatch(searchIndex - 1));
+  next?.addEventListener('click', () => jumpSearchMatch(searchIndex + 1));
+
+  // Ctrl+F / Cmd+F → focus search bar
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+  });
+}
+
+// ---- Feature 5: Annotation server sync ----
+const ANNOT_SYNC_DEBOUNCE = 1500;
+let _annotSyncTimer = null;
+
+function scheduleSyncAnnotations() {
+  if (!paperId) return; // can only sync if we know the paper
+  clearTimeout(_annotSyncTimer);
+  _annotSyncTimer = setTimeout(syncAnnotationsToServer, ANNOT_SYNC_DEBOUNCE);
+}
+
+async function syncAnnotationsToServer() {
+  if (!paperId) return;
+  try {
+    await fetch('/api/library/pdf-annotations', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paper_id: paperId, annotations })
+    });
+  } catch (_) { /* sync is best-effort */ }
+}
+
+async function loadAnnotationsFromServer() {
+  if (!paperId) return false;
+  try {
+    const res = await fetch(`/api/library/pdf-annotations?paper_id=${encodeURIComponent(paperId)}`, { credentials: 'include' });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (Array.isArray(data.annotations) && data.annotations.length) {
+      annotations = data.annotations;
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+// ---- Feature 6: GROBID fallback — extract refs from text layer ----
+function extractRefsFromTextLayer() {
+  const textBlocks = [];
+  document.querySelectorAll('.pdf-page-wrap').forEach(wrap => {
+    const spans = wrap.querySelectorAll('.pdf-text-layer span');
+    spans.forEach(s => { if (s.textContent.trim()) textBlocks.push(s.textContent.trim()); });
+  });
+  const fullText = textBlocks.join(' ');
+
+  // Find reference section
+  const refSectionMatch = fullText.match(/(?:references|bibliography|works cited)\s*\n?([\s\S]{200,})/i);
+  const refText = refSectionMatch ? refSectionMatch[1] : fullText.slice(-Math.min(fullText.length, 6000));
+
+  // Match numbered references [1] Title... or 1. Title...
+  const numbered = refText.match(/(?:\[\d{1,3}\]|\d{1,3}\.)[ \t]+.{20,200}/g) || [];
+  if (!numbered.length) return [];
+
+  return numbered.slice(0, 60).map((raw, i) => {
+    const numMatch = raw.match(/^[\[(\s]*(\d+)/);
+    const num = numMatch ? Number(numMatch[1]) : i + 1;
+    const body = raw.replace(/^[\[\d.\]\s]+/, '').trim();
+    // Try to pull a DOI
+    const doiMatch = body.match(/10\.\d{4,9}\/\S+/);
+    return {
+      number: num,
+      title: body.slice(0, 120),
+      authors: [],
+      doi: doiMatch ? doiMatch[0].replace(/[.,)]+$/, '') : null,
+      year: (body.match(/\b(19|20)\d{2}\b/) || [])[0] || null,
+      source: 'text_layer'
+    };
+  });
 }
 
 async function loadPaperMetadata(paperId) {
@@ -470,7 +709,30 @@ async function extractPDFReferences(pdfUrl) {
     return;
   } catch (e) {
     console.error('Reference extraction error:', e);
-    refsDiv.innerHTML = '<p class="muted">Could not extract references</p>';
+    // Fallback: extract references from rendered text layer
+    refsDiv.innerHTML = '<p class="muted" style="font-size:.8rem;">Server extraction unavailable — trying text layer…</p>';
+    setTimeout(() => {
+      const fallback = extractRefsFromTextLayer();
+      if (fallback.length) {
+        extractedReferences = fallback;
+        refsDiv.innerHTML = '<p class="muted" style="font-size:.75rem;margin-bottom:.5rem;">Extracted from text (basic):</p>' +
+          fallback.map(ref => `
+            <div class="reference-item" data-ref-number="${ref.number}" onclick="handleReferenceClick(${ref.number})">
+              <span class="reference-number">[${ref.number}]</span>
+              <div>
+                <strong style="font-size:.82rem;">${escapeHtml(ref.title || 'Untitled')}</strong>
+                <div style="display:flex;gap:.4rem;margin-top:.2rem;flex-wrap:wrap;">
+                  ${ref.year ? `<span class="badge">${escapeHtml(ref.year)}</span>` : ''}
+                  ${ref.doi ? `<a href="https://doi.org/${encodeURIComponent(ref.doi)}" target="_blank" class="badge badge-ok" onclick="event.stopPropagation()">DOI</a>` : ''}
+                </div>
+              </div>
+            </div>`).join('');
+        wireReferenceButtons();
+        applyCitationHighlights();
+      } else {
+        refsDiv.innerHTML = '<p class="muted">No references found.</p>';
+      }
+    }, 1500); // wait for text layers to finish rendering
   }
 }
 
@@ -651,22 +913,26 @@ window.jumpToInternalLink = jumpToInternalLink;
 
 // Escape handled by the combined listener below (removeSelToolbar + closeReferencePopup)
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   if (!pdfUrl) {
     document.querySelector('.pdf-main-body')?.insertAdjacentHTML('afterbegin',
       '<p style="padding:2rem;color:#c0392b;">No PDF URL provided. Please open this page from a paper link.</p>');
     return;
   }
 
+  bindSidebarTabs();
+  bindSearch();
+
   annotationKey = `se_annotations_${encodeURIComponent(pdfUrl)}`;
-  loadAnnotations();
+
+  // Try loading annotations from server first, fall back to localStorage
+  const serverLoaded = await loadAnnotationsFromServer();
+  if (!serverLoaded) loadAnnotations();
 
   loadPDF(pdfUrl);
   extractPDFReferences(pdfUrl);
 
-  if (paperId) {
-    loadPaperMetadata(paperId);
-  }
+  if (paperId) loadPaperMetadata(paperId);
 });
 
 function bindAnnotationToolbar() {
@@ -866,6 +1132,7 @@ function saveAnnotations() {
   try {
     localStorage.setItem(annotationKey, JSON.stringify(annotations));
   } catch (_e) {}
+  scheduleSyncAnnotations();
 }
 
 async function findScienceEcosystemLink(ref) {

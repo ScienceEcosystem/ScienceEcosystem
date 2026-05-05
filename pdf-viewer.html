@@ -20,11 +20,11 @@
     }
 
     .pdf-sidebar {
-      width: 320px;
+      width: 300px;
       background: #f8f9fa;
       border-right: 1px solid #dee2e6;
       overflow-y: auto;
-      padding: 1.5rem;
+      padding: 1rem;
       flex-shrink: 0;
     }
 
@@ -32,6 +32,41 @@
       flex: 1;
       background: #525252;
       overflow: hidden;
+    }
+
+    /* Thumbnail strip */
+    #pdfThumbnailStrip::-webkit-scrollbar { width: 4px; }
+    #pdfThumbnailStrip::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
+    .pdf-thumb {
+      width: 64px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      border-radius: 3px;
+      transition: border-color .15s;
+      display: block;
+    }
+    .pdf-thumb:hover { border-color: #888; }
+    .pdf-thumb.active { border-color: #2e7f9f; }
+    .pdf-thumb-label {
+      color: #aaa;
+      font-size: .65rem;
+      text-align: center;
+      display: block;
+      margin-top: 2px;
+    }
+
+    /* Sidebar tabs */
+    .pdf-tab-btn { color: #555; }
+    .pdf-tab-btn.active { color: #2e7f9f; border-bottom-color: #2e7f9f !important; }
+
+    /* Search highlight */
+    .pdf-search-highlight {
+      background: rgba(255,200,0,.5);
+      border-radius: 2px;
+    }
+    .pdf-search-highlight.current {
+      background: rgba(255,120,0,.65);
+      outline: 2px solid #e67e22;
     }
 
     .pdf-viewer-iframe {
@@ -129,41 +164,61 @@
   </nav>
 
   <div class="pdf-container">
+    <!-- Thumbnail strip -->
+    <div id="pdfThumbnailStrip" style="width:80px;flex-shrink:0;background:#2d2d2d;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 4px;"></div>
+
     <aside class="pdf-sidebar">
-      <div id="pdfMetadata" class="paper-metadata">
-        <div class="loading-spinner">Loading paper info...</div>
+      <!-- Sidebar tabs -->
+      <div style="display:flex;border-bottom:1px solid #e5e7eb;margin-bottom:.75rem;gap:0;">
+        <button class="pdf-tab-btn active" data-tab="info" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid #2e7f9f;cursor:pointer;font-weight:600;">Info</button>
+        <button class="pdf-tab-btn" data-tab="contents" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Contents</button>
+        <button class="pdf-tab-btn" data-tab="refs" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Refs</button>
+        <button class="pdf-tab-btn" data-tab="links" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Links</button>
       </div>
 
-      <h3 style="margin: 0 0 1rem 0; font-size: 1.1rem; color: #212529;">References</h3>
-      <div id="pdfReferences">
-        <div class="loading-spinner">Extracting references...</div>
+      <!-- Info tab -->
+      <div id="tabInfo" class="pdf-tab-panel">
+        <div id="pdfMetadata" class="paper-metadata"><div class="loading-spinner">Loading paper info...</div></div>
+        <h3 style="margin:1.5rem 0 .5rem;font-size:1rem;">Figures</h3>
+        <div id="pdfFigures"><div class="loading-spinner">Loading...</div></div>
+        <h3 style="margin:1.5rem 0 .5rem;font-size:1rem;">Tables</h3>
+        <div id="pdfTables"><div class="loading-spinner">Loading...</div></div>
       </div>
 
-      <h3 style="margin: 2rem 0 1rem 0; font-size: 1.1rem; color: #212529;">Figures</h3>
-      <div id="pdfFigures">
-        <div class="loading-spinner">Loading figures...</div>
+      <!-- Contents (outline) tab -->
+      <div id="tabContents" class="pdf-tab-panel" style="display:none;">
+        <div id="pdfOutline"><p class="muted" style="font-size:.85rem;">Loading outline…</p></div>
       </div>
 
-      <h3 style="margin: 2rem 0 1rem 0; font-size: 1.1rem; color: #212529;">Tables</h3>
-      <div id="pdfTables">
-        <div class="loading-spinner">Loading tables...</div>
+      <!-- References tab -->
+      <div id="tabRefs" class="pdf-tab-panel" style="display:none;">
+        <div id="pdfReferences"><div class="loading-spinner">Extracting references...</div></div>
       </div>
 
-      <h3 style="margin: 2rem 0 1rem 0; font-size: 1.1rem; color: #212529;">Document links</h3>
-      <div id="pdfLinks">
-        <div class="loading-spinner">Indexing links...</div>
+      <!-- Links tab -->
+      <div id="tabLinks" class="pdf-tab-panel" style="display:none;">
+        <div id="pdfLinks"><div class="loading-spinner">Indexing links...</div></div>
       </div>
     </aside>
 
     <main class="pdf-main">
-      <div class="pdf-annot-toolbar" style="display:flex; gap:.5rem; align-items:center; padding:.75rem 1rem; background:#f8f9fa; border-bottom:1px solid #dee2e6;">
-        <span class="muted" style="font-size:.9rem;">Annotate:</span>
+      <!-- Toolbar -->
+      <div class="pdf-annot-toolbar" style="display:flex;gap:.4rem;align-items:center;padding:.5rem .75rem;background:#f8f9fa;border-bottom:1px solid #dee2e6;flex-wrap:wrap;">
+        <span class="muted" style="font-size:.85rem;">Annotate:</span>
         <button id="annotHighlightBtn" class="btn btn-secondary btn-xs">Highlight</button>
         <button id="annotNoteBtn" class="btn btn-secondary btn-xs">Note</button>
         <button id="annotEraseBtn" class="btn btn-secondary btn-xs">Erase</button>
         <button id="annotClearBtn" class="btn btn-secondary btn-xs">Clear All</button>
+        <div style="flex:1;"></div>
+        <!-- Full-text search -->
+        <div style="display:flex;align-items:center;gap:.3rem;">
+          <input id="pdfSearchInput" class="input" placeholder="Search in PDF…" style="width:160px;padding:.3rem .5rem;font-size:.85rem;"/>
+          <button id="pdfSearchPrev" class="btn btn-secondary btn-xs" title="Previous match">↑</button>
+          <button id="pdfSearchNext" class="btn btn-secondary btn-xs" title="Next match">↓</button>
+          <span id="pdfSearchCount" class="muted" style="font-size:.8rem;min-width:40px;"></span>
+        </div>
       </div>
-      <div class="pdf-main-body" style="height: calc(100% - 46px); overflow: auto;"></div>
+      <div class="pdf-main-body" style="height:calc(100% - 50px);overflow:auto;"></div>
     </main>
   </div>
 
