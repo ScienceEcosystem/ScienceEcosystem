@@ -337,10 +337,15 @@
     var uni = A.size + B.size - inter;
     return uni ? inter/uni : 0;
   }
+  var _DATA_REPO_DOMAINS = ["zenodo.org","figshare.com","osf.io","dryad","dataverse","pangaea.de","mendeley.com","codeocean.com"];
+  var _CODE_REPO_DOMAINS = ["github.com","gitlab.com","bitbucket.org","sourceforge.net","codeocean.com"];
+
   function classifyROKind(str){
     var s = String(str||"").toLowerCase();
     if (s.includes("software") || s.includes("code")) return "Software";
     if (s.includes("dataset") || s.includes("data")) return "Dataset";
+    // Known data/code repositories → Dataset by default (covers Zenodo, Figshare, OSF, etc.)
+    if (_DATA_REPO_DOMAINS.some(function(d){ return s.includes(d); })) return "Dataset";
     return "Other";
   }
   function uniqueByKey(arr, keyFn){
@@ -1055,12 +1060,41 @@
     var checks = [];
     var paperType = detectPaperType(paperData);
     var hasOpenAccess = !!(get(paperData,"open_access.is_oa",false) || getOpenAccessPdf(paperData));
-    var datasets = Array.isArray(researchObjects) ? researchObjects.filter(function(r){ return String(r?.type || "").toLowerCase() === "dataset"; }) : [];
-    var codeRepos = Array.isArray(researchObjects) ? researchObjects.filter(function(r){
+    var ros = Array.isArray(researchObjects) ? researchObjects : [];
+
+    // Build a word-set from the abstract for code/data availability detection
+    var _absWords = (function(){
+      var inv = paperData && paperData.abstract_inverted_index;
+      if (!inv) return [];
+      return Object.keys(inv).map(function(w){ return w.toLowerCase(); });
+    })();
+    function _absHas(kws){
+      return kws.some(function(kw){ return _absWords.some(function(w){ return w.includes(kw); }); });
+    }
+    var _abstractMentionsCode = _absHas(["code","script","github","gitlab","software","analysis script"]);
+    var _abstractMentionsData = _absHas(["data deposited","dataset","supplementary data","raw data","source data"]);
+
+    // Datasets: explicitly typed Dataset, OR "Other"/"Dataset" items on known data repositories
+    var datasets = ros.filter(function(r){
       var t = String(r?.type || "").toLowerCase();
       var u = String(r?.url || "").toLowerCase();
-      return t === "software" || t === "code" || u.includes("github.com") || u.includes("gitlab.com");
-    }) : [];
+      var d = String(r?.doi || "").toLowerCase();
+      if (t === "dataset") return true;
+      if (t === "preprint") return false;  // preprints are not data deposits
+      return _DATA_REPO_DOMAINS.some(function(x){ return u.includes(x) || d.includes(x); });
+    });
+
+    // Code: explicitly typed Software/Code, OR code-hosting domain,
+    // OR any repository item when abstract also mentions code (handles "data + code in one Zenodo link")
+    var codeRepos = ros.filter(function(r){
+      var t = String(r?.type || "").toLowerCase();
+      var u = String(r?.url || "").toLowerCase();
+      if (t === "software" || t === "code") return true;
+      if (_CODE_REPO_DOMAINS.some(function(x){ return u.includes(x); })) return true;
+      // A repository deposit (Zenodo etc.) whose abstract says code is available
+      if (_abstractMentionsCode && _DATA_REPO_DOMAINS.some(function(x){ return u.includes(x); })) return true;
+      return false;
+    });
 
     if (paperType.category === "review" || paperType.category === "opinion") {
       if (hasOpenAccess) { score += 50; checks.push({ label:"Open access", status:"yes", icon:"✅ " }); }
@@ -1075,7 +1109,7 @@
     if (paperType.category === "theoretical") {
       if (hasOpenAccess) { score += 40; checks.push({ label:"Open access PDF", status:"yes", icon:"✅ " }); }
       else { checks.push({ label:"Open access PDF", status:"no", icon:"X" }); }
-      var hasSupplementary = Array.isArray(researchObjects) && researchObjects.length > 0;
+      var hasSupplementary = ros.length > 0;
       if (hasSupplementary) { score += 60; checks.push({ label:"Supplementary materials", status:"yes", icon:"✅ " }); }
       else { checks.push({ label:"Supplementary materials", status:"no", icon:"X" }); }
       var g2 = gradeFromPercent(score);

@@ -37,6 +37,8 @@ body {
 main { flex: 1; padding: .75rem .9rem; }
 
 /* ── States ─────────────────────────────────────────────────────────────────── */
+[hidden] { display: none !important; }
+
 .state {
   display: flex;
   flex-direction: column;
