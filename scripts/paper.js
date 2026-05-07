@@ -601,18 +601,18 @@
     var doiUrl = doiRaw ? (String(doiRaw).indexOf("http")===0 ? doiRaw : ("https://doi.org/" + String(doiRaw).replace(/^doi:/i,""))) : null;
 
     var oaPdf = getOpenAccessPdf(p);
-    var oaLanding = get(p,"open_access.oa_url",null) || get(p,"best_oa_location.url",null) || get(p,"primary_location.landing_page_url",null);
     var idTail = idTailFrom(p.id);
+    // Open in the SE PDF viewer (only if an open-access PDF URL exists)
     var pdfViewer = oaPdf ? ("/pdf-viewer.html?id=" + encodeURIComponent(idTail) + "&pdf=" + encodeURIComponent(oaPdf)) : null;
-    if (typeof console !== "undefined" && console.log) {
-      console.log("DEBUG PDF URLs:", { oaPdf: oaPdf, idTail: idTail, pdfViewer: pdfViewer });
-    }
 
+    // Three chips maximum, each with a distinct and clear destination:
+    // 1. Publisher page  — doi.org → the journal/publisher website
+    // 2. Read PDF        — SE viewer (only if an OA PDF is available)
+    // 3. OpenAlex        — the raw data record (kept small/secondary)
     var chips = [
-      badge(doiUrl, "DOI"),
+      badge(doiUrl,    "Publisher page"),
       badge(pdfViewer, "Read PDF", "badge-oa"),
-      badge(oaLanding, "Open access", "badge-oa"),
-      badge(p.id, "OpenAlex")
+      badge(p.id,      "OpenAlex")
     ];
 
     var aList = authorLinksList(p.authorships);
@@ -633,6 +633,50 @@
     var asMore = $("authorsShowMore"), asLess = $("authorsShowLess");
     if (asMore) asMore.onclick = function(){ $("authorsShort").style.display="none"; $("authorsFull").style.display="inline"; };
     if (asLess) asLess.onclick = function(){ $("authorsFull").style.display="none"; $("authorsShort").style.display="inline"; };
+  }
+
+  // ---------- Retraction check (CrossRef) ----------
+
+  async function checkRetractionCrossRef(doi){
+    if (!doi) return null;
+    try {
+      var clean = String(doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i,"").replace(/^doi:/i,"");
+      var res = await fetch("https://api.crossref.org/works/" + encodeURIComponent(clean), {
+        headers: { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" }
+      });
+      if (!res.ok) return null;
+      var data = await res.json();
+      var updates = (data && data.message && data.message["update-to"]) || [];
+      var retraction = null;
+      for (var i = 0; i < updates.length; i++) {
+        if (updates[i].type === "retraction") { retraction = updates[i]; break; }
+      }
+      return retraction
+        ? { retracted: true, date: (retraction.updated && retraction.updated["date-time"]) || null, doi: retraction.DOI || null }
+        : { retracted: false };
+    } catch (_) { return null; }
+  }
+
+  function renderRetractionBanner(info){
+    var el = $("retractionBanner");
+    if (!el || !info || !info.retracted) return;
+    var dateStr = "";
+    if (info.date) {
+      try { dateStr = new Date(info.date).toLocaleDateString("en-US", { year:"numeric", month:"long" }); } catch(_){}
+    }
+    var noticeHtml = info.doi
+      ? ' · <a href="https://doi.org/' + escapeHtml(info.doi) + '" target="_blank" rel="noopener" style="color:#fca5a5;">View retraction notice</a>'
+      : "";
+    el.innerHTML =
+      '<div style="background:#7f1d1d;color:#fff;padding:.85rem 1.1rem;border-radius:8px;margin-bottom:1.25rem;display:flex;align-items:flex-start;gap:.85rem;">' +
+        '<span style="font-size:1.75rem;flex-shrink:0;line-height:1;">⚠️</span>' +
+        '<div>' +
+          '<strong style="font-size:1.05rem;">RETRACTED</strong>' +
+          (dateStr ? '<span style="margin-left:.6rem;opacity:.8;font-size:.9rem;">' + escapeHtml(dateStr) + '</span>' : '') +
+          '<p style="margin:.3rem 0 0;font-size:.875rem;opacity:.9;line-height:1.5;">The authors or publisher have officially retracted this paper. Do not cite as valid research.' + noticeHtml + '</p>' +
+        '</div>' +
+      '</div>';
+    el.hidden = false;
   }
 
   function collectCiteDataForHeader(work){
@@ -676,13 +720,69 @@
         + '</div>'
       + '</article>';
   }
+  async function fetchSemanticScholarCount(doi){
+    if (!doi) return null;
+    try {
+      var clean = String(doi).replace(/^doi:/i,"").replace(/^https?:\/\/(dx\.)?doi\.org\//i,"");
+      var res = await fetch(
+        "https://api.semanticscholar.org/graph/v1/paper/DOI:" + encodeURIComponent(clean) + "?fields=citationCount",
+        { headers: { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" } }
+      );
+      if (!res.ok) return null;
+      var data = await res.json();
+      return (typeof data.citationCount === "number") ? data.citationCount : null;
+    } catch (_) { return null; }
+  }
+
+  function updateCitationStat(oaCount, ssCount){
+    var best = Math.max(oaCount, ssCount != null ? ssCount : 0);
+    var source = (ssCount != null && ssCount > oaCount) ? "Semantic Scholar" : "OpenAlex";
+    var tooltip = "OpenAlex: " + oaCount
+      + (ssCount != null ? " · Semantic Scholar: " + ssCount : "")
+      + "\n(showing highest available count)";
+    var el = $("statCitations");
+    if (!el) return;
+    el.title = tooltip;
+    var valEl = $("statCitationsValue");
+    if (valEl) valEl.textContent = String(best);
+    var lblEl = $("statCitationsLabel");
+    if (lblEl) lblEl.textContent = "Citations (" + source + ")";
+  }
+
   function buildStatsHeader(p){
     var citedBy = get(p,'cited_by_count',0) || 0;
     var refCount = Array.isArray(p.referenced_works) ? p.referenced_works.length : 0;
-    function stat(label, value){
-      return '<div class="stat"><div class="stat-value">'+escapeHtml(String(value))+'</div><div class="stat-label">'+escapeHtml(label)+'</div></div>';
+    var pctMax = get(p,'cited_by_percentile_year.max', null);
+    var pctDisplay = '-';
+    if (pctMax != null) {
+      if      (pctMax >= 99) pctDisplay = 'Top 1%';
+      else if (pctMax >= 95) pctDisplay = 'Top 5%';
+      else if (pctMax >= 90) pctDisplay = 'Top 10%';
+      else if (pctMax >= 75) pctDisplay = 'Top 25%';
+      else if (pctMax >= 50) pctDisplay = 'Top 50%';
+      else                   pctDisplay = 'Bottom 50%';
     }
-    return stat('Citations', citedBy) + stat('References used', refCount) + stat('Altmetric', '-');
+    function stat(label, value, title){
+      var titleAttr = title ? (' title="'+escapeHtml(title)+'"') : '';
+      return '<div class="stat"'+titleAttr+'><div class="stat-value">'+escapeHtml(String(value))+'</div><div class="stat-label">'+escapeHtml(label)+'</div></div>';
+    }
+    var doiForAltmetric = doiFromWork(p);
+    var cleanDoiA = doiForAltmetric
+      ? String(doiForAltmetric).replace(/^doi:/i,"").replace(/^https?:\/\/(dx\.)?doi\.org\//i,"")
+      : null;
+    var altmetricHtml = cleanDoiA
+      ? '<div class="stat altmetric-stat" style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:.25rem;">'
+          + '<div class="altmetric-embed" data-badge-type="donut" data-hide-no-mentions="true" data-doi="'+escapeHtml(cleanDoiA)+'"></div>'
+          + '<div class="stat-label">Altmetric</div>'
+        + '</div>'
+      : '';
+    return '<div class="stat" id="statCitations" title="OpenAlex citation count (updating…)">'
+         +   '<div class="stat-value" id="statCitationsValue">'+escapeHtml(String(citedBy))+'</div>'
+         +   '<div class="stat-label" id="statCitationsLabel">Citations</div>'
+         + '</div>'
+         + stat('References used', refCount)
+         + stat('Citation impact', pctDisplay, pctMax != null ? ('Top '+Math.max(1,100-pctMax)+'% most cited in its publication year (OpenAlex)') : 'No percentile data')
+         + altmetricHtml;
   }
 
   // ---------- Journal & Quality (simplified + PubPeer/RW) ----------
@@ -719,11 +819,13 @@
     var rwHrefTitle = "https://retractionwatch.com/?s=" + encodeURIComponent(p.display_name || "");
 
     var checks = '';
+    var ppsHref = "https://www.irit.fr/~Guillaume.Cabanac/problematic-paper-screener";
     checks += '<div class="panel light" style="margin-top:.5rem;">';
     checks += '<strong>Quality checks:</strong> ';
     if (pubpeerHref) checks += '<a href="'+escapeHtml(pubpeerHref)+'" target="_blank" rel="noopener">PubPeer</a>';
     else checks += '<span class="muted">PubPeer (no DOI)</span>';
     checks += ' · <a href="'+escapeHtml(rwHrefTitle)+'" target="_blank" rel="noopener">Retraction Watch</a>';
+    checks += ' · <a href="'+escapeHtml(ppsHref)+'" target="_blank" rel="noopener" title="Check for tortured phrases and paper mill indicators">Paper Mill Screener</a>';
     checks += '</div>';
 
     // Build indicators
@@ -815,7 +917,8 @@
         '<strong>Verify:</strong> ' +
         (pubpeerHref ? '<a href="'+escapeHtml(pubpeerHref)+'" target="_blank" rel="noopener">PubPeer</a> · ' : '') +
         '<a href="'+escapeHtml(rwHref)+'" target="_blank" rel="noopener">Retraction Watch</a> · ' +
-        '<a href="https://beallslist.net/" target="_blank" rel="noopener">Beall\'s List</a>' +
+        '<a href="https://beallslist.net/" target="_blank" rel="noopener">Beall\'s List</a> · ' +
+        '<a href="https://www.irit.fr/~Guillaume.Cabanac/problematic-paper-screener" target="_blank" rel="noopener" title="Check for tortured phrases and paper mill indicators">Paper Mill Screener</a>' +
       '</div>';
   }
 
@@ -1629,9 +1732,28 @@
     $("paperHeaderMain").innerHTML = buildHeaderMain(p);
     $("paperActions").innerHTML   = buildActionsBar(p);
     $("paperStats").innerHTML     = buildStatsHeader(p);
+    // Re-run Altmetric after injecting the badge div (script may have already scanned)
+    setTimeout(function(){ if (window._altmetric_embed) window._altmetric_embed.init(); }, 400);
     __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
     wireHeaderToggles();
     startHeaderObserver();
+
+    // Retraction check + citation count enrichment — both async, non-blocking
+    var _doiAsync = doiFromWork(p);
+    var _oaCount = get(p,'cited_by_count',0) || 0;
+    if (_doiAsync) {
+      checkRetractionCrossRef(_doiAsync).then(function(info){
+        renderRetractionBanner(info);
+      }).catch(function(){});
+
+      fetchSemanticScholarCount(_doiAsync).then(function(ssCount){
+        updateCitationStat(_oaCount, ssCount);
+      }).catch(function(){
+        updateCitationStat(_oaCount, null);
+      });
+    } else {
+      updateCitationStat(_oaCount, null);
+    }
 
     // Aggressive OA resolver (additive)
     try{

@@ -109,6 +109,80 @@ async function syncAnnotations({ paperId, pdfUrl, annotations }) {
   });
 }
 
+// ── Omnibox search ────────────────────────────────────────────────────────────
+
+chrome.omnibox.onInputChanged.addListener((text, suggest) => {
+  if (!text.trim()) return;
+  suggest([{
+    content: text,
+    description: `Search ScienceEcosystem for: <match>${text}</match>`
+  }]);
+});
+
+chrome.omnibox.onInputEntered.addListener((text, disposition) => {
+  const url = `${SE_BASE}/search.html?q=${encodeURIComponent(text.trim())}`;
+  if (disposition === "currentTab") {
+    chrome.tabs.update({ url });
+  } else {
+    chrome.tabs.create({ url, active: disposition === "newForegroundTab" });
+  }
+});
+
+// ── Keyboard shortcut ─────────────────────────────────────────────────────────
+
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== "save-paper") return;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) return;
+
+  let meta;
+  try { meta = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_METADATA" }); } catch (_) {}
+
+  if (!meta?.detected) {
+    chrome.notifications.create("", {
+      type: "basic", iconUrl: "icons/icon48.png",
+      title: "No paper detected",
+      message: "Could not find a research paper on this page."
+    });
+    return;
+  }
+
+  const auth = await checkAuth();
+  if (!auth.loggedIn) {
+    chrome.tabs.create({ url: `${SE_BASE}/auth/orcid/login` });
+    return;
+  }
+
+  let work = null;
+  if (meta.doi) work = await resolveByDoi(meta.doi);
+  const openAlexTail = work?.id?.replace("https://openalex.org/", "");
+
+  try {
+    await savePaper({ id: openAlexTail || meta.doi || "", title: meta.title || "Untitled", doi: meta.doi || null });
+    chrome.action.setBadgeText({ text: "✓", tabId: tab.id });
+    chrome.action.setBadgeBackgroundColor({ color: "#22c55e", tabId: tab.id });
+    chrome.notifications.create("", {
+      type: "basic", iconUrl: "icons/icon48.png",
+      title: "Paper saved!",
+      message: `"${(meta.title || "Paper").slice(0, 80)}" added to your library.`
+    });
+  } catch (e) {
+    chrome.notifications.create("", {
+      type: "basic", iconUrl: "icons/icon48.png",
+      title: "Save failed",
+      message: e.message || "Could not save. Are you logged in?"
+    });
+  }
+});
+
+// ── Action badge — clear on navigation ───────────────────────────────────────
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "loading") {
+    chrome.action.setBadgeText({ text: "", tabId });
+  }
+});
+
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -155,6 +229,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.type === "OPEN_SE") {
     chrome.tabs.create({ url: `${SE_BASE}/${msg.path || ""}` });
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (msg.type === "PAPER_DETECTED") {
+    const tabId = _sender.tab?.id;
+    if (tabId) {
+      chrome.action.setBadgeText({ text: "1", tabId });
+      chrome.action.setBadgeBackgroundColor({ color: "#2e7f9f", tabId });
+    }
     sendResponse({ ok: true });
     return true;
   }

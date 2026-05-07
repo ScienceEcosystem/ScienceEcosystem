@@ -657,17 +657,17 @@
         <h4 style="margin:0 0 .25rem 0;">${esc(item.title)}</h4>
         <p class="muted" style="margin:.25rem 0;">${esc(item.authors||"-")}</p>
         <p class="meta"><strong>${esc(item.year??"-")}</strong> · ${esc(item.venue||"-")}</p>
+        <!-- Secondary reference links -->
         <p style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.25rem 0;">
-          ${chip(doiUrl,"DOI")}
+          ${chip(doiUrl,"Publisher page")}
           ${chip(item.openalex_url,"OpenAlex")}
-          ${pdfViewerUrl?`<a class="badge badge-oa" href="${esc(pdfViewerUrl)}">Read PDF</a>`:""}
           ${zoteroLink?`<a class="badge badge-zotero" href="${zoteroLink}" target="_blank" rel="noopener">Zotero</a>`:(item.zotero_key?`<span class="badge badge-zotero">Zotero</span>`:"")}
         </p>
 
-        <!-- Actions -->
+        <!-- Primary actions -->
         <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0;">
-          <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(openAlexId)}">View paper</a>
-          ${pdfViewerUrl?`<a class="btn btn-secondary" href="${esc(pdfViewerUrl)}">📄 Open in PDF viewer</a>`:""}
+          <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(openAlexId)}">Paper details</a>
+          ${pdfViewerUrl?`<a class="btn btn-secondary" href="${esc(pdfViewerUrl)}">Read PDF</a>`:""}
           <button class="btn btn-secondary" id="addToCollectionBtn">+ Collection</button>
           ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn">Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn">Restore</button>`}
           ${item.deleted_at?`<button class="btn btn-secondary" id="deleteForeverBtn">Delete forever</button>`:""}

@@ -162,6 +162,44 @@
       if (pmcMatch) add(`https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcMatch[1]}/pdf/`);
     }
 
+    // 3b. Publisher-specific PDF URL patterns
+    const h = location.hostname.replace(/^www\./, "");
+
+    if (h === "nature.com" || h.endsWith(".nature.com")) {
+      const m = location.pathname.match(/\/articles\/([^/?#]+)/);
+      if (m) add(`https://www.nature.com/articles/${m[1]}.pdf`);
+    }
+
+    if (h === "sciencedirect.com" || h.endsWith(".sciencedirect.com")) {
+      const m = location.pathname.match(/\/science\/article\/pii\/([A-Z0-9]+)/i);
+      if (m) add(`https://www.sciencedirect.com/science/article/pii/${m[1]}/pdfft?isDTMRedir=true&download=true`);
+    }
+
+    if (h === "onlinelibrary.wiley.com") {
+      const m = location.pathname.match(/\/doi\/(?:abs|full)\/(10\..+)/);
+      if (m) add(`https://onlinelibrary.wiley.com/doi/pdf/${m[1]}`);
+    }
+
+    if (h === "ieeexplore.ieee.org") {
+      const m = location.href.match(/\/document\/(\d+)/);
+      if (m) add(`https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=${m[1]}`);
+    }
+
+    if (h === "dl.acm.org") {
+      const m = location.pathname.match(/\/doi\/(pdf\/)?(.+)/);
+      if (m) add(`https://dl.acm.org/doi/pdf/${m[2]}`);
+    }
+
+    if (h === "link.springer.com") {
+      const m = location.pathname.match(/\/article\/(.+)/);
+      if (m) add(`https://link.springer.com/content/pdf/${m[1]}.pdf`);
+    }
+
+    if (h === "pubs.acs.org") {
+      const m = location.pathname.match(/\/doi\/(?:abs|full)\/(10\..+)/);
+      if (m) add(`https://pubs.acs.org/doi/pdf/${m[1]}`);
+    }
+
     // 4. Links on the page that look like PDFs
     document.querySelectorAll("a[href]").forEach(a => {
       const href = a.href;
@@ -200,6 +238,46 @@
       return { source: "PubMed", pmid };
     }
 
+    // Nature / Springer Nature
+    if (host === "nature.com" || host.endsWith(".nature.com")) {
+      return { source: "Nature" };
+    }
+
+    // Elsevier / ScienceDirect
+    if (host === "sciencedirect.com" || host.endsWith(".sciencedirect.com")) {
+      return { source: "Elsevier/ScienceDirect" };
+    }
+
+    // Wiley Online Library
+    if (host === "onlinelibrary.wiley.com") {
+      return { source: "Wiley Online Library" };
+    }
+
+    // IEEE Xplore
+    if (host === "ieeexplore.ieee.org") {
+      return { source: "IEEE Xplore" };
+    }
+
+    // ACM Digital Library
+    if (host === "dl.acm.org") {
+      return { source: "ACM Digital Library" };
+    }
+
+    // Springer Link
+    if (host === "link.springer.com") {
+      return { source: "Springer" };
+    }
+
+    // ACS Publications
+    if (host === "pubs.acs.org") {
+      return { source: "ACS Publications" };
+    }
+
+    // Taylor & Francis
+    if (host === "tandfonline.com" || host.endsWith(".tandfonline.com")) {
+      return { source: "Taylor & Francis" };
+    }
+
     return { source: host };
   }
 
@@ -236,5 +314,15 @@
     }
     return true; // keep channel open for async
   });
+
+  // ── Proactive badge notification ───────────────────────────────────────────
+  // Tell the background to set the action badge when a paper is detected.
+
+  try {
+    const _initMeta = getPageMetadata();
+    if (_initMeta.detected) {
+      chrome.runtime.sendMessage({ type: "PAPER_DETECTED" }).catch(() => {});
+    }
+  } catch (_) {}
 
 })();

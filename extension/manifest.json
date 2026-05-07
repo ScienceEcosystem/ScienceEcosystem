@@ -35,12 +35,22 @@
     }
   ],
 
+  "omnibox": { "keyword": "se" },
+
+  "commands": {
+    "save-paper": {
+      "suggested_key": { "default": "Alt+Shift+S", "mac": "Alt+Shift+S" },
+      "description": "Save current paper to ScienceEcosystem library"
+    }
+  },
+
   "permissions": [
     "activeTab",
     "storage",
     "downloads",
     "tabs",
-    "cookies"
+    "cookies",
+    "notifications"
   ],
 
   "host_permissions": [

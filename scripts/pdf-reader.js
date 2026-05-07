@@ -18,6 +18,21 @@ let annotations = [];
 let annotationKey = '';
 let pdfLinkIndex = [];
 let pageTextIndex = new Map();
+let _paperDoiHref = null; // set by loadPaperMetadata; used by the PDF error state
+
+function renderDoiLink(el, doiHref, oaUrl) {
+  let html = `<a href="${escapeHtml(doiHref)}" target="_blank" rel="noopener"
+    style="display:inline-flex;align-items:center;gap:.5rem;background:#2e7f9f;color:#fff;padding:.65rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:.95rem;">
+    🔗 View on publisher site
+  </a>`;
+  if (oaUrl && oaUrl !== doiHref) {
+    html += `<a href="${escapeHtml(oaUrl)}" target="_blank" rel="noopener"
+      style="display:inline-flex;align-items:center;gap:.5rem;background:#f1f5f9;color:#334155;padding:.65rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:.95rem;border:1px solid #e2e8f0;">
+      📄 Open access version
+    </a>`;
+  }
+  el.innerHTML = html;
+}
 
 function escapeHtml(s) {
   return String(s ?? "")
@@ -85,56 +100,36 @@ async function loadPDF(url) {
     renderAllPages();
   } catch (error) {
     console.error('Error loading PDF:', error);
-    const pdfMain = document.querySelector('.pdf-main');
-    if (pdfMain) {
-      pdfMain.innerHTML = `<div id="pdfErrorState" style="text-align:center;padding:3rem 2rem;color:#444;max-width:560px;margin:0 auto;">
-        <div style="font-size:2.5rem;margin-bottom:1rem;">📄</div>
+    const pdfMain = document.querySelector('.pdf-main-body') || document.querySelector('.pdf-main');
+    if (!pdfMain) return;
+
+    // Build the initial link content — use cached DOI if already loaded, placeholder if not yet
+    const initialLinks = _paperDoiHref
+      ? '' // renderDoiLink will be called after innerHTML is set
+      : '<span style="color:#999;font-size:.9rem;">Looking up publisher link…</span>';
+
+    pdfMain.innerHTML = `
+      <div id="pdfErrorState" style="text-align:center;padding:3rem 2rem;color:#444;max-width:520px;margin:0 auto;">
+        <div style="font-size:2.5rem;margin-bottom:.75rem;">📄</div>
         <h3 style="color:#c0392b;margin:0 0 .5rem;">PDF unavailable</h3>
-        <p style="margin:.5rem 0 1.5rem;color:#666;">The PDF could not be loaded — the publisher is blocking direct access. Use the links below to read the paper on the publisher's site, or install the ScienceEcosystem browser extension to save PDFs directly from your browser.</p>
+        <p style="margin:.5rem 0 1.75rem;color:#666;line-height:1.5;">
+          The publisher is blocking direct PDF access.
+          Visit the publisher's page to read or download the paper.
+        </p>
         <div id="pdfErrorLinks" style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem;">
-          <span style="color:#999;font-size:.9rem;">Loading publisher links…</span>
+          ${initialLinks}
         </div>
-        <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;padding:1rem 1.25rem;text-align:left;font-size:.88rem;color:#1e3a5f;">
-          <strong>💡 Tip:</strong> Install the <strong>ScienceEcosystem browser extension</strong> — when you're on the publisher's site and have access, it downloads the PDF and saves it directly to your library.
-        </div>
+        <p style="font-size:.83rem;color:#94a3b8;">
+          💡 Install the <strong>ScienceEcosystem browser extension</strong> to save PDFs directly from the publisher's site into your library.
+        </p>
       </div>`;
 
-      // Fetch publisher links from OpenAlex if we have a paper ID
-      if (paperId) {
-        const cleanId = paperId.replace(/^https?:\/\/openalex\.org\//i, '');
-        fetch(`https://api.openalex.org/works/${encodeURIComponent(cleanId)}?mailto=info@scienceecosystem.org`)
-          .then(r => r.ok ? r.json() : null)
-          .then(work => {
-            const linksEl = document.getElementById('pdfErrorLinks');
-            if (!linksEl || !work) return;
-            const links = [];
-            const doi = work.doi ? String(work.doi).replace(/^doi:/i,'') : null;
-            if (doi) {
-              const doiHref = doi.startsWith('http') ? doi : `https://doi.org/${doi}`;
-              links.push(`<a href="${escapeHtml(doiHref)}" target="_blank" rel="noopener" class="btn">View on publisher site</a>`);
-            }
-            const oaUrl = work.open_access?.oa_url || work.best_oa_location?.url || null;
-            if (oaUrl && oaUrl !== doi) {
-              links.push(`<a href="${escapeHtml(oaUrl)}" target="_blank" rel="noopener" class="btn btn-secondary">Open access version</a>`);
-            }
-            const oaPdf = work.best_oa_location?.pdf_url || work.primary_location?.pdf_url || null;
-            if (oaPdf) {
-              links.push(`<a href="${escapeHtml(oaPdf)}" target="_blank" rel="noopener" class="btn btn-secondary">Try open PDF</a>`);
-            }
-            linksEl.innerHTML = links.length
-              ? links.join('')
-              : '<span class="muted">No publisher links found.</span>';
-          })
-          .catch(() => {
-            const linksEl = document.getElementById('pdfErrorLinks');
-            if (linksEl) linksEl.innerHTML = '<span class="muted">Could not load publisher links.</span>';
-          });
-      } else {
-        // No paper ID — just offer the original URL as a direct link
-        const linksEl = document.getElementById('pdfErrorLinks');
-        if (linksEl) linksEl.innerHTML = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn">Open original URL</a>`;
-      }
+    const linksEl = document.getElementById('pdfErrorLinks');
+    if (linksEl && _paperDoiHref) {
+      // DOI already known — render immediately
+      renderDoiLink(linksEl, _paperDoiHref, null);
     }
+    // If DOI not yet known, loadPaperMetadata will call renderDoiLink when it finishes
   }
 }
 
@@ -703,6 +698,15 @@ async function loadPaperMetadata(paperId) {
         <strong>Citations:</strong> ${paper.cited_by_count?.toLocaleString() || 0}
       </p>
     `;
+
+    // Cache the DOI so the error state can use it immediately
+    const rawDoi = paper.doi ? String(paper.doi).replace(/^doi:/i, '') : null;
+    if (rawDoi) {
+      _paperDoiHref = rawDoi.startsWith('http') ? rawDoi : `https://doi.org/${rawDoi}`;
+      // If the PDF already failed and the error state is visible, inject the link now
+      const linksEl = document.getElementById('pdfErrorLinks');
+      if (linksEl) renderDoiLink(linksEl, _paperDoiHref, paper.open_access?.oa_url || null);
+    }
 
     return paper;
   } catch (e) {
