@@ -1366,118 +1366,115 @@
     return visited;
   }
 
-  function baseNetworkOptions(){
-    return {
-      nodes: { shape:"dot", scaling:{min:6,max:28}, font:{size:14} },
-      edges: { smooth:true },
-      physics: { stabilization:true, barnesHut:{ gravitationalConstant:-6500, springConstant:0.02, avoidOverlap:0.2 } },
-      interaction: { hover:true }
-    };
+  // ── Graph node tooltip (DOM element — vis-network renders it as HTML) ────────
+  function buildNodeTooltipEl(w){
+    var div = document.createElement("div");
+    div.style.cssText = "max-width:260px;font-family:Inter,system-ui,sans-serif;font-size:12px;padding:10px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);pointer-events:none;";
+    var authors = (w.authorships||[]).slice(0,3).map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean);
+    var venue = get(w,"primary_location.source.display_name","") || get(w,"host_venue.display_name","") || "";
+    var cites = get(w,"cited_by_count",0)||0;
+    var isOa = get(w,"open_access.is_oa",false);
+    div.innerHTML =
+      '<div style="font-weight:700;margin-bottom:4px;color:#0f172a;line-height:1.3;">'+escapeHtml(w.display_name||"Untitled")+'</div>'
+      +(authors.length?'<div style="color:#64748b;margin-bottom:2px;font-size:11px;">'+escapeHtml(authors.join(", "))+((w.authorships||[]).length>3?" et al.":"")+'</div>':"")
+      +'<div style="color:#94a3b8;margin-bottom:6px;font-size:11px;">'+(w.publication_year||"n.d.")+(venue?" · "+escapeHtml(venue):"")+'</div>'
+      +'<div style="display:flex;gap:4px;flex-wrap:wrap;">'
+        +'<span style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:10px;">📚 '+cites+'</span>'
+        +(isOa?'<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px;">OA</span>':"")
+      +'</div>'
+      +'<div style="margin-top:6px;font-size:10px;color:#94a3b8;">Click for details · Double-click to open</div>';
+    return div;
   }
 
-  function renderGraphControls(){
+  // ── Year legend bar ───────────────────────────────────────────────────────────
+  function renderYearLegend(block, minY, maxY){
+    var old = $("graphYearLegend"); if (old) old.remove();
     var el = document.createElement("div");
-    el.id = "graphControls";
-    el.className = "panel light";
-    el.style.marginBottom = "8px";
-    el.style.padding = "10px";
-    el.innerHTML = ''
-      + '<div style="display:flex; flex-wrap:wrap; gap:8px; align-items:end;">'
-        + '<label style="display:flex; flex-direction:column; font-size:12px;">Mode'
-          + '<select id="graphMode" style="min-width:180px;">'
-            + '<option value="connected">Connected Map (similarity)</option>'
-            + '<option value="citation">Cited/Citing</option>'
-          + '</select>'
-        + '</label>'
-        + '<label style="display:flex; flex-direction:column; font-size:12px;">Min similarity'
-          + '<input id="minSim" type="number" step="0.01" min="0" max="1" value="0.10" />'
-        + '</label>'
-        + '<label style="display:flex; flex-direction:column; font-size:12px;">Min citations'
-          + '<input id="minCites" type="number" min="0" value="0" />'
-        + '</label>'
-        + '<label style="display:flex; flex-direction:column; font-size:12px;">Year range'
-          + '<div style="display:flex; gap:6px; align-items:center;">'
-            + '<input id="minYear" type="number" placeholder="min" style="width:90px;" />'
-            + '<span>–</span>'
-            + '<input id="maxYear" type="number" placeholder="max" style="width:90px;" />'
-          + '</div>'
-        + '</label>'
-        + '<button id="applyGraphFilters" class="btn btn-secondary" type="button">Apply</button>'
-      + '</div>'
-      + '<p class="muted small" style="margin-top:6px;">Connected Map uses similarity + year/citation filters. Citation mode shows direct references and citations; similarity is ignored there.</p>';
-    return el;
+    el.id = "graphYearLegend";
+    el.style.cssText = "display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:11px;color:#64748b;flex-wrap:wrap;";
+    el.innerHTML =
+      '<span>'+minY+'</span>'
+      +'<div style="width:110px;height:10px;border-radius:5px;background:linear-gradient(to right,#3b82f6,#f59e0b,#ef4444);flex-shrink:0;"></div>'
+      +'<span>'+maxY+'</span>'
+      +'<span style="margin-left:10px;">Node size = citations&nbsp;&nbsp;|&nbsp;&nbsp;<span style="color:#111827;font-weight:600;">⬤</span> = this paper</span>';
+    block.appendChild(el);
   }
 
-  function updateGraphControlState(){
-    var mode = $("#graphMode") ? $("#graphMode").value : "citation";
-    var simInput = $("#minSim");
-    if (simInput){
-      simInput.disabled = (mode !== "connected");
-      simInput.title = mode === "connected" ? "Keep edges above this similarity" : "Only used in Connected Map";
-    }
+  // ── Info panel shown when a node is clicked ───────────────────────────────────
+  function showGraphInfoPanel(block, w, isCurrentSeed, onExplore){
+    var old = $("graphInfoPanel"); if (old) old.remove();
+    var idTail = idTailFrom(w.id||"");
+    var authors = (w.authorships||[]).slice(0,5).map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean);
+    var authStr = authors.slice(0,3).join(", ")+(authors.length>3?" et al.":"");
+    var venue = get(w,"primary_location.source.display_name","") || get(w,"host_venue.display_name","") || "";
+    var cites = get(w,"cited_by_count",0)||0;
+    var isOa = get(w,"open_access.is_oa",false);
+    var doiRaw = w.doi || get(w,"ids.doi",null);
+    var doiClean = doiRaw ? String(doiRaw).replace(/^doi:/i,"").replace(/^https?:\/\/(dx\.)?doi\.org\//i,"") : null;
+    var panel = document.createElement("div");
+    panel.id = "graphInfoPanel";
+    panel.style.cssText = "background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;gap:10px;align-items:flex-start;";
+    panel.innerHTML =
+      '<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-bottom:4px;line-height:1.3;">'+escapeHtml(w.display_name||"Untitled")+'</div>'
+        +(authStr?'<div style="font-size:.78rem;color:#64748b;margin-bottom:2px;">'+escapeHtml(authStr)+'</div>':"")
+        +'<div style="font-size:.78rem;color:#94a3b8;margin-bottom:6px;">'+(w.publication_year||"")+(venue?" · "+escapeHtml(venue):"")+'</div>'
+        +'<div style="display:flex;gap:5px;flex-wrap:wrap;">'
+          +'<span style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size:.72rem;">📚 '+cites+' citations</span>'
+          +(isOa?'<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:.72rem;">Open access</span>':"")
+          +(doiClean?'<a href="https://doi.org/'+escapeHtml(doiClean)+'" target="_blank" style="background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:10px;font-size:.72rem;text-decoration:none;">Publisher page</a>':"")
+        +'</div>'
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">'
+        +'<a href="paper.html?id='+encodeURIComponent(idTail)+'" class="btn btn-secondary" style="font-size:.78rem;padding:4px 10px;white-space:nowrap;text-decoration:none;">View paper →</a>'
+        +(isCurrentSeed?"":('<button id="btnGraphExplore" class="btn btn-secondary" style="font-size:.78rem;padding:4px 10px;white-space:nowrap;">Explore from here</button>'))
+      +'</div>';
+    block.appendChild(panel);
+    var btn = $("btnGraphExplore");
+    if (btn && onExplore) btn.onclick = onExplore;
   }
 
-  async function renderCitationGraph(main, cited, citing){
-    window.__GRAPH_CTX__ = { main: main, cited: cited, citing: citing };
+  // ── Re-seed the graph from a clicked node ────────────────────────────────────
+  async function exploreFromNode(shortId){
     var block = $("graphBlock");
-    block.innerHTML = '<h2>Connected Papers</h2>';
-    block.appendChild(renderGraphControls());
-    var graphDiv = document.createElement("div");
-    graphDiv.id = "paperGraph";
-    graphDiv.className = "panel";
-    graphDiv.style.height = "680px";
-    block.appendChild(graphDiv);
-
-    if (!window.vis || !vis.Network){
-      block.insertAdjacentHTML("beforeend", "<p class='muted'>Graph library not loaded.</p>");
-      return;
+    if (!block) return;
+    var graphDiv = $("paperGraph");
+    if (graphDiv) { graphDiv.style.opacity = "0.4"; graphDiv.style.pointerEvents = "none"; }
+    try {
+      var newMain = await fetchPaperData(shortId);
+      var newCited = [], newCiting = [];
+      try { newCited = await fetchCitedPapers(newMain.referenced_works||[]); } catch(e){}
+      try { newCiting = await fetchCitingPapers(newMain.id); } catch(e){}
+      window.__GRAPH_CTX__ = { main:newMain, cited:newCited, citing:newCiting };
+      await renderConnectedGraph(newMain, newCited, newCiting);
+    } catch(e){
+      console.error("Explore failed:", e);
+      if (graphDiv){ graphDiv.style.opacity = "1"; graphDiv.style.pointerEvents = ""; }
     }
-
-    var nodes = [{ id: main.id, label: shortCitation(main), title: main.display_name, group: "main", paperId: main.id }];
-    for (var i=0;i<cited.length;i++){ nodes.push({ id: cited[i].id,  label: shortCitation(cited[i]),  title: cited[i].display_name,  group: "cited",  paperId: cited[i].id }); }
-    for (var j=0;j<citing.length;j++){ nodes.push({ id: citing[j].id, label: shortCitation(citing[j]), title: citing[j].display_name, group: "citing", paperId: citing[j].id }); }
-    nodes = uniqueNodes(nodes);
-
-    var edges = [];
-    for (var k=0;k<cited.length;k++){ edges.push({ from: main.id, to: cited[k].id, value: 1, width: 1 }); }
-    for (var m=0;m<citing.length;m++){ edges.push({ from: citing[m].id, to: main.id, value: 1, width: 1 }); }
-
-    var network = new vis.Network(graphDiv, { nodes:new vis.DataSet(nodes), edges:new vis.DataSet(edges) }, baseNetworkOptions());
-    network.on("click", function (params) {
-      if (!params.nodes || !params.nodes.length) return;
-      var nodeId = params.nodes[0];
-      var shortId = String(nodeId).replace(/^https?:\/\/openalex\.org\//i, "");
-      window.location.href = "paper.html?id=" + encodeURIComponent(shortId);
-    });
-
-    var applyBtn = $("#applyGraphFilters");
-    if (applyBtn){
-      applyBtn.onclick = async function(){
-        var mode = $("#graphMode").value;
-        if (mode === "connected") await renderConnectedGraph(main, cited, citing);
-        else await renderCitationGraph(main, cited, citing);
-      };
-    }
-    var modeSel = $("#graphMode");
-    if (modeSel) {
-      modeSel.value = "citation";
-      modeSel.onchange = updateGraphControlState;
-    }
-    updateGraphControlState();
-
-    repopulateHeaderIfEmpty(); restoreHeaderIfNeeded();
-    renderBelowGraphLists(cited, citing);
   }
 
+  // ── Connected Map (the only graph mode) ──────────────────────────────────────
   async function renderConnectedGraph(main, cited, citing){
     window.__GRAPH_CTX__ = { main: main, cited: cited, citing: citing };
     var block = $("graphBlock");
-    block.innerHTML = '<h2>Connected Papers</h2>';
-    block.appendChild(renderGraphControls());
+    block.innerHTML = '<h2>Similar Papers Map</h2>';
+
+    // Controls — no mode selector, just the two useful filters
+    var ctrlEl = document.createElement("div");
+    ctrlEl.className = "panel light";
+    ctrlEl.style.cssText = "margin-bottom:8px;padding:8px 12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12px;";
+    ctrlEl.innerHTML =
+      '<label style="display:flex;align-items:center;gap:4px;">Min similarity'
+        +'<input id="minSim" type="number" step="0.05" min="0.04" max="0.5" value="0.08" style="width:65px;margin-left:4px;"></label>'
+      +'<label style="display:flex;align-items:center;gap:4px;">Min citations'
+        +'<input id="minCites" type="number" min="0" value="0" style="width:65px;margin-left:4px;"></label>'
+      +'<button id="applyGraphFilters" class="btn btn-secondary" style="padding:4px 12px;">Apply</button>'
+      +'<span class="muted" style="margin-left:auto;font-size:11px;">Click node for details · Double-click to open paper</span>';
+    block.appendChild(ctrlEl);
+
     var graphDiv = document.createElement("div");
     graphDiv.id = "paperGraph";
-    graphDiv.className = "panel";
-    graphDiv.style.height = "680px";
+    graphDiv.style.cssText = "height:580px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;";
     block.appendChild(graphDiv);
 
     if (!window.vis || !vis.Network){
@@ -1485,52 +1482,62 @@
       return;
     }
 
-    var minSimInput = $("#minSim"), minCitesInput = $("#minCites"), minYearInput = $("#minYear"), maxYearInput = $("#maxYear");
-    var MIN_SIM = parseFloat(minSimInput ? (minSimInput.value || "0.10") : "0.10") || 0.10;
-    var MIN_CITES = parseInt(minCitesInput ? (minCitesInput.value || "0") : "0", 10) || 0;
-    var MIN_YEAR = parseInt(minYearInput ? (minYearInput.value || "0") : "0", 10) || 0;
-    var MAX_YEAR = parseInt(maxYearInput ? (maxYearInput.value || "0") : "0", 10) || 0;
+    var MIN_SIM   = parseFloat($("minSim")   ? $("minSim").value   : "0.08") || 0.08;
+    var MIN_CITES = parseInt($("minCites") ? $("minCites").value : "0", 10) || 0;
 
     var base = await buildConnectedLikeGraph(main, cited, citing, { maxReferences:220, maxCiters:220, jaccardThreshold:Math.max(0.04, MIN_SIM) });
 
     var candIdsFull = base.candidateIds.map(function(t){ return "https://openalex.org/"+t; });
     var meta = [];
     for (var i=0;i<candIdsFull.length;i+=50){
-      var chunk = candIdsFull.slice(i, i+50).join("|");
+      var chunk = candIdsFull.slice(i,i+50).join("|");
       var data = await getJSON(API + "/works?filter=ids.openalex:" + encodeURIComponent(chunk) + "&per_page=50");
       if (data && Array.isArray(data.results)) meta = meta.concat(data.results);
     }
 
+    // Build id → full paper object lookup for info panel
+    var _nodeMetaMap = Object.create(null);
+    _nodeMetaMap[String(main.id)] = main;
+    for (var mb=0;mb<meta.length;mb++){ _nodeMetaMap[String(meta[mb].id)] = meta[mb]; }
+
     var all = [main].concat(meta);
     var years = [];
-    for (var y=0;y<all.length;y++){ var py = +get(all[y],"publication_year",0) || 0; if (py) years.push(py); }
-    var minY = years.length ? Math.min.apply(null, years) : 0;
-    var maxY = years.length ? Math.max.apply(null, years) : 0;
+    for (var y=0;y<all.length;y++){ var py = +get(all[y],"publication_year",0)||0; if(py) years.push(py); }
+    var minY = years.length ? Math.min.apply(null,years) : 2000;
+    var maxY = years.length ? Math.max.apply(null,years) : new Date().getFullYear();
 
+    // Build nodes
     var nodes = [];
     var keepSet = new Set();
 
-    nodes.push({ id: main.id, label: shortCitation(main), title: main.display_name, group:"main", paperId: main.id,
-      value: Math.max(1, +get(main,'cited_by_count',0)), color:{ background:"#111827", border:"#111827" } });
+    nodes.push({
+      id: main.id, label: shortCitation(main), title: buildNodeTooltipEl(main),
+      group:"main", paperId: main.id,
+      value: Math.max(3, +get(main,"cited_by_count",0)),
+      color:{ background:"#111827", border:"#6b7280", highlight:{ background:"#374151", border:"#9ca3af" } },
+      font:{ color:"#ffffff", size:13 }
+    });
     keepSet.add(String(main.id));
 
     var metaByTail = Object.create(null);
-    for (var mb=0;mb<meta.length;mb++){ metaByTail[String(meta[mb].id).split("/").pop()] = meta[mb]; }
+    for (var mb2=0;mb2<meta.length;mb2++){ metaByTail[String(meta[mb2].id).split("/").pop()] = meta[mb2]; }
 
     var tails = Object.keys(metaByTail);
     for (var t=0;t<tails.length;t++){
       var tail = tails[t], w = metaByTail[tail];
-      var yr = +get(w,"publication_year",0) || 0;
-      var cites = +get(w,"cited_by_count",0) || 0;
+      var cites = +get(w,"cited_by_count",0)||0;
+      var yr    = +get(w,"publication_year",0)||0;
       if (MIN_CITES && cites < MIN_CITES) continue;
-      if (MIN_YEAR && yr && yr < MIN_YEAR) continue;
-      if (MAX_YEAR && yr && yr > MAX_YEAR) continue;
-      var colorHex = yearColor(yr || minY, MIN_YEAR||minY, MAX_YEAR||maxY || maxY);
-      nodes.push({ id:w.id, label:shortCitation(w), title:w.display_name, group:"candidate", paperId:w.id, value:Math.max(1,cites),
-        year:yr, color:{ background:colorHex, border:colorHex } });
+      var col = yearColor(yr||minY, minY, maxY);
+      nodes.push({
+        id: w.id, label: shortCitation(w), title: buildNodeTooltipEl(w),
+        group:"candidate", paperId: w.id, value: Math.max(1, cites), year: yr,
+        color:{ background:col, border:col, highlight:{ background:col, border:"#0f172a" } }
+      });
       keepSet.add(String(w.id));
     }
 
+    // Build edges
     var edges = [];
     for (var e=0;e<base.edges.length;e++){
       var E = base.edges[e];
@@ -1538,54 +1545,62 @@
       var bFull = E.b.indexOf("http")===0 ? E.b : ("https://openalex.org/"+E.b);
       if (!keepSet.has(aFull) || !keepSet.has(bFull)) continue;
       if (E.w < MIN_SIM) continue;
-      edges.push({ from:aFull, to:bFull, value:E.w, width: Math.max(1, 6*E.w) });
+      edges.push({ from:aFull, to:bFull, value:E.w, width:Math.max(1,6*E.w), color:{color:"#cbd5e1",highlight:"#94a3b8"} });
     }
-
     if (edges.length < 20 && base.edges.length){
-      var top = base.edges.slice().sort(function(a,b){ return b.w - a.w; }).slice(0, 30);
+      var top30 = base.edges.slice().sort(function(a,b){ return b.w-a.w; }).slice(0,30);
       edges = [];
-      for (var q=0;q<top.length;q++){
-        var EE = top[q];
+      for (var q=0;q<top30.length;q++){
+        var EE = top30[q];
         var aF = EE.a.indexOf("http")===0 ? EE.a : ("https://openalex.org/"+EE.a);
         var bF = EE.b.indexOf("http")===0 ? EE.b : ("https://openalex.org/"+EE.b);
-        edges.push({ from:aF, to:bF, value:EE.w, width: Math.max(1, 6*EE.w) });
+        edges.push({ from:aF, to:bF, value:EE.w, width:Math.max(1,6*EE.w), color:{color:"#cbd5e1",highlight:"#94a3b8"} });
       }
     }
 
     nodes = uniqueNodes(nodes);
-
-    var allIds = [];
-    for (var n=0;n<nodes.length;n++){ allIds.push(String(nodes[n].id)); }
+    var allIds = nodes.map(function(n){ return String(n.id); });
     var reachable = filterToSeedComponent(
-      base.edges.map(function(eX){ return { a: idTailFrom(eX.a.indexOf("http")===0 ? eX.a : ("https://openalex.org/"+eX.a)), b: idTailFrom(eX.b.indexOf("http")===0 ? eX.b : ("https://openalex.org/"+eX.b)), w:eX.w }; }),
-      allIds, String(main.id)
-    );
+      base.edges.map(function(eX){
+        return { a:idTailFrom(eX.a.indexOf("http")===0?eX.a:("https://openalex.org/"+eX.a)),
+                 b:idTailFrom(eX.b.indexOf("http")===0?eX.b:("https://openalex.org/"+eX.b)), w:eX.w }; }),
+      allIds, String(main.id));
     var nodesFiltered = nodes.filter(function(n){ return reachable.has(String(n.id)); });
-    var nodeIdsKept = new Set(nodesFiltered.map(function(n){ return String(n.id); }));
+    var nodeIdsKept   = new Set(nodesFiltered.map(function(n){ return String(n.id); }));
     var edgesFiltered = edges.filter(function(ed){ return nodeIdsKept.has(String(ed.from)) && nodeIdsKept.has(String(ed.to)); });
 
-    var network = new vis.Network(graphDiv, { nodes:new vis.DataSet(nodesFiltered), edges:new vis.DataSet(edgesFiltered) }, baseNetworkOptions());
-    network.on("click", function (params) {
+    var network = new vis.Network(graphDiv,
+      { nodes: new vis.DataSet(nodesFiltered), edges: new vis.DataSet(edgesFiltered) },
+      { nodes:{ shape:"dot", scaling:{min:8,max:36}, font:{size:13}, borderWidth:2 },
+        edges:{ smooth:{type:"continuous"}, selectionWidth:2 },
+        physics:{ stabilization:{iterations:120}, barnesHut:{ gravitationalConstant:-8000, springConstant:0.02, avoidOverlap:0.3 } },
+        interaction:{ hover:true, tooltipDelay:250, hideEdgesOnDrag:true } });
+
+    renderYearLegend(block, minY, maxY);
+
+    // Single click → show info panel (or hide it when clicking canvas)
+    network.on("click", function(params){
+      if (!params.nodes || !params.nodes.length){
+        var old = $("graphInfoPanel"); if (old) old.hidden = true;
+        return;
+      }
+      var nodeId = String(params.nodes[0]);
+      var wData = _nodeMetaMap[nodeId];
+      if (!wData) return;
+      showGraphInfoPanel(block, wData, nodeId === String(main.id), function(){
+        exploreFromNode(idTailFrom(nodeId));
+      });
+    });
+
+    // Double-click → navigate to paper page
+    network.on("doubleClick", function(params){
       if (!params.nodes || !params.nodes.length) return;
-      var nodeId = params.nodes[0];
-      var shortId = String(nodeId).replace(/^https?:\/\/openalex\.org\//i, "");
+      var shortId = idTailFrom(String(params.nodes[0]));
       window.location.href = "paper.html?id=" + encodeURIComponent(shortId);
     });
 
-    var applyBtn = $("#applyGraphFilters");
-    if (applyBtn){
-      applyBtn.onclick = async function(){
-        var mode = $("#graphMode").value;
-        if (mode === "citation") await renderCitationGraph(main, cited, citing);
-        else await renderConnectedGraph(main, cited, citing);
-      };
-    }
-    var gm = $("#graphMode");
-    if (gm) {
-      gm.value = "connected";
-      gm.onchange = updateGraphControlState;
-    }
-    updateGraphControlState();
+    // Apply button
+    $("applyGraphFilters").onclick = function(){ renderConnectedGraph(main, cited, citing); };
 
     repopulateHeaderIfEmpty(); restoreHeaderIfNeeded();
     renderBelowGraphLists(cited, citing);
@@ -2193,21 +2208,6 @@
       restoreHeaderIfNeeded();
     }
 
-    // Keep "Apply" working across re-renders
-    document.addEventListener("click", function(e){
-      var btn = e.target.closest("#applyGraphFilters");
-      if (!btn) return;
-      e.preventDefault();
-      var modeSel = document.getElementById("graphMode");
-      var mode = modeSel ? modeSel.value : "connected";
-      if (window.__GRAPH_CTX__ && __GRAPH_CTX__.main) {
-        if (mode === "citation"){
-          renderCitationGraph(__GRAPH_CTX__.main, __GRAPH_CTX__.cited, __GRAPH_CTX__.citing);
-        } else {
-          renderConnectedGraph(__GRAPH_CTX__.main, __GRAPH_CTX__.cited, __GRAPH_CTX__.citing);
-        }
-      }
-    });
   }
 
   document.addEventListener("DOMContentLoaded", boot);
