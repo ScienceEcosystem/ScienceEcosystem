@@ -64,6 +64,48 @@ function markSavedButton(btn) {
 (globalThis.SE_LIB ??= {});
 Object.assign(globalThis.SE_LIB, { loadLibraryOnce, isSaved, markSavedButton });
 
+// After saving, sync any PDF annotations that were made before the paper was in the library
+async function syncLocalAnnotationsForPaper(paperId, pdfUrl) {
+  if (!paperId) return;
+  // Check both possible localStorage keys (full URL or just the pdfUrl)
+  const keysToTry = pdfUrl
+    ? [`se_annotations_${encodeURIComponent(pdfUrl)}`]
+    : [];
+  // Also scan all localStorage keys for this paperId pattern
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("se_annotations_")) keysToTry.push(k);
+  }
+  for (const key of keysToTry) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const annots = JSON.parse(raw);
+      if (!Array.isArray(annots) || !annots.length) continue;
+      const inferredPdfUrl = key.replace("se_annotations_", "");
+      await fetch("/api/library/pdf-annotations", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paper_id: paperId,
+          pdf_url: decodeURIComponent(inferredPdfUrl),
+          annotations: annots
+        })
+      });
+    } catch (_) {}
+  }
+}
+
+function showSavedToast(msg = "Saved to library") {
+  const el = document.createElement("div");
+  el.textContent = msg;
+  Object.assign(el.style, { position:"fixed", bottom:"1.25rem", right:"1.25rem", background:"#15803d", color:"#fff", padding:".6rem 1rem", borderRadius:"8px", fontSize:".9rem", zIndex:"9000", boxShadow:"0 4px 12px rgba(0,0,0,.2)", opacity:"0", transition:"opacity .2s" });
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>{ el.style.opacity="1"; });
+  setTimeout(()=>{ el.style.opacity="0"; setTimeout(()=>el.remove(),200); }, 2500);
+}
+
 // Global save helper that can flip the clicked button
 globalThis.savePaper = async function savePaper(paper, btnEl) {
   if (!paper || !paper.id || !paper.title) {
@@ -75,17 +117,15 @@ globalThis.savePaper = async function savePaper(paper, btnEl) {
       method: "POST",
       body: JSON.stringify({ id: String(paper.id), title: String(paper.title) }),
     });
-    // update local cache + UI
+    // Update local cache + UI
     (SE_LIB_MAP ??= Object.create(null));
     SE_LIB_MAP[String(paper.id)] = true;
     if (btnEl) markSavedButton(btnEl);
-    // Non-blocking confirmation
-    const saved = document.createElement("div");
-    saved.textContent = `Saved to library`;
-    Object.assign(saved.style, { position:"fixed", bottom:"1.25rem", right:"1.25rem", background:"#15803d", color:"#fff", padding:".6rem 1rem", borderRadius:"8px", fontSize:".9rem", zIndex:"9000", boxShadow:"0 4px 12px rgba(0,0,0,.2)", opacity:"0", transition:"opacity .2s" });
-    document.body.appendChild(saved);
-    requestAnimationFrame(()=>{ saved.style.opacity="1"; });
-    setTimeout(()=>{ saved.style.opacity="0"; setTimeout(()=>saved.remove(),200); }, 2500);
+    showSavedToast("Saved to library");
+
+    // Sync any PDF annotations that were made before this paper was saved
+    const pdfUrl = paper.pdfUrl || null;
+    syncLocalAnnotationsForPaper(String(paper.id), pdfUrl).catch(() => {});
   } catch (e) {
     const msg = String(e?.message || "");
     if (msg.includes("Not signed in")) {

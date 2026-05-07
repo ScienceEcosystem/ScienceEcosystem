@@ -238,7 +238,13 @@
     const pdfUrl = localPdf || item.pdf_url || null;
     const defs=[
       {act:"open-paper",label:"Open paper page",onClick: ()=>{ location.href=`paper.html?id=${encodeURIComponent(openAlexId)}`; }},
-      ...(pdfUrl ? [{act:"open-pdf",label:"Open PDF",onClick: ()=>{ window.open(pdfUrl,"_blank"); }}] : []),
+      ...(pdfUrl ? [{act:"open-pdf",label:"Open in PDF viewer",onClick: ()=>{
+        const openAlexId = item.openalex_id || item.id || "";
+        const viewerUrl = openAlexId
+          ? `pdf-viewer.html?id=${encodeURIComponent(openAlexId)}&pdf=${encodeURIComponent(pdfUrl)}`
+          : `pdf-viewer.html?pdf=${encodeURIComponent(pdfUrl)}`;
+        window.open(viewerUrl,"_blank");
+      }}] : []),
       {act:"add-col",label:"Add to collection…",onClick: async()=>{ await addItemToCollection(item.id); }},
       ...((currentCollectionId && typeof currentCollectionId==="number") ? [{act:"remove-col",label:"Remove from this collection",onClick: async()=>{ await removeItemFromCollection(item.id, currentCollectionId); }}] : []),
       ...(!item.deleted_at ? [{act:"trash",label:"Move to Trash",onClick: async()=>{ await moveItemToTrash(item.id); }}] : [{act:"restore",label:"Restore",onClick: async()=>{ await restoreItem(item.id); }}]),
@@ -638,6 +644,10 @@
     const openAlexId = item.openalex_id || item.id || "";
     const localPdf = item.local_pdf_path ? `/api/library/pdf?paper_id=${encodeURIComponent(item.id)}` : null;
     const pdfUrl = localPdf || item.pdf_url || null;
+    // Always open PDFs through the viewer so annotations sync
+    const pdfViewerUrl = pdfUrl && openAlexId
+      ? `pdf-viewer.html?id=${encodeURIComponent(openAlexId)}&pdf=${encodeURIComponent(pdfUrl)}`
+      : (pdfUrl ? `pdf-viewer.html?pdf=${encodeURIComponent(pdfUrl)}` : null);
     const zoteroLink = (item.zotero_key && zoteroUserId) ? `https://www.zotero.org/users/${encodeURIComponent(zoteroUserId)}/items/${encodeURIComponent(item.zotero_key)}` : null;
 
     const currentTags = Array.isArray(item.tags) ? [...item.tags] : [];
@@ -650,29 +660,31 @@
         <p style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.25rem 0;">
           ${chip(doiUrl,"DOI")}
           ${chip(item.openalex_url,"OpenAlex")}
-          ${chip(pdfUrl,"Read PDF","badge badge-oa")}
+          ${pdfViewerUrl?`<a class="badge badge-oa" href="${esc(pdfViewerUrl)}">Read PDF</a>`:""}
           ${zoteroLink?`<a class="badge badge-zotero" href="${zoteroLink}" target="_blank" rel="noopener">Zotero</a>`:(item.zotero_key?`<span class="badge badge-zotero">Zotero</span>`:"")}
         </p>
 
-        <!-- Actions row 1 -->
+        <!-- Actions -->
         <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0;">
-          <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(item.openalex_id||item.id||"")}">View</a>
-          ${pdfUrl?`<a class="btn btn-secondary" href="${pdfUrl}" target="_blank" rel="noopener">Open PDF</a>`:""}
+          <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(openAlexId)}">View paper</a>
+          ${pdfViewerUrl?`<a class="btn btn-secondary" href="${esc(pdfViewerUrl)}">📄 Open in PDF viewer</a>`:""}
           <button class="btn btn-secondary" id="addToCollectionBtn">+ Collection</button>
           ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn">Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn">Restore</button>`}
           ${item.deleted_at?`<button class="btn btn-secondary" id="deleteForeverBtn">Delete forever</button>`:""}
         </div>
 
-        <!-- PDF row -->
+        <!-- PDF attach/remove -->
         <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.25rem 0;">
           ${localPdf?`
-            <a class="btn btn-secondary" href="${localPdf}" target="_blank" rel="noopener">Stored PDF</a>
-            <button class="btn btn-secondary" id="deletePdfBtn">Remove PDF</button>
+            <button class="btn btn-secondary" id="deletePdfBtn">Remove attached PDF</button>
           `:`
             <button class="btn btn-secondary" id="uploadPdfBtn">Attach PDF</button>
             <input id="uploadPdfInput" type="file" accept="application/pdf" style="display:none;">
           `}
         </div>
+
+        <!-- Annotations panel (loaded async below) -->
+        <div id="annotPanel" style="margin:.5rem 0;"></div>
 
         <!-- Citation export -->
         <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0;">
@@ -696,6 +708,9 @@
         </details>
       </div>
     `;
+
+    // Load PDF annotations from server and render in the panel
+    renderAnnotationPanel(id, pdfViewerUrl);
 
     // Add to collection
     $("#addToCollectionBtn").onclick=()=>addItemToCollection(id);
@@ -789,6 +804,59 @@
     await renderRelated(id);
     // Notes
     await renderNotes(id);
+  }
+
+  // ---- PDF annotation panel in inspector ----
+  async function renderAnnotationPanel(paperId, pdfViewerUrl){
+    const panel = document.getElementById("annotPanel");
+    if (!panel) return;
+
+    let annotData = { annotations: [], pdf_url: null };
+    try {
+      const res = await api(`/api/library/pdf-annotations?paper_id=${encodeURIComponent(paperId)}`);
+      annotData = res || annotData;
+    } catch(_) {}
+
+    const annots = Array.isArray(annotData.annotations) ? annotData.annotations : [];
+    const highlights = annots.filter(a => a.type === "highlight");
+    const notes     = annots.filter(a => a.type === "note");
+
+    if (!annots.length) {
+      panel.innerHTML = pdfViewerUrl
+        ? `<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:.6rem .75rem;font-size:.83rem;color:#6b7280;">
+             No highlights or notes yet. <a href="${esc(pdfViewerUrl)}" style="color:#2e7f9f;">Open in PDF viewer</a> to start annotating.
+           </div>`
+        : "";
+      return;
+    }
+
+    const summaryLine = [
+      highlights.length ? `${highlights.length} highlight${highlights.length>1?"s":""}` : "",
+      notes.length ? `${notes.length} note${notes.length>1?"s":""}` : ""
+    ].filter(Boolean).join(", ");
+
+    const annotHtml = annots.slice(0, 6).map(a => {
+      const icon = a.type === "note" ? "📝" : "🖊";
+      const color = a.type === "note" ? "rgba(46,127,159,.18)" : "rgba(255,235,59,.45)";
+      const border = a.type === "note" ? "#2e7f9f" : "#d4a017";
+      return `<div style="background:${color};border-left:3px solid ${border};border-radius:0 6px 6px 0;padding:.4rem .6rem;margin:.3rem 0;font-size:.82rem;">
+        <span style="margin-right:.3rem;">${icon}</span>${esc(a.quote||"").slice(0,120)}${(a.quote||"").length>120?"…":""}
+        ${a.note?`<div style="font-style:italic;color:#555;margin-top:.2rem;font-size:.8rem;">"${esc(a.note)}"</div>`:""}
+      </div>`;
+    }).join("");
+
+    const moreNote = annots.length > 6
+      ? `<p style="font-size:.78rem;color:#6b7280;margin:.25rem 0;">${annots.length-6} more in PDF viewer…</p>`
+      : "";
+
+    panel.innerHTML = `
+      <div style="margin:.25rem 0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem;">
+          <strong style="font-size:.85rem;">${summaryLine}</strong>
+          ${pdfViewerUrl?`<a href="${esc(pdfViewerUrl)}" style="font-size:.8rem;color:#2e7f9f;">Open PDF viewer →</a>`:""}
+        </div>
+        ${annotHtml}${moreNote}
+      </div>`;
   }
 
   // ---- Related items: show collection siblings ----

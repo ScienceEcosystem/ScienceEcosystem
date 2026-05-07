@@ -1,0 +1,170 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 340px;
+  min-height: 160px;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: #1e293b;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .6rem .9rem;
+  background: #0f172a;
+  color: #fff;
+}
+.logo { display: flex; align-items: center; gap: .5rem; }
+.logo-img { width: 20px; height: 20px; border-radius: 4px; }
+.logo-text { font-weight: 700; font-size: .9rem; letter-spacing: -.01em; }
+
+.auth-badge {
+  font-size: .72rem;
+  padding: .2rem .5rem;
+  border-radius: 20px;
+  background: rgba(255,255,255,.12);
+  color: #94a3b8;
+}
+.auth-badge.ok { background: rgba(34,197,94,.2); color: #86efac; }
+
+/* ── Main ───────────────────────────────────────────────────────────────────── */
+main { flex: 1; padding: .75rem .9rem; }
+
+/* ── States ─────────────────────────────────────────────────────────────────── */
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: .5rem;
+  padding: .75rem 0;
+}
+.state .icon { font-size: 1.8rem; }
+.state p { color: #475569; line-height: 1.4; }
+.state .hint { font-size: .8rem; color: #94a3b8; }
+.muted { color: #64748b; }
+
+/* Spinner */
+.spinner {
+  width: 22px; height: 22px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #2e7f9f;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Paper card ─────────────────────────────────────────────────────────────── */
+.paper-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: .65rem .75rem;
+  margin-bottom: .6rem;
+}
+.paper-title {
+  font-weight: 600;
+  font-size: .85rem;
+  line-height: 1.35;
+  color: #0f172a;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.paper-meta {
+  margin-top: .3rem;
+  font-size: .78rem;
+  color: #64748b;
+  line-height: 1.3;
+}
+.paper-doi {
+  margin-top: .2rem;
+  font-size: .72rem;
+  font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Save status strip ──────────────────────────────────────────────────────── */
+.save-status {
+  font-size: .8rem;
+  padding: .4rem .6rem;
+  border-radius: 6px;
+  margin-bottom: .5rem;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.save-status.saved    { background: #dcfce7; color: #166534; }
+.save-status.saving   { background: #eff6ff; color: #1d4ed8; }
+.save-status.error    { background: #fef2f2; color: #991b1b; }
+
+/* ── Actions ────────────────────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .45rem .8rem;
+  border-radius: 7px;
+  border: none;
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+  white-space: nowrap;
+}
+.btn:hover { opacity: .88; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.btn-primary  { background: #2e7f9f; color: #fff; flex: 1; justify-content: center; }
+.btn-secondary { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+.btn-success  { background: #16a34a; color: #fff; flex: 1; justify-content: center; }
+
+/* ── PDF status ─────────────────────────────────────────────────────────────── */
+.pdf-status {
+  font-size: .78rem;
+  padding: .3rem 0;
+}
+
+/* ── Open link ──────────────────────────────────────────────────────────────── */
+.open-link {
+  margin-top: .4rem;
+  text-align: center;
+}
+.open-link a {
+  font-size: .78rem;
+  color: #2e7f9f;
+  text-decoration: none;
+}
+.open-link a:hover { text-decoration: underline; }
+
+/* ── Footer ─────────────────────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .45rem .9rem;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+  font-size: .75rem;
+}
+.footer-link {
+  color: #2e7f9f;
+  text-decoration: none;
+  font-weight: 600;
+}
+.footer-link:hover { text-decoration: underline; }

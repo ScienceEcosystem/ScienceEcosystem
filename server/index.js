@@ -315,6 +315,18 @@ async function pgInit() {
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS collection_ids_zotero TEXT[]`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS annotations JSONB`);
 
+  // Standalone PDF annotations — independent of library membership
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdf_annotations (
+      orcid      TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      paper_id   TEXT NOT NULL,
+      pdf_url    TEXT,
+      data       JSONB NOT NULL DEFAULT '[]',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (orcid, paper_id)
+    )
+  `);
+
   // Zotero connections + sync log
   await pool.query(`
     CREATE TABLE IF NOT EXISTS zotero_connections (
@@ -1369,25 +1381,39 @@ app.get("/api/library/pdf-annotations", async (req, res) => {
   if (!sess) return res.status(401).json({ error: "Not signed in" });
   const paperId = (req.query.paper_id || "").trim();
   if (!paperId) return res.status(400).json({ error: "paper_id required" });
-  const { rows } = await pool.query(
-    `SELECT annotations FROM library_items WHERE orcid=$1 AND id=$2`,
-    [sess.orcid, paperId]
-  ).catch(() => ({ rows: [] }));
-  const raw = rows[0]?.annotations;
-  const annotations = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : [];
-  res.json({ annotations: Array.isArray(annotations) ? annotations : [] });
+  try {
+    const { rows } = await pool.query(
+      `SELECT data, pdf_url FROM pdf_annotations WHERE orcid=$1 AND paper_id=$2`,
+      [sess.orcid, paperId]
+    );
+    const raw = rows[0]?.data;
+    const annotations = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
+    res.json({ annotations, pdf_url: rows[0]?.pdf_url || null });
+  } catch (e) {
+    res.json({ annotations: [], pdf_url: null });
+  }
 });
 
 app.post("/api/library/pdf-annotations", async (req, res) => {
   const sess = await getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
-  const { paper_id, annotations } = req.body || {};
+  const { paper_id, pdf_url, annotations } = req.body || {};
   if (!paper_id || !Array.isArray(annotations)) return res.status(400).json({ error: "paper_id and annotations[] required" });
-  await pool.query(
-    `UPDATE library_items SET annotations=$3 WHERE orcid=$1 AND id=$2`,
-    [sess.orcid, String(paper_id), JSON.stringify(annotations)]
-  ).catch(() => {});
-  res.json({ ok: true });
+  try {
+    await pool.query(
+      `INSERT INTO pdf_annotations (orcid, paper_id, pdf_url, data, updated_at)
+       VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT (orcid, paper_id) DO UPDATE
+         SET data = EXCLUDED.data,
+             pdf_url = COALESCE(EXCLUDED.pdf_url, pdf_annotations.pdf_url),
+             updated_at = now()`,
+      [sess.orcid, String(paper_id), pdf_url || null, JSON.stringify(annotations)]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /api/library/pdf-annotations failed:", e);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
 });
 
 app.delete("/api/library/:id", async (req, res) => {
@@ -2002,42 +2028,73 @@ app.get("/api/paper/oa", async (req, res) => {
     "eartharxiv","socarxiv","lawarxiv","paleorxiv","agrixiv","research square","preprints.org","ssrn"
   ];
 
+  // Normalise DOI for comparison: lowercase, strip prefix/URL
+  function normDoi(raw) {
+    return String(raw || "")
+      .toLowerCase()
+      .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
+      .replace(/^doi:/i, "")
+      .trim();
+  }
+  const normRequestedDoi = normDoi(doi);
+
+  // Guard: only accept a result if its DOI matches what we requested
+  function doiMatches(candidateDoi) {
+    if (!normRequestedDoi) return true; // no DOI to check against
+    const c = normDoi(candidateDoi);
+    return c && c === normRequestedDoi;
+  }
+
   const tasks = [
-    // CORE
+    // CORE — look up by DOI, verify the result DOI matches before accepting
     async () => {
       if (!doi) return null;
       const headers = coreKey ? { "X-API-Key": coreKey } : {};
-      const core = await fetchJSONTimeout(`https://api.core.ac.uk/v3/search/works?q=doi:${encodeURIComponent(doi)}&limit=1`, { headers });
-      const hit = Array.isArray(core?.results) ? core.results[0] : null;
-      const pdf = hit?.downloadUrl || hit?.fullTextIdentifier || null;
+      const core = await fetchJSONTimeout(
+        `https://api.core.ac.uk/v3/search/works?q=doi:%22${encodeURIComponent(doi)}%22&limit=3`,
+        { headers }
+      );
+      const results = Array.isArray(core?.results) ? core.results : [];
+      // Only accept a result whose DOI exactly matches
+      const hit = results.find(r => doiMatches(r?.doi));
+      if (!hit) return null;
+      const pdf = hit.downloadUrl || hit.fullTextIdentifier || null;
       if (!pdf) return null;
-      return { source: "CORE", pdf_url: pdf, landing_url: hit?.fullTextIdentifier || hit?.sourceFulltextUrls?.[0] || null };
+      return { source: "CORE", pdf_url: pdf, landing_url: hit.fullTextIdentifier || hit.sourceFulltextUrls?.[0] || null };
     },
-    // Europe PMC
+    // Europe PMC — DOI-exact query, no fuzzy risk
     async () => {
       if (!doi) return null;
       const epmc = await fetchJSONTimeout(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:${encodeURIComponent(doi)}&format=json&resultType=core`);
       const results = Array.isArray(epmc?.resultList?.result) ? epmc.resultList.result : [];
       for (const r of results) {
+        // Verify DOI matches
+        if (!doiMatches(r?.doi)) continue;
         const list = Array.isArray(r?.fullTextUrlList?.fullTextUrl) ? r.fullTextUrlList.fullTextUrl : [];
         const oa = list.find(x => String(x?.availability || "").toLowerCase() === "open access");
         if (oa?.url) return { source: "Europe PMC", pdf_url: oa.url, landing_url: r?.pmcHtmlUrl || r?.fullTextUrl || null };
       }
       return null;
     },
-    // Semantic Scholar
+    // Semantic Scholar — direct DOI lookup (not a search, no DOI-mismatch risk)
     async () => {
       if (!doi) return null;
-      const ss = await fetchJSONTimeout(`https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=openAccessPdf`);
+      const ss = await fetchJSONTimeout(`https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=openAccessPdf,externalIds`);
+      // Verify the returned externalIds.DOI matches
+      if (ss?.externalIds?.DOI && !doiMatches(ss.externalIds.DOI)) return null;
       const pdf = ss?.openAccessPdf?.url || null;
       if (!pdf) return null;
       return { source: "Semantic Scholar", pdf_url: pdf, landing_url: ss?.openAccessPdf?.url || null };
     },
-    // BASE
+    // BASE — DOI field search, verify match
     async () => {
       if (!doi) return null;
       const base = await fetchJSONTimeout(`https://api.base-search.net/cgi-bin/BaseHttpSearchInterface.fcgi?func=PerformSearch&query=dcdoi:${encodeURIComponent(doi)}&format=json`);
       const doc = base?.response?.docs?.[0] || null;
+      if (!doc) return null;
+      // BASE returns dcdoi as an array or string
+      const baseDoi = Array.isArray(doc?.dcdoi) ? doc.dcdoi[0] : doc?.dcdoi;
+      if (!doiMatches(baseDoi)) return null;
       const link = Array.isArray(doc?.dclink) ? doc.dclink[0] : doc?.dclink || null;
       if (!link) return null;
       return { source: "BASE", pdf_url: link, landing_url: link };

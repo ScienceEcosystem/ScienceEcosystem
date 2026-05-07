@@ -87,25 +87,53 @@ async function loadPDF(url) {
     console.error('Error loading PDF:', error);
     const pdfMain = document.querySelector('.pdf-main');
     if (pdfMain) {
-      pdfMain.innerHTML = `
-        <div style="text-align:center; padding:3rem; color:#666;">
-          <h3 style="color:#c0392b;">Unable to Load PDF</h3>
-          <p style="margin:1rem 0;">This publisher blocks server-side PDF loading.</p>
-
-          <div style="margin-top:2rem; display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
-            <a href="${finalUrl}" target="_blank" class="btn" style="display:inline-flex; align-items:center; gap:0.5rem;">
-              Open PDF in New Tab
-            </a>
-            <a href="${finalUrl}" download class="btn btn-secondary" style="display:inline-flex; align-items:center; gap:0.5rem;">
-              Download PDF
-            </a>
-          </div>
-
-          <p style="margin-top:2rem; font-size:0.9rem; color:#999;">
-            Error: ${escapeHtml(error.message || 'Publisher blocking detected')}
-          </p>
+      pdfMain.innerHTML = `<div id="pdfErrorState" style="text-align:center;padding:3rem 2rem;color:#444;max-width:560px;margin:0 auto;">
+        <div style="font-size:2.5rem;margin-bottom:1rem;">📄</div>
+        <h3 style="color:#c0392b;margin:0 0 .5rem;">PDF unavailable</h3>
+        <p style="margin:.5rem 0 1.5rem;color:#666;">The PDF could not be loaded — the publisher is blocking direct access. Use the links below to read the paper on the publisher's site, or install the ScienceEcosystem browser extension to save PDFs directly from your browser.</p>
+        <div id="pdfErrorLinks" style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem;">
+          <span style="color:#999;font-size:.9rem;">Loading publisher links…</span>
         </div>
-      `;
+        <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;padding:1rem 1.25rem;text-align:left;font-size:.88rem;color:#1e3a5f;">
+          <strong>💡 Tip:</strong> Install the <strong>ScienceEcosystem browser extension</strong> — when you're on the publisher's site and have access, it downloads the PDF and saves it directly to your library.
+        </div>
+      </div>`;
+
+      // Fetch publisher links from OpenAlex if we have a paper ID
+      if (paperId) {
+        const cleanId = paperId.replace(/^https?:\/\/openalex\.org\//i, '');
+        fetch(`https://api.openalex.org/works/${encodeURIComponent(cleanId)}?mailto=info@scienceecosystem.org`)
+          .then(r => r.ok ? r.json() : null)
+          .then(work => {
+            const linksEl = document.getElementById('pdfErrorLinks');
+            if (!linksEl || !work) return;
+            const links = [];
+            const doi = work.doi ? String(work.doi).replace(/^doi:/i,'') : null;
+            if (doi) {
+              const doiHref = doi.startsWith('http') ? doi : `https://doi.org/${doi}`;
+              links.push(`<a href="${escapeHtml(doiHref)}" target="_blank" rel="noopener" class="btn">View on publisher site</a>`);
+            }
+            const oaUrl = work.open_access?.oa_url || work.best_oa_location?.url || null;
+            if (oaUrl && oaUrl !== doi) {
+              links.push(`<a href="${escapeHtml(oaUrl)}" target="_blank" rel="noopener" class="btn btn-secondary">Open access version</a>`);
+            }
+            const oaPdf = work.best_oa_location?.pdf_url || work.primary_location?.pdf_url || null;
+            if (oaPdf) {
+              links.push(`<a href="${escapeHtml(oaPdf)}" target="_blank" rel="noopener" class="btn btn-secondary">Try open PDF</a>`);
+            }
+            linksEl.innerHTML = links.length
+              ? links.join('')
+              : '<span class="muted">No publisher links found.</span>';
+          })
+          .catch(() => {
+            const linksEl = document.getElementById('pdfErrorLinks');
+            if (linksEl) linksEl.innerHTML = '<span class="muted">Could not load publisher links.</span>';
+          });
+      } else {
+        // No paper ID — just offer the original URL as a direct link
+        const linksEl = document.getElementById('pdfErrorLinks');
+        if (linksEl) linksEl.innerHTML = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn">Open original URL</a>`;
+      }
     }
   }
 }
@@ -571,15 +599,33 @@ function scheduleSyncAnnotations() {
 }
 
 async function syncAnnotationsToServer() {
-  if (!paperId) return;
+  if (!paperId) {
+    // No paper ID — annotations are browser-only; show a one-time nudge
+    showSyncNudge();
+    return;
+  }
   try {
-    await fetch('/api/library/pdf-annotations', {
+    const res = await fetch('/api/library/pdf-annotations', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paper_id: paperId, annotations })
+      body: JSON.stringify({ paper_id: paperId, pdf_url: pdfUrl, annotations })
     });
-  } catch (_) { /* sync is best-effort */ }
+    if (res.status === 401) showSyncNudge(); // not logged in
+  } catch (_) { /* network error — annotations still safe in localStorage */ }
+}
+
+let _nudgeShown = false;
+function showSyncNudge() {
+  if (_nudgeShown) return;
+  _nudgeShown = true;
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:.6rem 1.1rem;border-radius:10px;font-size:.85rem;z-index:10020;display:flex;align-items:center;gap:.75rem;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+  bar.innerHTML = '🔒 <span>Log in with ORCID to save highlights & notes permanently.</span> <a href="/auth/orcid/login" style="color:#7dd3fc;font-weight:600;white-space:nowrap;">Log in →</a> <button style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1rem;padding:0 0 0 .5rem;" title="Dismiss">✕</button>';
+  bar.querySelector('button').onclick = () => bar.remove();
+  document.body.appendChild(bar);
+  // Auto-dismiss after 8s
+  setTimeout(() => bar.remove(), 8000);
 }
 
 async function loadAnnotationsFromServer() {

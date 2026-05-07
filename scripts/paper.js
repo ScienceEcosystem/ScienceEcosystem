@@ -702,7 +702,7 @@
     var starStr = "★".repeat(stars) + "☆".repeat(5 - stars);
     // Weighted quality score (0-100)
     var peerReviewScore = 0;
-    if (peerText === "Peer reviewed") peerReviewScore = 40;
+    if (peerText === "Peer reviewed" || peerText === "Peer reviewed (open/transparent)") peerReviewScore = 40;
     else if (peerText === "Editorial review only") peerReviewScore = 20;
     var journalRankScore = Math.round((stars / 5) * 40);
     var openAccessScore = get(p, "open_access.is_oa", false) ? 20 : 0;
@@ -728,7 +728,7 @@
 
     // Build indicators
     var indicators = [];
-    if (peerText === "Peer reviewed") indicators.push({ icon: "✅ ", label: "Peer reviewed", status: "yes" });
+    if (peerText === "Peer reviewed" || peerText === "Peer reviewed (open/transparent)") indicators.push({ icon: "✅ ", label: peerText, status: "yes" });
     else if (peerText === "Editorial review only") indicators.push({ icon: "~", label: "Editorial review only", status: "partial" });
     else indicators.push({ icon: "X", label: "Not peer reviewed", status: "no" });
 

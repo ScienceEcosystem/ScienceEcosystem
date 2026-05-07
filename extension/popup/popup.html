@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ScienceEcosystem</title>
+  <link rel="stylesheet" href="popup.css"/>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">
+      <img src="../icons/icon32.png" alt="" class="logo-img"/>
+      <span class="logo-text">ScienceEcosystem</span>
+    </div>
+    <div id="authBadge" class="auth-badge">…</div>
+  </header>
+
+  <!-- Main content area -->
+  <main id="main">
+
+    <!-- Loading state -->
+    <div id="stateLoading" class="state">
+      <div class="spinner"></div>
+      <p class="muted">Checking page…</p>
+    </div>
+
+    <!-- Not logged in -->
+    <div id="stateNoAuth" class="state" hidden>
+      <div class="icon">🔒</div>
+      <p>Sign in with ORCID to save papers to your library.</p>
+      <button class="btn btn-primary" id="btnLogin">Log in with ORCID</button>
+    </div>
+
+    <!-- No paper detected -->
+    <div id="stateNoPaper" class="state" hidden>
+      <div class="icon">🔍</div>
+      <p class="muted">No paper detected on this page.</p>
+      <p class="hint">Navigate to a journal article, arXiv paper, or PubMed entry to save it.</p>
+      <button class="btn btn-secondary" id="btnOpenLibrary">Open my library →</button>
+    </div>
+
+    <!-- Paper detected -->
+    <div id="statePaper" hidden>
+
+      <!-- Paper metadata card -->
+      <div class="paper-card">
+        <div id="paperTitle" class="paper-title">—</div>
+        <div id="paperMeta" class="paper-meta">—</div>
+        <div id="paperDoi"  class="paper-doi muted">—</div>
+      </div>
+
+      <!-- Status strip (already saved / saving / saved) -->
+      <div id="saveStatus" class="save-status" hidden></div>
+
+      <!-- Actions -->
+      <div class="actions">
+        <button class="btn btn-primary" id="btnSave">
+          <span id="btnSaveIcon">＋</span>
+          <span id="btnSaveLabel">Save to library</span>
+        </button>
+
+        <button class="btn btn-secondary" id="btnSavePdf" hidden>
+          <span>📥</span>
+          <span id="btnSavePdfLabel">Save PDF</span>
+        </button>
+      </div>
+
+      <!-- PDF status message -->
+      <div id="pdfStatus" class="pdf-status muted" hidden></div>
+
+      <!-- Open in SE link -->
+      <div class="open-link">
+        <a id="linkOpenSE" href="#" target="_blank">View paper in ScienceEcosystem →</a>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <span id="footerUser" class="muted">Not signed in</span>
+    <a id="footerLibrary" href="#" class="footer-link">Library</a>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
