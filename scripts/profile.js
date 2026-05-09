@@ -7,25 +7,167 @@
   var PAGE_SIZE = 50;
   var FOLLOW_KEY = "se_followed_authors";
 
-  // Check if viewing own profile (ORCID matches current user)
-  async function initProfilePage() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const authorId = urlParams.get('id');
-    
-    // Check if user is logged in
-    const currentUser = await fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null);
-    
-    // If no author ID in URL and user is logged in, show their profile
-    if (!authorId && currentUser) {
-      showPersonalDashboard(currentUser);
-    } 
-    // If author ID matches current user's ORCID, show enhanced profile
-    else if (authorId && currentUser && authorId === currentUser.orcid) {
-      showEnhancedProfile(authorId, currentUser);
+  // ── ORCID profile data loaded from our server ──────────────────────────────
+  var _seUser = null; // the SE user record (null if viewing unregistered researcher)
+
+  // ── External platform definitions ────────────────────────────────────────────
+  var PLATFORMS = [
+    { key: "website_url",           label: "Website",        icon: "🌐",  color: "#374151" },
+    { key: "google_scholar_url",    label: "Google Scholar", icon: "📚",  color: "#4285F4" },
+    { key: "researchgate_url",      label: "ResearchGate",   icon: "🔬",  color: "#00CCBB" },
+    { key: "semantic_scholar_url",  label: "Sem. Scholar",   icon: "🤖",  color: "#1857B6" },
+    { key: "github_url",            label: "GitHub",         icon: "⌨️",  color: "#24292e" },
+    { key: "linkedin_url",          label: "LinkedIn",       icon: "💼",  color: "#0A66C2" },
+    { key: "twitter_url",           label: "Twitter / X",    icon: "𝕏",   color: "#000" },
+  ];
+
+  // ── Render external profile badges ───────────────────────────────────────────
+  function renderExternalLinks(user) {
+    var box = $("externalLinks");
+    if (!box || !user) return;
+    var html = PLATFORMS.map(function(p) {
+      var url = user[p.key];
+      if (!url) return "";
+      return '<a href="'+escapeHtml(url)+'" target="_blank" rel="noopener noreferrer" '
+        + 'style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;'
+        + 'background:#f1f5f9;border:1px solid #e2e8f0;font-size:.75rem;text-decoration:none;color:#374151;" '
+        + 'title="'+escapeHtml(p.label)+'">'
+        + '<span>'+p.icon+'</span><span>'+escapeHtml(p.label)+'</span></a>';
+    }).join("");
+
+    // ORCID badge always shown
+    var orcidEl = $("profileOrcid");
+    var orcidUrl = orcidEl && orcidEl.href && orcidEl.href !== "#" ? orcidEl.href : null;
+    if (orcidUrl) {
+      html = '<a href="'+escapeHtml(orcidUrl)+'" target="_blank" rel="noopener" '
+        + 'style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;'
+        + 'background:#a6ce39;color:#fff;font-size:.75rem;text-decoration:none;font-weight:600;" '
+        + 'title="ORCID">🆔 ORCID</a> ' + html;
     }
-    // Otherwise, show public profile
-    else {
-      showPublicProfile(authorId);
+    box.innerHTML = html || "";
+  }
+
+  // ── Render Open Science Portfolio ─────────────────────────────────────────────
+  function renderOpenSciencePortfolio(works) {
+    if (!works || !works.length) return;
+    var panel = $("openSciencePanel");
+    var box = $("openSciencePortfolio");
+    if (!panel || !box) return;
+
+    var total = works.length;
+    var oaCount = 0, topCited = 0, withDoi = 0;
+    var yearMin = 9999, yearMax = 0;
+
+    for (var i = 0; i < works.length; i++) {
+      var w = works[i];
+      if (w.open_access && w.open_access.is_oa) oaCount++;
+      if (w.doi) withDoi++;
+      var pct = w.cited_by_percentile_year && w.cited_by_percentile_year.max;
+      if (pct >= 75) topCited++;
+      var yr = w.publication_year;
+      if (yr && yr < yearMin) yearMin = yr;
+      if (yr && yr > yearMax) yearMax = yr;
+    }
+
+    var oaPct  = total ? Math.round(oaCount / total * 100) : 0;
+    var topPct = total ? Math.round(topCited / total * 100) : 0;
+    var span   = (yearMax && yearMin && yearMax >= yearMin) ? (yearMax - yearMin + 1) : null;
+
+    function bar(pct, color) {
+      return '<div style="background:#e5e7eb;border-radius:4px;height:8px;margin:.25rem 0 .5rem;">'
+        + '<div style="background:'+color+';width:'+pct+'%;height:100%;border-radius:4px;"></div></div>';
+    }
+    function row(label, value, pct, color, note) {
+      return '<div style="margin-bottom:.75rem;">'
+        + '<div style="display:flex;justify-content:space-between;font-size:.82rem;">'
+          + '<span style="color:#374151;font-weight:600;">'+escapeHtml(label)+'</span>'
+          + '<span style="color:'+color+';font-weight:700;">'+escapeHtml(String(value))+'</span>'
+        + '</div>'
+        + (pct !== null ? bar(pct, color) : "")
+        + (note ? '<p style="font-size:.72rem;color:#94a3b8;margin:0;">'+escapeHtml(note)+'</p>' : "")
+      + '</div>';
+    }
+
+    box.innerHTML =
+      row("Open access", oaPct + "%", oaPct, oaPct >= 60 ? "#16a34a" : oaPct >= 30 ? "#d97706" : "#dc2626",
+          oaCount + " of " + total + " papers freely available")
+      + row("Top 25% cited papers", topPct + "%", topPct, topPct >= 40 ? "#16a34a" : "#2e7f9f",
+            topCited + " papers in top quartile for their year (OpenAlex)")
+      + '<div style="font-size:.82rem;color:#374151;display:flex;gap:1rem;flex-wrap:wrap;margin-top:.25rem;">'
+        + (span ? '<span>📅 '+span+' year career span ('+yearMin+'–'+yearMax+')</span>' : "")
+        + '<span>📄 '+withDoi+' papers with DOI</span>'
+      + '</div>';
+
+    panel.style.display = "";
+
+    // Also update the OA % stat box
+    var oaEl = $("oaPercent");
+    if (oaEl) oaEl.textContent = oaPct + "%";
+  }
+
+  // ── CV Export (browser print) ─────────────────────────────────────────────────
+  function setupCvExport(authorName) {
+    var btn = $("exportCvBtn");
+    if (!btn) return;
+    btn.style.display = "inline-flex";
+    btn.onclick = function(e) {
+      e.preventDefault();
+      var prev = document.title;
+      document.title = "CV — " + (authorName || "Researcher") + " — ScienceEcosystem";
+      window.print();
+      document.title = prev;
+    };
+  }
+
+  // ── initProfilePage: entry point ─────────────────────────────────────────────
+  async function initProfilePage() {
+    var orcidParam = getParam("orcid");
+    var idParam    = getParam("id");
+
+    // Load current user (for follow state + owner detection)
+    var currentUser = await fetch("/api/me", { credentials: "include" })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .catch(function() { return null; });
+
+    if (orcidParam) {
+      // Load profile by ORCID — look up our DB first, then OpenAlex
+      await loadProfileByOrcid(orcidParam, currentUser);
+    } else if (!idParam && currentUser) {
+      // No params + logged in → show own profile
+      var ownOrcid = currentUser.orcid;
+      if (currentUser.openalex_author_id) {
+        await loadProfileByOrcid(ownOrcid, currentUser);
+      } else {
+        showPersonalDashboard(currentUser);
+      }
+    } else {
+      showPublicProfile(idParam);
+    }
+  }
+
+  async function loadProfileByOrcid(orcid, currentUser) {
+    try {
+      var seProfile = await fetch("/api/profile/orcid/" + encodeURIComponent(orcid))
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .catch(function() { return null; });
+
+      _seUser = seProfile;
+
+      var openAlexId = seProfile && seProfile.openalex_author_id
+        ? seProfile.openalex_author_id
+        : null;
+
+      var isOwner = currentUser && currentUser.orcid === orcid;
+      var opts = { enhanced: isOwner, user: currentUser, seUser: seProfile };
+
+      if (openAlexId) {
+        showPublicProfile(openAlexId, opts);
+      } else {
+        // Registered but no claimed OpenAlex ID — show basic profile from SE data
+        showSEOnlyProfile(seProfile || {}, isOwner);
+      }
+    } catch (e) {
+      hardError("Could not load profile.");
     }
   }
 
@@ -41,43 +183,49 @@
     }
 
     if ($("followAuthorBtn")) $("followAuthorBtn").style.display = "none";
+    var editBtn = $("editProfileBtn");
+    if (editBtn) { editBtn.style.display = "inline-flex"; editBtn.onclick = function(){ location.href = "settings-profile.html"; }; }
     if ($("followStatus")) $("followStatus").textContent = "";
 
-    const main = $("profileMain");
-    const sidebar = $("profileSidebar");
+    renderExternalLinks(user);
+    if (user && user.bio) {
+      var bioSec = $("profileBio");
+      var bioTxt = $("profileBioText");
+      if (bioSec && bioTxt) { bioTxt.textContent = user.bio; bioSec.style.display = ""; }
+    }
+
+    var main = $("profileMain");
+    var sidebar = $("profileSidebar");
     if (main) {
-      main.innerHTML = `
-        <div class="panel">
-          <h2>Your Dashboard</h2>
-          <p class="muted">Quick stats from your library and profile.</p>
-          <div id="personalStats" class="stats-grid"></div>
-          <div style="margin-top:1rem;">
-            <a class="btn btn-secondary" href="settings-profile.html">Edit profile</a>
-          </div>
-          <div id="claimPrompt" class="notice" style="margin-top:1rem;"></div>
-        </div>
-        <div class="panel" style="margin-top:1rem;">
-          <h3>Recent activity</h3>
-          <ul class="list-reset" id="recentActivity"><li class="muted">No recent activity.</li></ul>
-        </div>
-      `;
+      main.innerHTML =
+        '<div class="panel">'
+          + '<h2>Your Public Profile</h2>'
+          + '<p class="muted">Claim your OpenAlex author ID to show your publications and metrics here.</p>'
+          + '<div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">'
+            + '<a class="btn btn-primary" href="settings-profile.html">Set up profile</a>'
+            + '<a class="btn btn-secondary" href="library.html">My library</a>'
+          + '</div>'
+          + '<div id="claimPrompt" style="margin-top:1rem;"></div>'
+        + '</div>';
     }
     if (sidebar) {
-      sidebar.innerHTML = `
-        <section class="panel">
-          <h3>Library</h3>
-          <div id="libraryQuickStats" class="muted">Loading…</div>
-          <div style="margin-top:.75rem;">
-            <a class="btn btn-secondary" href="library.html">Open library</a>
-          </div>
-        </section>
-      `;
+      sidebar.innerHTML =
+        '<section class="panel"><h3>Library</h3>'
+          + '<div id="libraryQuickStats" class="muted">Loading…</div>'
+          + '<div style="margin-top:.75rem;"><a class="btn btn-secondary" href="library.html">Open library</a></div>'
+        + '</section>';
+      fetch("/api/library", { credentials: "include" })
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(items) {
+          var el = $("libraryQuickStats");
+          if (el) el.textContent = (Array.isArray(items) ? items.length : 0) + " papers saved.";
+        }).catch(function(){});
     }
 
     // Claim prompt
-    const claim = document.getElementById("claimPrompt");
+    var claim = document.getElementById("claimPrompt");
     if (claim) {
-      const needsClaim = !user?.name || !user?.affiliation;
+      var needsClaim = !user?.name || !user?.affiliation;
       claim.innerHTML = needsClaim
         ? `Claim your ORCID profile to complete your public info. <a href="settings-profile.html">Add details</a>.`
         : "";
@@ -116,8 +264,35 @@
     showPublicProfile(authorId, { enhanced: true, user });
   }
 
-  function showPublicProfile(authorId, opts = {}) {
-    boot(authorId, opts);
+  function showPublicProfile(authorId, opts) {
+    boot(authorId, opts || {});
+  }
+
+  // Registered user with no claimed OpenAlex ID yet
+  function showSEOnlyProfile(seUser, isOwner) {
+    if ($("profileName")) $("profileName").textContent = seUser.name || "Researcher";
+    if ($("profileAffiliation")) $("profileAffiliation").textContent = seUser.affiliation || "";
+    if ($("otherNames")) $("otherNames").textContent = "";
+    if ($("followAuthorBtn")) $("followAuthorBtn").style.display = "none";
+    if (isOwner) {
+      var eb = $("editProfileBtn");
+      if (eb) { eb.style.display = "inline-flex"; eb.onclick = function(){ location.href = "settings-profile.html"; }; }
+    }
+    renderExternalLinks(seUser);
+    if (seUser.bio) {
+      var s = $("profileBio"), t = $("profileBioText");
+      if (s && t) { t.textContent = seUser.bio; s.style.display = ""; }
+    }
+    var box = $("publicationsList");
+    if (box) box.innerHTML = isOwner
+      ? '<div class="notice"><p>Add your OpenAlex author ID in <a href="settings-profile.html">profile settings</a> to display your publications automatically.</p></div>'
+      : '<p class="muted">No publications linked yet.</p>';
+    var trend = $("trendCharts");
+    if (trend) trend.innerHTML = '<p class="muted">—</p>';
+    var co = $("coauthorsList");
+    if (co) co.innerHTML = '<li class="muted">—</li>';
+    var tl = $("careerTimeline");
+    if (tl) tl.innerHTML = '<li class="muted">—</li>';
   }
 
   // ---- State (publications) ----
@@ -653,8 +828,10 @@
   }
 
   // ---- Boot ----
-  async function boot(authorIdParam, opts = {}){
+  async function boot(authorIdParam, opts){
+    opts = opts || {};
     try{
+      // Auth + follows
       try{
         await fetch("/api/me", { credentials: "include" });
         isAuthed = true;
@@ -668,42 +845,58 @@
       }catch(_){ isAuthed = false; serverFollows = []; }
 
       var id = normalizeAuthorId(authorIdParam || getParam("id"));
-      var authorId = id || "A1969205033"; // fallback example
+      var authorId = id || "A1969205033";
       authorTail = authorId.replace(/^https?:\/\/openalex\.org\//i,"");
-      var authorUrl = API + "/authors/" + encodeURIComponent(authorTail);
 
-      var author = await getJSON(authorUrl);
+      var author = await getJSON(API + "/authors/" + encodeURIComponent(authorTail));
       renderAuthorHeader(author);
-      if (opts.enhanced && $("followAuthorBtn")) {
-        $("followAuthorBtn").textContent = "Edit profile";
-        $("followAuthorBtn").onclick = function(){ location.href = "settings-profile.html"; };
+
+      // ── Overlay SE user data (bio, external links, ownership controls) ──────
+      var seUser = opts.seUser || _seUser || null;
+      var isOwner = !!(opts.enhanced);
+
+      // Bio: prefer user-written bio, fall back to auto-summary
+      if (seUser && seUser.bio) {
+        var bioSec = $("profileBio"), bioTxt = $("profileBioText");
+        if (bioSec && bioTxt) { bioTxt.textContent = seUser.bio; bioSec.style.display = ""; }
+        var aiBox = $("aiBio"); if (aiBox) aiBox.style.display = "none";
       } else {
+        var aiBox2 = $("aiBio"); if (aiBox2) aiBox2.style.display = "";
+      }
+
+      // Keywords from SE (supplement OpenAlex concepts)
+      if (seUser && seUser.keywords && seUser.keywords.length) {
+        var tc = $("tagsContainer");
+        if (tc && !tc.innerHTML.trim()) {
+          tc.innerHTML = seUser.keywords.map(function(kw){
+            return '<span class="topic-card"><span class="topic-name">'+escapeHtml(kw)+'</span></span>';
+          }).join("");
+        }
+      }
+
+      // External profile links
+      renderExternalLinks(seUser);
+
+      // Owner controls
+      var followBtn = $("followAuthorBtn");
+      var editBtn   = $("editProfileBtn");
+      if (isOwner) {
+        if (followBtn) followBtn.style.display = "none";
+        if (editBtn) { editBtn.style.display = "inline-flex"; editBtn.onclick = function(){ location.href = "settings-profile.html"; }; }
+        setupCvExport(author.display_name);
+      } else {
+        if (editBtn) editBtn.style.display = "none";
         wireFollowButton(author);
       }
+
+      // Page title
+      if (author.display_name) document.title = author.display_name + " | ScienceEcosystem";
+
       renderTrendCharts(author);
       await loadWorks(author);
 
-      if (opts.enhanced && $("profileSidebar")) {
-        const box = document.createElement("section");
-        box.className = "panel";
-        box.innerHTML = `
-          <h3>Personal Stats</h3>
-          <p class="muted">Library and account insights.</p>
-          <div id="enhancedStats" class="muted">Loading…</div>
-        `;
-        $("profileSidebar").prepend(box);
-        fetch("/api/library", { credentials: "include" })
-          .then(r => r.ok ? r.json() : [])
-          .then(items => {
-            const count = Array.isArray(items) ? items.length : 0;
-            const el = document.getElementById("enhancedStats");
-            if (el) el.textContent = `${count} papers in your library.`;
-          })
-          .catch(() => {
-            const el = document.getElementById("enhancedStats");
-            if (el) el.textContent = "Library unavailable.";
-          });
-      }
+      // Open Science Portfolio (computed after works load)
+      renderOpenSciencePortfolio(accumulatedWorks);
 
       var sortSel = $("pubSort");
       var orderSel = $("orderSort");
@@ -711,22 +904,19 @@
         sortSel.value = currentSort;
         sortSel.addEventListener("change", async function(){
           currentSort = this.value === "citations" ? "citations" : "date";
-          currentPage = 1;
-          accumulatedWorks = [];
+          currentPage = 1; accumulatedWorks = [];
           await fetchWorksPage(currentPage, true);
+          renderOpenSciencePortfolio(accumulatedWorks);
         });
       }
       if (orderSel){
         orderSel.value = currentOrder;
         orderSel.addEventListener("change", async function(){
           currentOrder = (this.value === "asc" ? "asc" : "desc");
-          currentPage = 1;
-          accumulatedWorks = [];
+          currentPage = 1; accumulatedWorks = [];
           await fetchWorksPage(currentPage, true);
         });
       }
-
-      try { await getJSON(API + "/works?per_page=1"); } catch(_){}
 
     }catch(e){
       hardError(e.message || String(e));

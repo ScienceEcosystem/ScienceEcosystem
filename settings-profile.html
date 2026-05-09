@@ -4,125 +4,168 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Profile Settings | ScienceEcosystem</title>
-  <meta name="description" content="Edit your profile information and links."/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="style.css"/>
-<link rel="manifest" href="/manifest.json"/>
-<meta name="theme-color" content="#0f172a"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="ScienceEco"/>
-<link rel="apple-touch-icon" href="/assets/logos_se/logo.png"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <style>
+    .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+    .settings-grid .full { grid-column:1 / -1; }
+    .field-group { display:flex; flex-direction:column; gap:.3rem; }
+    .section-divider { border:none; border-top:1px solid #e5e7eb; margin:1.5rem 0; }
+    .external-link-row { display:grid; grid-template-columns:140px 1fr; align-items:center; gap:.75rem; padding:.5rem 0; border-bottom:1px solid #f1f5f9; }
+    .external-link-row:last-child { border-bottom:none; }
+    .platform-label { display:flex; align-items:center; gap:.5rem; font-size:.85rem; font-weight:600; color:#374151; }
+    .platform-icon { width:18px; height:18px; object-fit:contain; flex-shrink:0; }
+    .profile-preview-bar { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:.75rem 1rem; margin-bottom:1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+    .openalex-hint { font-size:.78rem; color:#64748b; margin-top:.3rem; }
+  </style>
 </head>
 <body data-page="settings-profile">
   <a class="skip-link" href="#main">Skip to content</a>
   <nav class="app-nav" role="navigation" aria-label="Primary">
-  <div class="nav-inner container">
-    <div class="logo">
-      <a href="index.html" aria-label="ScienceEcosystem Home">
-        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
-      </a>
-    </div>
-
-    <div class="nav-center">
-      <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
-        <label class="visually-hidden" for="searchInput">Search</label>
-        <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
-      </form>
-    </div>
-
-    <div class="nav-right">
-      <a class="nav-link" href="about.html">About</a>
-      <div class="nav-dropdown">
-        <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Tools<span class="nav-chevron">▾</span></button>
-        <div class="nav-dropdown-menu">
-          <a class="nav-dropdown-item" href="journal-finder.html">Journal finder</a>
-          <a class="nav-dropdown-item" href="research-tools.html">Tools finder</a>
-        </div>
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem"/>
+        </a>
       </div>
-
-      <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
-
-      <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
-        <span>Login with</span>
-        <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID" />
-      </a>
-
-      <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <span>Login with</span>
+          <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID"/>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
     </div>
-  </div>
-</nav>
+  </nav>
 
-
-
-
-
-
-  <main id="main" class="container" style="padding:2rem 1rem; max-width:960px;">
-    <header class="page-header" style="margin-bottom:1rem;">
-      <h1 style="margin:0;">Profile settings</h1>
-      <p class="muted" style="margin:.5rem 0 0;">Update your visible profile details.</p>
+  <main id="main" class="container" style="padding:2rem 1rem; max-width:860px;">
+    <header style="margin-bottom:1.25rem; display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:.75rem;">
+      <div>
+        <h1 style="margin:0;">Profile settings</h1>
+        <p class="muted" style="margin:.4rem 0 0;">What you fill in here appears on your public researcher profile.</p>
+      </div>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+        <a id="viewPublicProfile" class="btn btn-secondary" href="#" target="_blank">View public profile →</a>
+        <a class="btn btn-secondary" href="user-profile.html">Dashboard</a>
+      </div>
     </header>
 
-    <section class="panel" style="background:#fff; padding:1rem; border-radius:10px;">
-      <form id="profileForm" onsubmit="return false;">
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
-          <div>
-            <label class="label">Full name</label>
-            <input class="input" id="name" placeholder="Your name">
+    <!-- Public profile preview bar -->
+    <div class="profile-preview-bar">
+      <span style="font-size:.85rem; color:#0369a1;">Your public profile URL:</span>
+      <code id="profileUrlDisplay" style="font-size:.82rem; color:#0f172a; word-break:break-all;">Loading…</code>
+    </div>
+
+    <form id="profileForm" onsubmit="return false;">
+
+      <!-- ── Basic info ──────────────────────────────────────────── -->
+      <section class="panel" style="margin-bottom:1rem;">
+        <h2 style="margin:0 0 1rem; font-size:1rem;">Basic information</h2>
+        <div class="settings-grid">
+          <div class="field-group">
+            <label class="label" for="name">Full name</label>
+            <input class="input" id="name" placeholder="Your name"/>
           </div>
-          <div>
-            <label class="label">Affiliation</label>
-            <input class="input" id="affiliation" placeholder="e.g., University of …">
+          <div class="field-group">
+            <label class="label" for="affiliation">Current affiliation</label>
+            <input class="input" id="affiliation" placeholder="e.g., University of Amsterdam"/>
           </div>
-          <div style="grid-column:1 / -1;">
-            <label class="label">Biography</label>
-            <textarea class="input" id="bio" rows="4" placeholder="Short bio…"></textarea>
+          <div class="field-group full">
+            <label class="label" for="bio">Biography</label>
+            <textarea class="input" id="bio" rows="4" placeholder="Short bio visible on your public profile — what you research, your interests, current projects…"></textarea>
           </div>
-          <div>
-            <label class="label">Keywords (comma separated)</label>
-            <input class="input" id="keywords" placeholder="e.g., ecology, lakes, crayfish">
+          <div class="field-group">
+            <label class="label" for="keywords">Research keywords <span class="muted">(comma separated)</span></label>
+            <input class="input" id="keywords" placeholder="e.g., ecology, freshwater, crayfish"/>
           </div>
-          <div>
-            <label class="label">Languages</label>
-            <input class="input" id="languages" placeholder="e.g., English, Spanish">
+          <div class="field-group">
+            <label class="label" for="languages">Languages</label>
+            <input class="input" id="languages" placeholder="e.g., English, Dutch, French"/>
           </div>
-          <div style="grid-column:1 / -1;">
-            <label class="label">Links</label>
-            <textarea class="input" id="links" rows="3" placeholder="One URL per line (personal site, lab page, social, etc.)"></textarea>
-          </div>
-          <div>
-            <label class="label">Visibility</label>
+          <div class="field-group">
+            <label class="label" for="visibility">Profile visibility</label>
             <select class="input" id="visibility">
-              <option value="public">Public</option>
-              <option value="private">Private</option>
-              <option value="restricted">Restricted</option>
+              <option value="public">Public — anyone can view</option>
+              <option value="private">Private — only you</option>
             </select>
           </div>
         </div>
+      </section>
 
-        <div style="display:flex; gap:.5rem; margin-top:1rem;">
-          <button id="saveBtn" class="btn">Save changes</button>
-          <a class="btn btn-secondary" href="user-profile.html">Back</a>
+      <!-- ── Research identity ──────────────────────────────────── -->
+      <section class="panel" style="margin-bottom:1rem;">
+        <h2 style="margin:0 0 .25rem; font-size:1rem;">Research identity</h2>
+        <p class="muted" style="font-size:.82rem; margin:0 0 1rem;">Claim your OpenAlex author ID so your publications, citations, and h-index are shown on your public profile.</p>
+        <div class="field-group">
+          <label class="label" for="openalex_author_id">OpenAlex Author ID</label>
+          <input class="input" id="openalex_author_id" placeholder="e.g., A5023888391"/>
+          <p class="openalex-hint">Find your ID by searching your name on <a href="https://openalex.org/authors" target="_blank" rel="noopener">openalex.org/authors</a>. Copy the ID from the URL (starts with A followed by digits).</p>
         </div>
-        <p id="msg" class="muted" style="margin-top:.75rem;"></p>
-      </form>
-    </section>
+      </section>
+
+      <!-- ── External profiles ─────────────────────────────────── -->
+      <section class="panel" style="margin-bottom:1rem;">
+        <h2 style="margin:0 0 .25rem; font-size:1rem;">External profiles</h2>
+        <p class="muted" style="font-size:.82rem; margin:0 0 1rem;">These appear as verified badges on your public profile. Paste the full URL for each platform you use.</p>
+
+        <div class="external-link-row">
+          <span class="platform-label">🌐 Website</span>
+          <input class="input" id="website_url" type="url" placeholder="https://yoursite.com"/>
+        </div>
+        <div class="external-link-row">
+          <span class="platform-label">
+            <img class="platform-icon" src="https://scholar.google.com/favicon.ico" alt="" onerror="this.style.display='none'"/>
+            Google Scholar
+          </span>
+          <input class="input" id="google_scholar_url" type="url" placeholder="https://scholar.google.com/citations?user=…"/>
+        </div>
+        <div class="external-link-row">
+          <span class="platform-label">🔬 ResearchGate</span>
+          <input class="input" id="researchgate_url" type="url" placeholder="https://www.researchgate.net/profile/…"/>
+        </div>
+        <div class="external-link-row">
+          <span class="platform-label">🤖 Semantic Scholar</span>
+          <input class="input" id="semantic_scholar_url" type="url" placeholder="https://www.semanticscholar.org/author/…"/>
+        </div>
+        <div class="external-link-row">
+          <span class="platform-label">
+            <svg class="platform-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/></svg>
+            GitHub
+          </span>
+          <input class="input" id="github_url" type="url" placeholder="https://github.com/yourhandle"/>
+        </div>
+        <div class="external-link-row">
+          <span class="platform-label">💼 LinkedIn</span>
+          <input class="input" id="linkedin_url" type="url" placeholder="https://www.linkedin.com/in/…"/>
+        </div>
+        <div class="external-link-row">
+          <span class="platform-label">𝕏 Twitter / X</span>
+          <input class="input" id="twitter_url" type="url" placeholder="https://twitter.com/yourhandle"/>
+        </div>
+      </section>
+
+      <div style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
+        <button id="saveBtn" class="btn btn-primary">Save changes</button>
+        <p id="msg" class="muted" style="margin:0;"></p>
+      </div>
+    </form>
   </main>
 
   <footer class="site-footer">
     <div class="container">
       <p>&copy; <span class="js-year">2026</span> ScienceEcosystem. All rights reserved.</p>
       <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
-      <div class="footer-socials">
-        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
-        </a>
-        <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/></svg>
-        </a>
-      </div>
       <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
     </div>
   </footer>
@@ -132,42 +175,80 @@
   <script src="scripts/components.js" defer></script>
   <script src="scripts/session.js" defer></script>
   <script>
-    async function api(path,opts){const r=await fetch(path,{credentials:"include",...(opts||{})});if(!r.ok)throw new Error(await r.text());return r.json();}
-    function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");}
-    function linesToArray(text){return (text||"").split("\n").map(s=>s.trim()).filter(Boolean);}
-    function arrayToLines(arr){return (arr||[]).join("\n");}
-    async function load(){
-      let me;
-      try{ me=await api("/api/me"); }
-      catch{ document.getElementById("msg").textContent="Please sign in with ORCID to edit your profile."; return; }
-      document.getElementById("name").value = me.name||"";
-      document.getElementById("affiliation").value = me.affiliation||"";
-      document.getElementById("bio").value = me.bio||"";
-      document.getElementById("keywords").value = (me.keywords||[]).join(", ");
-      document.getElementById("languages").value = (me.languages||[]).join(", ");
-      document.getElementById("links").value = arrayToLines(me.links||[]);
-      document.getElementById("visibility").value = me.visibility||"public";
+    async function api(path, opts) {
+      const r = await fetch(path, { credentials: "include", ...(opts || {}) });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
     }
-    async function save(){
-      const msg=document.getElementById("msg");
-      msg.textContent="Saving…";
-      const body={
-        name: document.getElementById("name").value.trim(),
-        affiliation: document.getElementById("affiliation").value.trim(),
-        bio: document.getElementById("bio").value.trim(),
-        keywords: document.getElementById("keywords").value.split(",").map(s=>s.trim()).filter(Boolean),
-        languages: document.getElementById("languages").value.split(",").map(s=>s.trim()).filter(Boolean),
-        links: linesToArray(document.getElementById("links").value),
-        visibility: document.getElementById("visibility").value
+
+    function val(id) { return (document.getElementById(id) || {}).value || ""; }
+    function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v || ""; }
+
+    async function load() {
+      const msg = document.getElementById("msg");
+      let me;
+      try { me = await api("/api/me"); }
+      catch { msg.textContent = "Please sign in with ORCID to edit your profile."; return; }
+
+      setVal("name", me.name);
+      setVal("affiliation", me.affiliation);
+      setVal("bio", me.bio);
+      setVal("keywords", (me.keywords || []).join(", "));
+      setVal("languages", (me.languages || []).join(", "));
+      setVal("visibility", me.visibility || "public");
+      setVal("openalex_author_id", me.openalex_author_id);
+      setVal("google_scholar_url", me.google_scholar_url);
+      setVal("researchgate_url", me.researchgate_url);
+      setVal("semantic_scholar_url", me.semantic_scholar_url);
+      setVal("github_url", me.github_url);
+      setVal("linkedin_url", me.linkedin_url);
+      setVal("twitter_url", me.twitter_url);
+      setVal("website_url", me.website_url);
+
+      // Show public profile URL
+      const profileUrl = "profile.html?orcid=" + encodeURIComponent(me.orcid);
+      const display = document.getElementById("profileUrlDisplay");
+      if (display) display.textContent = window.location.origin + "/" + profileUrl;
+      const viewBtn = document.getElementById("viewPublicProfile");
+      if (viewBtn) viewBtn.href = profileUrl;
+    }
+
+    async function save() {
+      const msg = document.getElementById("msg");
+      msg.textContent = "Saving…";
+      const body = {
+        name:                 val("name"),
+        affiliation:          val("affiliation"),
+        bio:                  val("bio"),
+        keywords:             val("keywords").split(",").map(s => s.trim()).filter(Boolean),
+        languages:            val("languages").split(",").map(s => s.trim()).filter(Boolean),
+        links:                [],
+        visibility:           val("visibility"),
+        openalex_author_id:   val("openalex_author_id").trim() || null,
+        google_scholar_url:   val("google_scholar_url") || null,
+        researchgate_url:     val("researchgate_url") || null,
+        semantic_scholar_url: val("semantic_scholar_url") || null,
+        github_url:           val("github_url") || null,
+        linkedin_url:         val("linkedin_url") || null,
+        twitter_url:          val("twitter_url") || null,
+        website_url:          val("website_url") || null,
       };
-      try{
-        await api("/api/settings/profile",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-        msg.textContent="Saved.";
-      }catch(e){
-        msg.textContent="Failed to save. Please ensure you are logged in.";
+      try {
+        await api("/api/settings/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        msg.style.color = "#16a34a";
+        msg.textContent = "✓ Saved successfully.";
+        setTimeout(() => { msg.textContent = ""; }, 3000);
+      } catch (e) {
+        msg.style.color = "#dc2626";
+        msg.textContent = "Failed to save. Please ensure you are signed in.";
       }
     }
-    window.addEventListener("DOMContentLoaded", ()=>{
+
+    window.addEventListener("DOMContentLoaded", () => {
       load();
       document.getElementById("saveBtn").addEventListener("click", save);
     });

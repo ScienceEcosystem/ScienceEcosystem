@@ -142,6 +142,15 @@ async function pgInit() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS links TEXT[]`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS visibility TEXT DEFAULT 'public'`);
   await pool.query(`UPDATE users SET visibility='public' WHERE visibility IS NULL`);
+  // External profile links + claimed OpenAlex identity
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS openalex_author_id TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_scholar_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS researchgate_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS semantic_scholar_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS github_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS website_url TEXT`);
 
   // New: followed authors
   await pool.query(`
@@ -417,6 +426,10 @@ function requireAuth(req, res) {
 /* ------------
    SQL helpers
 -------------*/
+const USER_COLS = `orcid, name, affiliation, bio, keywords, languages, links, visibility,
+  openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
+  github_url, linkedin_url, twitter_url, website_url`;
+
 async function upsertUser({ orcid, name, affiliation, bio = null, keywords = null, languages = null, links = null, visibility = null }) {
   await pool.query(
     `INSERT INTO users (orcid, name, affiliation, bio, keywords, languages, links, visibility)
@@ -434,28 +447,28 @@ async function upsertUser({ orcid, name, affiliation, bio = null, keywords = nul
 }
 async function getUser(orcid) {
   const { rows } = await pool.query(
-    `SELECT orcid, name, affiliation, bio, keywords, languages, links, visibility FROM users WHERE orcid = $1`,
-    [orcid]
+    `SELECT ${USER_COLS} FROM users WHERE orcid = $1`, [orcid]
   );
   return rows[0] || null;
 }
 async function updateProfile(orcid, payload) {
-  const { name, affiliation, bio, keywords, languages, links, visibility } = payload;
+  const {
+    name, affiliation, bio, keywords, languages, links, visibility,
+    openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
+    github_url, linkedin_url, twitter_url, website_url
+  } = payload;
   const { rowCount, rows } = await pool.query(
     `UPDATE users SET
-      name=$2,
-      affiliation=$3,
-      bio=$4,
-      keywords=$5,
-      languages=$6,
-      links=$7,
-      visibility=$8
+      name=$2, affiliation=$3, bio=$4, keywords=$5, languages=$6, links=$7, visibility=$8,
+      openalex_author_id=$9, google_scholar_url=$10, researchgate_url=$11,
+      semantic_scholar_url=$12, github_url=$13, linkedin_url=$14, twitter_url=$15, website_url=$16
      WHERE orcid=$1
-     RETURNING orcid, name, affiliation, bio, keywords, languages, links, visibility`,
-    [orcid, name, affiliation, bio, keywords, languages, links, visibility]
+     RETURNING ${USER_COLS}`,
+    [orcid, name, affiliation, bio, keywords, languages, links, visibility,
+     openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
+     github_url, linkedin_url, twitter_url, website_url]
   );
   if (rowCount) return rows[0];
-  // If user row is missing for some reason, create it and return payload
   await upsertUser({ orcid, name, affiliation, bio, keywords, languages, links, visibility });
   return payload;
 }
@@ -1323,6 +1336,11 @@ app.patch("/api/settings/profile", async (req, res) => {
   const sess = await getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
   const body = req.body || {};
+  const sanitiseUrl = (v) => {
+    if (!v) return null;
+    const s = String(v).trim();
+    return s.startsWith("http://") || s.startsWith("https://") ? s : ("https://" + s);
+  };
   const payload = {
     name: body.name || null,
     affiliation: body.affiliation || null,
@@ -1330,7 +1348,15 @@ app.patch("/api/settings/profile", async (req, res) => {
     keywords: Array.isArray(body.keywords) ? body.keywords : [],
     languages: Array.isArray(body.languages) ? body.languages : [],
     links: Array.isArray(body.links) ? body.links : [],
-    visibility: body.visibility || "public"
+    visibility: body.visibility || "public",
+    openalex_author_id: body.openalex_author_id ? String(body.openalex_author_id).trim() : null,
+    google_scholar_url:    sanitiseUrl(body.google_scholar_url),
+    researchgate_url:      sanitiseUrl(body.researchgate_url),
+    semantic_scholar_url:  sanitiseUrl(body.semantic_scholar_url),
+    github_url:            sanitiseUrl(body.github_url),
+    linkedin_url:          sanitiseUrl(body.linkedin_url),
+    twitter_url:           sanitiseUrl(body.twitter_url),
+    website_url:           sanitiseUrl(body.website_url),
   };
   try {
     const updated = await updateProfile(sess.orcid, payload);
@@ -1338,6 +1364,22 @@ app.patch("/api/settings/profile", async (req, res) => {
   } catch (e) {
     console.error("PATCH /api/settings/profile failed:", e);
     res.status(500).json({ error: "Failed to save profile" });
+  }
+});
+
+// Public profile by ORCID — used by profile.html?orcid=…
+app.get("/api/profile/orcid/:orcid", async (req, res) => {
+  const orcid = req.params.orcid.replace(/^ORCID:/i, "");
+  try {
+    const row = await getUser(orcid);
+    if (!row) return res.status(404).json({ error: "Profile not found" });
+    if (row.visibility === "private") return res.status(403).json({ error: "Profile is private" });
+    // Strip any sensitive fields before returning
+    const { links: _links, languages: _lang, ...pub } = row;
+    res.json(pub);
+  } catch (e) {
+    console.error("GET /api/profile/orcid failed:", e);
+    res.status(500).json({ error: "Server error" });
   }
 });
 

@@ -8,6 +8,19 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
+  <style>
+    @media print {
+      .app-nav, .site-footer, #followAuthorBtn, #editProfileBtn, #exportCvBtn,
+      .sort-controls, #pubsPagination, #openSciencePanel h3 + p { display:none !important; }
+      body { font-size:11pt; color:#000; }
+      .profile-top, .panel { box-shadow:none !important; border:none !important; }
+      .layout-grid { display:block !important; }
+      .side-col { display:none !important; }
+      #profileMain { width:100% !important; }
+      a { color:#000 !important; text-decoration:none !important; }
+      .stat-value { font-size:1.1rem !important; }
+    }
+  </style>
 <link rel="manifest" href="/manifest.json"/>
 <meta name="theme-color" content="#0f172a"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -75,17 +88,27 @@
               <a id="profileOrcid" href="#" target="_blank" class="orcid-link" rel="noopener" style="display:none;"></a>
               <div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap;">
                 <button id="followAuthorBtn" class="btn btn-secondary" type="button">Follow</button>
+                <button id="editProfileBtn" class="btn btn-secondary" type="button" style="display:none;">Edit profile</button>
+                <a id="exportCvBtn" class="btn btn-secondary" href="#" style="display:none;" title="Download academic CV">CV export</a>
                 <span id="followStatus" class="muted small"></span>
               </div>
+
+              <!-- External profile badges -->
+              <div id="externalLinks" style="margin-top:.75rem; display:flex; flex-wrap:wrap; gap:.4rem;"></div>
             </div>
           </div>
 
-          <div class="topics-wrap">
+          <!-- Bio (user-written, falls back to auto-summary) -->
+          <section id="profileBio" style="margin-top:.75rem; display:none;">
+            <p id="profileBioText" style="font-size:.875rem; line-height:1.6; color:#374151;"></p>
+          </section>
+
+          <div class="topics-wrap" style="margin-top:.75rem;">
             <h3 class="topics-title">Research areas</h3>
             <div id="tagsContainer" class="topics-cards"></div>
           </div>
 
-          <section class="ai-bio" id="aiBio">A short summary will appear here.</section>
+          <section class="ai-bio" id="aiBio" style="display:none;">A short summary will appear here.</section>
         </div>
 
         <!-- Metrics column -->
@@ -93,23 +116,27 @@
           <div class="stats-grid">
             <div class="stat" id="statPublications" title="Total number of works listed for this researcher.">
               <div class="stat-label">Publications</div>
-              <div class="stat-value" id="totalWorks">0</div>
+              <div class="stat-value" id="totalWorks">—</div>
             </div>
             <div class="stat" title="Total citations to all works by this researcher.">
               <div class="stat-label">Citations</div>
-              <div class="stat-value" id="totalCitations">0</div>
+              <div class="stat-value" id="totalCitations">—</div>
             </div>
             <div class="stat" title="Number h where the researcher has h papers with at least h citations each.">
               <div class="stat-label">H-index</div>
-              <div class="stat-value" id="hIndex">0</div>
+              <div class="stat-value" id="hIndex">—</div>
             </div>
             <div class="stat" title="Number of papers cited at least 10 times.">
               <div class="stat-label">i10-index</div>
-              <div class="stat-value" id="i10Index">0</div>
+              <div class="stat-value" id="i10Index">—</div>
             </div>
             <div class="stat" title="Research Impact Score: (citations × h-index) ÷ (years active + 1).">
-              <div class="stat-label">RIS</div>
-              <div class="stat-value" id="risValue">0</div>
+              <div class="stat-label">Career impact</div>
+              <div class="stat-value" id="risValue">—</div>
+            </div>
+            <div class="stat" id="statOA" title="Percentage of this researcher's papers available open access.">
+              <div class="stat-label">Open access</div>
+              <div class="stat-value" id="oaPercent">—</div>
             </div>
           </div>
         </div>
@@ -141,13 +168,21 @@
 
             <!-- Sidebar -->
       <aside id="profileSidebar" class="side-col">
+
+        <!-- Open Science Portfolio -->
+        <section class="panel" id="openSciencePanel" style="display:none;">
+          <h3>Open Science Portfolio</h3>
+          <p class="muted" style="font-size:.8rem; margin:.25rem 0 .75rem;">Based on verified publication data.</p>
+          <div id="openSciencePortfolio"></div>
+        </section>
+
         <section class="panel">
           <h3>Trends</h3>
           <div id="trendCharts" class="charts-wrap">Loading charts...</div>
         </section>
 
         <section class="panel">
-          <h3>Past affiliations</h3>
+          <h3>Career timeline</h3>
           <ul id="careerTimeline" class="timeline">
             <li>Loading affiliations...</li>
           </ul>
