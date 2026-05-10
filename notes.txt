@@ -1,7 +1,7 @@
 Updates for scienceEcosystem
 
 
-as devaloper would be nice to make a platform so see how the site is being used and howm many users we have and any of those thing is there a way to keep track of that and can we make it into a hidden only for me page that shows all thes stats?
+as devaloper would be nice to make a platform so see how the site is being used and howm many users we have and any of those thing is there a way to keep track of that and can we make it into a hidden only for me page that shows all thes stats without the need for extra cookies or having problems with privacy what are the options?
 
 as the site will grow and privacy and cookies or what they are are used everywhere what kind of privacy do we need to make also with the login after how long will the login fall away or will need refresh or anything or when you share a link will not have that someone else is loged in on your account any other securaty risks we should look for?
 

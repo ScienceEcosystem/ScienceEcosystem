@@ -31,7 +31,8 @@ const {
   NODE_ENV = "development",
   COOKIE_DOMAIN,                // optional: ".scienceecosystem.org"
   DATABASE_URL,                 // Neon: postgresql://... ?sslmode=require
-  ZOTERO_SYNC_INTERVAL_MS = 3600000
+  ZOTERO_SYNC_INTERVAL_MS = 3600000,
+  ADMIN_ORCID = ""              // set in .env — the ORCID that can access /admin.html
 } = process.env;
 
 if (!ORCID_CLIENT_ID || !ORCID_CLIENT_SECRET || !ORCID_REDIRECT_URI) {
@@ -68,6 +69,25 @@ app.use((req, res, next) => {
     "object-src 'none'",
     "base-uri 'self'"
   ].join("; "));
+  next();
+});
+
+// ── Privacy-safe page hit counter ────────────────────────────────────────────
+// Counts GET requests to .html pages. Stores only (page_slug, date, count).
+// No IP addresses, no user IDs, no cookies, no personal data.
+app.use((req, res, next) => {
+  if (req.method !== "GET") return next();
+  const raw = req.path;
+  // Only count page-like routes, skip assets / API / fonts etc.
+  if (raw.startsWith("/api/") || raw.startsWith("/assets/") || raw.startsWith("/auth/")
+      || raw.includes(".") && !raw.endsWith(".html")) return next();
+  const page = raw.replace(/\.html$/, "") || "/";
+  // Fire-and-forget — never blocks the response
+  pool.query(
+    `INSERT INTO page_hits (page, day, hits) VALUES ($1, CURRENT_DATE, 1)
+     ON CONFLICT (page, day) DO UPDATE SET hits = page_hits.hits + 1`,
+    [page]
+  ).catch(() => {});
   next();
 });
 
@@ -200,6 +220,16 @@ async function pgInit() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS website_url TEXT`);
+
+  // Privacy-safe page hit counters — aggregate only, no personal data, no IP
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS page_hits (
+      page TEXT NOT NULL,
+      day  DATE NOT NULL DEFAULT CURRENT_DATE,
+      hits BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY (page, day)
+    )
+  `);
 
   // New: followed authors
   await pool.query(`
@@ -1462,6 +1492,85 @@ app.get("/api/profile/orcid/:orcid", async (req, res) => {
   } catch (e) {
     console.error("GET /api/profile/orcid failed:", e);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── Admin stats — only accessible to ADMIN_ORCID ─────────────────────────────
+// ?days=N controls the chart and top-pages window (default 30, max 3650 / ~10 yr)
+app.get("/api/admin/stats", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const adminOrcid = ADMIN_ORCID || "";
+  if (!adminOrcid || sess.orcid !== adminOrcid) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  const days = Math.min(3650, Math.max(1, parseInt(req.query.days || "30", 10) || 30));
+
+  try {
+    const [
+      usersTotal, usersWeek, usersMonth,
+      libTotal, libPdfs, annoTotal, followTotal,
+      activeSessions,
+      hitsToday, hitsWeek,
+      hitsPeriod, hitsPeriodDaily
+    ] = await Promise.all([
+      pool.query(`SELECT COUNT(*) FROM users`),
+      pool.query(`SELECT COUNT(*) FROM users WHERE orcid IN
+        (SELECT DISTINCT orcid FROM sessions WHERE expires_at > $1)`,
+        [Date.now() - 7*24*3600*1000]),
+      pool.query(`SELECT COUNT(*) FROM users WHERE orcid IN
+        (SELECT DISTINCT orcid FROM sessions WHERE expires_at > $1)`,
+        [Date.now() - 30*24*3600*1000]),
+      pool.query(`SELECT COUNT(*) FROM library_items`),
+      pool.query(`SELECT COUNT(*) FROM library_pdfs`).catch(() => ({ rows: [{ count: 0 }] })),
+      pool.query(`SELECT COUNT(*) FROM pdf_annotations`).catch(() => ({ rows: [{ count: 0 }] })),
+      pool.query(`SELECT COUNT(*) FROM followed_authors`).catch(() => ({ rows: [{ count: 0 }] })),
+      pool.query(`SELECT COUNT(*) FROM sessions WHERE expires_at > $1`, [Date.now()]),
+      // Top pages today
+      pool.query(`SELECT page, hits FROM page_hits WHERE day = CURRENT_DATE ORDER BY hits DESC LIMIT 20`),
+      // Top pages this week
+      pool.query(`SELECT page, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - 6 GROUP BY page ORDER BY hits DESC LIMIT 20`),
+      // Top pages for selected period
+      pool.query(`SELECT page, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - $1 GROUP BY page ORDER BY hits DESC LIMIT 20`, [days - 1]),
+      // Daily totals for chart (selected period)
+      pool.query(`SELECT day::text, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - $1 GROUP BY day ORDER BY day`, [days - 1])
+    ]);
+
+    // All-time total views
+    const allTimeResult = await pool.query(`SELECT COALESCE(SUM(hits),0) AS hits FROM page_hits`);
+    const allTimeTotal = Number(allTimeResult.rows[0].hits);
+
+    // Earliest data point (so UI can show "since...")
+    const firstDayResult = await pool.query(`SELECT MIN(day)::text AS first FROM page_hits`);
+    const firstDay = firstDayResult.rows[0]?.first || null;
+
+    res.json({
+      users: {
+        total:       Number(usersTotal.rows[0].count),
+        activeWeek:  Number(usersWeek.rows[0].count),
+        activeMonth: Number(usersMonth.rows[0].count)
+      },
+      content: {
+        libraryItems: Number(libTotal.rows[0].count),
+        pdfsStored:   Number(libPdfs.rows[0].count),
+        annotations:  Number(annoTotal.rows[0].count),
+        follows:      Number(followTotal.rows[0].count)
+      },
+      sessions:  { active: Number(activeSessions.rows[0].count) },
+      allTimeViews: allTimeTotal,
+      firstDay,
+      days,
+      traffic: {
+        today:       hitsToday.rows.map(r => ({ page: r.page, hits: Number(r.hits) })),
+        thisWeek:    hitsWeek.rows.map(r => ({ page: r.page, hits: Number(r.hits) })),
+        thisPeriod:  hitsPeriod.rows.map(r => ({ page: r.page, hits: Number(r.hits) })),
+        daily:       hitsPeriodDaily.rows.map(r => ({ day: r.day, hits: Number(r.hits) }))
+      }
+    });
+  } catch (e) {
+    console.error("GET /api/admin/stats failed:", e);
+    res.status(500).json({ error: "Stats query failed" });
   }
 });
 
