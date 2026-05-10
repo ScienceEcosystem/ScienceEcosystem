@@ -12,13 +12,13 @@
 
   // ── External platform definitions ────────────────────────────────────────────
   var PLATFORMS = [
-    { key: "website_url",           label: "Website",        icon: "🌐",  color: "#374151" },
-    { key: "google_scholar_url",    label: "Google Scholar", icon: "📚",  color: "#4285F4" },
-    { key: "researchgate_url",      label: "ResearchGate",   icon: "🔬",  color: "#00CCBB" },
-    { key: "semantic_scholar_url",  label: "Sem. Scholar",   icon: "🤖",  color: "#1857B6" },
-    { key: "github_url",            label: "GitHub",         icon: "⌨️",  color: "#24292e" },
-    { key: "linkedin_url",          label: "LinkedIn",       icon: "💼",  color: "#0A66C2" },
-    { key: "twitter_url",           label: "Twitter / X",    icon: "𝕏",   color: "#000" },
+    { key: "website_url",           label: "Website"},
+    { key: "google_scholar_url",    label: "Google Scholar"},
+    { key: "researchgate_url",      label: "ResearchGate"},
+    { key: "semantic_scholar_url",  label: "Sem. Scholar"},
+    { key: "github_url",            label: "GitHub"},
+    { key: "linkedin_url",          label: "LinkedIn"},
+    { key: "twitter_url",           label: "Twitter / X"},
   ];
 
   // ── Render external profile badges ───────────────────────────────────────────
@@ -94,8 +94,8 @@
       + row("Top 25% cited papers", topPct + "%", topPct, topPct >= 40 ? "#16a34a" : "#2e7f9f",
             topCited + " papers in top quartile for their year (OpenAlex)")
       + '<div style="font-size:.82rem;color:#374151;display:flex;gap:1rem;flex-wrap:wrap;margin-top:.25rem;">'
-        + (span ? '<span>📅 '+span+' year career span ('+yearMin+'–'+yearMax+')</span>' : "")
-        + '<span>📄 '+withDoi+' papers with DOI</span>'
+        + (span ? '<span> '+span+' year career span ('+yearMin+'–'+yearMax+')</span>' : "")
+        + '<span> '+withDoi+' papers with DOI</span>'
       + '</div>';
 
     panel.style.display = "";
@@ -153,17 +153,28 @@
 
       _seUser = seProfile;
 
-      var openAlexId = seProfile && seProfile.openalex_author_id
-        ? seProfile.openalex_author_id
+      var primaryId = seProfile && seProfile.openalex_author_id
+        ? seProfile.openalex_author_id.trim()
         : null;
 
-      var isOwner = currentUser && currentUser.orcid === orcid;
-      var opts = { enhanced: isOwner, user: currentUser, seUser: seProfile };
+      // Fetch all claimed additional IDs (only available to owner)
+      var allIds = primaryId ? [primaryId] : [];
+      var isOwner = !!(currentUser && currentUser.orcid === orcid);
+      if (isOwner && primaryId) {
+        try {
+          var claims = await fetch("/api/claims", { credentials: "include" }).then(function(r){ return r.ok ? r.json() : {}; });
+          var extras = (claims.claims || [])
+            .map(function(c){ return c.author_id.trim(); })
+            .filter(function(id){ return id && id !== primaryId; });
+          allIds = allIds.concat(extras);
+        } catch(_) {}
+      }
 
-      if (openAlexId) {
-        showPublicProfile(openAlexId, opts);
+      var opts = { enhanced: isOwner, user: currentUser, seUser: seProfile, allAuthorIds: allIds };
+
+      if (primaryId) {
+        showPublicProfile(primaryId, opts);
       } else {
-        // Registered but no claimed OpenAlex ID — show basic profile from SE data
         showSEOnlyProfile(seProfile || {}, isOwner);
       }
     } catch (e) {
@@ -851,7 +862,7 @@
       var author = await getJSON(API + "/authors/" + encodeURIComponent(authorTail));
       renderAuthorHeader(author);
 
-      // ── Overlay SE user data (bio, external links, ownership controls) ──────
+      // ── Overlay SE user data (bio, affiliations, external links, ownership controls) ──
       var seUser = opts.seUser || _seUser || null;
       var isOwner = !!(opts.enhanced);
 
@@ -862,6 +873,12 @@
         var aiBox = $("aiBio"); if (aiBox) aiBox.style.display = "none";
       } else {
         var aiBox2 = $("aiBio"); if (aiBox2) aiBox2.style.display = "";
+      }
+
+      // Affiliations: show all if researcher has multiple
+      if (seUser && seUser.affiliations && seUser.affiliations.length > 1) {
+        var affNode = $("profileAffiliation");
+        if (affNode) affNode.innerHTML = seUser.affiliations.map(function(a){ return escapeHtml(a); }).join(' &nbsp;·&nbsp; ');
       }
 
       // Keywords from SE (supplement OpenAlex concepts)
@@ -893,7 +910,26 @@
       if (author.display_name) document.title = author.display_name + " | ScienceEcosystem";
 
       renderTrendCharts(author);
-      await loadWorks(author);
+
+      // ── Merged works: if multiple OpenAlex IDs, override the works URL ─────────
+      var allIds = (opts.allAuthorIds && opts.allAuthorIds.length > 1) ? opts.allAuthorIds : null;
+      if (allIds) {
+        // Build OR filter: author.id:https://openalex.org/A1|https://openalex.org/A2|…
+        var idFilter = allIds.map(function(id){
+          return id.indexOf("http") === 0 ? id : ("https://openalex.org/" + id);
+        }).join("|");
+        var mergedWorksUrl = API + "/works?filter=author.id:" + encodeURIComponent(idFilter)
+          + "&sort=cited_by_count:desc&per_page=50";
+        worksApiBaseUrl = mergedWorksUrl;
+        currentPage = 1;
+        accumulatedWorks = [];
+        if ($("publicationsList")) $("publicationsList").innerHTML = '<p class="muted">Loading publications…</p>';
+        await fetchWorksPage(currentPage, true);
+        // Update publication count to reflect merged total
+        if ($("totalWorks")) $("totalWorks").textContent = accumulatedWorks.length;
+      } else {
+        await loadWorks(author);
+      }
 
       // Open Science Portfolio (computed after works load)
       renderOpenSciencePortfolio(accumulatedWorks);

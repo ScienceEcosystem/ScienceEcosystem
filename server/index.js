@@ -220,6 +220,7 @@ async function pgInit() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS website_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS affiliations TEXT[] DEFAULT '{}'`);
 
   // Privacy-safe page hit counters — aggregate only, no personal data, no IP
   await pool.query(`
@@ -523,7 +524,7 @@ function requireAuth(req, res) {
 /* ------------
    SQL helpers
 -------------*/
-const USER_COLS = `orcid, name, affiliation, bio, keywords, languages, links, visibility,
+const USER_COLS = `orcid, name, affiliation, affiliations, bio, keywords, languages, links, visibility,
   openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
   github_url, linkedin_url, twitter_url, website_url`;
 
@@ -550,18 +551,18 @@ async function getUser(orcid) {
 }
 async function updateProfile(orcid, payload) {
   const {
-    name, affiliation, bio, keywords, languages, links, visibility,
+    name, affiliation, affiliations, bio, keywords, languages, links, visibility,
     openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
     github_url, linkedin_url, twitter_url, website_url
   } = payload;
   const { rowCount, rows } = await pool.query(
     `UPDATE users SET
-      name=$2, affiliation=$3, bio=$4, keywords=$5, languages=$6, links=$7, visibility=$8,
-      openalex_author_id=$9, google_scholar_url=$10, researchgate_url=$11,
-      semantic_scholar_url=$12, github_url=$13, linkedin_url=$14, twitter_url=$15, website_url=$16
+      name=$2, affiliation=$3, affiliations=$4, bio=$5, keywords=$6, languages=$7, links=$8, visibility=$9,
+      openalex_author_id=$10, google_scholar_url=$11, researchgate_url=$12,
+      semantic_scholar_url=$13, github_url=$14, linkedin_url=$15, twitter_url=$16, website_url=$17
      WHERE orcid=$1
      RETURNING ${USER_COLS}`,
-    [orcid, name, affiliation, bio, keywords, languages, links, visibility,
+    [orcid, name, affiliation, affiliations, bio, keywords, languages, links, visibility,
      openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
      github_url, linkedin_url, twitter_url, website_url]
   );
@@ -1456,6 +1457,7 @@ app.patch("/api/settings/profile", async (req, res) => {
   const payload = {
     name: body.name || null,
     affiliation: body.affiliation || null,
+    affiliations: Array.isArray(body.affiliations) ? body.affiliations.filter(Boolean) : [],
     bio: body.bio || null,
     keywords: Array.isArray(body.keywords) ? body.keywords : [],
     languages: Array.isArray(body.languages) ? body.languages : [],

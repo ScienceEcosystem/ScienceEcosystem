@@ -104,13 +104,42 @@
 
       <!-- ── Research identity ──────────────────────────────────── -->
       <section class="panel" style="margin-bottom:1rem;">
-        <h2 style="margin:0 0 .25rem; font-size:1rem;">Research identity</h2>
-        <p class="muted" style="font-size:.82rem; margin:0 0 1rem;">Claim your OpenAlex author ID so your publications, citations, and h-index are shown on your public profile.</p>
-        <div class="field-group">
-          <label class="label" for="openalex_author_id">OpenAlex Author ID</label>
+        <h2 style="margin:0 0 .25rem; font-size:1rem;">Research identity — OpenAlex author IDs</h2>
+        <p class="muted" style="font-size:.82rem; margin:0 0 .75rem;">
+          If you appear under multiple names in OpenAlex (e.g. "O.V. Raven", "Olivier Raven", "Olivier V. Raven"),
+          add all their IDs here. Your profile will merge all papers into one list automatically.
+          Find your IDs by searching on <a href="https://openalex.org/authors" target="_blank" rel="noopener">openalex.org/authors</a> — copy the ID from the URL (starts with A).
+        </p>
+
+        <!-- Primary ID (stored in users.openalex_author_id) -->
+        <div class="field-group" style="margin-bottom:.75rem;">
+          <label class="label" for="openalex_author_id">Primary author ID <span class="muted">(used for your profile header)</span></label>
           <input class="input" id="openalex_author_id" placeholder="e.g., A5023888391"/>
-          <p class="openalex-hint">Find your ID by searching your name on <a href="https://openalex.org/authors" target="_blank" rel="noopener">openalex.org/authors</a>. Copy the ID from the URL (starts with A followed by digits).</p>
         </div>
+
+        <!-- Additional claimed IDs -->
+        <div class="field-group">
+          <label class="label">Additional IDs to merge</label>
+          <div id="claimedIdsList" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem;min-height:28px;"></div>
+          <div style="display:flex;gap:.5rem;">
+            <input class="input" id="newClaimId" placeholder="e.g., A5057345880" style="flex:1;"/>
+            <button type="button" id="addClaimBtn" class="btn btn-secondary" style="white-space:nowrap;">Add ID</button>
+          </div>
+          <p id="claimMsg" class="muted" style="font-size:.78rem;margin:.3rem 0 0;"></p>
+        </div>
+      </section>
+
+      <!-- ── Affiliations ──────────────────────────────────────── -->
+      <section class="panel" style="margin-bottom:1rem;">
+        <h2 style="margin:0 0 .25rem; font-size:1rem;">Affiliations</h2>
+        <p class="muted" style="font-size:.82rem; margin:0 0 .75rem;">Add all your current and recent institutional affiliations. The first one is used as your primary affiliation.</p>
+        <div id="affiliationsList" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem;min-height:28px;"></div>
+        <div style="display:flex;gap:.5rem;">
+          <input class="input" id="newAffiliation" placeholder="e.g., University of Amsterdam" style="flex:1;"/>
+          <button type="button" id="addAffiliationBtn" class="btn btn-secondary" style="white-space:nowrap;">Add</button>
+        </div>
+        <!-- Keep the legacy single-affiliation field hidden but synced -->
+        <input type="hidden" id="affiliation"/>
       </section>
 
       <!-- ── External profiles ─────────────────────────────────── -->
@@ -191,6 +220,58 @@
     function val(id) { return (document.getElementById(id) || {}).value || ""; }
     function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v || ""; }
 
+    // ── Chip helpers ────────────────────────────────────────────────
+    function renderChips(containerId, items, onRemove) {
+      const box = document.getElementById(containerId);
+      if (!box) return;
+      box.innerHTML = items.map((item, i) =>
+        `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;background:#f1f5f9;border:1px solid #e2e8f0;font-size:.82rem;">
+          ${item}
+          <button type="button" onclick="(${onRemove.toString()})(${i})"
+            style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:1rem;line-height:1;padding:0;">×</button>
+        </span>`
+      ).join("");
+    }
+
+    // ── Affiliations state ────────────────────────────────────────
+    let _affiliations = [];
+    function renderAffiliations() {
+      renderChips("affiliationsList", _affiliations, (i) => {
+        _affiliations.splice(i, 1);
+        renderAffiliations();
+        // Sync primary affiliation hidden field
+        document.getElementById("affiliation").value = _affiliations[0] || "";
+      });
+    }
+
+    // ── Claimed IDs state ─────────────────────────────────────────
+    let _claimedIds = []; // from /api/claims (additional IDs only — primary is separate)
+    function renderClaimedIds() {
+      renderChips("claimedIdsList", _claimedIds.map(c => c.author_id), (i) => {
+        removeClaim(_claimedIds[i].author_id);
+      });
+    }
+    async function addClaim(id) {
+      const msg = document.getElementById("claimMsg");
+      const clean = id.trim().toUpperCase().replace(/^HTTPS?:\/\/OPENALEX\.ORG\//i, "");
+      if (!clean.match(/^A\d+$/)) { msg.textContent = "Invalid ID format — should be like A5023888391"; return; }
+      try {
+        await api("/api/claims", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ author_id: clean }) });
+        _claimedIds.push({ author_id: clean });
+        renderClaimedIds();
+        document.getElementById("newClaimId").value = "";
+        msg.textContent = "";
+      } catch(e) { msg.textContent = "Could not add ID: " + e.message; }
+    }
+    async function removeClaim(id) {
+      try {
+        await api("/api/claims/" + encodeURIComponent(id), { method: "DELETE" });
+        _claimedIds = _claimedIds.filter(c => c.author_id !== id);
+        renderClaimedIds();
+      } catch(e) { console.error(e); }
+    }
+
+    // ── Load ──────────────────────────────────────────────────────
     async function load() {
       const msg = document.getElementById("msg");
       let me;
@@ -198,7 +279,6 @@
       catch { msg.textContent = "Please sign in with ORCID to edit your profile."; return; }
 
       setVal("name", me.name);
-      setVal("affiliation", me.affiliation);
       setVal("bio", me.bio);
       setVal("keywords", (me.keywords || []).join(", "));
       setVal("languages", (me.languages || []).join(", "));
@@ -212,7 +292,21 @@
       setVal("twitter_url", me.twitter_url);
       setVal("website_url", me.website_url);
 
-      // Show public profile URL
+      // Affiliations: use new affiliations[] array, fall back to legacy affiliation field
+      _affiliations = (me.affiliations && me.affiliations.length)
+        ? [...me.affiliations]
+        : (me.affiliation ? [me.affiliation] : []);
+      renderAffiliations();
+
+      // Load additional claimed IDs (primary is separate above)
+      try {
+        const claims = await api("/api/claims");
+        const primaryId = (me.openalex_author_id || "").trim().toUpperCase();
+        _claimedIds = (claims.claims || []).filter(c => c.author_id.toUpperCase() !== primaryId);
+        renderClaimedIds();
+      } catch(_) {}
+
+      // Public profile URL
       const profileUrl = "profile.html?orcid=" + encodeURIComponent(me.orcid);
       const display = document.getElementById("profileUrlDisplay");
       if (display) display.textContent = window.location.origin + "/" + profileUrl;
@@ -220,12 +314,15 @@
       if (viewBtn) viewBtn.href = profileUrl;
     }
 
+    // ── Save ──────────────────────────────────────────────────────
     async function save() {
       const msg = document.getElementById("msg");
       msg.textContent = "Saving…";
+      const primaryAffiliation = _affiliations[0] || "";
       const body = {
         name:                 val("name"),
-        affiliation:          val("affiliation"),
+        affiliation:          primaryAffiliation,
+        affiliations:         _affiliations,
         bio:                  val("bio"),
         keywords:             val("keywords").split(",").map(s => s.trim()).filter(Boolean),
         languages:            val("languages").split(",").map(s => s.trim()).filter(Boolean),
@@ -275,6 +372,25 @@
       load();
       document.getElementById("saveBtn").addEventListener("click", save);
       document.getElementById("deleteAccountBtn").addEventListener("click", deleteAccount);
+
+      // Affiliation add
+      document.getElementById("addAffiliationBtn").addEventListener("click", () => {
+        const inp = document.getElementById("newAffiliation");
+        const v = inp.value.trim();
+        if (v && !_affiliations.includes(v)) { _affiliations.push(v); renderAffiliations(); }
+        inp.value = "";
+      });
+      document.getElementById("newAffiliation").addEventListener("keydown", e => {
+        if (e.key === "Enter") { e.preventDefault(); document.getElementById("addAffiliationBtn").click(); }
+      });
+
+      // Claimed ID add
+      document.getElementById("addClaimBtn").addEventListener("click", () => {
+        addClaim(document.getElementById("newClaimId").value);
+      });
+      document.getElementById("newClaimId").addEventListener("keydown", e => {
+        if (e.key === "Enter") { e.preventDefault(); document.getElementById("addClaimBtn").click(); }
+      });
     });
   </script>
 </body>
