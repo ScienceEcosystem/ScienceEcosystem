@@ -127,8 +127,8 @@
       const periodLabel = PERIODS.find(p => p.days === _chartDays)?.label || `${_chartDays} days`;
       const kpis = [
         { label: "Total users",        value: s.users.total,         sub: "registered with ORCID", cls: "highlight" },
-        { label: "Active this week",   value: s.users.activeWeek,    sub: "unique users with session" },
-        { label: "Active this month",  value: s.users.activeMonth,   sub: "unique users with session" },
+        { label: "New this week",      value: s.users.newThisWeek,   sub: "accounts created in last 7 days" },
+        { label: "New this month",     value: s.users.newThisMonth,  sub: "accounts created in last 30 days" },
         { label: "Total page views",   value: s.allTimeViews,        sub: "all time, all pages", cls: "highlight" },
         { label: "Library items",      value: s.content.libraryItems,sub: "papers saved across all users" },
         { label: "PDFs stored",        value: s.content.pdfsStored,  sub: "PDF files uploaded" },

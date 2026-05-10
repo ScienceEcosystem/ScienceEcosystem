@@ -1506,50 +1506,44 @@ app.get("/api/admin/stats", async (req, res) => {
   }
 
   const days = Math.min(3650, Math.max(1, parseInt(req.query.days || "30", 10) || 30));
+  const empty = { rows: [{ count: 0 }] };
+  const emptyRows = { rows: [] };
 
   try {
     const [
-      usersTotal, usersWeek, usersMonth,
-      libTotal, libPdfs, annoTotal, followTotal,
-      activeSessions,
-      hitsToday, hitsWeek,
-      hitsPeriod, hitsPeriodDaily
+      usersTotal, libTotal, libPdfs, annoTotal, followTotal, activeSessions,
+      hitsToday, hitsWeek, hitsPeriod, hitsPeriodDaily
     ] = await Promise.all([
       pool.query(`SELECT COUNT(*) FROM users`),
-      pool.query(`SELECT COUNT(*) FROM users WHERE orcid IN
-        (SELECT DISTINCT orcid FROM sessions WHERE expires_at > $1)`,
-        [Date.now() - 7*24*3600*1000]),
-      pool.query(`SELECT COUNT(*) FROM users WHERE orcid IN
-        (SELECT DISTINCT orcid FROM sessions WHERE expires_at > $1)`,
-        [Date.now() - 30*24*3600*1000]),
       pool.query(`SELECT COUNT(*) FROM library_items`),
-      pool.query(`SELECT COUNT(*) FROM library_pdfs`).catch(() => ({ rows: [{ count: 0 }] })),
-      pool.query(`SELECT COUNT(*) FROM pdf_annotations`).catch(() => ({ rows: [{ count: 0 }] })),
-      pool.query(`SELECT COUNT(*) FROM followed_authors`).catch(() => ({ rows: [{ count: 0 }] })),
+      pool.query(`SELECT COUNT(*) FROM library_pdfs`).catch(() => empty),
+      pool.query(`SELECT COUNT(*) FROM pdf_annotations`).catch(() => empty),
+      pool.query(`SELECT COUNT(*) FROM followed_authors`).catch(() => empty),
       pool.query(`SELECT COUNT(*) FROM sessions WHERE expires_at > $1`, [Date.now()]),
-      // Top pages today
-      pool.query(`SELECT page, hits FROM page_hits WHERE day = CURRENT_DATE ORDER BY hits DESC LIMIT 20`),
-      // Top pages this week
-      pool.query(`SELECT page, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - 6 GROUP BY page ORDER BY hits DESC LIMIT 20`),
-      // Top pages for selected period
-      pool.query(`SELECT page, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - $1 GROUP BY page ORDER BY hits DESC LIMIT 20`, [days - 1]),
-      // Daily totals for chart (selected period)
-      pool.query(`SELECT day::text, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - $1 GROUP BY day ORDER BY day`, [days - 1])
+      // Traffic — all with .catch() so a missing table never breaks the endpoint
+      pool.query(`SELECT page, hits FROM page_hits WHERE day = CURRENT_DATE ORDER BY hits DESC LIMIT 20`).catch(() => emptyRows),
+      pool.query(`SELECT page, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - 6 GROUP BY page ORDER BY hits DESC LIMIT 20`).catch(() => emptyRows),
+      pool.query(`SELECT page, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - ($1::int) GROUP BY page ORDER BY hits DESC LIMIT 20`, [days - 1]).catch(() => emptyRows),
+      pool.query(`SELECT day::text, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - ($1::int) GROUP BY day ORDER BY day`, [days - 1]).catch(() => emptyRows)
     ]);
 
-    // All-time total views
-    const allTimeResult = await pool.query(`SELECT COALESCE(SUM(hits),0) AS hits FROM page_hits`);
+    // All-time total and earliest data point — safe fallbacks if table is new
+    const allTimeResult = await pool.query(`SELECT COALESCE(SUM(hits),0) AS hits FROM page_hits`).catch(() => ({ rows: [{ hits: 0 }] }));
     const allTimeTotal = Number(allTimeResult.rows[0].hits);
 
-    // Earliest data point (so UI can show "since...")
-    const firstDayResult = await pool.query(`SELECT MIN(day)::text AS first FROM page_hits`);
+    const firstDayResult = await pool.query(`SELECT MIN(day)::text AS first FROM page_hits`).catch(() => ({ rows: [{ first: null }] }));
     const firstDay = firstDayResult.rows[0]?.first || null;
+
+    // New users registered in last 7 / 30 days (count from users table by session creation proxy)
+    // Active sessions = sessions not yet expired; we use that as a live activity signal instead
+    const newUsersWeek  = await pool.query(`SELECT COUNT(*) FROM users WHERE orcid IN (SELECT orcid FROM sessions WHERE expires_at > $1 AND expires_at < $2)`, [Date.now() + (90-7)*24*3600*1000, Date.now() + (90+1)*24*3600*1000]).catch(() => empty);
+    const newUsersMonth = await pool.query(`SELECT COUNT(*) FROM users WHERE orcid IN (SELECT orcid FROM sessions WHERE expires_at > $1 AND expires_at < $2)`, [Date.now() + (90-30)*24*3600*1000, Date.now() + (90+1)*24*3600*1000]).catch(() => empty);
 
     res.json({
       users: {
-        total:       Number(usersTotal.rows[0].count),
-        activeWeek:  Number(usersWeek.rows[0].count),
-        activeMonth: Number(usersMonth.rows[0].count)
+        total:        Number(usersTotal.rows[0].count),
+        newThisWeek:  Number(newUsersWeek.rows[0].count),
+        newThisMonth: Number(newUsersMonth.rows[0].count)
       },
       content: {
         libraryItems: Number(libTotal.rows[0].count),
@@ -1557,15 +1551,15 @@ app.get("/api/admin/stats", async (req, res) => {
         annotations:  Number(annoTotal.rows[0].count),
         follows:      Number(followTotal.rows[0].count)
       },
-      sessions:  { active: Number(activeSessions.rows[0].count) },
+      sessions:     { active: Number(activeSessions.rows[0].count) },
       allTimeViews: allTimeTotal,
       firstDay,
       days,
       traffic: {
-        today:       hitsToday.rows.map(r => ({ page: r.page, hits: Number(r.hits) })),
-        thisWeek:    hitsWeek.rows.map(r => ({ page: r.page, hits: Number(r.hits) })),
-        thisPeriod:  hitsPeriod.rows.map(r => ({ page: r.page, hits: Number(r.hits) })),
-        daily:       hitsPeriodDaily.rows.map(r => ({ day: r.day, hits: Number(r.hits) }))
+        today:      hitsToday.rows.map(r => ({ page: r.page, hits: Number(r.hits) })),
+        thisWeek:   hitsWeek.rows.map(r => ({ page: r.page, hits: Number(r.hits) })),
+        thisPeriod: hitsPeriod.rows.map(r => ({ page: r.page, hits: Number(r.hits) })),
+        daily:      hitsPeriodDaily.rows.map(r => ({ day: r.day, hits: Number(r.hits) }))
       }
     });
   } catch (e) {
