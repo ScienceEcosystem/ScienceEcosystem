@@ -13,6 +13,8 @@ Do we need a kwnoledge graph when ai already can make the links and read sites ?
 
 
 
+
+
 - [ ] Cite button popup screen in paper page needs to be shown in middle of page
 - [-] Show journal/ paper score on the paper card
 - [ ] Update user-profile page as now is very empty
