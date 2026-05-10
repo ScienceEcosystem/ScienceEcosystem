@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Privacy Policy | ScienceEcosystem</title>
+  <meta name="description" content="ScienceEcosystem privacy policy — what data we collect, how we use it, and your rights."/>
+  <link rel="stylesheet" href="assets/fonts/fonts.css" />
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <style>
+    .privacy-body { max-width: 720px; margin: 0 auto; line-height: 1.7; }
+    .privacy-body h2 { margin-top: 2rem; font-size: 1.1rem; border-bottom: 1px solid #e5e7eb; padding-bottom: .4rem; }
+    .privacy-body h3 { margin-top: 1.25rem; font-size: .95rem; color: #374151; }
+    .privacy-body p, .privacy-body li { font-size: .925rem; color: #374151; }
+    .privacy-body ul { padding-left: 1.25rem; }
+    .privacy-body li { margin-bottom: .3rem; }
+    .cookie-table { width: 100%; border-collapse: collapse; font-size: .875rem; margin: 1rem 0; }
+    .cookie-table th { background: #f8fafc; text-align: left; padding: .5rem .75rem; border: 1px solid #e5e7eb; font-weight: 600; }
+    .cookie-table td { padding: .5rem .75rem; border: 1px solid #e5e7eb; vertical-align: top; }
+    .badge-necessary { background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 10px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+    .toc { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+    .toc ol { padding-left: 1.25rem; margin: .5rem 0 0; }
+    .toc li { margin-bottom: .25rem; font-size: .875rem; }
+    .highlight-box { background: #f0f9ff; border-left: 4px solid #2e7f9f; padding: .75rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; font-size: .9rem; }
+  </style>
+</head>
+<body data-page="privacy">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem"/>
+        </a>
+      </div>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <span>Login with</span>
+          <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID"/>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" class="container" style="padding: 2rem 1rem 4rem;">
+    <div class="privacy-body">
+
+      <h1>Privacy Policy</h1>
+      <p class="muted" style="font-size:.85rem;">Last updated: May 2026 &nbsp;·&nbsp; <a href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+
+      <div class="highlight-box">
+        <strong>Short version:</strong> ScienceEcosystem uses a single strictly necessary cookie to keep you signed in. We do not track you, sell your data, or show advertising. You can delete your account and all your data at any time.
+      </div>
+
+      <div class="toc">
+        <strong>Contents</strong>
+        <ol>
+          <li><a href="#who">Who we are</a></li>
+          <li><a href="#cookies">Cookies — what we use and why no banner</a></li>
+          <li><a href="#data">What data we store</a></li>
+          <li><a href="#third-party">Third-party services</a></li>
+          <li><a href="#retention">How long we keep data</a></li>
+          <li><a href="#rights">Your rights</a></li>
+          <li><a href="#security">Security</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ol>
+      </div>
+
+      <!-- 1 -->
+      <h2 id="who">1. Who we are</h2>
+      <p>ScienceEcosystem is an independent open-science infrastructure project operated by Olivier V. Raven (<a href="mailto:olivier.raven@scienceecosystem.org">olivier.raven@scienceecosystem.org</a>). We are a public-interest project, not a commercial company. We do not advertise, sell data, or operate a subscription business.</p>
+
+      <!-- 2 -->
+      <h2 id="cookies">2. Cookies — what we use and why there is no banner</h2>
+      <p>We set exactly two cookies. Both are <strong>strictly necessary</strong> to operate the service. Under GDPR Article 5(3) and ePrivacy Directive Recital 25, strictly necessary cookies are exempt from the consent requirement. This is why you do not see a cookie consent popup on ScienceEcosystem — the same reason Wikipedia, your bank, and most government websites do not show one.</p>
+
+      <table class="cookie-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Purpose</th>
+            <th>Duration</th>
+            <th>Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>sid</code></td>
+            <td>Keeps you signed in. Contains a random ID that references your session on our server. No personal data is stored in the cookie itself.</td>
+            <td>90 days (renewed automatically when you use the site)</td>
+            <td><span class="badge-necessary">Strictly necessary</span></td>
+          </tr>
+          <tr>
+            <td><code>orcid_oauth</code></td>
+            <td>Temporary security token used during the ORCID sign-in process to prevent CSRF attacks. Deleted immediately after login completes.</td>
+            <td>Seconds to minutes (one login flow)</td>
+            <td><span class="badge-necessary">Strictly necessary</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>We do not use analytics cookies, advertising cookies, or any tracking pixels. We do not use Google Analytics, Facebook Pixel, or any equivalent service.</p>
+
+      <!-- 3 -->
+      <h2 id="data">3. What data we store</h2>
+
+      <h3>If you are not signed in</h3>
+      <p>We store nothing. We do not log IP addresses, user agents, or page views. Your searches and browsing on ScienceEcosystem leave no record on our servers.</p>
+
+      <h3>If you sign in with ORCID</h3>
+      <p>When you authenticate via ORCID, we store the following in our database:</p>
+      <ul>
+        <li><strong>ORCID iD</strong> — your permanent researcher identifier (e.g., 0000-0002-1234-5678). This is the primary key for your account.</li>
+        <li><strong>Name and affiliation</strong> — pulled from ORCID at login; you can edit or delete these at any time.</li>
+        <li><strong>Profile data you add</strong> — bio, keywords, languages, external profile links.</li>
+        <li><strong>Library items</strong> — papers you save, including title, DOI, and any notes or tags you add.</li>
+        <li><strong>PDF annotations</strong> — highlights and notes you make in the PDF reader.</li>
+        <li><strong>Followed researchers</strong> — the list of researchers you follow.</li>
+        <li><strong>Session record</strong> — a random session ID with an expiry timestamp. No browsing history is stored.</li>
+      </ul>
+      <p>We do not store your ORCID password — authentication happens entirely on ORCID's servers. We receive only a confirmation that you successfully authenticated, plus the basic profile data you have made public on ORCID.</p>
+
+      <h3>What we never store</h3>
+      <ul>
+        <li>Browsing history or page view logs</li>
+        <li>IP addresses (beyond what your hosting provider's infrastructure logs at network level)</li>
+        <li>Device fingerprints or user agent strings</li>
+        <li>Payment information (we are free; there is nothing to pay)</li>
+        <li>Behavioural profiles or inferred interests</li>
+      </ul>
+
+      <!-- 4 -->
+      <h2 id="third-party">4. Third-party services</h2>
+      <p>ScienceEcosystem connects to external services to enrich paper data. None of these receive your personal data unless noted:</p>
+
+      <ul>
+        <li><strong>OpenAlex</strong> (openalex.org) — open bibliographic database. Queries contain only paper IDs and search terms, never your identity.</li>
+        <li><strong>Semantic Scholar</strong> (semanticscholar.org) — citation data. Same as above.</li>
+        <li><strong>CrossRef</strong> (crossref.org) — DOI and retraction data. No personal data sent.</li>
+        <li><strong>ORCID</strong> (orcid.org) — authentication and public profile data. Governed by <a href="https://info.orcid.org/privacy-policy/" target="_blank" rel="noopener">ORCID's privacy policy</a>.</li>
+        <li><strong>Altmetric</strong> (altmetric.com) — citation attention scores shown on paper pages. Their embed script loads from their CDN when you view a paper page. Altmetric may set their own cookies; see <a href="https://www.altmetric.com/privacy/" target="_blank" rel="noopener">Altmetric's privacy policy</a>.</li>
+        <li><strong>Google Fonts</strong> — typography loaded from Google's servers. Your browser sends a request to Google when loading the font. We are working to self-host fonts to eliminate this. Google's handling is governed by <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's privacy policy</a>.</li>
+        <li><strong>CORE, Europe PMC, BASE, Zenodo</strong> — used to find open-access PDFs. Queries contain only paper identifiers.</li>
+      </ul>
+
+      <!-- 5 -->
+      <h2 id="retention">5. How long we keep data</h2>
+      <ul>
+        <li><strong>Sessions</strong> — 90 days from last activity, then automatically deleted.</li>
+        <li><strong>Account data</strong> — kept until you delete your account.</li>
+        <li><strong>Library, annotations, follows</strong> — deleted immediately when you delete your account.</li>
+      </ul>
+      <p>We do not keep backups of deleted accounts beyond our standard database backup window (typically 7 days).</p>
+
+      <!-- 6 -->
+      <h2 id="rights">6. Your rights</h2>
+      <p>Under GDPR you have the right to access, correct, export, and erase your data. Because we store very little, these are straightforward:</p>
+      <ul>
+        <li><strong>Access and correct</strong> — view and edit everything in <a href="settings-profile.html">Profile settings</a>.</li>
+        <li><strong>Export</strong> — download your library from the <a href="library.html">Library page</a> (CSV / BibTeX export).</li>
+        <li><strong>Erase</strong> — delete your account and all associated data permanently from <a href="settings-profile.html">Profile settings</a> → Delete account. This is immediate and irreversible.</li>
+        <li><strong>Object or restrict</strong> — contact us at <a href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a>.</li>
+      </ul>
+
+      <!-- 7 -->
+      <h2 id="security">7. Security</h2>
+      <p>Session cookies are <code>HttpOnly</code> (inaccessible to JavaScript), <code>Secure</code> (HTTPS only), cryptographically signed, and use <code>SameSite=Lax</code> to prevent cross-site request forgery. Sessions are stored server-side in our database — the cookie contains only a random ID, nothing else. All data is transmitted over HTTPS.</p>
+      <p>Sharing a link with another person shares only the URL — your session cannot be transferred through a link.</p>
+
+      <!-- 8 -->
+      <h2 id="contact">8. Contact and complaints</h2>
+      <p>For any privacy question or data request: <a href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+      <p>If you believe we have not handled your data correctly, you have the right to lodge a complaint with your national data protection authority. In the Netherlands: <a href="https://www.autoriteitpersoonsgegevens.nl" target="_blank" rel="noopener">Autoriteit Persoonsgegevens</a>.</p>
+
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span class="js-year">2026</span> ScienceEcosystem. All rights reserved.</p>
+      <p>
+        <a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a>
+        &nbsp;·&nbsp;
+        <a class="footer-link" href="privacy.html">Privacy policy</a>
+      </p>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+</body>
+</html>

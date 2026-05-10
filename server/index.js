@@ -43,10 +43,59 @@ if (!HAS_DATABASE_URL) {
   console.warn("[db] DATABASE_URL not set; database-backed routes will be unavailable.");
 }
 
+const SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json());
 app.use(cookieParser(SESSION_SECRET));
+
+// ── Security headers ──────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  // CSP: lock down to known origins; 'unsafe-inline' needed for current inline scripts
+  res.setHeader("Content-Security-Policy", [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://d1bxh8uas1mnw7.cloudfront.net https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'self'"
+  ].join("; "));
+  next();
+});
+
+// ── Simple in-memory rate limiter (no external package needed) ────────────────
+const _rateBuckets = new Map();
+function rateLimiter(windowMs, max) {
+  return (req, res, next) => {
+    const key = req.ip || "unknown";
+    const now = Date.now();
+    const cutoff = now - windowMs;
+    const hits = (_rateBuckets.get(key) || []).filter(t => t > cutoff);
+    if (hits.length >= max) {
+      res.setHeader("Retry-After", Math.ceil(windowMs / 1000));
+      return res.status(429).json({ error: "Too many requests. Please wait before trying again." });
+    }
+    hits.push(now);
+    _rateBuckets.set(key, hits);
+    next();
+  };
+}
+// Purge stale rate-limit buckets every 30 min
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [k, hits] of _rateBuckets.entries()) {
+    const fresh = hits.filter(t => t > cutoff);
+    if (fresh.length === 0) _rateBuckets.delete(k); else _rateBuckets.set(k, fresh);
+  }
+}, 30 * 60 * 1000);
 
 // Canonical host + scheme redirects for SEO.
 app.use((req, res, next) => {
@@ -381,13 +430,12 @@ function cookieOptions() {
     secure: NODE_ENV === "production",
     path: "/",
     ...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
-    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    maxAge: SESSION_MAX_AGE_MS
   };
 }
 async function setSession(res, payload) {
   const sid = crypto.randomBytes(24).toString("hex");
-  const expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
-  // Ensure JSONB gets valid JSON
+  const expires = Date.now() + SESSION_MAX_AGE_MS;
   await pool.query(
     `INSERT INTO sessions (sid, data, expires_at)
      VALUES ($1, $2::jsonb, $3)
@@ -406,7 +454,6 @@ async function getSession(req) {
     await pool.query(`DELETE FROM sessions WHERE sid = $1`, [sid]);
     return null;
   }
-  // row.data is JSONB → JS object already, but normalize:
   return typeof row.data === "string" ? JSON.parse(row.data) : row.data;
 }
 async function clearSession(req, res) {
@@ -414,7 +461,27 @@ async function clearSession(req, res) {
   if (sid) await pool.query(`DELETE FROM sessions WHERE sid = $1`, [sid]);
   res.clearCookie("sid", cookieOptions());
 }
+// Expired session sweep every 12 h
 setInterval(() => pool.query(`DELETE FROM sessions WHERE expires_at < $1`, [Date.now()]).catch(()=>{}), 12 * 60 * 60 * 1000);
+
+// ── Sliding session middleware ─────────────────────────────────────────────────
+// If < half the TTL remains, extend the session automatically — user never needs
+// to re-login as long as they use the site at least once every 45 days.
+app.use(async (req, res, next) => {
+  const sid = req.signedCookies?.sid;
+  if (!sid) return next();
+  try {
+    const { rows } = await pool.query(`SELECT expires_at FROM sessions WHERE sid = $1`, [sid]);
+    if (!rows.length) return next();
+    const remaining = Number(rows[0].expires_at) - Date.now();
+    if (remaining > 0 && remaining < SESSION_MAX_AGE_MS / 2) {
+      const newExpires = Date.now() + SESSION_MAX_AGE_MS;
+      await pool.query(`UPDATE sessions SET expires_at = $1 WHERE sid = $2`, [newExpires, sid]);
+      res.cookie("sid", sid, cookieOptions());
+    }
+  } catch (_) {}
+  next();
+});
 
 function requireAuth(req, res) {
   return getSession(req).then(sess => {
@@ -1079,7 +1146,7 @@ function ensureSafePath(baseDir, targetPath) {
 /* ---------------------------
    ORCID OAuth
 ----------------------------*/
-app.get("/auth/orcid/login", (req, res) => {
+app.get("/auth/orcid/login", rateLimiter(15 * 60 * 1000, 20), (req, res) => {
   console.log("\n=== ORCID LOGIN INITIATED ===");
   console.log("Time:", new Date().toISOString());
   console.log("Environment check:");
@@ -1306,6 +1373,21 @@ app.get("/api/me", async (req, res) => {
   const row = await getUser(sess.orcid);
   if (!row) return res.status(404).json({ error: "User not found" });
   res.json(row);
+});
+
+// Permanent account deletion — GDPR right to erasure
+// Cascades to library_items, sessions, followed_authors, pdf_annotations via FK ON DELETE CASCADE
+app.delete("/api/account", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  try {
+    await clearSession(req, res);
+    await pool.query(`DELETE FROM users WHERE orcid = $1`, [sess.orcid]);
+    res.json({ ok: true, message: "Account and all associated data deleted." });
+  } catch (e) {
+    console.error("DELETE /api/account failed:", e);
+    res.status(500).json({ error: "Failed to delete account. Please contact info@scienceecosystem.org." });
+  }
 });
 
 app.get("/api/orcid/record", async (req, res) => {

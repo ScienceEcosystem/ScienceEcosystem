@@ -1,7 +1,33 @@
-next prompts
+Updates for scienceEcosystem
 
-as devaloper would be nice to make a platform so see how the site is being used and howm many users we 
-have and any of those thing is there a way to keep track of that and can we make it into a hidden only for me 
-page that shows all thes stats?
 
-as the site will grow and privacy and cookies or what they are are used everywhere what kind of privacy do we need to make also with the login after how long will the login fall away or will need refresh or anything or when you share a link will not have that someone else 
+as devaloper would be nice to make a platform so see how the site is being used and howm many users we have and any of those thing is there a way to keep track of that and can we make it into a hidden only for me page that shows all thes stats?
+
+as the site will grow and privacy and cookies or what they are are used everywhere what kind of privacy do we need to make also with the login after how long will the login fall away or will need refresh or anything or when you share a link will not have that someone else is loged in on your account any other securaty risks we should look for?
+
+i have these openalex id: A5117810853 & A5057345880 & A5133781948. under the names. O.V. Raven & Olivier V. Raven & Olivier Raven. i dont want that i want to merge into one especially for our site. as the option to merge accounts on openalex is not available anymore.
+
+at the profile page we ask for current affiliation but many resurchers are linked to multipule institutes or universitys so we will need to make that also posible.
+
+Do we need a kwnoledge graph when ai already can make the links and read sites ? or how does it work and how can it be better?
+
+
+
+- [ ] Cite button popup screen in paper page needs to be shown in middle of page
+- [-] Show journal/ paper score on the paper card
+- [ ] Update user-profile page as now is very empty
+    - [ ] We want that when accounts are claimed others can see what the person wants to show on his page which we can use from orcid but also adjustable here. Also want to have links to other profile pages like github, scholar, personal, institute site. etc.
+    - [ ] Claimed and merge profiles should not be in view all the time that is pointless only when I change things about my profile.
+    - [ ] 
+- [ ] Include graphical abstracts and images to the paper pages so they show similar as what journal site shows but better organised.
+
+
+
+DONE
+- [X] Add more metrics for journal quality: citation index, SCImago Journal Rank, CiteScore, Eigenfactor, and Altmetrics.
+- [X] The search bar still doesn’t search for DOI and for example a large sentence give no results 
+- [X] Components needs update so paper cards are less big now lots of white
+
+
+
+

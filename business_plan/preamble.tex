@@ -1,0 +1,27 @@
+% preamble.tex
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{tabularx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{background}
+\usepackage{lmodern}
+
+% Background logo setup
+\backgroundsetup{
+  scale=0.5,
+  angle=0,
+  opacity=0.8,
+  position=current page.south,
+  vshift=56cm,
+  hshift=15cm,
+  contents={\includegraphics[width=0.5\textwidth]{images/Logo1.png}}
+}
+
+% Heading colors and formatting
+\definecolor{heading}{RGB}{34,49,63}
+\titleformat{\section}{\Large\bfseries\color{heading}}{}{0em}{}
+\titleformat{\subsection}{\large\bfseries\color{heading}}{}{0em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{heading}}{}{0em}{}

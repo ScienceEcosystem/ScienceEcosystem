@@ -4,8 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Profile Settings | ScienceEcosystem</title>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="assets/fonts/fonts.css" />
   <link rel="stylesheet" href="style.css"/>
   <link rel="manifest" href="/manifest.json"/>
   <meta name="theme-color" content="#0f172a"/>
@@ -160,12 +159,20 @@
         <p id="msg" class="muted" style="margin:0;"></p>
       </div>
     </form>
+
+    <!-- ── Danger zone ────────────────────────────────────────────── -->
+    <section class="panel" style="margin-top:1.5rem; border:1px solid #fca5a5;">
+      <h2 style="margin:0 0 .4rem; font-size:1rem; color:#dc2626;">Danger zone</h2>
+      <p class="muted" style="font-size:.85rem; margin:0 0 1rem;">Deleting your account permanently removes your profile, library, annotations, and all associated data. This cannot be undone.</p>
+      <button id="deleteAccountBtn" class="btn" style="background:#dc2626; color:#fff;">Delete my account</button>
+      <p id="deleteMsg" style="margin:.5rem 0 0; font-size:.85rem;"></p>
+    </section>
   </main>
 
   <footer class="site-footer">
     <div class="container">
       <p>&copy; <span class="js-year">2026</span> ScienceEcosystem. All rights reserved.</p>
-      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a> &nbsp;·&nbsp; <a class="footer-link" href="privacy.html">Privacy policy</a></p>
       <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
     </div>
   </footer>
@@ -248,9 +255,26 @@
       }
     }
 
+    async function deleteAccount() {
+      const msg = document.getElementById("deleteMsg");
+      if (!confirm("Are you absolutely sure? This will permanently delete your account, library, and all annotations. This cannot be undone.")) return;
+      msg.style.color = "#64748b";
+      msg.textContent = "Deleting…";
+      try {
+        await api("/api/account", { method: "DELETE" });
+        msg.style.color = "#16a34a";
+        msg.textContent = "Account deleted. Redirecting…";
+        setTimeout(() => { window.location.href = "index.html"; }, 1500);
+      } catch (e) {
+        msg.style.color = "#dc2626";
+        msg.textContent = "Failed to delete account. Please contact info@scienceecosystem.org.";
+      }
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       load();
       document.getElementById("saveBtn").addEventListener("click", save);
+      document.getElementById("deleteAccountBtn").addEventListener("click", deleteAccount);
     });
   </script>
 </body>

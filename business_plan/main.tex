@@ -1,0 +1,201 @@
+\documentclass[11pt,a4paper]{article}
+
+\input{preamble}
+
+\begin{document}
+
+% ==================== Title Page ====================
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    \includegraphics[width=0.7\textwidth]{images/Logo1.png}\\[2cm]
+
+    {\Huge \bfseries ScienceEcosystem\\[0.5cm]}
+    {\Large \itshape Open Infrastructure for Verifiable Science\\[1.5cm]}
+
+    {\LARGE \textbf{Business Plan}\\[2cm]}
+
+    \begin{flushleft}
+        \textbf{Prepared by:}\\
+        Olivier V. Raven\\
+        \texttt{olivier.raven@scienceecosystem.org}\\[1cm]
+        \textbf{Date:}\\
+        \today
+    \end{flushleft}
+
+    \vfill
+    {\small \textit{This document describes a public-interest infrastructure project and is intended for institutional, academic, and funding stakeholders.}}
+\end{titlepage}
+
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+\pagenumbering{arabic}
+
+% ==================== Executive Summary ====================
+\section{Executive Summary}
+
+ScienceEcosystem is an independent, public-interest digital infrastructure designed to improve how science is conducted, shared, verified, and preserved across generations. Its core purpose is to link scientific results directly to the data, code, and workflows that produced them, creating a transparent and verifiable research record.
+
+The platform is not a publisher, journal, repository, or start-up. It is infrastructure. ScienceEcosystem operates as a connective layer that integrates existing systems—such as repositories, identifier services, and development environments—into a coherent, navigable network of research objects.
+
+ScienceEcosystem is designed to remain free for all end users, without paywalls or commercial extraction. It is governed with a long-term stewardship mindset, recognising that meaningful improvements to scientific practice require decades rather than funding cycles.
+
+The platform already exists in an early functional state, with core components operational and further development underway. Over time, ScienceEcosystem aims to become a trusted backbone for open, reproducible, and transparent science.
+
+% ==================== 1. Problem Statement ====================
+\section{The Problem}
+
+Modern science generates knowledge at unprecedented scale, yet the scientific record remains fragmented and difficult to verify. Publications, datasets, software, and methods are typically distributed across disconnected platforms, often behind paywalls or with inconsistent metadata.
+
+Key structural issues include:
+\begin{itemize}
+    \item Weak linkage between publications, data, and code
+    \item Poor documentation of analytical decisions and workflows
+    \item Fragmented discovery tools and metadata standards
+    \item Limited practical support for reproducibility and verification
+    \item Incentive structures that prioritise novelty over robustness
+\end{itemize}
+
+These problems are systemic rather than individual. They cannot be solved through policy alone, but require shared digital infrastructure.
+
+% ==================== 2. Mission and Vision ====================
+\section{Mission and Vision}
+
+\textbf{Mission}\\
+To develop and steward a free, open, and durable digital infrastructure that links scientific papers, data, code, and research context into a single, verifiable, and reusable ecosystem.
+
+\textbf{Vision}\\
+ScienceEcosystem envisions a future in which the global scientific record functions as a living, navigable system rather than a static archive of documents. Transparency, reproducibility, and collaboration emerge as properties of the system itself.
+
+Progress will be incremental and conservative, prioritising trust, legitimacy, and continuity over speed or disruption.
+
+% ==================== 3. Core Concept ====================
+\section{Core Concept: The Research Object Layer}
+
+ScienceEcosystem introduces a research object layer that sits above existing repositories and tools. Each research object aggregates and links:
+\begin{itemize}
+    \item Publications and preprints
+    \item Underlying datasets
+    \item Analysis code and computational environments
+    \item Figures, tables, and derived outputs
+    \item Provenance metadata, versions, and licences
+\end{itemize}
+
+This structure allows results to be traced, cited, verified, and reused without duplicating storage or replacing existing platforms.
+
+% ==================== 4. Functional Scope ====================
+\section{Functional Scope}
+
+\subsection*{Near-Term Capabilities}
+\begin{enumerate}
+    \item Unified search across publications, authors, institutions, and topics
+    \item Persistent linkage between papers, datasets, and code repositories
+    \item Project pages aggregating all research components
+    \item Integration with GitHub (source control), Zenodo or equivalent (archival DOI), and ORCID (identity)
+    \item Citation management and export
+    \item Lightweight collaborative working groups
+\end{enumerate}
+
+\subsection*{Longer-Term Development}
+Future phases may introduce open annotation, transparent peer review, and versioned web-native publications (“living papers”), contingent on community readiness and institutional support.
+
+% ==================== 5. Guiding Principles ====================
+\section{Guiding Principles}
+
+\begin{itemize}
+    \item Free and open for all users
+    \item Built on open standards and interoperability
+    \item Provenance and transparency by design
+    \item Accessibility and multilingual participation
+    \item Neutral, non-commercial governance
+    \item Long-term durability over short-term optimisation
+\end{itemize}
+
+% ==================== 6. Governance ====================
+\section{Governance and Independence}
+
+ScienceEcosystem is governed to prevent capture and ensure long-term legitimacy. Governance structures will evolve gradually and include:
+\begin{itemize}
+    \item A Board of Trustees providing fiduciary oversight
+    \item A Scientific Council representing disciplinary expertise
+    \item A Community Council elected from active contributors
+    \item An Ethics and Integrity Board safeguarding neutrality and transparency
+\end{itemize}
+
+The founder serves as initial steward; authority and decision-making will transition institutionally over time.
+
+% ==================== 7. Technology Philosophy ====================
+\section{Technology and AI Philosophy}
+
+ScienceEcosystem adopts an infrastructure-first and conservative approach to technology. Artificial intelligence is used only to:
+\begin{itemize}
+    \item Improve linkage, provenance, and discoverability
+    \item Assist documentation and reproducibility checks
+    \item Reduce friction in navigation and metadata alignment
+\end{itemize}
+
+AI will not be used to generate research content, assign opaque scores, or replace scientific judgement.
+
+% ==================== 8. Funding and Sustainability ====================
+\section{Funding and Sustainability}
+
+ScienceEcosystem will never monetise access, data, metrics, or user attention. Permitted funding sources include:
+\begin{itemize}
+    \item Public research and infrastructure grants
+    \item Philanthropic and foundation funding
+    \item Voluntary donations
+\end{itemize}
+
+Long-term sustainability will be pursued through diversified funding and, eventually, an endowment model.
+
+% ==================== 9. Partnerships ====================
+\section{Partnerships}
+
+ScienceEcosystem collaborates with:
+\begin{itemize}
+    \item Universities, libraries, and research institutes
+    \item National research infrastructures
+    \item Open metadata and identifier providers
+    \item International open science policy bodies
+\end{itemize}
+
+All partnerships must preserve platform neutrality and openness.
+
+% ==================== 10. Risks ====================
+\section{Risks and Mitigation}
+
+\begin{itemize}
+    \item Adoption risk mitigated through immediate practical value
+    \item Technical risk mitigated through open standards and audits
+    \item Funding risk mitigated through diversification
+    \item Governance risk mitigated through transparency and term limits
+\end{itemize}
+
+% ==================== 11. Long-Term Outlook ====================
+\section{Long-Term Outlook}
+
+ScienceEcosystem is conceived as a century-scale investment in scientific infrastructure. Success will be measured not by growth metrics or revenue, but by whether future scientists inherit a research system that is more transparent, reproducible, and humane than the one that preceded it.
+
+ScienceEcosystem exists to make that outcome possible—patiently and irreversibly.
+
+\appendix
+\clearpage
+\section*{Appendices}
+\addcontentsline{toc}{section}{Appendices}
+\section{Governance Charter}
+\input{governance}
+
+\clearpage
+\section{Funding and Sustainability Framework}
+\input{funding}
+
+\clearpage
+\section{Technical Architecture Framework}
+\input{technical}
+
+\clearpage
+\section{Future directions}
+\input{future}
+
+\end{document}
