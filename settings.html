@@ -1,130 +1,120 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Settings - ScienceEcosystem</title>
-  <link rel="stylesheet" href="style.css">
-<link rel="manifest" href="/manifest.json"/>
-<meta name="theme-color" content="#0f172a"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="ScienceEco"/>
-<link rel="apple-touch-icon" href="/assets/logos_se/logo.png"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Settings | ScienceEcosystem</title>
+  <link rel="stylesheet" href="assets/fonts/fonts.css"/>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <meta name="robots" content="noindex"/>
+  <style>
+    .settings-card { display:block; text-decoration:none; color:inherit; padding:1.25rem 1.5rem; border:1px solid #e2e8f0; border-radius:10px; transition:border-color .15s, box-shadow .15s; background:#fff; }
+    .settings-card:hover { border-color:#2e7f9f; box-shadow:0 2px 8px rgba(46,127,159,.1); }
+    .settings-card h3 { margin:0 0 .4rem; font-size:1rem; }
+    .settings-card p  { margin:0; color:#64748b; font-size:.875rem; }
+    .settings-card .badge-new { font-size:.68rem; background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:4px; font-weight:600; margin-left:.4rem; vertical-align:middle; }
+    .settings-card .badge-soon { font-size:.68rem; background:#f1f5f9; color:#94a3b8; padding:1px 6px; border-radius:4px; font-weight:600; margin-left:.4rem; vertical-align:middle; }
+  </style>
 </head>
-<body>
+<body data-page="settings">
   <nav class="app-nav" role="navigation" aria-label="Primary">
-  <div class="nav-inner container">
-    <div class="logo">
-      <a href="index.html" aria-label="ScienceEcosystem Home">
-        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
-      </a>
-    </div>
-
-    <div class="nav-center">
-      <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
-        <label class="visually-hidden" for="searchInput">Search</label>
-        <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
-      </form>
-    </div>
-
-    <div class="nav-right">
-      <a class="nav-link" href="about.html">About</a>
-      <div class="nav-dropdown">
-        <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Tools<span class="nav-chevron">▾</span></button>
-        <div class="nav-dropdown-menu">
-          <a class="nav-dropdown-item" href="journal-finder.html">Journal finder</a>
-          <a class="nav-dropdown-item" href="research-tools.html">Tools finder</a>
-        </div>
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem"/>
+        </a>
       </div>
-
-      <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
-
-      <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
-        <span>Login with</span>
-        <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID" />
-      </a>
-
-      <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <span>Login with</span>
+          <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID"/>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
     </div>
-  </div>
-</nav>
+  </nav>
 
+  <main class="container" style="max-width:860px; padding:2rem 1rem 3rem;">
+    <header style="margin-bottom:1.5rem;">
+      <h1 style="margin:0;">Settings</h1>
+      <p class="muted" style="margin:.4rem 0 0;">Manage your account and preferences.</p>
+    </header>
 
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:1rem; margin-bottom:1.5rem;">
 
-<main class="container" style="max-width: 900px; margin: 2rem auto; padding: 0 1rem;">
-    <h1>Settings</h1>
-    <p class="subtitle">Manage your account and preferences</p>
-
-    <div class="settings-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 2rem;">
-      
-      <a href="settings-profile.html" class="settings-card panel" style="text-decoration: none; color: inherit; padding: 1.5rem; border: 1px solid #e1e4e8; border-radius: 8px; transition: border-color 0.2s;">
-        <h3 style="margin: 0 0 0.5rem 0;">👤 Profile</h3>
-        <p style="margin: 0; color: #6c757d;">Update your name, affiliation, and public information</p>
+      <a href="settings-profile.html" class="settings-card">
+        <h3>👤 Profile &amp; identity</h3>
+        <p>Name, bio, affiliations, OpenAlex IDs, external profile links</p>
       </a>
 
-      <a href="settings-privacy.html" class="settings-card panel" style="text-decoration: none; color: inherit; padding: 1.5rem; border: 1px solid #e1e4e8; border-radius: 8px; transition: border-color 0.2s;">
-        <h3 style="margin: 0 0 0.5rem 0;">🔒 Privacy</h3>
-        <p style="margin: 0; color: #6c757d;">Control who can see your information</p>
+      <a href="library.html" class="settings-card">
+        <h3>📚 Library</h3>
+        <p>Your saved papers, collections, annotations, and exports</p>
       </a>
 
-      <a href="settings-notifications.html" class="settings-card panel" style="text-decoration: none; color: inherit; padding: 1.5rem; border: 1px solid #e1e4e8; border-radius: 8px; transition: border-color 0.2s;">
-        <h3 style="margin: 0 0 0.5rem 0;">🔔 Notifications</h3>
-        <p style="margin: 0; color: #6c757d;">Email and alert preferences</p>
+      <a href="privacy.html" class="settings-card">
+        <h3>🔒 Privacy policy</h3>
+        <p>What data we store, your rights, and how to delete your account</p>
       </a>
 
-      <a href="settings-identity.html" class="settings-card panel" style="text-decoration: none; color: inherit; padding: 1.5rem; border: 1px solid #e1e4e8; border-radius: 8px; transition: border-color 0.2s;">
-        <h3 style="margin: 0 0 0.5rem 0;">🔗 Identity</h3>
-        <p style="margin: 0; color: #6c757d;">Link additional accounts and verify authorship</p>
+      <a href="settings-notifications.html" class="settings-card">
+        <h3>🔔 Notifications <span class="badge-soon">Coming soon</span></h3>
+        <p>Email and alert preferences for new papers and citations</p>
+      </a>
+
+      <a href="integrations.html" class="settings-card">
+        <h3>🔌 Integrations <span class="badge-soon">Coming soon</span></h3>
+        <p>Full GitHub, OSF, and Zenodo integrations</p>
       </a>
 
     </div>
 
-    <div class="panel" style="margin-top: 2rem; padding: 1.5rem;">
-      <h3>Account Actions</h3>
-      <button onclick="handleLogout()" class="btn btn-secondary" style="margin-top: 1rem;">
-        Sign Out
-      </button>
+    <div class="panel" style="padding:1.25rem;">
+      <h3 style="margin:0 0 .75rem; font-size:1rem;">Account</h3>
+      <div style="display:flex; gap:.75rem; flex-wrap:wrap; align-items:center;">
+        <a href="user-profile.html" class="btn btn-secondary">← Dashboard</a>
+        <button id="logoutBtnMain" class="btn btn-secondary">Sign out</button>
+      </div>
     </div>
   </main>
 
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span class="js-year">2026</span> ScienceEcosystem. All rights reserved.</p>
+      <p>
+        <a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a>
+        &nbsp;·&nbsp;
+        <a class="footer-link" href="privacy.html">Privacy policy</a>
+      </p>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/session.js" defer></script>
   <script>
-    // Show/hide user menu based on login status
-    fetch('/api/me')
-      .then(r => r.ok ? r.json() : null)
-      .then(user => {
-        if (user) {
-          document.getElementById('user-menu').style.display = 'flex';
-          document.getElementById('login-btn').style.display = 'none';
-        } else {
-          // Not logged in - redirect to home
-          window.location.href = 'index.html';
-        }
+    fetch("/api/me", { credentials:"include" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(user){
+        if (!user) window.location.href = "index.html";
       })
-      .catch(() => {
-        window.location.href = 'index.html';
-      });
+      .catch(function(){ window.location.href = "index.html"; });
 
-    async function handleLogout() {
-      try {
-        await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
-        window.location.href = 'index.html';
-      } catch (error) {
-        console.error('Logout error:', error);
-        window.location.href = 'index.html';
-      }
-    }
-
-    // Add hover effect to cards
-    document.addEventListener('DOMContentLoaded', () => {
-      const cards = document.querySelectorAll('.settings-card');
-      cards.forEach(card => {
-        card.addEventListener('mouseenter', () => {
-          card.style.borderColor = '#0366d6';
-        });
-        card.addEventListener('mouseleave', () => {
-          card.style.borderColor = '#e1e4e8';
-        });
+    document.addEventListener("DOMContentLoaded", function(){
+      var btn = document.getElementById("logoutBtnMain");
+      if (btn) btn.addEventListener("click", function(){
+        fetch("/auth/logout", { method:"POST", credentials:"include" })
+          .finally(function(){ window.location.href = "index.html"; });
       });
     });
   </script>

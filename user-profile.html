@@ -1,215 +1,151 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Researcher Home | ScienceEcosystem</title>
-  <meta name="description" content="Your ScienceEcosystem home: library, activity, and identity linking." />
-  <link rel="stylesheet" href="assets/fonts/fonts.css" />
-  <link rel="stylesheet" href="style.css" />
-<link rel="manifest" href="/manifest.json"/>
-<meta name="theme-color" content="#0f172a"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="ScienceEco"/>
-<link rel="apple-touch-icon" href="/assets/logos_se/logo.png"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Dashboard | ScienceEcosystem</title>
+  <link rel="stylesheet" href="assets/fonts/fonts.css"/>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <meta name="robots" content="noindex"/>
+  <style>
+    .dash-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1.5rem; }
+    @media(max-width:680px){ .dash-grid { grid-template-columns:1fr 1fr; } }
+    .kpi { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:1rem 1.25rem; text-align:center; }
+    .kpi-value { font-size:2rem; font-weight:700; color:#0f172a; line-height:1; }
+    .kpi-label { font-size:.78rem; color:#64748b; margin-top:.3rem; }
+    .dash-hero { background:#0f172a; color:#fff; border-radius:12px; padding:1.5rem; display:flex; gap:1.25rem; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; }
+    .dash-avatar { width:64px; height:64px; border-radius:50%; background:#2e7f9f; display:flex; align-items:center; justify-content:center; font-size:1.5rem; font-weight:700; color:#fff; flex-shrink:0; }
+    .dash-name { font-size:1.2rem; font-weight:700; margin:0 0 .25rem; }
+    .dash-sub  { font-size:.82rem; color:#94a3b8; margin:0; }
+    .dash-actions { margin-left:auto; display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+    .dash-btn { font-size:.82rem; padding:6px 14px; border-radius:7px; text-decoration:none; display:inline-block; }
+    .dash-btn-ghost { background:rgba(255,255,255,.1); color:#fff; border:1px solid rgba(255,255,255,.2); }
+    .dash-btn-primary { background:#2e7f9f; color:#fff; border:1px solid #2e7f9f; }
+    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+    @media(max-width:680px){ .two-col { grid-template-columns:1fr; } }
+    .sec-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:.75rem; }
+    .sec-head h2 { margin:0; font-size:1rem; }
+    .sec-head a { font-size:.8rem; color:#2e7f9f; text-decoration:none; }
+    .paper-row { padding:.55rem 0; border-bottom:1px solid #f1f5f9; }
+    .paper-row:last-child { border-bottom:none; }
+    .paper-row-title { font-size:.85rem; font-weight:600; line-height:1.3; }
+    .paper-row-title a { color:#0f172a; text-decoration:none; }
+    .paper-row-title a:hover { color:#2e7f9f; text-decoration:underline; }
+    .paper-row-meta { font-size:.75rem; color:#94a3b8; margin-top:.15rem; }
+    .follow-row { display:flex; align-items:center; gap:.6rem; padding:.45rem 0; border-bottom:1px solid #f1f5f9; }
+    .follow-row:last-child { border-bottom:none; }
+    .follow-av { width:30px; height:30px; border-radius:50%; background:#e2e8f0; display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:700; color:#64748b; flex-shrink:0; }
+    .follow-name { font-size:.85rem; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .follow-name a { color:#0f172a; text-decoration:none; }
+    .follow-name a:hover { color:#2e7f9f; }
+    .unfollow-btn { font-size:.72rem; color:#94a3b8; background:none; border:1px solid #e2e8f0; border-radius:4px; padding:2px 8px; cursor:pointer; flex-shrink:0; }
+    .unfollow-btn:hover { color:#dc2626; border-color:#fca5a5; }
+    .empty { color:#94a3b8; font-size:.85rem; padding:.4rem 0; margin:0; }
+  </style>
 </head>
 <body data-page="user-profile">
   <a class="skip-link" href="#main">Skip to content</a>
-
   <nav class="app-nav" role="navigation" aria-label="Primary">
-  <div class="nav-inner container">
-    <div class="logo">
-      <a href="index.html" aria-label="ScienceEcosystem Home">
-        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
-      </a>
-    </div>
-
-    <div class="nav-center">
-      <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
-        <label class="visually-hidden" for="searchInput">Search</label>
-        <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
-      </form>
-    </div>
-
-    <div class="nav-right">
-      <a class="nav-link" href="about.html">About</a>
-      <div class="nav-dropdown">
-        <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Tools<span class="nav-chevron">▾</span></button>
-        <div class="nav-dropdown-menu">
-          <a class="nav-dropdown-item" href="journal-finder.html">Journal finder</a>
-          <a class="nav-dropdown-item" href="research-tools.html">Tools finder</a>
-        </div>
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem"/>
+        </a>
       </div>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <span>Login with</span>
+          <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID"/>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
 
-      <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+  <main id="main" class="container" style="padding:1.5rem 1rem 3rem;">
 
-      <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+    <!-- Not signed in -->
+    <div id="notSignedIn" style="display:none; text-align:center; padding:4rem 1rem;">
+      <p class="muted" style="margin-bottom:1.25rem;">Sign in to access your personal dashboard.</p>
+      <a class="btn btn-orcid" href="/auth/orcid/login" style="display:inline-flex;gap:.5rem;align-items:center;">
         <span>Login with</span>
-        <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID" />
+        <img src="assets/logos/orcid.png" alt="ORCID" style="height:20px;width:auto;"/>
       </a>
-
-      <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
     </div>
-  </div>
-</nav>
 
+    <!-- Dashboard -->
+    <div id="dashboard" style="display:none;">
 
-  <main id="main" class="container user-dashboard">
-    <!-- Hero Section -->
-    <section id="profileHero" class="profile-hero dashboard-card">
-      <div class="hero-content">
-        <div class="avatar-large" id="profileAvatar">
-          <img id="profileAvatarImg" alt="" loading="lazy" referrerpolicy="no-referrer" />
-          <span id="profileAvatarInitials" aria-hidden="true">SE</span>
+      <!-- Hero -->
+      <div class="dash-hero">
+        <div class="dash-avatar" id="dashAvatar">?</div>
+        <div style="min-width:0;">
+          <p class="dash-name" id="dashName">Loading…</p>
+          <p class="dash-sub" id="dashSub"></p>
         </div>
-        <div class="hero-info">
-          <p class="eyebrow">Researcher profile</p>
-          <h1 id="profileName">Your profile</h1>
-          <p class="hero-meta">
-            <a id="profileOrcidLink" href="#" target="_blank" rel="noopener" class="orcid-link">ORCID</a>
-            <span id="profileAffiliation" class="affiliation"></span>
-          </p>
-          <p class="sync-status">Last synced: <span id="syncText">Loading…</span></p>
-        </div>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="settings-profile.html">Edit Profile</a>
-          <a class="btn" href="settings-identity.html">Link Accounts</a>
-          <a id="viewOrcidBtn" class="btn btn-ghost" href="https://orcid.org" target="_blank" rel="noopener">View on ORCID</a>
+        <div class="dash-actions">
+          <a id="linkPublicProfile" href="#" class="dash-btn dash-btn-ghost">Public profile</a>
+          <a href="settings-profile.html" class="dash-btn dash-btn-ghost">Edit profile</a>
+          <a href="library.html" class="dash-btn dash-btn-primary">My library →</a>
         </div>
       </div>
-    </section>
 
-    <!-- Library Overview -->
-    <section id="sectionLibrary" class="library-overview dashboard-card">
-      <div class="section-head">
-        <h2>My Library</h2>
-        <span id="libCountBadge" class="count-badge">0 papers</span>
-        <span id="libCount" style="display:none;"></span>
-      </div>
-      <div class="library-total">
-        <div id="libCountBig" class="count-number">0</div>
-        <div class="count-label">Total papers saved</div>
-      </div>
-      <div class="section-actions">
-        <a class="btn btn-primary" href="library.html">View Full Library →</a>
-      </div>
-      <div class="library-grid">
-        <div class="library-column">
-          <h3>Recently Saved</h3>
-          <ul id="libRecent" class="list"></ul>
+      <!-- KPIs -->
+      <div class="dash-grid">
+        <div class="kpi">
+          <div class="kpi-value" id="kpiPapers">—</div>
+          <div class="kpi-label">Papers saved</div>
         </div>
-        <div class="library-column">
-          <h3>To Read</h3>
-          <ul id="libToRead" class="list"></ul>
+        <div class="kpi">
+          <div class="kpi-value" id="kpiFollowing">—</div>
+          <div class="kpi-label">Researchers following</div>
         </div>
-        <div class="library-column">
-          <h3>Starred</h3>
-          <ul id="libStarred" class="list"></ul>
+        <div class="kpi">
+          <div class="kpi-value" id="kpiAnnotations">—</div>
+          <div class="kpi-label">Annotations</div>
         </div>
       </div>
-    </section>
 
-    <!-- Following Feed -->
-    <section id="sectionFollowing" class="following-feed dashboard-card">
-      <div class="section-head">
-        <h2>Following</h2>
-        <button id="refreshFollowingBtn" class="btn btn-ghost btn-small">Refresh</button>
-      </div>
-      <p class="muted small">Follow researchers on their profile pages. New works appear here.</p>
-      <div class="following-grid">
-        <div class="following-list">
-          <div class="subhead">
-            <h3>Researchers you follow</h3>
-            <a id="findResearchersBtn" class="btn btn-ghost btn-small" href="search.html">Find researchers to follow</a>
-          </div>
-          <ul id="followedList" class="list avatar-list"></ul>
-        </div>
-        <div class="following-updates">
-          <h3>Latest publications</h3>
-          <ul id="followedUpdates" class="list updates-list"></ul>
-        </div>
-      </div>
-    </section>
+      <!-- Two columns -->
+      <div class="two-col">
+        <section class="panel">
+          <div class="sec-head"><h2>Recently saved</h2><a href="library.html">View all →</a></div>
+          <div id="recentPapers"><p class="empty">Loading…</p></div>
+        </section>
 
-    <!-- ORCID Profile -->
-    <section id="sectionOrcid" class="orcid-profile">
-      <div class="section-head">
-        <h2>ORCID Profile</h2>
-        <a id="orcidEditLink" class="btn btn-ghost btn-small" href="https://orcid.org" target="_blank" rel="noopener">Edit on ORCID →</a>
+        <section class="panel">
+          <div class="sec-head"><h2>Researchers you follow</h2><a href="search.html">Find more →</a></div>
+          <div id="followingList"><p class="empty">Loading…</p></div>
+        </section>
       </div>
-      <div class="orcid-grid">
-        <details class="orcid-card" open>
-          <summary>Personal Information</summary>
-          <div id="orcidPersonal" class="orcid-card-body">Loading…</div>
-        </details>
-        <details class="orcid-card">
-          <summary>Contact &amp; Links</summary>
-          <div id="orcidContact" class="orcid-card-body">Loading…</div>
-        </details>
-        <details class="orcid-card">
-          <summary>Keywords &amp; Research Interests</summary>
-          <div id="orcidKeywords" class="orcid-card-body">Loading…</div>
-        </details>
-        <details class="orcid-card">
-          <summary>Employment History</summary>
-          <div id="orcidEmployment" class="orcid-card-body">Loading…</div>
-        </details>
-        <details class="orcid-card">
-          <summary>Education History</summary>
-          <div id="orcidEducation" class="orcid-card-body">Loading…</div>
-        </details>
-        <details class="orcid-card">
-          <summary>Works &amp; Publications</summary>
-          <div id="orcidWorks" class="orcid-card-body">Loading…</div>
-        </details>
-        <details class="orcid-card">
-          <summary>Funding</summary>
-          <div id="orcidFunding" class="orcid-card-body">Loading…</div>
-        </details>
-        <details class="orcid-card">
-          <summary>Peer Review &amp; Service</summary>
-          <div id="orcidService" class="orcid-card-body">Loading…</div>
-        </details>
-      </div>
-      <p class="orcid-updated muted small">Last updated on ORCID: <span id="orcidLastUpdated">-</span></p>
-    </section>
 
-    <!-- Identity & Linking -->
-    <section id="sectionIdentity" class="identity-status dashboard-card">
-      <div class="section-head">
-        <h3>Linked Accounts</h3>
-        <a class="btn btn-ghost btn-small" href="settings-identity.html">Link More Accounts</a>
-      </div>
-      <div id="identityBadges" class="identity-badges"></div>
-      <p class="muted small">Last sync: <span id="identityLastSync">-</span></p>
-    </section>
+      <!-- Follow feed -->
+      <section class="panel" style="margin-top:1rem;" id="feedSection" hidden>
+        <div class="sec-head"><h2>New from people you follow</h2></div>
+        <div id="followFeed"><p class="empty">Loading…</p></div>
+      </section>
 
-    <!-- Advanced Settings -->
-    <details class="advanced-settings dashboard-card">
-      <summary>Advanced: Claim &amp; Merge OpenAlex Profiles</summary>
-      <div id="claimsPanel"></div>
-    </details>
+    </div>
   </main>
 
   <footer class="site-footer">
     <div class="container">
       <p>&copy; <span class="js-year">2026</span> ScienceEcosystem. All rights reserved.</p>
-      <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a> &nbsp;·&nbsp; <a class="footer-link" href="privacy.html">Privacy policy</a></p>
-
-      <div class="footer-socials">
-        <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-            <path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
-          </svg>
-        </a>
-        <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true">
-            <path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/>
-          </svg>
-        </a>
-      </div>
-
+      <p>
+        <a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a>
+        &nbsp;·&nbsp;
+        <a class="footer-link" href="privacy.html">Privacy policy</a>
+      </p>
       <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
     </div>
   </footer>
@@ -217,7 +153,153 @@
   <script src="scripts/search.js" defer></script>
   <script src="scripts/library.js" defer></script>
   <script src="scripts/components.js" defer></script>
-  <script src="scripts/user-profile.js?v=2026-01-13" defer></script>
   <script src="scripts/session.js" defer></script>
+  <script>
+  (function(){
+    var OA = "https://api.openalex.org";
+
+    function api(path, opts) {
+      return fetch(path, Object.assign({ credentials:"include" }, opts||{})).then(function(r){
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      });
+    }
+
+    function esc(s) {
+      return String(s||"").replace(/[&<>'"]/g,function(c){
+        return {"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c];
+      });
+    }
+
+    function initials(name) {
+      return (name||"?").split(" ").map(function(w){return w[0]||"";}).slice(0,2).join("").toUpperCase()||"?";
+    }
+
+    function renderHero(me) {
+      document.getElementById("dashAvatar").textContent = initials(me.name);
+      document.getElementById("dashName").textContent   = me.name || "Your profile";
+      var parts = [];
+      if (me.affiliations && me.affiliations.length) parts.push(me.affiliations[0]);
+      else if (me.affiliation) parts.push(me.affiliation);
+      if (me.orcid) parts.push("ORCID: " + me.orcid);
+      document.getElementById("dashSub").textContent = parts.join("  ·  ");
+      var pp = document.getElementById("linkPublicProfile");
+      if (me.orcid) pp.href = "profile.html?orcid=" + encodeURIComponent(me.orcid);
+      else pp.style.display = "none";
+    }
+
+    function renderRecentPapers(items) {
+      var box = document.getElementById("recentPapers");
+      if (!items || !items.length) {
+        box.innerHTML = '<p class="empty">No papers saved yet. <a href="search.html">Search →</a></p>';
+        return;
+      }
+      box.innerHTML = items.slice(0,8).map(function(p){
+        var href = p.openalex_id ? "paper.html?id="+encodeURIComponent(p.openalex_id)
+                 : p.doi         ? "search.html?q="+encodeURIComponent(p.doi) : "#";
+        return '<div class="paper-row">'
+          + '<div class="paper-row-title"><a href="'+esc(href)+'">'+esc(p.title||"Untitled")+'</a></div>'
+          + (p.year||p.venue ? '<div class="paper-row-meta">'+esc([p.year,p.venue].filter(Boolean).join(" · "))+'</div>' : "")
+        + '</div>';
+      }).join("");
+    }
+
+    function renderFollowing(follows) {
+      var box = document.getElementById("followingList");
+      if (!follows || !follows.length) {
+        box.innerHTML = '<p class="empty">Not following anyone yet. <a href="search.html">Find researchers →</a></p>';
+        return;
+      }
+      box.innerHTML = follows.slice(0,10).map(function(f){
+        var id   = f.author_id || f.id;
+        var name = f.name || id;
+        return '<div class="follow-row">'
+          + '<div class="follow-av">'+esc(initials(name))+'</div>'
+          + '<div class="follow-name"><a href="profile.html?id='+esc(id)+'">'+esc(name)+'</a></div>'
+          + '<button class="unfollow-btn" data-id="'+esc(id)+'">Unfollow</button>'
+        + '</div>';
+      }).join("");
+      box.querySelectorAll(".unfollow-btn").forEach(function(btn){
+        btn.addEventListener("click", function(){
+          var id = btn.getAttribute("data-id");
+          fetch("/api/follows/"+encodeURIComponent(id),{method:"DELETE",credentials:"include"})
+            .then(function(){ btn.closest(".follow-row").remove(); })
+            .catch(function(){});
+        });
+      });
+    }
+
+    function renderFollowFeed(follows) {
+      if (!follows || !follows.length) return;
+      var section = document.getElementById("feedSection");
+      var box     = document.getElementById("followFeed");
+      section.hidden = false;
+
+      var ids = follows.slice(0,5).map(function(f){
+        var id = f.author_id || f.id;
+        return id.indexOf("http")===0 ? id : "https://openalex.org/"+id;
+      }).join("|");
+
+      fetch(OA+"/works?filter=author.id:"+encodeURIComponent(ids)+"&sort=publication_date:desc&per_page=10")
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+          var works = (data && data.results) || [];
+          if (!works.length){ box.innerHTML='<p class="empty">No recent papers found.</p>'; return; }
+          box.innerHTML = works.map(function(w){
+            var tail = String(w.id||"").replace(/^https?:\/\/openalex\.org\//i,"");
+            var authors = (w.authorships||[]).slice(0,3).map(function(a){
+              return a.author && a.author.display_name || "";
+            }).filter(Boolean).join(", ");
+            return '<div class="paper-row">'
+              + '<div class="paper-row-title"><a href="paper.html?id='+esc(tail)+'">'+esc(w.display_name||"Untitled")+'</a></div>'
+              + '<div class="paper-row-meta">'+esc([authors,w.publication_year].filter(Boolean).join(" · "))+'</div>'
+            + '</div>';
+          }).join("");
+        })
+        .catch(function(){ box.innerHTML='<p class="empty">Could not load feed.</p>'; });
+    }
+
+    async function boot(){
+      var me;
+      try { me = await api("/api/me"); }
+      catch(_){
+        document.getElementById("notSignedIn").style.display = "";
+        return;
+      }
+      document.getElementById("dashboard").style.display = "";
+      renderHero(me);
+
+      // Library
+      api("/api/library")
+        .then(function(items){
+          document.getElementById("kpiPapers").textContent = (items.length||0).toLocaleString();
+          renderRecentPapers(items.slice().reverse());
+        })
+        .catch(function(){
+          document.getElementById("kpiPapers").textContent = "—";
+          document.getElementById("recentPapers").innerHTML = '<p class="empty">Could not load library.</p>';
+        });
+
+      // Annotations
+      api("/api/library/pdf-annotations")
+        .then(function(a){ document.getElementById("kpiAnnotations").textContent = Array.isArray(a)?a.length:"—"; })
+        .catch(function(){ document.getElementById("kpiAnnotations").textContent = "—"; });
+
+      // Follows
+      api("/api/follows")
+        .then(function(follows){
+          document.getElementById("kpiFollowing").textContent = (follows.length||0).toLocaleString();
+          renderFollowing(follows);
+          renderFollowFeed(follows);
+        })
+        .catch(function(){
+          document.getElementById("kpiFollowing").textContent = "—";
+          document.getElementById("followingList").innerHTML = '<p class="empty">Could not load following list.</p>';
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", boot);
+  })();
+  </script>
 </body>
 </html>
