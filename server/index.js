@@ -73,16 +73,26 @@ app.use((req, res, next) => {
 });
 
 // ── Privacy-safe page hit counter ────────────────────────────────────────────
-// Counts GET requests to .html pages. Stores only (page_slug, date, count).
-// No IP addresses, no user IDs, no cookies, no personal data.
+// Counts GET requests to real pages. Skips bots, assets, and API routes.
+// Stores only (page_slug, date, count) — no IP, no user ID, no personal data.
+const BOT_PROBE_PATTERNS = [
+  /^\/wp-/i, /^\/wordpress/i, /xmlrpc/i, /\.php$/i, /\.asp(x)?$/i,
+  /^\/\./, /^\/admin\//i, /^\/cgi-bin/i, /\/actuator/i,
+  /\/\.env/i, /\/\.git/i, /\/config\./i, /phpmyadmin/i,
+  /\/vendor\//i, /\/boaform/i, /\/telescope/i, /\/debug/i,
+  /gravitysmtp/i, /autodiscover/i, /ecp\//i
+];
+function isBotProbe(path) {
+  return BOT_PROBE_PATTERNS.some(function(re){ return re.test(path); });
+}
 app.use((req, res, next) => {
   if (req.method !== "GET") return next();
   const raw = req.path;
-  // Only count page-like routes, skip assets / API / fonts etc.
+  // Skip bot probes, assets, API routes, non-page files
+  if (isBotProbe(raw)) return next();
   if (raw.startsWith("/api/") || raw.startsWith("/assets/") || raw.startsWith("/auth/")
-      || raw.includes(".") && !raw.endsWith(".html")) return next();
+      || raw.startsWith("/uploads/") || (raw.includes(".") && !raw.endsWith(".html"))) return next();
   const page = raw.replace(/\.html$/, "") || "/";
-  // Fire-and-forget — never blocks the response
   pool.query(
     `INSERT INTO page_hits (page, day, hits) VALUES ($1, CURRENT_DATE, 1)
      ON CONFLICT (page, day) DO UPDATE SET hits = page_hits.hits + 1`,
@@ -3187,11 +3197,26 @@ app.get("/institute/:id", (req, res) => {
   }
 });
 
-app.get("*", (req, res, next) => {
-  if (req.method === "GET" && req.accepts("html")) {
-    return res.sendFile(path.join(staticRoot, "index.html"));
+// 404 handler — bot probes and unknown paths get a clean 404, never index.html
+app.use((req, res) => {
+  if (isBotProbe(req.path)) {
+    return res.status(404).end();
   }
-  next();
+  if (req.accepts("html")) {
+    return res.status(404).send(
+      '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1"/>' +
+      '<title>Page not found | ScienceEcosystem</title>' +
+      '<style>body{font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f8fafc;}' +
+      '.box{text-align:center;max-width:380px;padding:2rem;}h1{font-size:1.2rem;margin:0 0 .5rem;}p{color:#64748b;font-size:.9rem;margin:0 0 1.5rem;}' +
+      'a{background:#2e7f9f;color:#fff;padding:.6rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;}</style>' +
+      '</head><body><div class="box"><p style="font-size:2rem;margin:0 0 1rem">🔍</p>' +
+      '<h1>Page not found</h1>' +
+      '<p>The page you\'re looking for doesn\'t exist.</p>' +
+      '<a href="/">Go to home page</a></div></body></html>'
+    );
+  }
+  res.status(404).json({ error: "Not found" });
 });
 
 app.use((err, req, res, next) => {
