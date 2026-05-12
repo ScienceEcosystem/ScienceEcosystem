@@ -64,7 +64,7 @@ app.use((req, res, next) => {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
-    "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net",
+    "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'self'"
@@ -2199,7 +2199,7 @@ app.get("/api/paper/abstract", async (req, res) => {
 
   const headers = { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" };
 
-  // 1. Semantic Scholar
+  // 1. Semantic Scholar (DOI goes in the URL path — encode fully)
   try {
     const s2 = await fetchJSONTimeout(
       `https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=abstract`,
@@ -2208,17 +2208,17 @@ app.get("/api/paper/abstract", async (req, res) => {
     if (s2?.abstract) return res.json({ abstract: s2.abstract, source: "Semantic Scholar" });
   } catch (_) {}
 
-  // 2. Europe PMC (good coverage for life sciences)
+  // 2. Europe PMC — DOI goes in a query parameter; do NOT encode slashes or EPMC won't match it
   try {
-    const epmc = await fetchJSONTimeout(
-      `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:${encodeURIComponent(doi)}&format=json&resultType=core`,
-      { headers }, 8000
-    );
+    const epmcUrl = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+      + "?query=DOI:" + doi           // bare DOI — slashes are fine inside query params
+      + "&format=json&resultType=core";
+    const epmc = await fetchJSONTimeout(epmcUrl, { headers }, 8000);
     const result = epmc?.resultList?.result?.[0];
     if (result?.abstractText) return res.json({ abstract: result.abstractText, source: "Europe PMC" });
   } catch (_) {}
 
-  // 3. CrossRef (has abstracts for some journals, often XML-tagged)
+  // 3. CrossRef (DOI in URL path — encode fully; response often has JATS XML tags)
   try {
     const cr = await fetchJSONTimeout(
       `https://api.crossref.org/works/${encodeURIComponent(doi)}`,
@@ -2226,7 +2226,6 @@ app.get("/api/paper/abstract", async (req, res) => {
     );
     const raw = cr?.message?.abstract;
     if (raw) {
-      // Strip JATS XML tags (e.g. <jats:p>, <jats:italic>)
       const clean = raw.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
       if (clean.length > 30) return res.json({ abstract: clean, source: "CrossRef" });
     }
