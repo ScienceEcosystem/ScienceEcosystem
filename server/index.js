@@ -2191,6 +2191,50 @@ app.get("/api/paper/artifacts", async (req, res) => {
 });
 
 // Aggressive Open Access resolver
+// Abstract fallback — called when OpenAlex has no abstract_inverted_index
+// Tries Semantic Scholar → Europe PMC → CrossRef in order
+app.get("/api/paper/abstract", async (req, res) => {
+  const doi = normalizeDoi(req.query?.doi || "");
+  if (!doi) return res.status(400).json({ error: "doi required" });
+
+  const headers = { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" };
+
+  // 1. Semantic Scholar
+  try {
+    const s2 = await fetchJSONTimeout(
+      `https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=abstract`,
+      { headers }, 6000
+    );
+    if (s2?.abstract) return res.json({ abstract: s2.abstract, source: "Semantic Scholar" });
+  } catch (_) {}
+
+  // 2. Europe PMC (good coverage for life sciences)
+  try {
+    const epmc = await fetchJSONTimeout(
+      `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:${encodeURIComponent(doi)}&format=json&resultType=core`,
+      { headers }, 8000
+    );
+    const result = epmc?.resultList?.result?.[0];
+    if (result?.abstractText) return res.json({ abstract: result.abstractText, source: "Europe PMC" });
+  } catch (_) {}
+
+  // 3. CrossRef (has abstracts for some journals, often XML-tagged)
+  try {
+    const cr = await fetchJSONTimeout(
+      `https://api.crossref.org/works/${encodeURIComponent(doi)}`,
+      { headers }, 8000
+    );
+    const raw = cr?.message?.abstract;
+    if (raw) {
+      // Strip JATS XML tags (e.g. <jats:p>, <jats:italic>)
+      const clean = raw.replace(/<[^>]+>/g, " ").replace(/\s{2,}/g, " ").trim();
+      if (clean.length > 30) return res.json({ abstract: clean, source: "CrossRef" });
+    }
+  } catch (_) {}
+
+  res.status(404).json({ error: "Abstract not available" });
+});
+
 app.get("/api/paper/oa", async (req, res) => {
   const doiParam = normalizeDoi(req.query?.doi || "");
   const openalexIdParam = normalizeOpenAlexId(req.query?.openalex_id || "");
