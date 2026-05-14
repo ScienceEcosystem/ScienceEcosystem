@@ -1446,8 +1446,8 @@
     panel.id = "graphInfoPanel";
     panel.style.cssText = "background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;gap:10px;align-items:flex-start;";
     panel.innerHTML =
-      '<div style="flex:1;min-width:0;">'
-        +'<div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-bottom:4px;line-height:1.3;">'+escapeHtml(w.display_name||"Untitled")+'</div>'
+      '<div style="flex:1;min-width:0;overflow:hidden;">'
+        +'<div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-bottom:4px;line-height:1.3;overflow-wrap:break-word;word-break:break-word;">'+escapeHtml(w.display_name||"Untitled")+'</div>'
         +(authStr?'<div style="font-size:.78rem;color:#64748b;margin-bottom:2px;">'+escapeHtml(authStr)+'</div>':"")
         +'<div style="font-size:.78rem;color:#94a3b8;margin-bottom:6px;">'+(w.publication_year||"")+(venue?" · "+escapeHtml(venue):"")+'</div>'
         +'<div style="display:flex;gap:5px;flex-wrap:wrap;">'
@@ -1604,8 +1604,17 @@
       { nodes: new vis.DataSet(nodesFiltered), edges: new vis.DataSet(edgesFiltered) },
       { nodes:{ shape:"dot", scaling:{min:8,max:36}, font:{size:13}, borderWidth:2 },
         edges:{ smooth:{type:"continuous"}, selectionWidth:2 },
-        physics:{ stabilization:{iterations:120}, barnesHut:{ gravitationalConstant:-8000, springConstant:0.02, avoidOverlap:0.3 } },
+        physics:{
+          stabilization:{ enabled:true, iterations:200, updateInterval:30, fit:true },
+          barnesHut:{ gravitationalConstant:-4000, springConstant:0.04,
+                      springLength:120, avoidOverlap:0.6, damping:0.25 }
+        },
         interaction:{ hover:true, tooltipDelay:250, hideEdgesOnDrag:true } });
+
+    // Freeze the graph once it has settled — stops endless jumping
+    network.on("stabilizationIterationsDone", function(){
+      network.setOptions({ physics:{ enabled:false } });
+    });
 
     renderYearLegend(block, minY, maxY);
 
