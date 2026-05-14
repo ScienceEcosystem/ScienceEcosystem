@@ -562,8 +562,16 @@
       const authors = cols.has("authors")?`<td>${esc(authorsDisplay)}${tagsHtml}</td>`:"";
       const year    = cols.has("year")   ?`<td>${esc(it.year??"-")}</td>`:"";
       const zoteroBadge = it.zotero_key ? `<span class="badge badge-zotero" title="Synced from Zotero">Z</span>` : "";
+      const pdfBadge = it.local_pdf_path
+        ? `<span title="PDF stored in your library" style="display:inline-flex;align-items:center;margin-right:4px;vertical-align:middle;flex-shrink:0;">
+            <svg width="13" height="15" viewBox="0 0 13 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <rect width="13" height="15" rx="2" fill="#dc2626"/>
+              <text x="6.5" y="10.5" text-anchor="middle" font-size="5.5" font-family="Inter,sans-serif" font-weight="700" fill="white">PDF</text>
+            </svg>
+           </span>`
+        : "";
       return `<tr data-id="${esc(it.id)}" draggable="true">
-        <td>${zoteroBadge}${esc(it.title||"-")}</td>
+        <td style="display:flex;align-items:baseline;gap:3px;">${zoteroBadge}${pdfBadge}<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(it.title||"-")}</span></td>
         ${authors}${year}
       </tr>`;
     }).join("");
