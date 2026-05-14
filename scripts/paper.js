@@ -1213,16 +1213,47 @@
 
   async function loadAbstractFallback(doi){
     if (!doi) return;
-    try {
-      const res = await fetch(`/api/paper/abstract?doi=${encodeURIComponent(doi)}`);
-      if (!res.ok) throw new Error("No fallback abstract");
-      const data = await res.json();
-      if (data?.abstract) {
-        $("abstractBlock").innerHTML = '<h2>Abstract</h2><p>' + escapeHtml(data.abstract) + '</p>';
-      }
-    } catch (e) {
-      // keep default fallback text
+    // Normalise to bare DOI (strip https://doi.org/ prefix)
+    var bare = String(doi).replace(/^doi:/i,"").replace(/^https?:\/\/(dx\.)?doi\.org\//i,"").trim();
+    if (!bare) return;
+
+    function setAbstract(text) {
+      var box = $("abstractBlock");
+      if (box) box.innerHTML = '<h2>Abstract</h2><p>' + escapeHtml(text) + '</p>';
     }
+
+    // 1. Semantic Scholar — CORS-friendly, fast
+    try {
+      var s2 = await fetch("https://api.semanticscholar.org/graph/v1/paper/DOI:"
+        + encodeURIComponent(bare) + "?fields=abstract",
+        { headers: { "Accept": "application/json" } });
+      if (s2.ok) {
+        var s2d = await s2.json();
+        if (s2d && s2d.abstract) { setAbstract(s2d.abstract); return; }
+      }
+    } catch(_) {}
+
+    // 2. Europe PMC — CORS-friendly; bare DOI (no slash encoding) in query
+    try {
+      var epmc = await fetch("https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+        + "?query=DOI:" + bare + "&format=json&resultType=core",
+        { headers: { "Accept": "application/json" } });
+      if (epmc.ok) {
+        var ed = await epmc.json();
+        var result = ed && ed.resultList && ed.resultList.result && ed.resultList.result[0];
+        if (result && result.abstractText) { setAbstract(result.abstractText); return; }
+      }
+    } catch(_) {}
+
+    // 3. Server proxy (CrossRef JATS-stripped) — last resort
+    try {
+      var srv = await fetch("/api/paper/abstract?doi=" + encodeURIComponent(bare));
+      if (srv.ok) {
+        var sd = await srv.json();
+        if (sd && sd.abstract) { setAbstract(sd.abstract); return; }
+      }
+    } catch(_) {}
+    // No abstract found — keep "Looking for an abstract…" placeholder
   }
 
   // ---------- Graph ----------

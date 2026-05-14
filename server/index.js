@@ -60,8 +60,8 @@ app.use((req, res, next) => {
   // CSP: lock down to known origins; 'unsafe-inline' needed for current inline scripts
   res.setHeader("Content-Security-Policy", [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://d1bxh8uas1mnw7.cloudfront.net https://unpkg.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "script-src 'self' 'unsafe-inline' https://d1bxh8uas1mnw7.cloudfront.net https://embed.altmetric.com https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://unpkg.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
     "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk",
@@ -2143,14 +2143,18 @@ app.get("/api/paper/links", async (req, res) => {
   const target = url || (doi ? `https://doi.org/${doi}` : null);
   if (!target) return res.status(400).json({ error: "url or doi required" });
   try {
-    const r = await fetch(target, { headers: { "User-Agent":"ScienceEcosystemBot/1.0 (+https://scienceecosystem.org)" } });
-    if (!r.ok) return res.status(400).json({ error: `Fetch failed ${r.status}` });
+    const r = await fetch(target, {
+      headers: { "User-Agent":"ScienceEcosystemBot/1.0 (+https://scienceecosystem.org)" },
+      redirect: "follow"
+    });
+    // Publisher bot-detection or paywalls → return empty rather than 400
+    if (!r.ok) return res.json([]);
     const html = await r.text();
     const links = extractLinks(html);
     const unique = Array.from(new Set(links));
     res.json(unique.map(h=>({ url: h, provenance:"Publisher page" })));
   } catch (e) {
-    res.status(500).json({ error: String(e.message||e) });
+    res.json([]); // network error — just return empty, don't break the page
   }
 });
 
