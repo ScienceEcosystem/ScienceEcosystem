@@ -1444,12 +1444,12 @@
     var doiClean = doiRaw ? String(doiRaw).replace(/^doi:/i,"").replace(/^https?:\/\/(dx\.)?doi\.org\//i,"") : null;
     var panel = document.createElement("div");
     panel.id = "graphInfoPanel";
-    panel.style.cssText = "background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;gap:10px;align-items:flex-start;";
+    panel.style.cssText = "background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;gap:10px;align-items:flex-start;width:100%;box-sizing:border-box;overflow:hidden;";
     panel.innerHTML =
-      '<div style="flex:1;min-width:0;overflow:hidden;">'
-        +'<div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-bottom:4px;line-height:1.3;overflow-wrap:break-word;word-break:break-word;">'+escapeHtml(w.display_name||"Untitled")+'</div>'
-        +(authStr?'<div style="font-size:.78rem;color:#64748b;margin-bottom:2px;">'+escapeHtml(authStr)+'</div>':"")
-        +'<div style="font-size:.78rem;color:#94a3b8;margin-bottom:6px;">'+(w.publication_year||"")+(venue?" · "+escapeHtml(venue):"")+'</div>'
+      '<div style="flex:1;min-width:0;width:0;overflow:hidden;">'
+        +'<div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-bottom:4px;line-height:1.3;overflow-wrap:anywhere;word-break:break-word;white-space:normal;">'+escapeHtml(w.display_name||"Untitled")+'</div>'
+        +(authStr?'<div style="font-size:.78rem;color:#64748b;margin-bottom:2px;overflow-wrap:anywhere;">'+escapeHtml(authStr)+'</div>':"")
+        +'<div style="font-size:.78rem;color:#94a3b8;margin-bottom:6px;overflow-wrap:anywhere;">'+(w.publication_year||"")+(venue?" · "+escapeHtml(venue):"")+'</div>'
         +'<div style="display:flex;gap:5px;flex-wrap:wrap;">'
           +'<span style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size:.72rem;">📚 '+cites+' citations</span>'
           +(isOa?'<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:.72rem;">Open access</span>':"")

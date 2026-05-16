@@ -65,7 +65,7 @@ globalThis.SE_SESSION_PROMISE = (async function(){
     const me = await globalThis.SE_SESSION_PROMISE;
     if (!me) throw new Error("not signed in");
 
-    // Toggle nav: show Profile + Logout, hide Login
+    // Toggle nav: show Profile + Library + Logout, hide Login
     if (loginBtn)  loginBtn.style.display = "none";
     if (profileLink) {
       profileLink.style.display = "inline-flex";
@@ -73,6 +73,19 @@ globalThis.SE_SESSION_PROMISE = (async function(){
       profileLink.textContent = me.name ? me.name : "My Profile";
       profileLink.setAttribute("title", `Logged in as ${me.orcid}`);
     }
+
+    // Insert Library link once, before the logout button
+    if (!document.getElementById("libraryNavLink")) {
+      const libLink = document.createElement("a");
+      libLink.id = "libraryNavLink";
+      libLink.className = "nav-link";
+      libLink.href = "library.html";
+      libLink.textContent = "Library";
+      const navRight = document.querySelector(".nav-right");
+      if (navRight && logoutBtn) navRight.insertBefore(libLink, logoutBtn);
+      else if (navRight) navRight.appendChild(libLink);
+    }
+
     if (logoutBtn) {
       logoutBtn.style.display = "inline-flex";
       logoutBtn.onclick = async () => {
