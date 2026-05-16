@@ -207,11 +207,10 @@
     // SE Journal Score
     if ($("seScoreValue") && globalThis.SE?.components?.computeJournalTrustIndex) {
       var seScore = SE.components.computeJournalTrustIndex(src);
-      $("seScoreValue").textContent = seScore.total;
-      $("seScoreValue").style.color = seScore.color;
+      $("seScoreValue").textContent = seScore.total + "/100";
       var gradeEl = $("seScoreGrade");
-      if (gradeEl) { gradeEl.textContent = seScore.grade; gradeEl.style.color = seScore.color; }
-      var tip = "SE Journal Score · Openness " + seScore.openness + "/30 · Recognition " + seScore.recognition + "/40 · Scale " + seScore.scale + "/15 · Integrity " + seScore.integrity + "/15";
+      if (gradeEl) gradeEl.textContent = seScore.grade;
+      var tip = "Journal Trust Index (JTI) · Openness " + seScore.openness + "/30 · Recognition " + seScore.recognition + "/40 · Scale " + seScore.scale + "/15 · Integrity " + seScore.integrity + "/15";
       var statEl = $("seScoreStat");
       if (statEl) statEl.title = tip;
     }
@@ -341,8 +340,8 @@
       var valEl  = $("seScoreValue");
       var gradeEl = $("seScoreGrade");
       var statEl  = $("seScoreStat");
-      if (valEl)  { valEl.textContent = "0"; valEl.style.color = "#b91c1c"; }
-      if (gradeEl){ gradeEl.textContent = "Predatory"; gradeEl.style.color = "#b91c1c"; }
+      if (valEl)  valEl.textContent = "0/100";
+      if (gradeEl) gradeEl.textContent = "Predatory";
       if (statEl) statEl.title = "Journal Trust Index — on predatory publisher list (JTI forced to 0)";
 
       // Warning banner in identity column

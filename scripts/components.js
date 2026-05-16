@@ -853,9 +853,9 @@
   function journalTrustIndexBadgeHtml(score) {
     var tip = "Journal Trust Index (JTI) · Openness " + score.openness + "/30 · Recognition " + score.recognition + "/40 · Scale " + score.scale + "/15 · Integrity " + score.integrity + "/15";
     return '<span title="' + tip + '" style="display:inline-flex;align-items:center;gap:.25rem;'
-      + 'background:' + score.color + '18;color:' + score.color + ';border:1px solid ' + score.color + '44;'
+      + 'background:#f1f5f9;color:#374151;border:1px solid #e2e8f0;'
       + 'padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:700;cursor:help;">'
-      + 'SE ' + score.total + ' <span style="font-weight:400;">' + score.grade + '</span>'
+      + 'JTI ' + score.total + '/100'
       + '</span>';
   }
 

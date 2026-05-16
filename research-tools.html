@@ -68,26 +68,28 @@ FILE: research-tools.html
       <p class="lead">Browse and compare open-science tools by category, cost, and purpose.</p>
     </header>
 
-    <section id=”overview” class=”panel”>
-      <div style=”margin-bottom:1.25rem;”>
-        <h2 style=”margin:0 0 .5rem;”>Research tools directory</h2>
-        <p class=”muted” style=”margin:0 0 1rem;”>Browse tools by category or search by name, purpose, or topic.</p>
-        <div style=”display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;”>
-          <input type=”search” id=”toolSearch” class=”input” placeholder=”Search tools…” style=”flex:1;min-width:180px;” aria-label=”Search tools”/>
-          <label class=”visually-hidden” for=”categoryFilter”>Filter by category</label>
-          <select id=”categoryFilter” class=”input select” style=”min-width:160px;”>
-            <option value=””>All categories</option>
-          </select>
-          <label class=”visually-hidden” for=”costFilter”>Filter by cost</label>
-          <select id=”costFilter” class=”input select” style=”min-width:120px;”>
-            <option value=””>Any cost</option>
-            <option value=”Free”>Free</option>
-            <option value=”Freemium”>Freemium</option>
-            <option value=”Paid”>Paid</option>
-          </select>
-        </div>
+    <section class=”panel” style=”margin-bottom:1rem;”>
+      <div style=”display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;”>
+        <input type=”search” id=”toolSearch” class=”input” placeholder=”Search tools by name, purpose, or category…”
+          style=”flex:1;min-width:200px;” aria-label=”Search tools”/>
+        <label class=”visually-hidden” for=”categoryFilter”>Filter by category</label>
+        <select id=”categoryFilter” class=”input select” style=”min-width:160px;”>
+          <option value=””>All categories</option>
+        </select>
+        <label class=”visually-hidden” for=”costFilter”>Filter by cost</label>
+        <select id=”costFilter” class=”input select” style=”min-width:120px;”>
+          <option value=””>Any cost</option>
+          <option value=”Free”>Free</option>
+          <option value=”Freemium”>Freemium</option>
+          <option value=”Paid”>Paid</option>
+        </select>
       </div>
+      <p id=”toolHint” class=”muted” style=”font-size:.8rem;margin:.5rem 0 0;”>
+        Showing all tools by category. Use filters to narrow results.
+      </p>
+    </section>
 
+    <section id=”overview”>
       <div id=”toolGrid”></div>
     </section>
   </main>

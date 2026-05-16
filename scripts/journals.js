@@ -111,8 +111,10 @@ function makeCuratedCard(j) {
       + '<span style="font-size:.72rem;color:#94a3b8;padding:1px 0;">' + escJ(j.publisher) + '</span>'
     + '</div>'
     + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
+      + '<a href="journal.html?name=' + encodeURIComponent(j.name) + '" '
+        + 'style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>'
       + '<a href="' + escJ(j.link) + '" target="_blank" rel="noopener noreferrer" '
-        + 'style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Visit →</a>'
+        + 'style="font-size:.8rem;color:#64748b;text-decoration:none;">Website ↗</a>'
     + '</div>';
   return card;
 }

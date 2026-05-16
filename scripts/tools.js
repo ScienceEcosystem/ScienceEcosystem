@@ -4049,11 +4049,28 @@ function populateToolCategories() {
   populateToolCategories();
   renderToolGrid(toolCatalog);
 
+  const hint = document.getElementById('toolHint');
+  if (hint) hint.textContent = 'Showing ' + toolCatalog.length + ' tools by category. Use filters to narrow results.';
+
   const searchEl   = document.getElementById('toolSearch');
   const categoryEl = document.getElementById('categoryFilter');
   const costEl     = document.getElementById('costFilter');
 
-  if (searchEl)   searchEl.addEventListener('input', applyToolFilters);
-  if (categoryEl) categoryEl.addEventListener('change', applyToolFilters);
-  if (costEl)     costEl.addEventListener('change', applyToolFilters);
+  function onFilter() {
+    applyToolFilters();
+    if (hint) {
+      const q   = (searchEl   ? searchEl.value.trim()   : '');
+      const cat = (categoryEl ? categoryEl.value        : '');
+      const cost = (costEl    ? costEl.value            : '');
+      if (!q && !cat && !cost) {
+        hint.textContent = 'Showing ' + toolCatalog.length + ' tools by category.';
+      } else {
+        hint.textContent = 'Filtering tools' + (q ? ' for "' + q + '"' : '') + (cat ? ' in ' + cat : '') + (cost ? ', ' + cost : '') + '.';
+      }
+    }
+  }
+
+  if (searchEl)   searchEl.addEventListener('input', onFilter);
+  if (categoryEl) categoryEl.addEventListener('change', onFilter);
+  if (costEl)     costEl.addEventListener('change', onFilter);
 })();
