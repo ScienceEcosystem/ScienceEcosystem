@@ -49,15 +49,26 @@ async function boot() {
   _user = authResult.user;
   setFooter(_user);
 
-  // 2. Get metadata from the active tab's content script
+  // 2. Get metadata — inject content script on demand (no <all_urls> needed)
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let meta = null;
   try {
-    meta = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_METADATA" });
-  } catch (_) {
-    // Content script not injected (e.g. chrome:// pages, PDFs)
-  }
+    try {
+      meta = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_METADATA" });
+    } catch (_) {
+      // Not yet injected — use scripting API to inject now
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content/content.js"] });
+      await new Promise(r => setTimeout(r, 80));
+      meta = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_METADATA" });
+    }
+  } catch (_) { /* chrome://, PDF, restricted page */ }
   _meta = meta;
+
+  // Badge: set here instead of from the auto-injected content script
+  if (meta?.detected) {
+    chrome.action.setBadgeText({ text: "1", tabId: tab.id });
+    chrome.action.setBadgeBackgroundColor({ color: "#2e7f9f", tabId: tab.id });
+  }
 
   if (!meta?.detected) {
     showState("stateNoPaper");

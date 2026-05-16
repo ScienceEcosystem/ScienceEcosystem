@@ -128,12 +128,31 @@ chrome.omnibox.onInputEntered.addListener((text, disposition) => {
   }
 });
 
+// ── Content script injection on demand ────────────────────────────────────────
+// The content script is NOT injected automatically on all pages (avoids broad
+// host permission warning). Instead we inject it only when the user acts.
+
+async function ensureContentScript(tabId) {
+  try {
+    // If script already running, PING returns immediately
+    await chrome.tabs.sendMessage(tabId, { type: "PING" });
+  } catch (_) {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ["content/content.js"] });
+      // Brief pause so the script's message listener registers
+      await new Promise(r => setTimeout(r, 80));
+    } catch (_) { /* chrome:// pages, PDFs, etc. — silent fail */ }
+  }
+}
+
 // ── Keyboard shortcut ─────────────────────────────────────────────────────────
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== "save-paper") return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
+
+  await ensureContentScript(tab.id);
 
   let meta;
   try { meta = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_METADATA" }); } catch (_) {}
@@ -229,16 +248,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.type === "OPEN_SE") {
     chrome.tabs.create({ url: `${SE_BASE}/${msg.path || ""}` });
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (msg.type === "PAPER_DETECTED") {
-    const tabId = _sender.tab?.id;
-    if (tabId) {
-      chrome.action.setBadgeText({ text: "1", tabId });
-      chrome.action.setBadgeBackgroundColor({ color: "#2e7f9f", tabId });
-    }
     sendResponse({ ok: true });
     return true;
   }

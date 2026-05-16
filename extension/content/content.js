@@ -309,20 +309,13 @@
   // ── Message listener ───────────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg.type === "GET_PAGE_METADATA") {
+    if (msg.type === "PING") {
+      // Used by background/popup to check if script is already injected
+      sendResponse({ ok: true });
+    } else if (msg.type === "GET_PAGE_METADATA") {
       sendResponse(getPageMetadata());
     }
-    return true; // keep channel open for async
+    return true;
   });
-
-  // ── Proactive badge notification ───────────────────────────────────────────
-  // Tell the background to set the action badge when a paper is detected.
-
-  try {
-    const _initMeta = getPageMetadata();
-    if (_initMeta.detected) {
-      chrome.runtime.sendMessage({ type: "PAPER_DETECTED" }).catch(() => {});
-    }
-  } catch (_) {}
 
 })();
