@@ -131,15 +131,19 @@ function makeOpenAlexCard(s) {
   const pub    = s.host_organization_name || '';
   const site   = s.homepage_url || '';
 
+  const seScore   = (globalThis.SE?.components?.computeJournalTrustIndex) ? SE.components.computeJournalTrustIndex(s) : null;
+  const scoreBadge = seScore ? SE.components.journalTrustIndexBadgeHtml(seScore) : '';
+
   card.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">'
       + nameHtml
       + oaBadge(s.is_oa, s.is_in_doaj)
     + '</div>'
     + (pub ? '<p style="font-size:.78rem;color:#64748b;margin:0;">' + escJ(pub) + '</p>' : '')
-    + '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.2rem;">'
+    + '<div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-top:.2rem;">'
       + '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">' + works + ' works</span>'
       + (hIndex ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">h-index ' + hIndex + '</span>' : '')
+      + scoreBadge
     + '</div>'
     + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
       + (pageUrl ? '<a href="' + escJ(pageUrl) + '" style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>' : '')

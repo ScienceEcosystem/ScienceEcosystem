@@ -811,9 +811,59 @@
   }
   setupNavDropdowns();
 
+  // ---------- Journal Trust Index (JTI) ----------
+  function computeJournalTrustIndex(src) {
+    if (!src) return { total: 0, grade: "Unknown", color: "#94a3b8", openness: 0, recognition: 0, scale: 0, integrity: 0 };
+    var isDoaj    = !!src.is_in_doaj;
+    var isOa      = !!src.is_oa;
+    var stats     = src.summary_stats || {};
+    var citedness = +stats["2yr_mean_citedness"] || 0;
+    var works     = +(src.works_count || 0);
+    var type      = String(src.type || "").toLowerCase();
+
+    // Openness (0–30): DOAJ verified gold OA=30, OA=20, Closed=0
+    var openness = isDoaj ? 30 : isOa ? 20 : 0;
+
+    // Recognition (0–40): log10-scaled 2yr mean citedness (open-source IF proxy)
+    // 0→0  1→13  5→26  50→40  (cap reference: citedness=100 → top journals)
+    var recognition = citedness > 0
+      ? Math.min(40, Math.round(40 * Math.log10(1 + citedness) / Math.log10(101)))
+      : 0;
+
+    // Scale (0–15): log10-scaled works count
+    // 100→5  1k→10  50k→~14  (cap reference: 100k works)
+    var scale = works > 0
+      ? Math.min(15, Math.round(15 * Math.log10(1 + works) / Math.log10(100001)))
+      : 0;
+
+    // Integrity (0–15): not preprint/repo=10, + OA transparency bonus=5
+    var isPreprintOrRepo = type.includes("repository") || type.includes("preprint");
+    var integrity = isPreprintOrRepo ? 0 : (isDoaj || isOa ? 15 : 10);
+
+    var total = openness + recognition + scale + integrity;
+    var grade = "Poor", color = "#c0392b";
+    if (total >= 85) { grade = "Excellent"; color = "#27ae60"; }
+    else if (total >= 70) { grade = "Good";      color = "#2e7f9f"; }
+    else if (total >= 50) { grade = "Fair";      color = "#f39c12"; }
+    else if (total >= 30) { grade = "Limited";   color = "#e67e22"; }
+
+    return { total: total, grade: grade, color: color, openness: openness, recognition: recognition, scale: scale, integrity: integrity };
+  }
+
+  function journalTrustIndexBadgeHtml(score) {
+    var tip = "Journal Trust Index (JTI) · Openness " + score.openness + "/30 · Recognition " + score.recognition + "/40 · Scale " + score.scale + "/15 · Integrity " + score.integrity + "/15";
+    return '<span title="' + tip + '" style="display:inline-flex;align-items:center;gap:.25rem;'
+      + 'background:' + score.color + '18;color:' + score.color + ';border:1px solid ' + score.color + '44;'
+      + 'padding:1px 8px;border-radius:10px;font-size:.72rem;font-weight:700;cursor:help;">'
+      + 'SE ' + score.total + ' <span style="font-weight:400;">' + score.grade + '</span>'
+      + '</span>';
+  }
+
   // ---------- export ----------
   (globalThis.SE ??= {}).components = {
     renderPaperCard: renderPaperCard,
-    enhancePaperCards: enhancePaperCards
+    enhancePaperCards: enhancePaperCards,
+    computeJournalTrustIndex: computeJournalTrustIndex,
+    journalTrustIndexBadgeHtml: journalTrustIndexBadgeHtml
   };
 })();

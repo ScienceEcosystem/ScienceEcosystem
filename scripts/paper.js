@@ -557,18 +557,6 @@
     }
     return false;
   }
-  function computeJournalScore(src){
-    var score = 3;
-    if (get(src, "is_in_doaj", false)) score += 1;
-    if (get(src, "is_oa", false)) score += 1;
-    var works = +get(src, "works_count", 0) || 0;
-    if (works > 10000) score += 1;
-    if (works < 100) score -= 1;
-    var type = String(get(src, "type", "") || "").toLowerCase();
-    if (type.includes("repository") || type.includes("preprint")) score = Math.max(1, score - 2);
-    return Math.max(1, Math.min(5, score));
-  }
-
   function buildFundingRow(p){
     var grants = Array.isArray(p.grants) ? p.grants : [];
     var funderNames = Array.isArray(p.funder_display_names) ? p.funder_display_names : [];
@@ -803,13 +791,14 @@
     var peerText = isPreprint ? "Preprint / repository (not peer reviewed)" :
       (hasOpenPeerReview(journalName) ? "Peer reviewed (open/transparent)" : "Peer reviewed");
 
-    var stars = computeJournalScore(source || {});
-    var starStr = "★".repeat(stars) + "☆".repeat(5 - stars);
     // Weighted quality score (0-100)
     var peerReviewScore = 0;
     if (peerText === "Peer reviewed" || peerText === "Peer reviewed (open/transparent)") peerReviewScore = 40;
     else if (peerText === "Editorial review only") peerReviewScore = 20;
-    var journalRankScore = Math.round((stars / 5) * 40);
+    var seScore = globalThis.SE?.components?.computeJournalTrustIndex
+      ? SE.components.computeJournalTrustIndex(source || {})
+      : { total: 0, grade: "Unknown", color: "#94a3b8", openness: 0, recognition: 0, scale: 0, integrity: 0 };
+    var journalRankScore = Math.round(seScore.total / 100 * 40);
     var openAccessScore = get(p, "open_access.is_oa", false) ? 20 : 0;
     var percent = peerReviewScore + journalRankScore + openAccessScore;
 
@@ -839,10 +828,9 @@
     else if (peerText === "Editorial review only") indicators.push({ icon: "~", label: "Editorial review only", status: "partial" });
     else indicators.push({ icon: "X", label: "Not peer reviewed", status: "no" });
 
-    if (stars >= 4) indicators.push({ icon: "✅ ", label: "High-impact journal ("+stars+"/5)", status: "yes" });
-    else if (stars >= 3) indicators.push({ icon: "~", label: "Mid-tier journal ("+stars+"/5)", status: "partial" });
-    else if (stars > 0) indicators.push({ icon: "~", label: "Lower-tier journal ("+stars+"/5)", status: "partial" });
-    else indicators.push({ icon: "X", label: "Journal rating unknown", status: "no" });
+    if (seScore.total >= 70) indicators.push({ icon: "✅ ", label: "Journal: " + seScore.grade + " (JTI " + seScore.total + "/100)", status: "yes" });
+    else if (seScore.total >= 30) indicators.push({ icon: "~", label: "Journal: " + seScore.grade + " (JTI " + seScore.total + "/100)", status: "partial" });
+    else indicators.push({ icon: "~", label: "Journal: " + seScore.grade + " (JTI " + seScore.total + "/100)", status: "partial" });
 
     if (get(p, "open_access.is_oa", false)) indicators.push({ icon: "✅ ", label: "Open access", status: "yes" });
     else indicators.push({ icon: "~", label: "Behind paywall", status: "partial" });
@@ -855,6 +843,10 @@
         '</div>';
     }).join('');
 
+    var seScoreBadge = globalThis.SE?.components?.journalTrustIndexBadgeHtml
+      ? SE.components.journalTrustIndexBadgeHtml(seScore)
+      : '';
+
     $("journalBlock").innerHTML =
       '<div class="repro-score" style="text-align:center; margin-bottom:1rem;">' +
         '<div style="font-size:3rem; font-weight:700; color:'+color+';">'+percent+'%</div>' +
@@ -864,15 +856,15 @@
         '</div>' +
       '</div>' +
       '<div class="repro-checklist">' + indicatorsHtml + '</div>' +
-      '<p style="margin-top:1rem; font-size:0.9rem; color:#666;"><strong>Journal:</strong> '+journalLinkHtml+'</p>' +
+      '<p style="margin-top:1rem; font-size:0.9rem; color:#666;"><strong>Journal:</strong> '+journalLinkHtml+' '+seScoreBadge+'</p>' +
       '<details style="margin-top:1rem;">' +
         '<summary style="cursor:pointer; color:#2e7f9f; font-size:0.9rem;">How is this calculated?</summary>' +
         '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem; line-height:1.5;">' +
-          'Journal quality is based on:<br>' +
-          '• Peer review process (40%)<br>' +
-          '• Journal impact/ranking (40%)<br>' +
-          '• Open access status (20%)<br><br>' +
-          'This helps assess the credibility and accessibility of the publication venue.' +
+          'Publication quality combines three signals:<br>' +
+          '• Peer review (40%) — whether the work is peer reviewed<br>' +
+          '• Journal Trust Index (JTI) (40%) — Openness (DOAJ/OA), Recognition (2yr citedness), Scale (works count), Integrity (journal type)<br>' +
+          '• Open access (20%) — whether this paper is freely available<br><br>' +
+          'The Journal Trust Index (JTI) (0–100) is an open, reproducible measure computed from public OpenAlex data — a transparent alternative to proprietary impact factors.' +
         '</p>' +
       '</details>' +
       checks;

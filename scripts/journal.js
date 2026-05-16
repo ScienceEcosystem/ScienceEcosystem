@@ -204,6 +204,18 @@
     if ($("oaStatus")) $("oaStatus").textContent = oa ? "Yes" : "No";
     if ($("doajStatus")) $("doajStatus").textContent = doaj ? "Yes" : "No";
 
+    // SE Journal Score
+    if ($("seScoreValue") && globalThis.SE?.components?.computeJournalTrustIndex) {
+      var seScore = SE.components.computeJournalTrustIndex(src);
+      $("seScoreValue").textContent = seScore.total;
+      $("seScoreValue").style.color = seScore.color;
+      var gradeEl = $("seScoreGrade");
+      if (gradeEl) { gradeEl.textContent = seScore.grade; gradeEl.style.color = seScore.color; }
+      var tip = "SE Journal Score · Openness " + seScore.openness + "/30 · Recognition " + seScore.recognition + "/40 · Scale " + seScore.scale + "/15 · Integrity " + seScore.integrity + "/15";
+      var statEl = $("seScoreStat");
+      if (statEl) statEl.title = tip;
+    }
+
     // Topics (x_concepts if present on source; may be absent)
     var xconcepts = Array.isArray(src.x_concepts) ? src.x_concepts.slice() : [];
     xconcepts.sort((a,b)=>(b.score||0)-(a.score||0));
@@ -310,6 +322,44 @@
     }
   }
 
+  async function checkPredatoryAndUpdate(src) {
+    var issns = Array.isArray(src.issn) ? src.issn : [];
+    var params = new URLSearchParams();
+    params.set("issn",  issns[0] || "");
+    params.set("issnl", src.issn_l || "");
+    params.set("name",  src.display_name || "");
+    params.set("id",    idTailFrom(src.id || ""));
+    params.set("url",   src.homepage_url || "");
+
+    try {
+      var res = await fetch("/api/journal/integrity?" + params.toString(), { headers: { "Accept": "application/json" } });
+      if (!res.ok) return;
+      var data = await res.json();
+      if (!data.onPredatoryList) return;
+
+      // Override JTI stat
+      var valEl  = $("seScoreValue");
+      var gradeEl = $("seScoreGrade");
+      var statEl  = $("seScoreStat");
+      if (valEl)  { valEl.textContent = "0"; valEl.style.color = "#b91c1c"; }
+      if (gradeEl){ gradeEl.textContent = "Predatory"; gradeEl.style.color = "#b91c1c"; }
+      if (statEl) statEl.title = "Journal Trust Index — on predatory publisher list (JTI forced to 0)";
+
+      // Warning banner in identity column
+      var identity = document.querySelector(".identity");
+      if (identity) {
+        var banner = document.createElement("div");
+        banner.style.cssText = "background:#fef2f2;border:2px solid #b91c1c;border-radius:10px;padding:.75rem 1rem;margin-top:.75rem;";
+        banner.innerHTML =
+          '<strong style="color:#b91c1c;">Predatory journal</strong> '
+          + '<span style="font-size:.85rem;color:#7f1d1d;">— This journal appears on predatory publisher lists. '
+          + 'Peer review claims cannot be verified. Treat content with caution. '
+          + '<a href="https://beallslist.net/" target="_blank" rel="noopener" style="color:#b91c1c;">Beall\'s List</a></span>';
+        identity.appendChild(banner);
+      }
+    } catch(_) {}
+  }
+
   async function boot(){
     try{
       var raw = getParam("id");
@@ -347,6 +397,7 @@
       renderHeader(src);
       populatePublisher(src);
       renderTrends(src);
+      checkPredatoryAndUpdate(src);
 
       // Works API (OpenAlex usually provides this on the entity)
       worksApiBaseUrl = get(src, "works_api_url", null);
