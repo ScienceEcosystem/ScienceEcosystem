@@ -4046,15 +4046,24 @@ function populateToolCategories() {
 }
 
 (function initTools() {
-  populateToolCategories();
-  renderToolGrid(toolCatalog);
-
+  const grid = document.getElementById('toolGrid');
   const hint = document.getElementById('toolHint');
-  if (hint) hint.textContent = 'Showing ' + toolCatalog.length + ' tools by category. Use filters to narrow results.';
+
+  try {
+    populateToolCategories();
+    renderToolGrid(toolCatalog);
+    if (hint) hint.textContent = 'Showing ' + toolCatalog.length + ' tools by category. Use filters to narrow results.';
+  } catch (err) {
+    console.error('tools.js initTools error:', err);
+    if (grid) grid.innerHTML = '<p style="color:#b91c1c;padding:1rem;background:#fef2f2;border-radius:8px;"><strong>Error loading tools:</strong> ' + (err && err.message ? err.message : String(err)) + '</p>';
+    if (hint) hint.textContent = 'Failed to load tools. Check the browser console for details.';
+    return;
+  }
 
   const searchEl   = document.getElementById('toolSearch');
   const categoryEl = document.getElementById('categoryFilter');
   const costEl     = document.getElementById('costFilter');
+  if (!searchEl && !grid) return;
 
   function onFilter() {
     applyToolFilters();
