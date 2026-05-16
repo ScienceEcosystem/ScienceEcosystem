@@ -84,7 +84,9 @@ self.addEventListener("fetch", (event) => {
     url.hostname.includes("datacite.org") ||
     url.hostname.includes("unpaywall.org") ||
     url.hostname.includes("api.figshare.com") ||
-    url.hostname.includes("api.github.com");
+    url.hostname.includes("api.github.com") ||
+    url.hostname.includes("semanticscholar.org") ||
+    url.hostname.includes("ebi.ac.uk");
 
   if (isApiCall) {
     event.respondWith(networkFirstWithCache(request, DATA_CACHE, 60 * 1000)); // 1 min TTL

@@ -718,8 +718,8 @@
     try {
       var clean = String(doi).replace(/^doi:/i,"").replace(/^https?:\/\/(dx\.)?doi\.org\//i,"");
       var res = await fetch(
-        "https://api.semanticscholar.org/graph/v1/paper/DOI:" + encodeURIComponent(clean) + "?fields=citationCount",
-        { headers: { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" } }
+        "https://api.semanticscholar.org/graph/v1/paper/DOI:" + clean + "?fields=citationCount",
+        { headers: { "Accept": "application/json" } }
       );
       if (!res.ok) return null;
       var data = await res.json();
@@ -1217,7 +1217,7 @@
     // 1. Semantic Scholar — CORS-friendly, fast
     try {
       var s2 = await fetch("https://api.semanticscholar.org/graph/v1/paper/DOI:"
-        + encodeURIComponent(bare) + "?fields=abstract",
+        + bare + "?fields=abstract",
         { headers: { "Accept": "application/json" } });
       if (s2.ok) {
         var s2d = await s2.json();
