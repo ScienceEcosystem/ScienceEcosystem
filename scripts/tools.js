@@ -4045,7 +4045,7 @@ function populateToolCategories() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+(function initTools() {
   populateToolCategories();
   renderToolGrid(toolCatalog);
 
@@ -4056,4 +4056,4 @@ document.addEventListener('DOMContentLoaded', function() {
   if (searchEl)   searchEl.addEventListener('input', applyToolFilters);
   if (categoryEl) categoryEl.addEventListener('change', applyToolFilters);
   if (costEl)     costEl.addEventListener('change', applyToolFilters);
-});
+})();

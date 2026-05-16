@@ -243,7 +243,8 @@ async function searchJournals(query, oaOnly) {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', function() {
+// defer guarantees DOM is parsed — run directly
+(function initJournals() {
   const searchEl = document.getElementById('journalSearch');
   const oaEl     = document.getElementById('oaOnly');
   const hint      = document.getElementById('searchHint');
@@ -274,4 +275,4 @@ document.addEventListener('DOMContentLoaded', function() {
       else renderDefault(isOaOnly());
     });
   }
-});
+})();
