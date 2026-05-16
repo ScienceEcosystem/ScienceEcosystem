@@ -1298,6 +1298,21 @@
       return new Set(parsed.refs);
     }catch(e){ return null; }
   }
+  // Purge expired refmap entries so localStorage doesn't grow unboundedly
+  (function purgeStaleRefmaps(){
+    try{
+      var now = Date.now(), toDelete = [];
+      for (var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i);
+        if (!k || !k.startsWith(CACHE_PREFIX)) continue;
+        try{
+          var p = JSON.parse(localStorage.getItem(k));
+          if (!p || !p.t || now - p.t > CACHE_TTL_MS) toDelete.push(k);
+        }catch(e){ toDelete.push(k); }
+      }
+      toDelete.forEach(function(k){ localStorage.removeItem(k); });
+    }catch(e){}
+  })();
   async function fetchRefsFor(workIdTails){
     var out = Object.create(null);
     var idsToFetch = [];

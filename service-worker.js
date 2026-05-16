@@ -4,7 +4,7 @@
 //   - API calls to OpenAlex etc  → Network First (fresh data)
 //   - Everything else             → Network First with cache fallback
 
-const CACHE_VERSION = "se-v4";
+const CACHE_VERSION = "se-v5";
 const STATIC_CACHE = CACHE_VERSION + "-static";
 const DATA_CACHE = CACHE_VERSION + "-data";
 
@@ -94,21 +94,22 @@ self.addEventListener("fetch", (event) => {
   }
 
   // ── 2. Static assets on our own origin ──
-  //    Cache First: serve from cache instantly, revalidate in background
-  const isStaticAsset =
-    url.origin === self.location.origin &&
-    (url.pathname.endsWith(".css") ||
-      url.pathname.endsWith(".js") ||
-      url.pathname.endsWith(".png") ||
-      url.pathname.endsWith(".jpg") ||
-      url.pathname.endsWith(".svg") ||
-      url.pathname.endsWith(".ico") ||
-      url.pathname.endsWith(".woff2") ||
-      url.pathname.endsWith(".woff"));
-
-  if (isStaticAsset) {
-    event.respondWith(cacheFirstWithRevalidate(request, STATIC_CACHE));
-    return;
+  //    JS/CSS: Network First (1 s timeout) so updates land on first reload.
+  //    Images/fonts: Cache First — they rarely change and benefit from instant load.
+  if (url.origin === self.location.origin) {
+    if (url.pathname.endsWith(".js") || url.pathname.endsWith(".css")) {
+      event.respondWith(networkFirstWithCache(request, STATIC_CACHE, 1000));
+      return;
+    }
+    if (url.pathname.endsWith(".png") ||
+        url.pathname.endsWith(".jpg") ||
+        url.pathname.endsWith(".svg") ||
+        url.pathname.endsWith(".ico") ||
+        url.pathname.endsWith(".woff2") ||
+        url.pathname.endsWith(".woff")) {
+      event.respondWith(cacheFirstWithRevalidate(request, STATIC_CACHE));
+      return;
+    }
   }
 
   // ── 3. HTML navigation pages ──
