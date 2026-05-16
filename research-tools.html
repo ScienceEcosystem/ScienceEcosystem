@@ -64,55 +64,31 @@ FILE: research-tools.html
 
   <main id="main" class="container">
     <header class="page-header hero">
-      <h1>Research Tools Guide</h1>
-      <p class="lead">Describe your task and get matched to the best tool. Compare options by purpose, ease of use, and cost.</p>
+      <h1>Research Tools Directory</h1>
+      <p class="lead">Browse and compare open-science tools by category, cost, and purpose.</p>
     </header>
 
-    <section id="overview" class="panel">
-      <div class="overview-header">
-        <div>
-          <h2>Overview of research tools</h2>
-          <p class="muted">Compare tools by purpose, cost, ease, and strengths. Use filters to narrow quickly.</p>
-        </div>
-        <div class="finder-grid" style="margin-top: 1rem;">
-          <div>
-            <h3>Describe your task</h3>
-            <label class="visually-hidden" for="problemInput">Describe your research task</label>
-            <textarea id="problemInput" class="input" rows="3" placeholder="e.g., “I need to clean messy CSV data and run quick visualizations with teammates.”"></textarea>
-            <div class="finder-actions">
-              <button class="btn btn-primary" id="findToolsBtn" type="button">Find tools</button>
-              <p class="muted small">Search by keywords, categories, or costs. We highlight open, reproducible options first.</p>
-            </div>
-          </div>
-          <div>
-            <div class="finder-note">
-              <h3>How we pick tools</h3>
-              <ul>
-                <li>Match to the task you describe.</li>
-                <li>Favor open-source or free-first options.</li>
-                <li>Highlight ease of use and active communities.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div class="filter-bar" style="margin-top: 1rem;">
-          <label class="visually-hidden" for="categoryFilter">Filter by category</label>
-          <select id="categoryFilter" class="input select">
-            <option value="">All categories</option>
+    <section id=”overview” class=”panel”>
+      <div style=”margin-bottom:1.25rem;”>
+        <h2 style=”margin:0 0 .5rem;”>Research tools directory</h2>
+        <p class=”muted” style=”margin:0 0 1rem;”>Browse tools by category or search by name, purpose, or topic.</p>
+        <div style=”display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;”>
+          <input type=”search” id=”toolSearch” class=”input” placeholder=”Search tools…” style=”flex:1;min-width:180px;” aria-label=”Search tools”/>
+          <label class=”visually-hidden” for=”categoryFilter”>Filter by category</label>
+          <select id=”categoryFilter” class=”input select” style=”min-width:160px;”>
+            <option value=””>All categories</option>
           </select>
-          <label class="visually-hidden" for="costFilter">Filter by cost</label>
-          <select id="costFilter" class="input select">
-            <option value="">Any cost</option>
-            <option value="Free">Free</option>
-            <option value="Freemium">Freemium</option>
-            <option value="Paid">Paid</option>
+          <label class=”visually-hidden” for=”costFilter”>Filter by cost</label>
+          <select id=”costFilter” class=”input select” style=”min-width:120px;”>
+            <option value=””>Any cost</option>
+            <option value=”Free”>Free</option>
+            <option value=”Freemium”>Freemium</option>
+            <option value=”Paid”>Paid</option>
           </select>
         </div>
       </div>
 
-
-      <div id="toolGrid" class="tool-grid"></div>
+      <div id=”toolGrid”></div>
     </section>
   </main>
 

@@ -3946,21 +3946,9 @@ const toolCatalog = [
   }
 ];
 
-const finderState = {
-  defaultCount: 4
-};
+// ── UI ────────────────────────────────────────────────────────────────────────
 
-const keywordMatchers = [
-  { pattern: /write|manuscript|paper|latex|draft|author/, topic: 'writing' },
-  { pattern: /cite|citation|reference|bibliograph/, topic: 'citation' },
-  { pattern: /clean|messy|deduplicat|normalize|tidy/, topic: 'cleaning' },
-  { pattern: /analysis|stat|model|regression|visuali|python|r\b|notebook|code/, topic: 'analysis' },
-  { pattern: /collaborat|team|coauthor|share/, topic: 'collaboration' },
-  { pattern: /publish|archive|doi|deposit|repository|data set|dataset/, topic: 'publishing' },
-  { pattern: /reproducib|workflow|environment|binder|container/, topic: 'reproducibility' },
-  { pattern: /free|budget|open source|no cost/, topic: 'budget' },
-  { pattern: /easy|quick|beginner|simple/, topic: 'ease' },
-];
+// keywordMatchers removed — simple text search replaces the scoring system
 
 function scoreTool(tool, text) {
   const lower = text.toLowerCase();
@@ -4049,59 +4037,12 @@ function scoreTool(tool, text) {
   return { score, reasons };
 }
 
-function renderRecommendations(problemText) {
-  const container = document.getElementById('recommendations');
-  if (!container) return;
 
-  const scored = toolCatalog
-    .map(tool => {
-      const { score, reasons } = scoreTool(tool, problemText);
-      return { tool, score, reasons };
-    })
-    .sort((a, b) => b.score - a.score);
+// ── Rendering ─────────────────────────────────────────────────────────────────
 
-  const meaningful = problemText.trim()
-    ? scored.filter(entry => entry.score > 0)
-    : scored;
-
-  const picks = (meaningful.length ? meaningful : scored).slice(0, finderState.defaultCount);
-
-  if (!picks.length) {
-    container.innerHTML = '<p class="muted">Add a sentence about your task to see recommendations.</p>';
-    return;
-  }
-
-  container.innerHTML = '';
-  picks.forEach(({ tool, score, reasons }) => {
-    const reasonText = reasons.length
-      ? `Why: ${Array.from(new Set(reasons)).slice(0, 3).join(', ')}.`
-      : 'Why: Solid default for open, reproducible workflows.';
-
-    const card = document.createElement('article');
-    card.className = 'rec-card';
-    card.innerHTML = `
-      <div class="rec-head">
-        <div>
-          <h3>${tool.name}</h3>
-          <p class="muted small">${tool.category}</p>
-        </div>
-        <div class="pill-row">
-          <span class="badge">${tool.cost}</span>
-          <span class="badge badge-ease">${tool.ease}</span>
-          ${tool.open ? '<span class="badge badge-open">Open-source</span>' : ''}
-        </div>
-      </div>
-      <p class="rec-summary">${tool.summary}</p>
-      <p class="rec-why">${reasonText}</p>
-      <div class="chip-row">
-        ${tool.tags.slice(0, 4).map(tag => `<span class="badge">${tag}</span>`).join('')}
-      </div>
-      <div class="rec-actions">
-        <a class="btn btn-secondary" href="${tool.link}" target="_blank" rel="noopener">Open ${tool.name}</a>
-        <span class="alt-note">Best for: ${tool.bestFor}${tool.alternatives ? ` · Alternatives: ${tool.alternatives}` : ''}</span>
-      </div>
-    `;
-    container.appendChild(card);
+function esc(str) {
+  return String(str || '').replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
   });
 }
 
@@ -4111,49 +4052,69 @@ function renderToolGrid(list) {
   grid.innerHTML = '';
 
   if (!list.length) {
-    grid.innerHTML = '<p class="muted">No tools match those filters yet.</p>';
+    grid.innerHTML = '<p class="muted" style="padding:.5rem 0;">No tools match those filters.</p>';
     return;
   }
 
-  list.forEach(tool => {
-    const card = document.createElement('article');
-    card.className = 'tool-card';
-    card.innerHTML = `
-      <div class="tool-meta">
-        <h3>${tool.name}</h3>
-        <div class="pill-row">
-          <span class="badge">${tool.cost}</span>
-          <span class="badge badge-ease">${tool.ease}</span>
-          ${tool.open ? '<span class="badge badge-open">Open-source</span>' : ''}
-          <span class="badge">${tool.category}</span>
-        </div>
-      </div>
-      <p class="rec-summary">${tool.summary}</p>
-      <p class="tool-strengths">Strengths: ${tool.strengths.join(', ')}</p>
-      <div class="tool-footer">
-        <span class="alt-note">Best for: ${tool.bestFor}</span>
-        <a href="${tool.link}" target="_blank" rel="noopener">Visit</a>
-      </div>
-    `;
-    grid.appendChild(card);
+  // Group by category
+  const byCategory = Object.create(null);
+  list.forEach(function(tool) {
+    if (!byCategory[tool.category]) byCategory[tool.category] = [];
+    byCategory[tool.category].push(tool);
+  });
+
+  // Sort categories alphabetically, tools within each category alphabetically
+  const categories = Object.keys(byCategory).sort();
+
+  categories.forEach(function(cat) {
+    const section = document.createElement('div');
+    section.style.cssText = 'margin-bottom:2rem;';
+
+    section.innerHTML = '<h3 style="font-size:.95rem;font-weight:700;color:#374151;margin:0 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid #e5e7eb;">'
+      + esc(cat) + '</h3>';
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.75rem;';
+
+    byCategory[cat]
+      .slice()
+      .sort(function(a, b) { return a.name.localeCompare(b.name); })
+      .forEach(function(tool) {
+        const card = document.createElement('article');
+        card.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;display:flex;flex-direction:column;gap:.5rem;';
+        card.innerHTML =
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">'
+            + '<span style="font-size:.9rem;font-weight:700;color:#0f172a;">' + esc(tool.name) + '</span>'
+            + '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:2px 7px;border-radius:10px;flex-shrink:0;">' + esc(tool.cost) + '</span>'
+          + '</div>'
+          + '<p style="font-size:.82rem;color:#475569;margin:0;line-height:1.45;">' + esc(tool.summary) + '</p>'
+          + (tool.open ? '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:2px 7px;border-radius:10px;width:fit-content;">Open-source</span>' : '')
+          + '<div style="margin-top:auto;padding-top:.25rem;">'
+            + '<a href="' + esc(tool.link) + '" target="_blank" rel="noopener noreferrer" '
+            + 'style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Visit ' + esc(tool.name) + ' →</a>'
+          + '</div>';
+        row.appendChild(card);
+      });
+
+    section.appendChild(row);
+    grid.appendChild(section);
   });
 }
 
 function applyFilters() {
-  const searchTerm = (document.getElementById('problemInput')?.value || '').toLowerCase();
-  const category = document.getElementById('categoryFilter')?.value || '';
-  const cost = document.getElementById('costFilter')?.value || '';
+  const searchTerm = ((document.getElementById('toolSearch') || {}).value || '').toLowerCase().trim();
+  const category   = ((document.getElementById('categoryFilter') || {}).value || '');
+  const cost       = ((document.getElementById('costFilter') || {}).value || '');
 
-  const filtered = toolCatalog.filter(tool => {
+  const filtered = toolCatalog.filter(function(tool) {
     const matchesSearch = !searchTerm
       || tool.name.toLowerCase().includes(searchTerm)
       || tool.summary.toLowerCase().includes(searchTerm)
-      || tool.bestFor.toLowerCase().includes(searchTerm)
-      || tool.tags.some(tag => tag.toLowerCase().includes(searchTerm));
-
+      || tool.category.toLowerCase().includes(searchTerm)
+      || (tool.bestFor || '').toLowerCase().includes(searchTerm)
+      || tool.tags.some(function(tag) { return tag.toLowerCase().includes(searchTerm); });
     const matchesCategory = !category || tool.category === category;
-    const matchesCost = !cost || tool.cost === cost;
-
+    const matchesCost     = !cost     || tool.cost === cost;
     return matchesSearch && matchesCategory && matchesCost;
   });
 
@@ -4163,37 +4124,24 @@ function applyFilters() {
 function populateCategories() {
   const select = document.getElementById('categoryFilter');
   if (!select) return;
-  const categories = Array.from(new Set(toolCatalog.map(t => t.category))).sort();
-  categories.forEach(cat => {
-    const option = document.createElement('option');
-    option.value = cat;
-    option.textContent = cat;
-    select.appendChild(option);
+  const categories = Array.from(new Set(toolCatalog.map(function(t) { return t.category; }))).sort();
+  categories.forEach(function(cat) {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = cat;
+    select.appendChild(opt);
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const findBtn = document.getElementById('findToolsBtn');
-  const problemInput = document.getElementById('problemInput');
-
+document.addEventListener('DOMContentLoaded', function() {
   populateCategories();
   renderToolGrid(toolCatalog);
-  renderRecommendations(problemInput?.value || '');
 
-  findBtn?.addEventListener('click', () => {
-    renderRecommendations(problemInput.value);
-    applyFilters();
-  });
-  problemInput?.addEventListener('keydown', (evt) => {
-    if (evt.key === 'Enter' && (evt.metaKey || evt.ctrlKey)) {
-      renderRecommendations(problemInput.value);
-      applyFilters();
-    }
-  });
-  problemInput?.addEventListener('input', () => {
-    applyFilters();
-    renderRecommendations(problemInput.value);
-  });
-  document.getElementById('categoryFilter')?.addEventListener('change', applyFilters);
-  document.getElementById('costFilter')?.addEventListener('change', applyFilters);
+  const searchEl   = document.getElementById('toolSearch');
+  const categoryEl = document.getElementById('categoryFilter');
+  const costEl     = document.getElementById('costFilter');
+
+  if (searchEl)   searchEl.addEventListener('input', applyFilters);
+  if (categoryEl) categoryEl.addEventListener('change', applyFilters);
+  if (costEl)     costEl.addEventListener('change', applyFilters);
 });
