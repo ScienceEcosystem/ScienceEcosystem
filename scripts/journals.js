@@ -63,312 +63,215 @@ let journalCatalog = [
   { id: "ijerph", name: "International Journal of Environmental Research and Public Health", discipline: "Public Health", articleTypes: ["Research", "Review"], oaPolicy: "OA", apcBand: "1500-3500", speed: "Fast", ambition: "Rapid", summary: "OA journal covering environmental and public health.", strengths: ["Fast", "Broad scope"], bestFor: "Applied public health needing rapid OA.", avoidIf: "Looking for high-prestige clinical journals.", publisher: "MDPI", link: "https://www.mdpi.com/journal/ijerph" }
 ];
 
-const journalState = {
-  defaultCount: 10
-};
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function loadOpenAlexCatalog(){
-  try{
-    const res = await fetch("https://api.openalex.org/sources?per_page=200&sort=works_count:desc&mailto=info@scienceecosystem.org");
-    if (!res.ok) throw new Error(res.status+" "+res.statusText);
-    const data = await res.json();
-    const seen = new Set(journalCatalog.map(j=>j.id));
-    const mapped = (data.results||[]).map(s=>{
-      const tail = (s.id||"").split("/").pop();
-      const topConcept = Array.isArray(s.x_concepts) && s.x_concepts.length
-        ? s.x_concepts.sort((a,b)=>(b.score||0)-(a.score||0))[0].display_name
-        : null;
-      const worksCount = s.works_count || 0;
-      const cited = s.cited_by_count || 0;
-      const oaStatus = s.is_oa ? "OA" : (s.is_in_doaj ? "OA" : "Hybrid");
-      const ambition = cited > 200000 ? "High" : cited > 20000 ? "Solid" : "Rapid";
-      const strengths = [
-        s.is_in_doaj ? "DOAJ listed" : "Publisher journal",
-        (s.is_oa || s.is_in_doaj) ? "OA friendly" : "Mixed access",
-        worksCount ? `${worksCount.toLocaleString()} works` : "Newer catalog entry"
-      ];
-      const summary = `${s.display_name || "Journal"} has ${worksCount.toLocaleString()} works and ${cited.toLocaleString()} citations in OpenAlex. OA: ${oaStatus}${s.is_in_doaj ? ", DOAJ listed" : ""}.`;
+const OA_MAILTO = "info@scienceecosystem.org";
+const OA_API    = "https://api.openalex.org";
 
-      return {
-        id: tail || s.id || s.display_name,
-        name: s.display_name || "Journal",
-        discipline: topConcept || "Multidisciplinary",
-        articleTypes: ["Research"],
-        oaPolicy: oaStatus,
-        apcBand: "Unknown",
-        speed: "Unknown",
-        ambition: ambition,
-        summary: summary,
-        strengths: strengths,
-        bestFor: "Research that fits the journal's scope and access policy.",
-        avoidIf: "Scope mismatch or closed access constraints.",
-        publisher: s.host_organization_name || "Publisher",
-        link: s.homepage_url || s.id || "#",
-        openAlexId: s.id
-      };
-    }).filter(j=>!seen.has(j.id));
-    journalCatalog = journalCatalog.concat(mapped);
-  }catch(e){
-    console.warn("OpenAlex catalog load failed:", e);
-  }
+function escJ(str) {
+  return String(str || '').replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
 }
 
-function buildJournalPageUrl(journal) {
-  const rawId = journal.openAlexId || journal.id || "";
-  let tail = "";
-  if (/^https?:\/\//i.test(rawId)) {
-    tail = rawId.split("/").filter(Boolean).pop() || "";
-  } else if (/^S\d+$/i.test(rawId)) {
-    tail = rawId;
-  }
-  if (tail) return `journal.html?id=${encodeURIComponent(tail)}`;
-  return `journal.html?name=${encodeURIComponent(journal.name)}`;
+function oaBadge(isOa, inDoaj) {
+  if (inDoaj) return '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:10px;">DOAJ · Gold OA</span>';
+  if (isOa)   return '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:10px;">Open Access</span>';
+  return             '<span style="font-size:.72rem;background:#f1f5f9;color:#64748b;padding:1px 7px;border-radius:10px;">Subscription</span>';
 }
 
-const disciplineKeywords = [
-  { key: "Biology", words: ["bio", "genome", "cell", "molecular", "genetic", "protein", "microbio"] },
-  { key: "Medicine", words: ["clinical", "medicine", "trial", "patient", "healthcare"] },
-  { key: "Public Health", words: ["public health", "epidemiology", "population", "health policy"] },
-  { key: "Computer Science", words: ["ai", "machine learning", "ml", "algorithm", "computer", "deep learning"] },
-  { key: "Data/AI", words: ["dataset", "data", "benchmark", "software", "code"] },
-  { key: "Engineering", words: ["engineering", "materials", "device", "electronics", "mechanical"] },
-  { key: "Earth & Environment", words: ["climate", "earth", "geoscience", "atmosphere", "environment", "ocean"] },
-  { key: "Economics", words: ["economics", "finance", "market", "macro", "micro"] },
-  { key: "Social Science", words: ["sociology", "social", "behavior", "policy", "education"] },
-  { key: "Humanities", words: ["humanities", "history", "literature", "digital humanities"] },
-  { key: "Multidisciplinary", words: ["interdisciplinary", "multiple fields", "general"] }
-];
-
-const articleTypeKeywords = [
-  { key: "Research", words: ["research", "study", "experiment", "trial", "analysis"] },
-  { key: "Review", words: ["review", "meta-analysis", "systematic"] },
-  { key: "Methods", words: ["method", "protocol", "pipeline"] },
-  { key: "Short", words: ["brief", "letter", "short", "communication"] },
-  { key: "Case", words: ["case report", "case series", "clinical case"] },
-  { key: "Data", words: ["dataset", "data note", "descriptor", "software"] }
-];
-
-function normalizeText(val) {
-  return (val || "").toLowerCase();
+function journalPageUrl(openAlexId) {
+  if (!openAlexId) return null;
+  const tail = String(openAlexId).replace(/^https?:\/\/openalex\.org\//i, '').replace(/^\//, '');
+  return tail ? 'journal.html?id=' + encodeURIComponent(tail) : null;
 }
 
-function mapDiscipline(text) {
-  for (const d of disciplineKeywords) {
-    if (d.words.some(w => text.includes(w))) return d.key;
-  }
-  return "";
+// ── Card renderers ─────────────────────────────────────────────────────────────
+
+function makeCuratedCard(j) {
+  const card = document.createElement('article');
+  card.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;display:flex;flex-direction:column;gap:.4rem;';
+
+  const oaStyle = j.oaPolicy === 'OA'
+    ? 'background:#dcfce7;color:#166534'
+    : j.oaPolicy === 'Hybrid'
+      ? 'background:#fef9c3;color:#78350f'
+      : 'background:#f1f5f9;color:#64748b';
+
+  card.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">'
+      + '<a href="' + escJ(j.link) + '" target="_blank" rel="noopener noreferrer" '
+        + 'style="font-size:.9rem;font-weight:700;color:#0f172a;text-decoration:none;">' + escJ(j.name) + '</a>'
+      + '<span style="font-size:.72rem;padding:1px 7px;border-radius:10px;flex-shrink:0;' + oaStyle + '">' + escJ(j.oaPolicy) + '</span>'
+    + '</div>'
+    + '<p style="font-size:.8rem;color:#475569;margin:0;line-height:1.4;">' + escJ(j.summary) + '</p>'
+    + '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.2rem;">'
+      + (j.apcBand && j.apcBand !== 'Unknown' ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">APC: ' + escJ(j.apcBand) + '</span>' : '')
+      + (j.speed && j.speed !== 'Unknown' ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">' + escJ(j.speed) + '</span>' : '')
+      + '<span style="font-size:.72rem;color:#94a3b8;padding:1px 0;">' + escJ(j.publisher) + '</span>'
+    + '</div>'
+    + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
+      + '<a href="' + escJ(j.link) + '" target="_blank" rel="noopener noreferrer" '
+        + 'style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Visit →</a>'
+    + '</div>';
+  return card;
 }
 
-function mapArticleTypes(text) {
-  const picks = [];
-  for (const a of articleTypeKeywords) {
-    if (a.words.some(w => text.includes(w))) picks.push(a.key);
-  }
-  return picks;
+function makeOpenAlexCard(s) {
+  const card = document.createElement('article');
+  card.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;display:flex;flex-direction:column;gap:.4rem;';
+
+  const pageUrl  = journalPageUrl(s.id);
+  const nameHtml = pageUrl
+    ? '<a href="' + escJ(pageUrl) + '" style="font-size:.9rem;font-weight:700;color:#0f172a;text-decoration:none;">' + escJ(s.display_name) + '</a>'
+    : '<span style="font-size:.9rem;font-weight:700;color:#0f172a;">' + escJ(s.display_name) + '</span>';
+
+  const works  = (s.works_count || 0).toLocaleString();
+  const hIndex = s.summary_stats?.h_index || null;
+  const pub    = s.host_organization_name || '';
+  const site   = s.homepage_url || '';
+
+  card.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">'
+      + nameHtml
+      + oaBadge(s.is_oa, s.is_in_doaj)
+    + '</div>'
+    + (pub ? '<p style="font-size:.78rem;color:#64748b;margin:0;">' + escJ(pub) + '</p>' : '')
+    + '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.2rem;">'
+      + '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">' + works + ' works</span>'
+      + (hIndex ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">h-index ' + hIndex + '</span>' : '')
+    + '</div>'
+    + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
+      + (pageUrl ? '<a href="' + escJ(pageUrl) + '" style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>' : '')
+      + (site ? '<a href="' + escJ(site) + '" target="_blank" rel="noopener noreferrer" style="font-size:.8rem;color:#64748b;text-decoration:none;">Website ↗</a>' : '')
+    + '</div>';
+  return card;
 }
 
-function scoreJournal(j, text, filters) {
-  let score = 0;
-  const reasons = [];
-  const lower = normalizeText(text);
+// ── Default view — curated journals grouped by discipline ─────────────────────
 
-  // Discipline match
-  if (filters.discipline && j.discipline === filters.discipline) { score += 6; reasons.push("Discipline match"); }
-  else if (!filters.discipline) {
-    const inferred = mapDiscipline(lower);
-    if (inferred && j.discipline === inferred) { score += 5; reasons.push("Matches described field"); }
-    else if (j.discipline === "Multidisciplinary") { score += 3; reasons.push("Multidisciplinary option"); }
-  }
-
-  // Article type
-  if (filters.article && j.articleTypes.includes(filters.article)) { score += 4; reasons.push("Supports your article type"); }
-  else if (!filters.article) {
-    const inferredTypes = mapArticleTypes(lower);
-    if (inferredTypes.some(t => j.articleTypes.includes(t))) { score += 3; reasons.push("Fits article type"); }
-  }
-
-  // OA / APC
-  if (filters.oa && j.oaPolicy === filters.oa) { score += 3; reasons.push("OA policy matches"); }
-  if (filters.apc) {
-    if (filters.apc === j.apcBand) { score += 3; reasons.push("APC within budget"); }
-    else if (filters.apc === "None" && j.apcBand === "Under1500") { score += 1; reasons.push("Low APC option"); }
-  } else if (lower.includes("oa") || lower.includes("open access") || lower.includes("budget")) {
-    if (j.apcBand === "None") { score += 3; reasons.push("No APC"); }
-    else if (j.apcBand === "Under1500") { score += 2; reasons.push("Low APC"); }
-  }
-
-  // Speed
-  if (filters.speed && j.speed === filters.speed) { score += 2; reasons.push("Speed preference"); }
-  else if (lower.includes("urgent") || lower.includes("fast") || lower.includes("rapid")) {
-    if (j.speed === "Fast") { score += 2; reasons.push("Fast review"); }
-  }
-
-  // Ambition
-  if (filters.ambition && j.ambition === filters.ambition) { score += 3; reasons.push("Ambition match"); }
-  else if (lower.includes("prestige") || lower.includes("high impact")) {
-    if (j.ambition === "High") { score += 2; reasons.push("High-prestige option"); }
-  }
-
-  // Publisher anchor
-  if (lower.includes("society") && j.publisher.toLowerCase().includes("society")) {
-    score += 1; reasons.push("Society journal");
-  }
-
-  return { score, reasons };
-}
-
-function renderRecommendations(problemText, filters) {
-  const container = document.getElementById("journalRecommendations");
+function renderDefault(oaOnly) {
+  const container = document.getElementById('journalResults');
   if (!container) return;
+  container.innerHTML = '';
 
-  const scored = journalCatalog.map(j => {
-    const { score, reasons } = scoreJournal(j, problemText, filters);
-    return { journal: j, score, reasons };
-  }).sort((a, b) => b.score - a.score);
+  const list = oaOnly ? journalCatalog.filter(function(j){ return j.oaPolicy === 'OA'; }) : journalCatalog;
 
-  const meaningful = problemText.trim() ? scored.filter(x => x.score > 0) : scored;
-  const picks = (meaningful.length ? meaningful : scored).slice(0, journalState.defaultCount);
-
-  if (!picks.length) {
-    container.innerHTML = '<p class="muted">Add a sentence about your manuscript to see suggestions.</p>';
-    return;
-  }
-
-  container.innerHTML = "";
-  picks.forEach(({ journal, score, reasons }) => {
-    const reasonText = reasons.length ? `Why: ${Array.from(new Set(reasons)).slice(0, 4).join(", ")}.` : "Why: Broadly suitable default.";
-    const verify = [
-      "Check aims & scope",
-      "Confirm APC on journal site",
-      "Check review timelines",
-      "Confirm preprint policy"
-    ].map(t => `<span class="badge">${t}</span>`).join("");
-    const journalUrl = buildJournalPageUrl(journal);
-    const card = document.createElement("article");
-    card.className = "rec-card";
-    card.innerHTML = `
-      <div class="rec-head">
-        <div>
-          <h3><a href="${journalUrl}">${journal.name}</a></h3>
-          <p class="muted small">${journal.discipline} · ${journal.publisher}</p>
-        </div>
-        <div class="pill-row">
-          <span class="badge">${journal.oaPolicy}</span>
-          <span class="badge badge-ease">APC: ${journal.apcBand === "None" ? "None" : journal.apcBand}</span>
-          <span class="badge">${journal.speed}</span>
-          <span class="badge">${journal.ambition}</span>
-        </div>
-      </div>
-      <p class="rec-summary">${journal.summary}</p>
-      <p class="rec-why">${reasonText}</p>
-      <p class="tool-strengths">Best for: ${journal.bestFor}</p>
-      <p class="tool-strengths muted small">Avoid if: ${journal.avoidIf}</p>
-      <div class="chip-row">${journal.strengths.map(s => `<span class="badge">${s}</span>`).join("")}</div>
-      <div class="chip-row" style="margin-top:.5rem;">${verify}</div>
-      <div class="rec-actions">
-        <a class="btn btn-secondary" href="${journal.link}" target="_blank" rel="noopener">Visit ${journal.name}</a>
-        <span class="alt-note">Article types: ${journal.articleTypes.join(", ")}</span>
-      </div>
-    `;
-    container.appendChild(card);
-  });
-}
-
-function renderJournalGrid(list) {
-  const grid = document.getElementById("journalGrid");
-  if (!grid) return;
-  grid.innerHTML = "";
   if (!list.length) {
-    grid.innerHTML = '<p class="muted">No journals match those filters yet.</p>';
+    container.innerHTML = '<p class="muted">No journals match the current filters.</p>';
     return;
   }
-  list.forEach(j => {
-    const journalUrl = buildJournalPageUrl(j);
-    const card = document.createElement("article");
-    card.className = "tool-card";
-    card.innerHTML = `
-      <div class="tool-meta">
-        <h3><a href="${journalUrl}">${j.name}</a></h3>
-        <div class="pill-row">
-          <span class="badge">${j.discipline}</span>
-          <span class="badge">${j.oaPolicy}</span>
-          <span class="badge badge-ease">APC: ${j.apcBand === "None" ? "None" : j.apcBand}</span>
-          <span class="badge">${j.speed}</span>
-          <span class="badge">${j.ambition}</span>
-        </div>
-      </div>
-      <p class="rec-summary">${j.summary}</p>
-      <p class="tool-strengths">Best for: ${j.bestFor}</p>
-      <p class="tool-strengths muted small">Avoid if: ${j.avoidIf}</p>
-      <div class="tool-footer">
-        <span class="alt-note">Article types: ${j.articleTypes.join(", ")} · Publisher: ${j.publisher}</span>
-        <a href="${j.link}" target="_blank" rel="noopener">Visit</a>
-      </div>
-    `;
-    grid.appendChild(card);
+
+  const byDiscipline = Object.create(null);
+  list.forEach(function(j) {
+    const d = j.discipline || 'Other';
+    if (!byDiscipline[d]) byDiscipline[d] = [];
+    byDiscipline[d].push(j);
+  });
+
+  Object.keys(byDiscipline).sort().forEach(function(disc) {
+    const section = document.createElement('div');
+    section.style.cssText = 'margin-bottom:2rem;';
+    section.innerHTML = '<h3 style="font-size:.95rem;font-weight:700;color:#374151;'
+      + 'margin:0 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid #e5e7eb;">' + escJ(disc) + '</h3>';
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:.75rem;';
+
+    byDiscipline[disc]
+      .slice()
+      .sort(function(a, b){ return a.name.localeCompare(b.name); })
+      .forEach(function(j){ grid.appendChild(makeCuratedCard(j)); });
+
+    section.appendChild(grid);
+    container.appendChild(section);
   });
 }
 
-function getFilters() {
-  return {
-    discipline: document.getElementById("disciplineFilter")?.value || "",
-    article: document.getElementById("articleTypeFilter")?.value || "",
-    oa: document.getElementById("oaFilter")?.value || "",
-    apc: document.getElementById("apcFilter")?.value || "",
-    speed: document.getElementById("speedFilter")?.value || "",
-    ambition: document.getElementById("ambitionFilter")?.value || "",
-  };
-}
+// ── Live search via OpenAlex sources API ──────────────────────────────────────
 
-function applyJournalFilters(problemText) {
-  const filters = getFilters();
-  const filtered = journalCatalog.filter(j => {
-    const matchesDiscipline = !filters.discipline || j.discipline === filters.discipline;
-    const matchesArticle = !filters.article || j.articleTypes.includes(filters.article);
-    const matchesOA = !filters.oa || j.oaPolicy === filters.oa;
-    const matchesAPC = !filters.apc || j.apcBand === filters.apc || (filters.apc === "None" && j.apcBand === "Under1500");
-    const matchesSpeed = !filters.speed || j.speed === filters.speed;
-    const matchesAmbition = !filters.ambition || j.ambition === filters.ambition;
-    return matchesDiscipline && matchesArticle && matchesOA && matchesAPC && matchesSpeed && matchesAmbition;
-  });
-  renderJournalGrid(filtered);
-}
+let _searchTimer = null;
+let _lastQuery   = '';
 
-function populateDisciplineOptions() {
-  const select = document.getElementById("disciplineFilter");
-  if (!select) return;
-  const disciplines = Array.from(new Set(journalCatalog.map(j => j.discipline))).sort();
-  disciplines.forEach(d => {
-    const opt = document.createElement("option");
-    opt.value = d;
-    opt.textContent = d;
-    select.appendChild(opt);
-  });
-}
+async function searchJournals(query, oaOnly) {
+  const container = document.getElementById('journalResults');
+  const hint      = document.getElementById('searchHint');
+  if (!container) return;
+  _lastQuery = query;
 
-document.addEventListener("DOMContentLoaded", () => {
-  const input = document.getElementById("journalProblem");
-  const btn = document.getElementById("findJournalsBtn");
+  container.innerHTML = '<p class="muted" style="padding:.5rem 0;">Searching…</p>';
+  if (hint) hint.textContent = 'Searching OpenAlex for journals matching "' + query + '"…';
 
-  loadOpenAlexCatalog().then(()=>{
-    populateDisciplineOptions();
-    renderJournalGrid(journalCatalog);
-  }).catch(()=>{
-    populateDisciplineOptions();
-    renderJournalGrid(journalCatalog);
-  });
+  try {
+    let url = OA_API + '/sources?search=' + encodeURIComponent(query)
+      + '&filter=type:journal'
+      + (oaOnly ? ',is_oa:true' : '')
+      + '&per_page=20&sort=works_count:desc&select=id,display_name,host_organization_name,'
+      + 'is_oa,is_in_doaj,works_count,homepage_url,summary_stats'
+      + '&mailto=' + OA_MAILTO;
 
-  btn?.addEventListener("click", () => {
-    applyJournalFilters(input?.value || "");
-  });
-  input?.addEventListener("input", () => applyJournalFilters(input.value));
-  input?.addEventListener("keydown", (evt) => {
-    if (evt.key === "Enter" && (evt.metaKey || evt.ctrlKey)) {
-      applyJournalFilters(input.value);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+
+    // Guard against stale response if user typed faster
+    if (query !== _lastQuery) return;
+
+    const results = data.results || [];
+    container.innerHTML = '';
+
+    if (!results.length) {
+      container.innerHTML = '<p class="muted">No journals found for "' + escJ(query) + '". Try a broader term.</p>';
+      if (hint) hint.textContent = '0 results from OpenAlex.';
+      return;
     }
-  });
 
-  ["disciplineFilter","articleTypeFilter","oaFilter","apcFilter","speedFilter","ambitionFilter"].forEach(id => {
-    document.getElementById(id)?.addEventListener("change", () => applyJournalFilters(input?.value || ""));
-  });
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:.75rem;';
+    results.forEach(function(s){ grid.appendChild(makeOpenAlexCard(s)); });
+    container.appendChild(grid);
+
+    if (hint) hint.textContent = results.length + ' journals found via OpenAlex. Click "Full details" to see metrics, topics, and papers.';
+
+  } catch(e) {
+    if (query !== _lastQuery) return;
+    container.innerHTML = '<p class="muted">Search failed — showing curated list instead.</p>';
+    renderDefault(oaOnly);
+    if (hint) hint.textContent = 'Search unavailable. Showing curated journals.';
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', function() {
+  const searchEl = document.getElementById('journalSearch');
+  const oaEl     = document.getElementById('oaOnly');
+  const hint      = document.getElementById('searchHint');
+
+  function isOaOnly() { return !!(oaEl && oaEl.checked); }
+
+  renderDefault(false);
+  if (hint) hint.textContent = 'Showing ' + journalCatalog.length + ' curated journals by discipline. Type to search all journals via OpenAlex.';
+
+  if (searchEl) {
+    searchEl.addEventListener('input', function() {
+      const q = this.value.trim();
+      clearTimeout(_searchTimer);
+      if (!q) {
+        _lastQuery = '';
+        renderDefault(isOaOnly());
+        if (hint) hint.textContent = 'Showing curated journals. Type to search all journals via OpenAlex.';
+        return;
+      }
+      _searchTimer = setTimeout(function(){ searchJournals(q, isOaOnly()); }, 350);
+    });
+  }
+
+  if (oaEl) {
+    oaEl.addEventListener('change', function() {
+      const q = searchEl ? searchEl.value.trim() : '';
+      if (q) searchJournals(q, isOaOnly());
+      else renderDefault(isOaOnly());
+    });
+  }
 });

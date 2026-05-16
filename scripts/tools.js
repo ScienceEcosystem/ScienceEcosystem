@@ -3946,101 +3946,9 @@ const toolCatalog = [
   }
 ];
 
-// ── UI ────────────────────────────────────────────────────────────────────────
-
-// keywordMatchers removed — simple text search replaces the scoring system
-
-function scoreTool(tool, text) {
-  const lower = text.toLowerCase();
-  let score = tool.baseScore || 0;
-  const reasons = [];
-
-  if (!text.trim()) {
-    return { score, reasons };
-  }
-
-  tool.tags.forEach(tag => {
-    if (lower.includes(tag)) {
-      score += 3;
-      reasons.push(`Mentions ${tag}`);
-    }
-  });
-
-  keywordMatchers.forEach(({ pattern, topic }) => {
-    if (pattern.test(lower)) {
-      switch (topic) {
-        case 'writing':
-          if (tool.category.includes('Writing') || tool.tags.includes('draft')) {
-            score += 3;
-            reasons.push('Built for writing');
-          }
-          break;
-        case 'citation':
-          if (tool.category.includes('Reference') || tool.tags.includes('citation')) {
-            score += 3;
-            reasons.push('Handles citations');
-          }
-          break;
-        case 'cleaning':
-          if (tool.category.includes('Data cleaning')) {
-            score += 3;
-            reasons.push('Data cleaning workflows');
-          }
-          break;
-        case 'analysis':
-          if (tool.category.includes('analysis') || tool.tags.includes('analysis') || tool.tags.includes('notebook')) {
-            score += 2;
-            reasons.push('Good for analysis/notebooks');
-          }
-          break;
-        case 'collaboration':
-          if (tool.collaboration) {
-            score += 2;
-            reasons.push('Collaboration built-in');
-          }
-          break;
-        case 'publishing':
-          if (tool.category.includes('Publishing') || tool.tags.includes('doi')) {
-            score += 3;
-            reasons.push('Publishes with DOIs');
-          }
-          break;
-        case 'reproducibility':
-          if (tool.category.includes('Reproducible') || tool.tags.includes('reproducible') || tool.tags.includes('environment')) {
-            score += 2;
-            reasons.push('Keeps environments reproducible');
-          }
-          break;
-        case 'budget':
-          if (tool.cost === 'Free') {
-            score += 2;
-            reasons.push('No-cost option');
-          } else if (tool.cost === 'Freemium') {
-            score += 1;
-            reasons.push('Free tier available');
-          }
-          if (tool.open) {
-            score += 1;
-            reasons.push('Open-source');
-          }
-          break;
-        case 'ease':
-          if (tool.ease === 'Easy') {
-            score += 2;
-            reasons.push('Low learning curve');
-          }
-          break;
-      }
-    }
-  });
-
-  return { score, reasons };
-}
-
-
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
-function esc(str) {
+function escT(str) {
   return String(str || '').replace(/[&<>"']/g, function(c) {
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
   });
@@ -4051,7 +3959,7 @@ function renderToolGrid(list) {
   if (!grid) return;
   grid.innerHTML = '';
 
-  if (!list.length) {
+  if (!list || !list.length) {
     grid.innerHTML = '<p class="muted" style="padding:.5rem 0;">No tools match those filters.</p>';
     return;
   }
@@ -4059,19 +3967,19 @@ function renderToolGrid(list) {
   // Group by category
   const byCategory = Object.create(null);
   list.forEach(function(tool) {
-    if (!byCategory[tool.category]) byCategory[tool.category] = [];
-    byCategory[tool.category].push(tool);
+    const cat = tool.category || 'Other';
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(tool);
   });
 
-  // Sort categories alphabetically, tools within each category alphabetically
   const categories = Object.keys(byCategory).sort();
 
   categories.forEach(function(cat) {
     const section = document.createElement('div');
     section.style.cssText = 'margin-bottom:2rem;';
-
-    section.innerHTML = '<h3 style="font-size:.95rem;font-weight:700;color:#374151;margin:0 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid #e5e7eb;">'
-      + esc(cat) + '</h3>';
+    section.innerHTML = '<h3 style="font-size:.95rem;font-weight:700;color:#374151;'
+      + 'margin:0 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid #e5e7eb;">'
+      + escT(cat) + '</h3>';
 
     const row = document.createElement('div');
     row.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.75rem;';
@@ -4081,18 +3989,21 @@ function renderToolGrid(list) {
       .sort(function(a, b) { return a.name.localeCompare(b.name); })
       .forEach(function(tool) {
         const card = document.createElement('article');
-        card.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;display:flex;flex-direction:column;gap:.5rem;';
+        card.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:10px;'
+          + 'padding:1rem;display:flex;flex-direction:column;gap:.5rem;';
         card.innerHTML =
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">'
-            + '<span style="font-size:.9rem;font-weight:700;color:#0f172a;">' + esc(tool.name) + '</span>'
-            + '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:2px 7px;border-radius:10px;flex-shrink:0;">' + esc(tool.cost) + '</span>'
+            + '<span style="font-size:.9rem;font-weight:700;color:#0f172a;">' + escT(tool.name) + '</span>'
+            + '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;'
+              + 'padding:2px 7px;border-radius:10px;flex-shrink:0;">' + escT(tool.cost || '') + '</span>'
           + '</div>'
-          + '<p style="font-size:.82rem;color:#475569;margin:0;line-height:1.45;">' + esc(tool.summary) + '</p>'
-          + (tool.open ? '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:2px 7px;border-radius:10px;width:fit-content;">Open-source</span>' : '')
-          + '<div style="margin-top:auto;padding-top:.25rem;">'
-            + '<a href="' + esc(tool.link) + '" target="_blank" rel="noopener noreferrer" '
-            + 'style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Visit ' + esc(tool.name) + ' →</a>'
-          + '</div>';
+          + '<p style="font-size:.82rem;color:#475569;margin:0;line-height:1.45;">' + escT(tool.summary || '') + '</p>'
+          + (tool.open ? '<span style="font-size:.72rem;background:#dcfce7;color:#166534;'
+              + 'padding:2px 7px;border-radius:10px;display:inline-block;">Open-source</span>' : '')
+          + (tool.link ? '<div style="margin-top:auto;padding-top:.25rem;">'
+              + '<a href="' + escT(tool.link) + '" target="_blank" rel="noopener noreferrer" '
+              + 'style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">'
+              + 'Visit ' + escT(tool.name) + ' →</a></div>' : '');
         row.appendChild(card);
       });
 
@@ -4101,18 +4012,18 @@ function renderToolGrid(list) {
   });
 }
 
-function applyFilters() {
+function applyToolFilters() {
   const searchTerm = ((document.getElementById('toolSearch') || {}).value || '').toLowerCase().trim();
   const category   = ((document.getElementById('categoryFilter') || {}).value || '');
   const cost       = ((document.getElementById('costFilter') || {}).value || '');
 
   const filtered = toolCatalog.filter(function(tool) {
     const matchesSearch = !searchTerm
-      || tool.name.toLowerCase().includes(searchTerm)
-      || tool.summary.toLowerCase().includes(searchTerm)
-      || tool.category.toLowerCase().includes(searchTerm)
+      || (tool.name || '').toLowerCase().includes(searchTerm)
+      || (tool.summary || '').toLowerCase().includes(searchTerm)
+      || (tool.category || '').toLowerCase().includes(searchTerm)
       || (tool.bestFor || '').toLowerCase().includes(searchTerm)
-      || tool.tags.some(function(tag) { return tag.toLowerCase().includes(searchTerm); });
+      || (tool.tags || []).some(function(tag) { return tag.toLowerCase().includes(searchTerm); });
     const matchesCategory = !category || tool.category === category;
     const matchesCost     = !cost     || tool.cost === cost;
     return matchesSearch && matchesCategory && matchesCost;
@@ -4121,11 +4032,12 @@ function applyFilters() {
   renderToolGrid(filtered);
 }
 
-function populateCategories() {
+function populateToolCategories() {
   const select = document.getElementById('categoryFilter');
   if (!select) return;
-  const categories = Array.from(new Set(toolCatalog.map(function(t) { return t.category; }))).sort();
-  categories.forEach(function(cat) {
+  const seen = new Set();
+  toolCatalog.forEach(function(t) { if (t.category) seen.add(t.category); });
+  Array.from(seen).sort().forEach(function(cat) {
     const opt = document.createElement('option');
     opt.value = cat;
     opt.textContent = cat;
@@ -4134,14 +4046,14 @@ function populateCategories() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  populateCategories();
+  populateToolCategories();
   renderToolGrid(toolCatalog);
 
   const searchEl   = document.getElementById('toolSearch');
   const categoryEl = document.getElementById('categoryFilter');
   const costEl     = document.getElementById('costFilter');
 
-  if (searchEl)   searchEl.addEventListener('input', applyFilters);
-  if (categoryEl) categoryEl.addEventListener('change', applyFilters);
-  if (costEl)     costEl.addEventListener('change', applyFilters);
+  if (searchEl)   searchEl.addEventListener('input', applyToolFilters);
+  if (categoryEl) categoryEl.addEventListener('change', applyToolFilters);
+  if (costEl)     costEl.addEventListener('change', applyToolFilters);
 });
