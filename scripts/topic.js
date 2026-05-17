@@ -758,5 +758,5 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", loadTopic);
+  loadTopic();
 })();
