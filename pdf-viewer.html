@@ -126,6 +126,158 @@
       padding: 2rem;
       color: #6c757d;
     }
+
+    /* ── PDF page layout ─────────────────────────────────────────────────────── */
+    .pdf-pages {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem;
+      gap: 0;
+    }
+
+    /* Critical: position:relative so every child layer anchors to the page */
+    .pdf-page-wrap {
+      position: relative;
+      display: inline-block;
+      margin-bottom: 24px;
+    }
+
+    .pdf-page-canvas {
+      display: block;
+    }
+
+    /* ── Text layer (Zotero / pdf.js approach) ────────────────────────────────
+       Sits exactly over the canvas. Text is transparent — canvas text shows
+       through — but text nodes are real so the browser can select them.      */
+    .pdf-text-layer {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      line-height: 1;
+      text-size-adjust: none;
+      -webkit-text-size-adjust: none;
+      transform-origin: 0 0;
+      z-index: 2;
+      cursor: text;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    /* Every span = one glyph run. Color transparent = invisible text,
+       visible canvas content. transform-origin 0 0 matches pdf.js output. */
+    .pdf-text-layer span,
+    .pdf-text-layer br {
+      color: transparent;
+      position: absolute;
+      white-space: pre;
+      cursor: text;
+      transform-origin: 0% 0%;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    /* Native selection colour that shows up on the transparent spans */
+    .pdf-text-layer ::selection {
+      background: rgba(0, 100, 255, 0.28);
+      color: transparent;
+    }
+    .pdf-text-layer ::-moz-selection {
+      background: rgba(0, 100, 255, 0.28);
+      color: transparent;
+    }
+
+    /* ── Link layer ──────────────────────────────────────────────────────────
+       Sits above the text layer. Default pointer-events:none so it doesn't
+       swallow text selection; only the individual <a> links capture events.  */
+    .pdf-link-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .pdf-link {
+      position: absolute;
+      pointer-events: auto;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+
+    /* ── Annotation layer ────────────────────────────────────────────────────*/
+    .pdf-annotation-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    .pdf-annot {
+      position: absolute;
+      pointer-events: auto;
+      mix-blend-mode: multiply;
+      border-radius: 2px;
+    }
+
+    /* ── Citation tooltip ────────────────────────────────────────────────────*/
+    .citation-tooltip {
+      position: absolute;
+      z-index: 6;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: .5rem .75rem;
+      font-size: .82rem;
+      max-width: 300px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      pointer-events: none;
+      color: #1e293b;
+    }
+
+    /* Citation highlights */
+    .citation-highlight {
+      color: transparent !important;
+      background: rgba(46, 127, 159, 0.22);
+      border-radius: 2px;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .citation-highlight.active {
+      background: rgba(46, 127, 159, 0.5);
+      outline: 1px solid #2e7f9f;
+    }
+
+    /* ── Floating selection toolbar (Zotero-style) ───────────────────────────*/
+    .pdf-sel-toolbar {
+      position: fixed;
+      z-index: 10010;
+      background: #1e293b;
+      border-radius: 9px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+      padding: 3px;
+      display: flex;
+      align-items: center;
+      gap: 1px;
+      user-select: none;
+      pointer-events: auto;
+    }
+
+    .pdf-sel-toolbar button {
+      background: transparent;
+      border: none;
+      color: #e2e8f0;
+      padding: 6px 11px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .82rem;
+      white-space: nowrap;
+      font-family: inherit;
+      transition: background .1s;
+    }
+
+    .pdf-sel-toolbar button:hover {
+      background: rgba(255,255,255,0.18);
+    }
   </style>
 <link rel="manifest" href="/manifest.json"/>
 <meta name="theme-color" content="#0f172a"/>

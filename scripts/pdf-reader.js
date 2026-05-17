@@ -59,7 +59,7 @@ function setupCanvas() {
         <button id="zoomIn" class="btn btn-small">Zoom In</button>
         <button id="zoomOut" class="btn btn-small">Zoom Out</button>
       </div>
-      <div id="pdfPages" class="pdf-pages" style="margin-top: 1rem;"></div>
+      <div id="pdfPages" class="pdf-pages"></div>
     </div>
   `;
 
@@ -142,11 +142,10 @@ function renderPage(num) {
 async function renderTextLayer(page, viewport, layerEl, tooltipEl) {
   if (!layerEl || !pdfjsLib) return;
   layerEl.innerHTML = '';
-  layerEl.style.width = viewport.width + 'px';
-  layerEl.style.height = viewport.height + 'px';
 
   const textContent = await page.getTextContent();
   if (typeof pdfjsLib.TextLayer !== 'function') return;
+
   const textLayer = new pdfjsLib.TextLayer({
     textContentSource: textContent,
     container: layerEl,
@@ -154,6 +153,12 @@ async function renderTextLayer(page, viewport, layerEl, tooltipEl) {
     textDivs: []
   });
   await textLayer.render();
+
+  // Ensure every span is transparent so canvas text shows through
+  layerEl.querySelectorAll('span').forEach(s => {
+    s.style.color = 'transparent';
+  });
+
   indexTextLayer(layerEl);
   applyCitationHighlightsToLayer(layerEl);
   wireCitationHover(layerEl, tooltipEl);
@@ -214,8 +219,6 @@ async function resolveDestToPage(dest) {
 async function renderLinkLayer(page, viewport, layerEl, pageNumber) {
   if (!layerEl || !pdfjsLib) return;
   layerEl.innerHTML = '';
-  layerEl.style.width = viewport.width + 'px';
-  layerEl.style.height = viewport.height + 'px';
 
   let annotationsList = [];
   try {
@@ -377,7 +380,6 @@ async function renderAllPages() {
     const wrap = document.createElement('div');
     wrap.className = 'pdf-page-wrap';
     wrap.setAttribute('data-page', String(i));
-    wrap.style.marginBottom = '24px';
     wrap.innerHTML = `
       <canvas class="pdf-page-canvas" style="box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></canvas>
       <div class="pdf-text-layer"></div>
