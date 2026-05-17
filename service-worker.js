@@ -4,7 +4,7 @@
 //   - API calls to OpenAlex etc  → Network First (fresh data)
 //   - Everything else             → Network First with cache fallback
 
-const CACHE_VERSION = "se-v6";
+const CACHE_VERSION = "se-v7";
 const STATIC_CACHE = CACHE_VERSION + "-static";
 const DATA_CACHE = CACHE_VERSION + "-data";
 
@@ -94,8 +94,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ── 2. Static assets on our own origin ──
-  //    JS/CSS: Network First (1 s timeout) so updates land on first reload.
+  // ── 2. tools.json — always fetch fresh, never serve from cache
+  if (url.origin === self.location.origin && url.pathname.endsWith("tools.json")) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  //    JS/CSS: Network First so updates land on first reload.
   //    Images/fonts: Cache First — they rarely change and benefit from instant load.
   if (url.origin === self.location.origin) {
     if (url.pathname.endsWith(".js") || url.pathname.endsWith(".css")) {
