@@ -113,6 +113,86 @@ FILE: research-tools.html
   <script src="scripts/search.js" defer></script>
   <script src="scripts/components.js" defer></script>
   <script src="scripts/session.js" defer></script>
-  <script src="scripts/tools.js" defer></script>
+
+  <!-- Tool grid — inline so no caching layer can interfere -->
+  <script>
+  (function() {
+    var hint = document.getElementById('toolHint');
+    var grid = document.getElementById('toolGrid');
+
+    function esc(s) {
+      return String(s || '').replace(/[&<>"']/g, function(c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+      });
+    }
+
+    function render(list) {
+      grid.innerHTML = '';
+      if (!list.length) { grid.innerHTML = '<p class="muted">No tools match.</p>'; return; }
+      var by = {};
+      list.forEach(function(t) { var c = t.category || 'Other'; if (!by[c]) by[c] = []; by[c].push(t); });
+      Object.keys(by).sort().forEach(function(cat) {
+        var sec = document.createElement('div');
+        sec.style.cssText = 'margin-bottom:2rem;';
+        sec.innerHTML = '<h3 style="font-size:.95rem;font-weight:700;color:#374151;margin:0 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid #e5e7eb;">' + esc(cat) + '</h3>';
+        var row = document.createElement('div');
+        row.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.75rem;';
+        by[cat].slice().sort(function(a,b){return(a.name||'').localeCompare(b.name||'');}).forEach(function(t) {
+          var card = document.createElement('article');
+          card.style.cssText = 'background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:1rem;display:flex;flex-direction:column;gap:.5rem;';
+          card.innerHTML =
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">'
+              + '<span style="font-size:.9rem;font-weight:700;color:#0f172a;">' + esc(t.name) + '</span>'
+              + '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:2px 7px;border-radius:10px;flex-shrink:0;">' + esc(t.cost || '') + '</span>'
+            + '</div>'
+            + '<p style="font-size:.82rem;color:#475569;margin:0;line-height:1.45;">' + esc(t.summary || '') + '</p>'
+            + (t.open ? '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:2px 7px;border-radius:10px;display:inline-block;">Open-source</span>' : '')
+            + (t.link ? '<div style="margin-top:auto;padding-top:.25rem;"><a href="' + esc(t.link) + '" target="_blank" rel="noopener noreferrer" style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Visit ' + esc(t.name) + ' →</a></div>' : '');
+          row.appendChild(card);
+        });
+        sec.appendChild(row);
+        grid.appendChild(sec);
+      });
+    }
+
+    if (hint) hint.textContent = 'Loading…';
+
+    fetch('/assets/tools.json?v=1')
+      .then(function(r) { return r.json(); })
+      .then(function(tools) {
+        var searchEl   = document.getElementById('toolSearch');
+        var categoryEl = document.getElementById('categoryFilter');
+        var costEl     = document.getElementById('costFilter');
+
+        var cats = {};
+        tools.forEach(function(t) { if (t.category) cats[t.category] = 1; });
+        Object.keys(cats).sort().forEach(function(c) {
+          var o = document.createElement('option'); o.value = c; o.textContent = c; categoryEl.appendChild(o);
+        });
+
+        render(tools);
+        if (hint) hint.textContent = 'Showing ' + tools.length + ' tools. Use filters to narrow results.';
+
+        function doFilter() {
+          var q = (searchEl.value || '').toLowerCase().trim();
+          var c = categoryEl.value;
+          var v = costEl.value;
+          var filtered = tools.filter(function(t) {
+            var ok = !q || (t.name||'').toLowerCase().includes(q) || (t.summary||'').toLowerCase().includes(q) || (t.category||'').toLowerCase().includes(q);
+            return ok && (!c || t.category === c) && (!v || t.cost === v);
+          });
+          render(filtered);
+          if (hint) hint.textContent = filtered.length + ' tools shown.';
+        }
+        searchEl.addEventListener('input', doFilter);
+        categoryEl.addEventListener('change', doFilter);
+        costEl.addEventListener('change', doFilter);
+      })
+      .catch(function(err) {
+        grid.innerHTML = '<p style="color:#b91c1c;padding:1rem;background:#fef2f2;border-radius:8px;"><strong>Failed to load tools.</strong> ' + esc(String(err)) + '</p>';
+        if (hint) hint.textContent = 'Error loading tools.';
+      });
+  })();
+  </script>
 </body>
 </html>
