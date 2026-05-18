@@ -12,9 +12,6 @@ at the profile page we ask for current affiliation but many resurchers are linke
 Do we need a kwnoledge graph when ai already can make the links and read sites ? or how does it work and how can it be better?
 
 
-
-
-
 - [ ] Cite button popup screen in paper page needs to be shown in middle of page
 - [-] Show journal/ paper score on the paper card
 - [ ] Update user-profile page as now is very empty
@@ -23,12 +20,13 @@ Do we need a kwnoledge graph when ai already can make the links and read sites ?
     - [ ] 
 - [ ] Include graphical abstracts and images to the paper pages so they show similar as what journal site shows but better organised.
 
-
-
 DONE
 - [X] Add more metrics for journal quality: citation index, SCImago Journal Rank, CiteScore, Eigenfactor, and Altmetrics.
 - [X] The search bar still doesn’t search for DOI and for example a large sentence give no results 
 - [X] Components needs update so paper cards are less big now lots of white
+
+
+
 
 
 
