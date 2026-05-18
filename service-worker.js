@@ -4,7 +4,7 @@
 //   - API calls to OpenAlex etc  → Network First (fresh data)
 //   - Everything else             → Network First with cache fallback
 
-const CACHE_VERSION = "se-v7";
+const CACHE_VERSION = "se-v8";
 const STATIC_CACHE = CACHE_VERSION + "-static";
 const DATA_CACHE = CACHE_VERSION + "-data";
 
@@ -94,9 +94,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ── 2. tools.json — always fetch fresh, never serve from cache
-  if (url.origin === self.location.origin && url.pathname.endsWith("tools.json")) {
-    event.respondWith(fetch(request));
+  // ── 2. research-tools page + tools data — always network only, never cache
+  //    This page embeds tool data inline; stale cache causes "missing elements" errors
+  if (url.origin === self.location.origin &&
+      (url.pathname.includes("research-tools") || url.pathname.endsWith("tools.json"))) {
+    event.respondWith(fetch(request).catch(() =>
+      new Response("<h1>Offline</h1><p>Please reconnect and reload.</p>",
+        { headers: { "Content-Type": "text/html" } })));
     return;
   }
 
