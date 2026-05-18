@@ -119,6 +119,7 @@ FILE: research-tools.html
   (function() {
     var hint = document.getElementById('toolHint');
     var grid = document.getElementById('toolGrid');
+    console.log('[tools] grid el:', grid, 'hint el:', hint);
 
     function esc(s) {
       return String(s || '').replace(/[&<>"']/g, function(c) {
@@ -157,7 +158,7 @@ FILE: research-tools.html
 
     if (hint) hint.textContent = 'Loading…';
 
-    fetch('/assets/tools.json?v=1')
+    fetch('/assets/tools.json')
       .then(function(r) { return r.json(); })
       .then(function(tools) {
         var searchEl   = document.getElementById('toolSearch');
@@ -189,8 +190,12 @@ FILE: research-tools.html
         costEl.addEventListener('change', doFilter);
       })
       .catch(function(err) {
-        grid.innerHTML = '<p style="color:#b91c1c;padding:1rem;background:#fef2f2;border-radius:8px;"><strong>Failed to load tools.</strong> ' + esc(String(err)) + '</p>';
-        if (hint) hint.textContent = 'Error loading tools.';
+        console.error('[tools] fetch failed:', err, 'grid:', grid);
+        var g = document.getElementById('toolGrid');
+        var msg = '<p style="color:#b91c1c;padding:1rem;background:#fef2f2;border-radius:8px;"><strong>Failed to load tools:</strong> ' + esc(String(err)) + '</p>';
+        if (g) g.innerHTML = msg;
+        else document.body.insertAdjacentHTML('beforeend', msg);
+        if (hint) hint.textContent = 'Error: ' + String(err);
       });
   })();
   </script>
