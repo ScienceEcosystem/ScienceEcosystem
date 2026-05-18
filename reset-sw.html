@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Reset | ScienceEcosystem</title></head>
+<body style="font-family:sans-serif;max-width:500px;margin:4rem auto;padding:1rem;text-align:center;">
+<h2>Clearing site cache…</h2>
+<p id="status">Working…</p>
+<script>
+(async function() {
+  const s = document.getElementById('status');
+  try {
+    // 1. Unregister all service workers
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) await r.unregister();
+
+    // 2. Delete all caches
+    const keys = await caches.keys();
+    for (const k of keys) await caches.delete(k);
+
+    s.innerHTML = '✅ Done! <strong>' + regs.length + '</strong> service worker(s) removed, <strong>' + keys.length + '</strong> cache(s) cleared.<br><br><a href="research-tools.html" style="background:#2e7f9f;color:#fff;padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:600;">Open Tools page →</a>';
+  } catch(e) {
+    s.textContent = 'Error: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>
