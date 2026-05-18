@@ -4,7 +4,7 @@
 //   - API calls to OpenAlex etc  → Network First (fresh data)
 //   - Everything else             → Network First with cache fallback
 
-const CACHE_VERSION = "se-v8";
+const CACHE_VERSION = "se-v9";
 const STATIC_CACHE = CACHE_VERSION + "-static";
 const DATA_CACHE = CACHE_VERSION + "-data";
 
@@ -29,6 +29,8 @@ const STATIC_ASSETS = [
   "/scripts/profile.js",
   "/scripts/tools-data.js",
   "/scripts/tools.js",
+  "/assets/vendor/vis-network.min.js",
+  "/assets/vendor/vis-network.min.css",
   "/scripts/journals.js",
   "/assets/logos_se/logo.png",
   "/assets/logos_se/logo_name.png",
