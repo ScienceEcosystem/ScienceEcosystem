@@ -1166,7 +1166,18 @@ const uploadDir = path.join(staticRoot, "uploads", "materials");
 const pdfUploadDir = path.join(staticRoot, "uploads", "pdfs");
 app.use(express.static(staticRoot, {
   extensions: ["html"],
-  maxAge: NODE_ENV === "production" ? "1h" : 0
+  setHeaders(res, filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === ".html" || ext === ".js" || ext === ".json") {
+      // Always fetch fresh — these files change with every deploy
+      res.set("Cache-Control", "no-cache");
+    } else if (ext === ".css") {
+      res.set("Cache-Control", "no-cache");
+    } else {
+      // Images, fonts, icons — stable, cache for 7 days
+      res.set("Cache-Control", NODE_ENV === "production" ? "public, max-age=604800" : "no-cache");
+    }
+  }
 }));
 
 function isPathInside(baseDir, targetPath) {
