@@ -98,6 +98,7 @@ function makeCuratedCard(j) {
       ? 'background:#fef9c3;color:#78350f'
       : 'background:#f1f5f9;color:#64748b';
 
+  card.setAttribute('data-jname', j.name);
   card.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">'
       + '<a href="' + escJ(j.link) + '" target="_blank" rel="noopener noreferrer" '
@@ -105,10 +106,10 @@ function makeCuratedCard(j) {
       + '<span style="font-size:.72rem;padding:1px 7px;border-radius:10px;flex-shrink:0;' + oaStyle + '">' + escJ(j.oaPolicy) + '</span>'
     + '</div>'
     + '<p style="font-size:.8rem;color:#475569;margin:0;line-height:1.4;">' + escJ(j.summary) + '</p>'
-    + '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.2rem;">'
+    + '<div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-top:.2rem;">'
       + (j.apcBand && j.apcBand !== 'Unknown' ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">APC: ' + escJ(j.apcBand) + '</span>' : '')
       + (j.speed && j.speed !== 'Unknown' ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">' + escJ(j.speed) + '</span>' : '')
-      + '<span style="font-size:.72rem;color:#94a3b8;padding:1px 0;">' + escJ(j.publisher) + '</span>'
+      + '<span class="curated-jti" style="font-size:.72rem;color:#cbd5e1;">JTI…</span>'
     + '</div>'
     + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
       + '<a href="journal.html?name=' + encodeURIComponent(j.name) + '" '
@@ -247,6 +248,43 @@ async function searchJournals(query, oaOnly) {
   }
 }
 
+// ── JTI loader for curated cards ─────────────────────────────────────────────
+// Fetches real OpenAlex source data for each curated journal and populates
+// the JTI badge. Runs in the background after cards are rendered.
+
+async function loadCuratedJti() {
+  if (!globalThis.SE?.components?.computeJournalTrustIndex) return;
+  const placeholders = Array.from(document.querySelectorAll('.curated-jti'));
+  if (!placeholders.length) return;
+
+  // Process in batches of 4 to stay within OpenAlex rate limits
+  const BATCH = 4;
+  for (let i = 0; i < placeholders.length; i += BATCH) {
+    const batch = placeholders.slice(i, i + BATCH);
+    await Promise.all(batch.map(async function(el) {
+      const card = el.closest('[data-jname]');
+      if (!card) return;
+      const name = card.getAttribute('data-jname');
+      try {
+        const url = OA_API + '/sources?search=' + encodeURIComponent(name)
+          + '&filter=type:journal&per_page=1&select=display_name,is_oa,is_in_doaj,works_count,summary_stats'
+          + '&mailto=' + OA_MAILTO;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        const src = data.results && data.results[0];
+        if (!src) { el.textContent = ''; return; }
+        const score = SE.components.computeJournalTrustIndex(src);
+        el.outerHTML = SE.components.journalTrustIndexBadgeHtml(score);
+      } catch(_) { el.textContent = ''; }
+    }));
+    // Small pause between batches
+    if (i + BATCH < placeholders.length) {
+      await new Promise(function(r){ setTimeout(r, 150); });
+    }
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 // defer guarantees DOM is parsed — run directly
@@ -259,6 +297,7 @@ async function searchJournals(query, oaOnly) {
 
   renderDefault(false);
   if (hint) hint.textContent = 'Showing ' + journalCatalog.length + ' curated journals by discipline. Type to search all journals via OpenAlex.';
+  loadCuratedJti();
 
   if (searchEl) {
     searchEl.addEventListener('input', function() {
