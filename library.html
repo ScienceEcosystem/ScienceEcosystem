@@ -63,9 +63,15 @@
     .muted{ color:#666; }
 
     /* Table */
-    .lib-table{ width:100%; border-collapse:collapse; }
-    .lib-table th,.lib-table td{ padding:.6rem .75rem; border-bottom:1px solid var(--border-color,#f0f0f0); vertical-align:top; }
+    .lib-table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+    .lib-table th,.lib-table td{ padding:.6rem .75rem; border-bottom:1px solid var(--border-color,#f0f0f0); vertical-align:middle; overflow:hidden; }
     .lib-table thead th{ text-align:left; font-weight:600; font-size:.9rem; background:#fff; position:sticky; top:0; z-index:1; }
+    /* Column widths — title gets remaining space, author and year are fixed */
+    .lib-table th:first-child, .lib-table td:first-child { width:auto; }
+    .lib-table th[data-k="authors"], .lib-table td:nth-child(2){ width:140px; }
+    .lib-table th[data-k="year"],    .lib-table td:nth-child(3){ width:56px; }
+    /* Title truncation */
+    .lib-table td:first-child { white-space:nowrap; text-overflow:ellipsis; }
     .tag-chip{ display:inline-block; padding:.15rem .4rem; border-radius:999px; border:1px solid #e5e7eb; font-size:.75rem; margin-right:.25rem; }
 
     /* Inspector */

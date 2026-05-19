@@ -571,7 +571,7 @@
            </span>`
         : "";
       return `<tr data-id="${esc(it.id)}" draggable="true">
-        <td style="display:flex;align-items:baseline;gap:3px;">${zoteroBadge}${pdfBadge}<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(it.title||"-")}</span></td>
+        <td title="${esc(it.title||"-")}">${zoteroBadge}${pdfBadge}${esc(it.title||"-")}</td>
         ${authors}${year}
       </tr>`;
     }).join("");
