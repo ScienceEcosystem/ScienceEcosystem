@@ -440,11 +440,10 @@
     if ($("aiBio")){
       var topTopics = concepts.slice(0,5).map(function(c){return c.display_name;}).filter(Boolean);
       // Prefer SE-saved affiliations over OpenAlex guesses for the auto-bio
-      var _su = opts && opts.seUser;
-      var affLabel = (_su && _su.affiliations && _su.affiliations[0])
-        ? _su.affiliations[0]
-        : (_su && _su.affiliation)
-          ? _su.affiliation
+      var affLabel = (_seUser && _seUser.affiliations && _seUser.affiliations[0])
+        ? _seUser.affiliations[0]
+        : (_seUser && _seUser.affiliation)
+          ? _seUser.affiliation
           : (lki && lki.display_name ? lki.display_name : null);
       $("aiBio").textContent =
         (a.display_name||"This researcher")+" studies "+(topTopics.join(", ")||"various topics")+". "+
