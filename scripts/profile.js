@@ -12,13 +12,13 @@
 
   // ── External platform definitions ────────────────────────────────────────────
   var PLATFORMS = [
-    { key: "website_url",           label: "Website"},
-    { key: "google_scholar_url",    label: "Google Scholar"},
-    { key: "researchgate_url",      label: "ResearchGate"},
-    { key: "semantic_scholar_url",  label: "Sem. Scholar"},
-    { key: "github_url",            label: "GitHub"},
-    { key: "linkedin_url",          label: "LinkedIn"},
-    { key: "twitter_url",           label: "Twitter / X"},
+    { key: "website_url",           label: "Website",         icon: "🌐" },
+    { key: "google_scholar_url",    label: "Google Scholar",  icon: "🎓" },
+    { key: "researchgate_url",      label: "ResearchGate",    icon: "🔬" },
+    { key: "semantic_scholar_url",  label: "Sem. Scholar",    icon: "🤖" },
+    { key: "github_url",            label: "GitHub",          icon: "💻" },
+    { key: "linkedin_url",          label: "LinkedIn",        icon: "💼" },
+    { key: "twitter_url",           label: "Twitter / X",     icon: "𝕏" },
   ];
 
   // ── Render external profile badges ───────────────────────────────────────────
@@ -27,12 +27,13 @@
     if (!box || !user) return;
     var html = PLATFORMS.map(function(p) {
       var url = user[p.key];
-      if (!url) return "";
+      // Guard: skip missing, null, or accidentally-saved "undefined"/"null" strings
+      if (!url || url === "undefined" || url === "null") return "";
       return '<a href="'+escapeHtml(url)+'" target="_blank" rel="noopener noreferrer" '
         + 'style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;'
         + 'background:#f1f5f9;border:1px solid #e2e8f0;font-size:.75rem;text-decoration:none;color:#374151;" '
         + 'title="'+escapeHtml(p.label)+'">'
-        + '<span>'+p.icon+'</span><span>'+escapeHtml(p.label)+'</span></a>';
+        + '<span>'+p.icon+'</span> <span>'+escapeHtml(p.label)+'</span></a>';
     }).join("");
 
     // ORCID badge always shown
@@ -42,7 +43,7 @@
       html = '<a href="'+escapeHtml(orcidUrl)+'" target="_blank" rel="noopener" '
         + 'style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;'
         + 'background:#a6ce39;color:#fff;font-size:.75rem;text-decoration:none;font-weight:600;" '
-        + 'title="ORCID">🆔 ORCID</a> ' + html;
+        + 'title="ORCID"> ORCID</a> ' + html;
     }
     box.innerHTML = html || "";
   }
@@ -398,8 +399,11 @@
       setAffiliationNode("Affiliation unavailable (deriving from publications…)", null);
     }
 
+    var mainName = (a.display_name || "").toLowerCase().trim();
     var alt = (Array.isArray(a.display_name_alternatives)&&a.display_name_alternatives.length)?a.display_name_alternatives:(Array.isArray(a.alternate_names)?a.alternate_names:[]);
-    if ($("otherNames")) $("otherNames").innerHTML = alt.length ? '<strong>Also published as:</strong> '+alt.map(escapeHtml).join(", ") : "";
+    // Filter out alternatives that are identical to the main display name
+    alt = alt.filter(function(n){ return n && n.toLowerCase().trim() !== mainName; });
+    if ($("otherNames")) $("otherNames").innerHTML = alt.length ? '<span class="muted" style="font-size:.85rem;">Also published as: '+alt.map(escapeHtml).join(", ")+'</span>' : "";
 
     if (a.orcid && $("profileOrcid")){
       var orcidHref = (a.orcid.indexOf("http")===0 ? a.orcid : ("https://orcid.org/"+a.orcid.replace(/^ORCID:/i,"")));
@@ -435,10 +439,17 @@
 
     if ($("aiBio")){
       var topTopics = concepts.slice(0,5).map(function(c){return c.display_name;}).filter(Boolean);
+      // Prefer SE-saved affiliations over OpenAlex guesses for the auto-bio
+      var _su = opts && opts.seUser;
+      var affLabel = (_su && _su.affiliations && _su.affiliations[0])
+        ? _su.affiliations[0]
+        : (_su && _su.affiliation)
+          ? _su.affiliation
+          : (lki && lki.display_name ? lki.display_name : null);
       $("aiBio").textContent =
         (a.display_name||"This researcher")+" studies "+(topTopics.join(", ")||"various topics")+". "+
         "They have "+((a.works_count||0).toLocaleString())+" works and "+(totalCitations.toLocaleString())+" citations. "+
-        "Current h-index is "+h+". Latest affiliation is "+(lki && lki.display_name ? lki.display_name : "Unknown")+".";
+        "Current h-index is "+h+"."+(affLabel ? " Current affiliation: "+affLabel+"." : "");
     }
 
     // Past affiliations timeline: initial fallback to last_known_institutions
@@ -875,10 +886,13 @@
         var aiBox2 = $("aiBio"); if (aiBox2) aiBox2.style.display = "";
       }
 
-      // Affiliations: show all if researcher has multiple
-      if (seUser && seUser.affiliations && seUser.affiliations.length > 1) {
+      // Affiliations: SE-saved affiliations always override OpenAlex guesses
+      if (seUser && seUser.affiliations && seUser.affiliations.length > 0) {
         var affNode = $("profileAffiliation");
         if (affNode) affNode.innerHTML = seUser.affiliations.map(function(a){ return escapeHtml(a); }).join(' &nbsp;·&nbsp; ');
+      } else if (seUser && seUser.affiliation) {
+        var affNode2 = $("profileAffiliation");
+        if (affNode2) affNode2.textContent = seUser.affiliation;
       }
 
       // Keywords from SE (supplement OpenAlex concepts)
