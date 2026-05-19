@@ -98,6 +98,42 @@ FILE: about.html (UPDATED)
     </section>
 
     <section class="panel">
+      <h2>Our open metrics</h2>
+      <p>Science has long relied on proprietary metrics — Impact Factors sold by Clarivate, citation counts locked in Scopus or Web of Science, h-indexes that vary depending on which database you use. ScienceEcosystem introduces three transparent alternatives, computed entirely from open public data and fully reproducible by anyone.</p>
+
+      <h3 style="margin:1.5rem 0 .5rem;">Journal Trust Index (JTI)</h3>
+      <p>The JTI is a 0–100 score for journals, designed as an open alternative to the proprietary Impact Factor. It is computed from <a href="https://openalex.org/" target="_blank" rel="noopener">OpenAlex</a> data across four dimensions:</p>
+      <ul>
+        <li><strong>Openness (0–30):</strong> Is the journal indexed in DOAJ as verified gold open access (30 pts), open access but not DOAJ-verified (20 pts), or subscription-only (0 pts)? Journals that make science freely available are rewarded.</li>
+        <li><strong>Recognition (0–40):</strong> How often are papers in this journal cited in the two years after publication? This uses OpenAlex's <em>2-year mean citedness</em> on a log scale — a transparent, openly-computable equivalent to the Impact Factor.</li>
+        <li><strong>Scale (0–15):</strong> How large is the journal's body of work? A log-scaled measure of total published works — larger established journals score higher.</li>
+        <li><strong>Integrity (0–15):</strong> Is the journal a legitimate peer-reviewed venue (not a preprint server or repository)? Journals verified as open access receive a transparency bonus.</li>
+      </ul>
+      <p>Grades run from <strong>Excellent (85+)</strong> through Good, Fair, Limited, to <strong>Poor (&lt;30)</strong>. A journal scoring 100/100 would need to be DOAJ-verified, have extraordinary citation impact, and publish a large body of work — an aspirational target that currently no journal meets, which is itself a meaningful statement about the state of open science. The JTI appears on journal pages, paper pages, and the journal finder.</p>
+      <p class="muted" style="font-size:.85rem;">The formula is fully open: <code>JTI = Openness + Recognition + Scale + Integrity</code>. Anyone can reproduce it from OpenAlex's public API.</p>
+
+      <h3 style="margin:1.5rem 0 .5rem;">Publication Quality Score</h3>
+      <p>Each paper page shows a 0–100% quality score combining three signals about a specific publication:</p>
+      <ul>
+        <li><strong>Peer review (40%):</strong> Is this paper peer reviewed? Papers in journals with open/transparent peer review (eLife, F1000Research) score highest.</li>
+        <li><strong>Journal quality (40%):</strong> The JTI of the journal where the paper was published, scaled to 0–40 points.</li>
+        <li><strong>Open access (20%):</strong> Is this specific paper freely available to read?</li>
+      </ul>
+      <p>This score is not a measure of scientific correctness — it reflects the credibility of the publication venue and the accessibility of the work. A preprint scores low; a peer-reviewed open-access paper in a high-JTI journal scores high. The score is shown alongside integrity checks (PubPeer, Retraction Watch, predatory journal detection) so readers can form their own judgement.</p>
+
+      <h3 style="margin:1.5rem 0 .5rem;">Open Science Portfolio</h3>
+      <p>On every researcher profile, ScienceEcosystem computes an Open Science Portfolio — a career-level view of a researcher's commitment to open science, derived entirely from OpenAlex's open data:</p>
+      <ul>
+        <li><strong>Open access rate:</strong> What percentage of the researcher's papers are freely available? Colour-coded green (&ge;60%), amber (&ge;30%), or red (&lt;30%).</li>
+        <li><strong>Citation impact:</strong> What share of their papers fall in the top 25% most-cited for their publication year? This is a field-normalised measure that works across disciplines.</li>
+        <li><strong>Career span:</strong> The range of years across their publication record.</li>
+        <li><strong>DOI coverage:</strong> How many of their papers have a persistent identifier for discoverability.</li>
+      </ul>
+      <p>The goal is not to replace h-index or citation counts — they appear on profiles too. The Open Science Portfolio adds a dimension that existing tools ignore: how openly has this researcher shared their work? A researcher with 10,000 citations but 0% open access scores differently from one with 1,000 citations and 80% open access. Both profiles are valuable; both should be visible.</p>
+      <p class="muted" style="font-size:.85rem;">All three metrics are recomputed live from OpenAlex data. No proprietary database subscriptions are required to use or verify them.</p>
+    </section>
+
+    <section class="panel">
       <h2>Who it is for</h2>
       <p>ScienceEcosystem serves researchers, students, educators, institutions, and funders who need trustworthy links between results and the work behind them. Whether you publish, fund, or reuse research, this platform helps you connect the dots.</p>
     </section>
