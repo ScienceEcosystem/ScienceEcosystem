@@ -12,13 +12,13 @@
 
   // ── External platform definitions ────────────────────────────────────────────
   var PLATFORMS = [
-    { key: "website_url",           label: "Website",         icon: "🌐" },
-    { key: "google_scholar_url",    label: "Google Scholar",  icon: "🎓" },
-    { key: "researchgate_url",      label: "ResearchGate",    icon: "🔬" },
-    { key: "semantic_scholar_url",  label: "Sem. Scholar",    icon: "🤖" },
-    { key: "github_url",            label: "GitHub",          icon: "💻" },
-    { key: "linkedin_url",          label: "LinkedIn",        icon: "💼" },
-    { key: "twitter_url",           label: "Twitter / X",     icon: "𝕏" },
+    { key: "website_url",           label: "Website" },
+    { key: "google_scholar_url",    label: "Google Scholar" },
+    { key: "researchgate_url",      label: "ResearchGate" },
+    { key: "semantic_scholar_url",  label: "Semantic Scholar" },
+    { key: "github_url",            label: "GitHub" },
+    { key: "linkedin_url",          label: "LinkedIn" },
+    { key: "twitter_url",           label: "Twitter / X" },
   ];
 
   // ── Render external profile badges ───────────────────────────────────────────
@@ -33,7 +33,7 @@
         + 'style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;'
         + 'background:#f1f5f9;border:1px solid #e2e8f0;font-size:.75rem;text-decoration:none;color:#374151;" '
         + 'title="'+escapeHtml(p.label)+'">'
-        + '<span>'+p.icon+'</span> <span>'+escapeHtml(p.label)+'</span></a>';
+        + escapeHtml(p.label)+'</a>';
     }).join("");
 
     // ORCID badge always shown
@@ -43,7 +43,7 @@
       html = '<a href="'+escapeHtml(orcidUrl)+'" target="_blank" rel="noopener" '
         + 'style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;'
         + 'background:#a6ce39;color:#fff;font-size:.75rem;text-decoration:none;font-weight:600;" '
-        + 'title="ORCID"> ORCID</a> ' + html;
+        + 'title="ORCID">ORCID</a> ' + html;
     }
     box.innerHTML = html || "";
   }
