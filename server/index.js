@@ -11,6 +11,7 @@ import pkg from "pg";
 import { resolveArtifacts } from "./artifacts-resolver.js";
 import { checkJournalIntegrity, clearJournalIntegrityCache } from "./journal-integrity.js";
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const { Pool } = pkg;
 const fsp = fs.promises;
 import paperRoutes from "../routes/paper.js";
@@ -40,17 +41,22 @@ async function uploadToR2(key, buffer, contentType) {
 
 async function streamFromR2(res, orcid, paperId, key) {
   try {
-    const r2Res = await r2Client.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", 'inline; filename="paper.pdf"');
-    r2Res.Body.pipe(res);
+    // Generate a 1-hour pre-signed URL and redirect — browser fetches directly
+    // from R2 (fast, no server memory used, works without session cookies in pdf.js)
+    const signedUrl = await getSignedUrl(
+      r2Client,
+      new GetObjectCommand({ Bucket: R2_BUCKET, Key: key, ResponseContentType: "application/pdf" }),
+      { expiresIn: 3600 }
+    );
+    res.redirect(302, signedUrl);
   } catch (e) {
     if (e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404) {
       await pool.query(`DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [orcid, paperId]).catch(() => {});
       await pool.query(`UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`, [orcid, paperId]).catch(() => {});
       res.status(404).json({ error: "PDF no longer available. Please re-save using the browser extension." });
     } else {
-      throw e;
+      console.error("R2 GetObject error:", e);
+      res.status(500).json({ error: "Failed to load PDF from storage." });
     }
   }
 }

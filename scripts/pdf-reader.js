@@ -103,7 +103,10 @@ async function loadPDF(url) {
   }
 
   try {
-    const loadingTask = pdfjsLib.getDocument(finalUrl);
+    const loadingTask = pdfjsLib.getDocument({
+      url: finalUrl,
+      withCredentials: true  // send session cookie for authenticated endpoints
+    });
     pdfDoc = await loadingTask.promise;
 
     const countEl = document.getElementById('pageCount');
