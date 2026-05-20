@@ -1790,9 +1790,21 @@ async function sendLibraryPdf(res, orcid, paperId) {
       candidate = path.join(staticRoot, rel);
     }
     const safePath = ensureSafePath(pdfUploadDir, candidate);
-    return res.sendFile(safePath, err => {
+    return res.sendFile(safePath, async err => {
       if (err) {
-        if (err.code === "ENOENT") return res.status(404).json({ error: "PDF not found" });
+        if (err.code === "ENOENT") {
+          // File was lost (e.g. Render redeploy wiped the disk) — clear stale DB entries
+          // so the PDF badge disappears from the library
+          await pool.query(
+            `DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
+            [orcid, paperId]
+          ).catch(() => {});
+          await pool.query(
+            `UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`,
+            [orcid, paperId]
+          ).catch(() => {});
+          return res.status(404).json({ error: "PDF no longer available — the file was lost on server restart. Please re-upload from the publisher site using the browser extension." });
+        }
         console.error("sendFile error:", err);
         return res.status(500).json({ error: "Failed to load PDF" });
       }

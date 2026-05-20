@@ -85,6 +85,18 @@ async function loadPDF(url) {
   const isExternal = !url.startsWith('/') && !url.startsWith(window.location.origin);
   const finalUrl = isExternal ? `/api/pdf/proxy?url=${encodeURIComponent(url)}` : url;
 
+  // If it's a library PDF, check availability first before loading with pdf.js
+  if (url.includes('/api/library/pdf')) {
+    try {
+      const check = await fetch(url, { credentials: 'include' });
+      if (!check.ok) {
+        const data = await check.json().catch(() => ({}));
+        showPdfError(data.error || 'PDF not available.', true);
+        return;
+      }
+    } catch (_) {}
+  }
+
   if (!pdfjsLib) {
     pdfjsLib = await import('/pdfjs/build/pdf.mjs');
     pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/build/pdf.worker.mjs';
@@ -100,37 +112,35 @@ async function loadPDF(url) {
     renderAllPages();
   } catch (error) {
     console.error('Error loading PDF:', error);
-    const pdfMain = document.querySelector('.pdf-main-body') || document.querySelector('.pdf-main');
-    if (!pdfMain) return;
-
-    // Build the initial link content — use cached DOI if already loaded, placeholder if not yet
-    const initialLinks = _paperDoiHref
-      ? '' // renderDoiLink will be called after innerHTML is set
-      : '<span style="color:#999;font-size:.9rem;">Looking up publisher link…</span>';
-
-    pdfMain.innerHTML = `
-      <div id="pdfErrorState" style="text-align:center;padding:3rem 2rem;color:#444;max-width:520px;margin:0 auto;">
-        <div style="font-size:2.5rem;margin-bottom:.75rem;">📄</div>
-        <h3 style="color:#c0392b;margin:0 0 .5rem;">PDF unavailable</h3>
-        <p style="margin:.5rem 0 1.75rem;color:#666;line-height:1.5;">
-          The publisher is blocking direct PDF access.
-          Visit the publisher's page to read or download the paper.
-        </p>
-        <div id="pdfErrorLinks" style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem;">
-          ${initialLinks}
-        </div>
-        <p style="font-size:.83rem;color:#94a3b8;">
-          💡 Install the <strong>ScienceEcosystem browser extension</strong> to save PDFs directly from the publisher's site into your library.
-        </p>
-      </div>`;
-
-    const linksEl = document.getElementById('pdfErrorLinks');
-    if (linksEl && _paperDoiHref) {
-      // DOI already known — render immediately
-      renderDoiLink(linksEl, _paperDoiHref, null);
-    }
-    // If DOI not yet known, loadPaperMetadata will call renderDoiLink when it finishes
+    showPdfError(null, false);
   }
+}
+
+function showPdfError(customMessage, isLibraryLoss) {
+  const pdfMain = document.querySelector('.pdf-main-body') || document.querySelector('.pdf-main');
+  if (!pdfMain) return;
+
+  const initialLinks = _paperDoiHref
+    ? ''
+    : '<span style="color:#999;font-size:.9rem;">Looking up publisher link…</span>';
+
+  const bodyText = isLibraryLoss
+    ? (customMessage || 'The stored PDF is no longer available — the file was lost when the server restarted. Visit the publisher site to get the PDF again and re-save it using the browser extension.')
+    : 'The publisher is blocking direct PDF access. Visit the publisher\'s page to read or download the paper.';
+
+  pdfMain.innerHTML = `
+    <div id="pdfErrorState" style="text-align:center;padding:3rem 2rem;color:#444;max-width:520px;margin:0 auto;">
+      <div style="font-size:2.5rem;margin-bottom:.75rem;">📄</div>
+      <h3 style="color:#c0392b;margin:0 0 .5rem;">${isLibraryLoss ? 'PDF no longer available' : 'PDF unavailable'}</h3>
+      <p style="margin:.5rem 0 1.75rem;color:#666;line-height:1.5;">${escapeHtml(bodyText)}</p>
+      <div id="pdfErrorLinks" style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;margin-bottom:1.5rem;">
+        ${initialLinks}
+      </div>
+      ${!isLibraryLoss ? '<p style="font-size:.83rem;color:#94a3b8;">Install the <strong>ScienceEcosystem browser extension</strong> to save PDFs directly from the publisher\'s site.</p>' : ''}
+    </div>`;
+
+  const linksEl = document.getElementById('pdfErrorLinks');
+  if (linksEl && _paperDoiHref) renderDoiLink(linksEl, _paperDoiHref, null);
 }
 
 function renderPage(num) {
