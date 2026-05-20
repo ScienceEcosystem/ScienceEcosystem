@@ -10,6 +10,7 @@ import crypto from "crypto";
 import pkg from "pg";
 import { resolveArtifacts } from "./artifacts-resolver.js";
 import { checkJournalIntegrity, clearJournalIntegrityCache } from "./journal-integrity.js";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 const { Pool } = pkg;
 const fsp = fs.promises;
 import paperRoutes from "../routes/paper.js";
@@ -17,6 +18,47 @@ import paperRoutes from "../routes/paper.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+// ── Cloudflare R2 client (S3-compatible) ──────────────────────────────────────
+const r2Client = process.env.R2_ACCOUNT_ID ? new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.R2_SECRET_KEY || "",
+  },
+}) : null;
+const R2_BUCKET = process.env.R2_BUCKET || "";
+
+async function uploadToR2(key, buffer, contentType) {
+  if (!r2Client) throw new Error("R2 not configured");
+  await r2Client.send(new PutObjectCommand({
+    Bucket: R2_BUCKET, Key: key, Body: buffer,
+    ContentType: contentType || "application/pdf",
+  }));
+}
+
+async function streamFromR2(res, orcid, paperId, key) {
+  try {
+    const r2Res = await r2Client.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="paper.pdf"');
+    r2Res.Body.pipe(res);
+  } catch (e) {
+    if (e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404) {
+      await pool.query(`DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [orcid, paperId]).catch(() => {});
+      await pool.query(`UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`, [orcid, paperId]).catch(() => {});
+      res.status(404).json({ error: "PDF no longer available. Please re-save using the browser extension." });
+    } else {
+      throw e;
+    }
+  }
+}
+
+async function deleteFromR2(key) {
+  if (!r2Client) return;
+  await r2Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key })).catch(() => {});
+}
 
 const {
   PORT = 5173,
@@ -1057,14 +1099,12 @@ async function syncZoteroForUser(orcid) {
             if (pdfChild?.key) {
               const fileRes = await zoteroFetch(`${ZOTERO_BASE}/users/${zid}/items/${pdfChild.key}/file`, apiKey);
               const buf = Buffer.from(await fileRes.arrayBuffer());
-              await fsp.mkdir(path.join(pdfUploadDir, orcid), { recursive: true });
               const safeKey = String(item.key).replace(/[^\w.\-]/g, "_");
               const safeAttach = String(pdfChild.key).replace(/[^\w.\-]/g, "_");
               const fname = `zotero_${safeKey}_${safeAttach}.pdf`;
-              const fullPath = path.join(pdfUploadDir, orcid, fname);
-              await fsp.writeFile(fullPath, buf);
-              const safePath = ensureSafePath(pdfUploadDir, fullPath);
-              const urlPath = `/uploads/pdfs/${orcid}/${fname}`;
+              const r2ZotKey = `pdfs/${orcid}/${fname}`;
+              await uploadToR2(r2ZotKey, buf, "application/pdf");
+              const urlPath = `r2:${r2ZotKey}`;
               await pool.query(
                 `INSERT INTO library_pdfs (orcid, paper_id, filename, storage_path, file_size, mime_type, source)
                  VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -1074,7 +1114,7 @@ async function syncZoteroForUser(orcid) {
                    file_size=EXCLUDED.file_size,
                    mime_type=EXCLUDED.mime_type,
                    source=EXCLUDED.source`,
-                [orcid, mapped.id, fname, safePath, buf.length, "application/pdf", "zotero"]
+                [orcid, mapped.id, fname, urlPath, buf.length, "application/pdf", "zotero"]
               );
               await pool.query(
                 `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
@@ -1699,12 +1739,11 @@ app.post("/api/library/pdf", async (req, res) => {
     if (file.size > 50 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
 
     const safePaper = paperId.replace(/[^\w.\-]/g, "_");
-    await fsp.mkdir(path.join(pdfUploadDir, sess.orcid), { recursive: true });
     const fname = `${safePaper}_${Date.now()}.pdf`;
-    const fullPath = path.join(pdfUploadDir, sess.orcid, fname);
-    await fsp.writeFile(fullPath, file.buffer);
-    const safePath = ensureSafePath(pdfUploadDir, fullPath);
-    const urlPath = `/uploads/pdfs/${sess.orcid}/${fname}`;
+    const r2Key = `pdfs/${sess.orcid}/${fname}`;
+    const storagePath = `r2:${r2Key}`;
+
+    await uploadToR2(r2Key, file.buffer, file.contentType || "application/pdf");
 
     await pool.query(
       `INSERT INTO library_pdfs (orcid, paper_id, filename, storage_path, file_size, mime_type, source)
@@ -1715,13 +1754,13 @@ app.post("/api/library/pdf", async (req, res) => {
          file_size=EXCLUDED.file_size,
          mime_type=EXCLUDED.mime_type,
          source=EXCLUDED.source`,
-      [sess.orcid, paperId, filename, safePath, file.size, file.contentType || "application/pdf", "upload"]
+      [sess.orcid, paperId, fname, storagePath, file.size, file.contentType || "application/pdf", "upload"]
     );
     await pool.query(
       `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
-      [urlPath, sess.orcid, paperId]
+      [storagePath, sess.orcid, paperId]
     );
-    res.json({ ok: true, url: urlPath, paper_id: paperId });
+    res.json({ ok: true, paper_id: paperId });
   } catch (e) {
     console.error("POST /api/library/pdf failed:", e);
     res.status(500).json({ error: "Failed to upload PDF" });
@@ -1783,6 +1822,13 @@ async function sendLibraryPdf(res, orcid, paperId) {
   }
   if (!storagePath) return res.status(404).json({ error: "PDF not found" });
 
+  // R2-stored PDF
+  if (storagePath.startsWith("r2:")) {
+    const key = storagePath.slice(3);
+    return streamFromR2(res, orcid, paperId, key);
+  }
+
+  // Legacy: filesystem path (will ENOENT on Render, triggers cleanup)
   try {
     let candidate = storagePath;
     if (!path.isAbsolute(candidate)) {
@@ -1793,17 +1839,9 @@ async function sendLibraryPdf(res, orcid, paperId) {
     return res.sendFile(safePath, async err => {
       if (err) {
         if (err.code === "ENOENT") {
-          // File was lost (e.g. Render redeploy wiped the disk) — clear stale DB entries
-          // so the PDF badge disappears from the library
-          await pool.query(
-            `DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
-            [orcid, paperId]
-          ).catch(() => {});
-          await pool.query(
-            `UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`,
-            [orcid, paperId]
-          ).catch(() => {});
-          return res.status(404).json({ error: "PDF no longer available — the file was lost on server restart. Please re-upload from the publisher site using the browser extension." });
+          await pool.query(`DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [orcid, paperId]).catch(() => {});
+          await pool.query(`UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`, [orcid, paperId]).catch(() => {});
+          return res.status(404).json({ error: "PDF no longer available — the file was lost on server restart. Please re-save using the browser extension." });
         }
         console.error("sendFile error:", err);
         return res.status(500).json({ error: "Failed to load PDF" });
@@ -1838,13 +1876,16 @@ app.delete("/api/library/pdf", async (req, res) => {
   if (!rows.length) return res.status(404).json({ error: "PDF not found" });
   try {
     const stored = rows[0].storage_path;
-    let candidate = stored;
-    if (!path.isAbsolute(candidate)) {
-      const rel = candidate.startsWith("/") ? candidate.slice(1) : candidate;
-      candidate = path.join(staticRoot, rel);
+    if (stored && stored.startsWith("r2:")) {
+      await deleteFromR2(stored.slice(3));
+    } else if (stored) {
+      let candidate = stored;
+      if (!path.isAbsolute(candidate)) {
+        const rel = candidate.startsWith("/") ? candidate.slice(1) : candidate;
+        candidate = path.join(staticRoot, rel);
+      }
+      await fsp.unlink(candidate).catch(e => { if (e.code !== "ENOENT") throw e; });
     }
-    const safePath = ensureSafePath(pdfUploadDir, candidate);
-    await fsp.unlink(safePath).catch(e => { if (e.code !== "ENOENT") throw e; });
     await pool.query(`DELETE FROM library_pdfs WHERE id=$1`, [rows[0].id]);
     await pool.query(
       `UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`,
@@ -1866,8 +1907,12 @@ app.delete("/api/library/pdf/:paperId", async (req, res) => {
   );
   if (!rows.length) return res.status(404).json({ error: "PDF not found" });
   try {
-    const safePath = ensureSafePath(pdfUploadDir, rows[0].storage_path);
-    await fsp.unlink(safePath).catch(e => { if (e.code !== "ENOENT") throw e; });
+    const stored = rows[0].storage_path;
+    if (stored && stored.startsWith("r2:")) {
+      await deleteFromR2(stored.slice(3));
+    } else if (stored) {
+      await fsp.unlink(stored).catch(e => { if (e.code !== "ENOENT") throw e; });
+    }
     await pool.query(`DELETE FROM library_pdfs WHERE id=$1`, [rows[0].id]);
     await pool.query(
       `UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`,
