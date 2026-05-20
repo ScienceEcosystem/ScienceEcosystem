@@ -670,16 +670,20 @@
       totalWorksCount = get(data, "meta.count", totalWorksCount || results.length || 0);
 
       if (replace) {
-        accumulatedWorks = results.slice();
-        // reset derivations
+        accumulatedWorks = [];
         coauthors = Object.create(null);
         affYears  = Object.create(null);
         clearPublications();
-      } else {
-        accumulatedWorks = accumulatedWorks.concat(results);
       }
 
-      renderWorksChunk(results);
+      // Deduplicate before appending — merged author IDs can return the same
+      // work multiple times (once per matching author ID)
+      var seenIds = Object.create(null);
+      accumulatedWorks.forEach(function(w){ if (w.id) seenIds[w.id] = true; });
+      var uniqueNew = results.filter(function(w){ return w.id && !seenIds[w.id]; });
+      accumulatedWorks = accumulatedWorks.concat(uniqueNew);
+
+      renderWorksChunk(uniqueNew);
     }catch(e){
       if (e.name === "AbortError") return;
       hardError(e.message || String(e));
