@@ -120,6 +120,66 @@
     };
   }
 
+  // ── BibTeX Export ─────────────────────────────────────────────────────────────
+  function setupBibtexExport(authorName) {
+    var btn = $("bibtexBtn");
+    if (!btn) return;
+    btn.style.display = "inline-flex";
+    btn.onclick = function() {
+      var works = accumulatedWorks;
+      if (!works || !works.length) { alert("No publications loaded yet."); return; }
+
+      var entries = works.map(function(w) {
+        // Cite key: first author last name + year + first title word
+        var firstAuthor = (w.authorships && w.authorships[0] && w.authorships[0].author && w.authorships[0].author.display_name) || "Unknown";
+        var lastName = firstAuthor.split(" ").pop().replace(/[^a-zA-Z]/g,"") || "Author";
+        var year = w.publication_year || "n.d.";
+        var titleWord = (w.title || w.display_name || "").split(/\s+/)[0].replace(/[^a-zA-Z]/g,"") || "work";
+        var key = lastName.toLowerCase() + year + titleWord.toLowerCase();
+
+        // Authors: "Family, Given and Family, Given …"
+        var authors = (w.authorships || []).map(function(a) {
+          return (a.author && a.author.display_name) ? a.author.display_name : "";
+        }).filter(Boolean).join(" and ");
+
+        // Type mapping
+        var type = w.type || "article";
+        var bibType = type === "dataset" ? "misc" : type === "book" ? "book" : type === "book-chapter" ? "incollection" : "article";
+
+        var doi = (w.doi || "").replace(/^https?:\/\/doi\.org\//i,"").replace(/^doi:/i,"");
+        var journal = (w.primary_location && w.primary_location.source && w.primary_location.source.display_name) || "";
+        var vol = get(w,"biblio.volume","");
+        var num = get(w,"biblio.issue","");
+        var pages = [get(w,"biblio.first_page",""), get(w,"biblio.last_page","")].filter(Boolean).join("--");
+        var url = doi ? "https://doi.org/" + doi : (w.id || "");
+
+        var fields = [
+          "  title     = {" + (w.title || w.display_name || "Untitled") + "}",
+          "  author    = {" + (authors || "Unknown") + "}",
+          "  year      = {" + year + "}",
+          journal ? "  journal   = {" + journal + "}" : null,
+          vol     ? "  volume    = {" + vol + "}" : null,
+          num     ? "  number    = {" + num + "}" : null,
+          pages   ? "  pages     = {" + pages + "}" : null,
+          doi     ? "  doi       = {" + doi + "}" : null,
+          url     ? "  url       = {" + url + "}" : null,
+        ].filter(Boolean).join(",\n");
+
+        return "@" + bibType + "{" + key + ",\n" + fields + "\n}";
+      });
+
+      var bib = "% BibTeX export from ScienceEcosystem\n% " + (authorName || "Researcher") + " — " + new Date().toISOString().slice(0,10) + "\n\n" + entries.join("\n\n");
+
+      // Download
+      var blob = new Blob([bib], { type:"text/plain" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (authorName || "publications").replace(/\s+/g,"_") + ".bib";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+  }
+
   // ── initProfilePage: entry point ─────────────────────────────────────────────
   async function initProfilePage() {
     var orcidParam = getParam("orcid");
@@ -943,6 +1003,7 @@
         if (followBtn) followBtn.style.display = "none";
         if (editBtn) { editBtn.style.display = "inline-flex"; editBtn.onclick = function(){ location.href = "settings-profile.html"; }; }
         setupCvExport(author.display_name);
+        setupBibtexExport(author.display_name);
       } else {
         if (editBtn) editBtn.style.display = "none";
         wireFollowButton(author);

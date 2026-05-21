@@ -9,15 +9,49 @@
   <link rel="stylesheet" href="style.css" />
   <style>
     @media print {
-      .app-nav, .site-footer, #followAuthorBtn, #editProfileBtn, #exportCvBtn,
-      .sort-controls, #pubsPagination, #openSciencePanel h3 + p { display:none !important; }
-      body { font-size:11pt; color:#000; }
-      .profile-top, .panel { box-shadow:none !important; border:none !important; }
+      /* Hide all interactive chrome */
+      .app-nav, .site-footer, .skip-link,
+      #followAuthorBtn, #editProfileBtn, #exportCvBtn, #bibtexBtn,
+      .sort-controls, #pubsPagination, .chips, #externalLinks,
+      .footer-socials, #openSciencePanel, #trendCharts,
+      .btn, button { display:none !important; }
+
+      /* Clean page setup */
+      @page { margin: 2cm 2.5cm; }
+      body { font-size:11pt; color:#000; background:#fff; font-family:Georgia,serif; }
+      h1 { font-size:18pt; margin:0 0 4pt; }
+      h2 { font-size:13pt; margin:16pt 0 4pt; border-bottom:1pt solid #999; padding-bottom:2pt; }
+      h3 { font-size:11pt; margin:10pt 0 2pt; }
+
+      /* Remove all card/panel styling */
+      .profile-top, .panel, .layout-grid { box-shadow:none !important; border:none !important; padding:0 !important; margin:0 0 8pt !important; }
+      .container { max-width:100% !important; padding:0 !important; }
+
+      /* Profile header */
+      .profile-top-grid { display:block !important; }
+      .metrics { display:none !important; }
+      #profilePhoto { display:none !important; }
+      .id-header { display:block !important; }
+      #profileOrcid { display:inline !important; font-size:9pt; color:#555; }
+
+      /* Full-width publications, no sidebar */
       .layout-grid { display:block !important; }
       .side-col { display:none !important; }
-      #profileMain { width:100% !important; }
-      a { color:#000 !important; text-decoration:none !important; }
-      .stat-value { font-size:1.1rem !important; }
+      #profileMain { width:100% !important; box-shadow:none !important; }
+
+      /* Publication list formatting */
+      .paper-card { border:none !important; box-shadow:none !important; padding:0 0 6pt !important; margin:0 !important; border-bottom:none !important; page-break-inside:avoid; }
+      .paper-card + .paper-card { border-top:0.5pt solid #ddd !important; padding-top:6pt !important; }
+      .paper-card .chips, .paper-card button, .paper-card .badge { display:none !important; }
+
+      /* Links in print: show DOI inline */
+      a[href*="doi.org"]::after { content:" (" attr(href) ")"; font-size:9pt; color:#555; }
+
+      /* Topics as comma list */
+      .topics-cards { display:inline !important; }
+      .topic-card { display:inline !important; padding:0 !important; border:none !important; background:none !important; }
+      .topic-card::after { content:", "; }
+      .topic-card:last-child::after { content:""; }
     }
   </style>
 <link rel="manifest" href="/manifest.json"/>
@@ -88,7 +122,8 @@
               <div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap;">
                 <button id="followAuthorBtn" class="btn btn-secondary" type="button">Follow</button>
                 <button id="editProfileBtn" class="btn btn-secondary" type="button" style="display:none;">Edit profile</button>
-                <a id="exportCvBtn" class="btn btn-secondary" href="#" style="display:none;" title="Download academic CV">CV export</a>
+                <a id="exportCvBtn" class="btn btn-secondary" href="#" style="display:none;" title="Print / save as PDF">CV export</a>
+                <button id="bibtexBtn" class="btn btn-secondary" type="button" style="display:none;" title="Download all publications as BibTeX (.bib)">Download .bib</button>
                 <span id="followStatus" class="muted small"></span>
               </div>
 
