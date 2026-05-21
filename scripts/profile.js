@@ -499,7 +499,7 @@
     var yLabel = opts.yLabel || "";
     var id = opts.id || ("c" + Math.random().toString(36).slice(2));
 
-    var H = 300, W = 640, padL = 68, padR = 16, padT = 20, padB = 48;
+    var H = 300, W = 640, padL = 76, padR = 16, padT = 20, padB = 54;
     var innerW = W - padL - padR;
     var innerH = H - padT - padB;
 
@@ -543,9 +543,9 @@
     }
 
     var xLabels = [
-      '<text x="'+padL+'" y="'+(H-14)+'" class="xlabel">'+escapeHtml(String(first))+'</text>',
-      '<text x="'+(padL + innerW/2)+'" y="'+(H-14)+'" class="xlabel" text-anchor="middle">'+escapeHtml(String(mid))+'</text>',
-      '<text x="'+(W-padR)+'" y="'+(H-14)+'" class="xlabel" text-anchor="end">'+escapeHtml(String(last))+'</text>'
+      '<text x="'+padL+'" y="'+(H-16)+'" class="xlabel">'+escapeHtml(String(first))+'</text>',
+      '<text x="'+(padL + innerW/2)+'" y="'+(H-16)+'" class="xlabel" text-anchor="middle">'+escapeHtml(String(mid))+'</text>',
+      '<text x="'+(W-padR)+'" y="'+(H-16)+'" class="xlabel" text-anchor="end">'+escapeHtml(String(last))+'</text>'
     ];
 
     var yAxisLabel = yLabel ? '<text x="16" y="'+(padT+8)+'" class="ylabel-unit" font-size="12" fill="currentColor" fill-opacity=".7">'+escapeHtml(yLabel)+'</text>' : '';
@@ -556,9 +556,9 @@
         '<svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" role="img" aria-label="'+escapeHtml(title)+'">'+
           yAxisLabel +
           '<g class="grid-lines">'+grid.join("")+'</g>'+
-          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="12">'+yLabels.join("")+'</g>'+
+          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="13">'+yLabels.join("")+'</g>'+
           '<g class="bars" fill="currentColor" fill-opacity=".8">'+bars.join("")+'</g>'+
-          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="12">'+xLabels.join("")+'</g>'+
+          '<g class="axis" fill="currentColor" fill-opacity=".85" font-size="13">'+xLabels.join("")+'</g>'+
         '</svg>'+
       '</div>';
   }
