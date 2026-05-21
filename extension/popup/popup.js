@@ -62,6 +62,17 @@ async function boot() {
       meta = await chrome.tabs.sendMessage(tab.id, { type: "GET_PAGE_METADATA" });
     }
   } catch (_) { /* chrome://, PDF, restricted page */ }
+
+  // PDF fallback: if content script couldn't detect a paper (e.g. Chrome PDF viewer
+  // or a direct .pdf URL), try to extract a DOI from the tab URL itself.
+  if (!meta?.detected && tab.url) {
+    const doiMatch = tab.url.match(/10\.\d{4,}\/[^\s"?#&,)>]+/);
+    if (doiMatch) {
+      const doi = doiMatch[0].replace(/[.,;)]+$/, ""); // trim trailing punctuation
+      meta = { detected: true, doi, title: tab.title || "PDF document", isPdf: true };
+    }
+  }
+
   _meta = meta;
 
   // Badge: set here instead of from the auto-injected content script

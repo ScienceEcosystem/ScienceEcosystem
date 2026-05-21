@@ -1646,9 +1646,30 @@ app.get("/api/library", async (req, res) => {
 app.post("/api/library", async (req, res) => {
   const sess = await getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
-  const { id, title } = req.body || {};
+  const { id, title, doi } = req.body || {};
   if (!id || !title) return res.status(400).json({ error: "id and title required" });
-  await libraryAdd(sess.orcid, String(id), String(title));
+
+  const normDoi = (s) => String(s || "").toLowerCase()
+    .replace(/^doi:/i, "").replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim();
+  const cleanDoi = normDoi(doi);
+
+  // DOI-based dedup: if a paper with the same DOI already exists, skip insert
+  if (cleanDoi) {
+    const { rows } = await pool.query(
+      `SELECT id FROM library_items WHERE orcid=$1
+       AND doi IS NOT NULL AND lower(doi)=$2 LIMIT 1`,
+      [sess.orcid, cleanDoi]
+    );
+    if (rows.length) return res.status(200).json({ ok: true, duplicate: true, existing_id: rows[0].id });
+  }
+
+  await pool.query(
+    `INSERT INTO library_items (orcid, id, title, doi)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (orcid, id) DO UPDATE SET
+       doi = COALESCE(EXCLUDED.doi, library_items.doi)`,
+    [sess.orcid, String(id), String(title), cleanDoi || null]
+  );
   res.status(201).json({ ok: true });
 });
 

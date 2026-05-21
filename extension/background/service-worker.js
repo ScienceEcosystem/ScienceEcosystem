@@ -52,7 +52,7 @@ async function checkIfSaved(doi, openAlexId) {
 async function savePaper({ id, title, doi }) {
   return seApi("/api/library", {
     method: "POST",
-    body: JSON.stringify({ id: id || doi || "", title: title || "Untitled" })
+    body: JSON.stringify({ id: id || doi || "", title: title || "Untitled", doi: doi || null })
   });
 }
 
