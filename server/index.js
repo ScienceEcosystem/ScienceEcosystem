@@ -41,14 +41,14 @@ async function uploadToR2(key, buffer, contentType) {
 
 async function streamFromR2(res, orcid, paperId, key) {
   try {
-    // Generate a 1-hour pre-signed URL and redirect — browser fetches directly
-    // from R2 (fast, no server memory used, works without session cookies in pdf.js)
+    // Return the pre-signed URL as JSON — pdf-reader.js fetches it directly from R2.
+    // Redirect approach fails because pdf.js withCredentials blocks cross-origin redirects.
     const signedUrl = await getSignedUrl(
       r2Client,
       new GetObjectCommand({ Bucket: R2_BUCKET, Key: key, ResponseContentType: "application/pdf" }),
       { expiresIn: 3600 }
     );
-    res.redirect(302, signedUrl);
+    res.json({ signedUrl });
   } catch (e) {
     if (e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404) {
       await pool.query(`DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [orcid, paperId]).catch(() => {});

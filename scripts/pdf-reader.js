@@ -85,7 +85,7 @@ async function loadPDF(url) {
   const isExternal = !url.startsWith('/') && !url.startsWith(window.location.origin);
   const finalUrl = isExternal ? `/api/pdf/proxy?url=${encodeURIComponent(url)}` : url;
 
-  // If it's a library PDF, check availability first before loading with pdf.js
+  // If it's a library PDF, fetch the signed R2 URL from the server first
   if (url.includes('/api/library/pdf')) {
     try {
       const check = await fetch(url, { credentials: 'include' });
@@ -94,7 +94,20 @@ async function loadPDF(url) {
         showPdfError(data.error || 'PDF not available.', true);
         return;
       }
-    } catch (_) {}
+      const data = await check.json().catch(() => null);
+      if (data && data.signedUrl) {
+        // Use the signed R2 URL directly — no auth needed, no CORS issues
+        const signedTask = pdfjsLib.getDocument({ url: data.signedUrl });
+        pdfDoc = await signedTask.promise;
+        const countEl = document.getElementById('pageCount');
+        if (countEl) countEl.textContent = String(pdfDoc.numPages);
+        renderAllPages();
+        return;
+      }
+    } catch (err) {
+      showPdfError('Could not load PDF: ' + String(err), true);
+      return;
+    }
   }
 
   if (!pdfjsLib) {
@@ -291,6 +304,10 @@ async function renderLinkLayer(page, viewport, layerEl, pageNumber) {
     }
     layerEl.appendChild(linkEl);
   }
+}
+
+function applyCitationHighlights() {
+  document.querySelectorAll('.pdf-text-layer').forEach(applyCitationHighlightsToLayer);
 }
 
 function applyCitationHighlightsToLayer(layerEl) {
