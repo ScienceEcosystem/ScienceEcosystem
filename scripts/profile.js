@@ -672,6 +672,8 @@
       var data = await getJSON(u.toString());
       var results = Array.isArray(data.results) ? data.results : [];
       totalWorksCount = get(data, "meta.count", totalWorksCount || results.length || 0);
+      // If this is the last API page, we know we have everything
+      var isLastPage = results.length < PAGE_SIZE;
 
       if (replace) {
         accumulatedWorks = [];
@@ -702,6 +704,9 @@
         return true;
       });
       accumulatedWorks = accumulatedWorks.concat(uniqueNew);
+
+      // If last API page OR dedup reduced count to match what we expect, mark done
+      if (isLastPage) totalWorksCount = accumulatedWorks.length;
 
       renderWorksChunk(uniqueNew);
     }catch(e){
@@ -967,21 +972,28 @@
         await fetchWorksPage(currentPage, true);
         if ($("totalWorks")) $("totalWorks").textContent = accumulatedWorks.length;
 
-        // Rebuild trend charts using merged data from all author records
-        // Fetch counts_by_year for each ID and sum them up
-        var mergedCounts = Object.create(null);
+        // Fetch citations-per-year from all author records and sum
+        var citeCounts = Object.create(null);
         await Promise.all(allIds.map(async function(id) {
           var t = String(id).replace(/^https?:\/\/openalex\.org\//i,'');
           try {
             var a2 = await getJSON(API + "/authors/" + encodeURIComponent(t));
             (a2.counts_by_year || []).forEach(function(row) {
-              if (!mergedCounts[row.year]) mergedCounts[row.year] = { year: row.year, works_count: 0, cited_by_count: 0 };
-              mergedCounts[row.year].works_count  += (row.works_count || 0);
-              mergedCounts[row.year].cited_by_count += (row.cited_by_count || 0);
+              if (!citeCounts[row.year]) citeCounts[row.year] = { year: row.year, works_count: 0, cited_by_count: 0 };
+              citeCounts[row.year].cited_by_count += (row.cited_by_count || 0);
             });
           } catch(_) {}
         }));
-        var fakeAuthor = { counts_by_year: Object.values(mergedCounts).sort(function(a,b){ return a.year-b.year; }) };
+
+        // Override works_count using deduplicated accumulatedWorks (correct count)
+        accumulatedWorks.forEach(function(w) {
+          var yr = w.publication_year;
+          if (!yr) return;
+          if (!citeCounts[yr]) citeCounts[yr] = { year: yr, works_count: 0, cited_by_count: 0 };
+          citeCounts[yr].works_count += 1;
+        });
+
+        var fakeAuthor = { counts_by_year: Object.values(citeCounts).sort(function(a,b){ return a.year-b.year; }) };
         renderTrendCharts(fakeAuthor);
       } else {
         renderTrendCharts(author);
