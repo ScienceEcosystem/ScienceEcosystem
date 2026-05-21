@@ -319,9 +319,10 @@
   var serverFollows = [];
 
   // ---- Sidebar derived state ----
-  var authorTail = null;                // "A12345"
-  var coauthors = Object.create(null);  // idTail -> { name, tail, count }
-  var affYears  = Object.create(null);  // instTail -> { name, tail, min, max }
+  var authorTail  = null;                // "A12345" — primary ID
+  var authorTails = Object.create(null); // set of all claimed author tails
+  var coauthors = Object.create(null);   // idTail -> { name, tail, count }
+  var affYears  = Object.create(null);   // instTail -> { name, tail, min, max }
 
   // ---- Small utils ----
   function $(id){ return document.getElementById(id); }
@@ -676,11 +677,23 @@
         clearPublications();
       }
 
-      // Deduplicate before appending — merged author IDs can return the same
-      // work multiple times (once per matching author ID)
+      // Deduplicate before appending — dedup by OpenAlex ID AND DOI so
+      // the same dataset appearing under multiple name variants is collapsed
       var seenIds = Object.create(null);
-      accumulatedWorks.forEach(function(w){ if (w.id) seenIds[w.id] = true; });
-      var uniqueNew = results.filter(function(w){ return w.id && !seenIds[w.id]; });
+      accumulatedWorks.forEach(function(w) {
+        if (w.id) seenIds[w.id] = true;
+        var d = w.doi ? String(w.doi).toLowerCase().replace(/^https?:\/\/doi\.org\//i,'') : null;
+        if (d) seenIds['doi:'+d] = true;
+      });
+      var uniqueNew = results.filter(function(w) {
+        if (!w.id) return false;
+        if (seenIds[w.id]) return false;
+        var d = w.doi ? String(w.doi).toLowerCase().replace(/^https?:\/\/doi\.org\//i,'') : null;
+        if (d && seenIds['doi:'+d]) return false;
+        seenIds[w.id] = true;
+        if (d) seenIds['doi:'+d] = true;
+        return true;
+      });
       accumulatedWorks = accumulatedWorks.concat(uniqueNew);
 
       renderWorksChunk(uniqueNew);
@@ -730,11 +743,11 @@
         coauthors[aid].count += 1;
       }
 
-      // affiliations for THIS author in this paper
+      // affiliations for THIS author in this paper — check all claimed IDs
       var my = null;
       for (var a2=0;a2<authorships.length;a2++){
         var aid2 = idTail(get(authorships[a2], "author.id", null));
-        if (aid2 === authorTail){ my = authorships[a2]; break; }
+        if (aid2 && (aid2 === authorTail || authorTails[aid2])){ my = authorships[a2]; break; }
       }
       if (my){
         var insts = Array.isArray(my.institutions) ? my.institutions : [];
@@ -926,12 +939,15 @@
       // Page title
       if (author.display_name) document.title = author.display_name + " | ScienceEcosystem";
 
-      renderTrendCharts(author);
-
       // ── Merged works: if multiple OpenAlex IDs, override the works URL ─────────
       var allIds = (opts.allAuthorIds && opts.allAuthorIds.length > 1) ? opts.allAuthorIds : null;
       if (allIds) {
-        // Build OR filter: author.id:https://openalex.org/A1|https://openalex.org/A2|…
+        // Store all tails so processWorksForSidebar can match any claimed ID
+        allIds.forEach(function(id) {
+          var t = String(id).replace(/^https?:\/\/openalex\.org\//i,'');
+          authorTails[t] = true;
+        });
+
         var idFilter = allIds.map(function(id){
           return id.indexOf("http") === 0 ? id : ("https://openalex.org/" + id);
         }).join("|");
@@ -942,9 +958,26 @@
         accumulatedWorks = [];
         if ($("publicationsList")) $("publicationsList").innerHTML = '<p class="muted">Loading publications…</p>';
         await fetchWorksPage(currentPage, true);
-        // Update publication count to reflect merged total
         if ($("totalWorks")) $("totalWorks").textContent = accumulatedWorks.length;
+
+        // Rebuild trend charts using merged data from all author records
+        // Fetch counts_by_year for each ID and sum them up
+        var mergedCounts = Object.create(null);
+        await Promise.all(allIds.map(async function(id) {
+          var t = String(id).replace(/^https?:\/\/openalex\.org\//i,'');
+          try {
+            var a2 = await getJSON(API + "/authors/" + encodeURIComponent(t));
+            (a2.counts_by_year || []).forEach(function(row) {
+              if (!mergedCounts[row.year]) mergedCounts[row.year] = { year: row.year, works_count: 0, cited_by_count: 0 };
+              mergedCounts[row.year].works_count  += (row.works_count || 0);
+              mergedCounts[row.year].cited_by_count += (row.cited_by_count || 0);
+            });
+          } catch(_) {}
+        }));
+        var fakeAuthor = { counts_by_year: Object.values(mergedCounts).sort(function(a,b){ return a.year-b.year; }) };
+        renderTrendCharts(fakeAuthor);
       } else {
+        renderTrendCharts(author);
         await loadWorks(author);
       }
 
