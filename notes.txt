@@ -1,33 +1,175 @@
-Updates for scienceEcosystem
+ScienceEcosystem — Development Notes
+Last updated: 2026-05-22
+=======================================================
 
 
-as devaloper would be nice to make a platform so see how the site is being used and howm many users we have and any of those thing is there a way to keep track of that and can we make it into a hidden only for me page that shows all thes stats without the need for extra cookies or having problems with privacy what are the options?
+=======================================================
+BUGS / QUICK FIXES
+=======================================================
 
-as the site will grow and privacy and cookies or what they are are used everywhere what kind of privacy do we need to make also with the login after how long will the login fall away or will need refresh or anything or when you share a link will not have that someone else is loged in on your account any other securaty risks we should look for?
+- [ ] Cite button popup on paper page: needs to appear centred on screen, not off to the side
+- [ ] Paper page still shows "SE" prefix before journal score number — remove the prefix
+- [ ] about.html chip links: open-science.html and data-code.html either don't exist yet
+      or are very thin — decide: build them properly or remove the chips
+- [ ] The GitHub link in the footer points to github.com/ScienceEcosystem but the repo
+      may not be public yet — make it public and add a README
 
-i have these openalex id: A5117810853 & A5057345880 & A5133781948. under the names. O.V. Raven & Olivier V. Raven & Olivier Raven. i dont want that i want to merge into one especially for our site. as the option to merge accounts on openalex is not available anymore.
 
-at the profile page we ask for current affiliation but many resurchers are linked to multipule institutes or universitys so we will need to make that also posible.
+=======================================================
+NEAR-TERM FEATURES (next 1–3 months)
+=======================================================
 
-Do we need a kwnoledge graph when ai already can make the links and read sites ? or how does it work and how can it be better?
+USER PROFILE PAGE (currently very empty)
+- [ ] Show claimed profile cleanly: name, bio, links, publications
+- [ ] Let researcher add links to: GitHub, Google Scholar, personal website, institution page
+- [ ] "Claim profile" and "Merge profiles" options should only appear when the user is
+      in edit mode — not permanently visible to everyone
+- [ ] Support multiple current affiliations (researchers often belong to >1 institution)
+- [ ] Olivier's 3 OpenAlex IDs need merging on our side:
+        A5117810853 (O.V. Raven)
+        A5057345880 (Olivier V. Raven)
+        A5133781948 (Olivier Raven)
+      OpenAlex no longer allows merge requests — we need to handle this in our DB by
+      treating all 3 as one author, combining their works, and picking the canonical ID
+
+PAPER PAGE
+- [ ] Include graphical abstracts and figures where available (similar to what journal
+      sites show but better organised)
+- [ ] Cite button popup centred on screen
+
+ANALYTICS (private, no cookies, no privacy impact)
+- [ ] Build a private /admin or /stats page (auth-gated, only for Olivier) that shows:
+        - Daily/weekly active users
+        - Most searched terms
+        - Most saved papers
+        - Library usage counts
+        - Extension installs vs active users
+      Options that avoid cookies and GDPR issues:
+        - Server-side log parsing (already have Render logs)
+        - Plausible Analytics (privacy-first, no cookies, ~$9/mo) — cheapest option
+        - Self-hosted Umami (free, open source, runs on Neon + Render)
+        - Simple DB counter table (free, basic, no external service needed)
+      Recommendation: start with a simple DB counter table, upgrade to Umami later
+
+SECURITY & SESSION MANAGEMENT
+- [ ] Review session expiry: how long before ORCID login expires? Set a reasonable TTL
+- [ ] Shared link safety: make sure a session token in a URL can't log in a different user
+- [ ] CSRF protection on all POST endpoints
+- [ ] Rate limiting on /api/library and search endpoints
+
+BROWSER EXTENSION
+- [ ] Firefox extension port (same codebase, minor manifest differences)
+- [ ] Safari extension port (requires Xcode + Apple developer account — plan for later)
+- [ ] Extension update: show paper JTI score in popup when available
 
 
-- [ ] Cite button popup screen in paper page needs to be shown in middle of page
-- [-] Show journal/ paper score on the paper card
-- [ ] Update user-profile page as now is very empty
-    - [ ] We want that when accounts are claimed others can see what the person wants to show on his page which we can use from orcid but also adjustable here. Also want to have links to other profile pages like github, scholar, personal, institute site. etc.
-    - [ ] Claimed and merge profiles should not be in view all the time that is pointless only when I change things about my profile.
-    - [ ] 
-- [ ] Include graphical abstracts and images to the paper pages so they show similar as what journal site shows but better organised.
+=======================================================
+PHASE 2 — EVIDENCE LINKS (medium-term, needs funding/help)
+=======================================================
 
+- [ ] Reliable data & code linking: connect a paper to the dataset and code that
+      produced it. Currently works for a subset via OpenAlex — need to improve coverage
+      and reliability before making it a headline feature.
+      Sources to integrate: Zenodo, Dryad, Figshare, GitHub (via citation.cff),
+      Software Heritage, DataCite
+- [ ] GitHub integration: detect when a paper cites a GitHub repo and link them
+      bidirectionally. Show code repos on paper pages.
+- [ ] Data availability statements: parse and surface the data availability statement
+      from paper pages where possible
+- [ ] Knowledge graph foundation: begin building the internal graph structure that
+      connects papers → datasets → code → authors → institutions
+      (see business_plan/future.tex for architecture vision)
+- [ ] Public roadmap page on the site itself (not just Overleaf)
+
+
+=======================================================
+PHASE 3 — INFRASTRUCTURE (long-term vision)
+=======================================================
+
+These are from the business plan (future.tex, technical.tex). Not for immediate work —
+but keep them visible so short-term decisions don't block them.
+
+LIVING PAPERS
+- [ ] A paper format where the underlying data, code, figures, and text are stored as
+      a knowledge graph and rendered as a traditional paper on the surface.
+      The researcher experience: write prose, add figures, upload data, run code → see a paper.
+      Behind the scenes: entities, methods, results, claims, provenance, uncertainty, versions.
+
+MEMORY ALPHA (connective knowledge layer)
+- [ ] Context, methods, and meaning preserved alongside results — not just data storage.
+      Research objects that remain understandable and reusable across decades, even as
+      institutions and technologies change. The long-term scientific memory infrastructure.
+
+REPRODUCIBLE WORKSPACES
+- [ ] Link code at version level, record computational environments, allow re-execution
+      and verification workflows.
+
+GOVERNANCE (once there is a team and funding)
+- [ ] Board of Trustees (independent, science/infrastructure/law/ethics expertise)
+- [ ] Scientific Council (disciplinary advisors)
+- [ ] Community Council (elected by contributors)
+- [ ] Ethics and Integrity Board
+- [ ] Annual public activity + financial reports
+- [ ] Legal incorporation as non-profit
+
+FUNDING STRATEGY
+- [ ] Apply for: national research infrastructure grants, EU/UNESCO-aligned programmes,
+      science and open-knowledge foundations (Wellcome Trust, Sloan Foundation, etc.)
+- [ ] No: venture capital, paywalls, user data sales, advertising, sponsored ranking
+- [ ] Long-term goal: endowment covering baseline operational costs
+
+
+=======================================================
+INFRASTRUCTURE / PLATFORM HEALTH
+=======================================================
+
+- [ ] Make GitHub repo public + write a proper README explaining what the project is,
+      how to run it locally, and how to contribute
+- [ ] Add CONTRIBUTING.md so outside developers can contribute
+- [ ] Service worker version: currently se-v9 — bump when doing major JS/CSS changes
+- [ ] Neon DB: add indexes if queries get slow as user count grows
+- [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
+- [ ] Cloudflare R2: monitor storage usage, set lifecycle rules if needed
+- [ ] Legal: write a proper Terms of Service (currently only have Privacy Policy)
+
+
+=======================================================
+OPEN QUESTIONS / DECISIONS TO MAKE
+=======================================================
+
+- Knowledge graph vs AI: do we need to build a knowledge graph ourselves, or can we
+  use AI to extract relationships from papers on demand? The answer is probably both —
+  AI for extraction, graph for storage and traversal. But worth revisiting as AI APIs
+  get cheaper and better.
+
+- Firefox extension: worth doing soon as Firefox has significant academic user share.
+  Manifest V3 is now required in Chrome; Firefox supports both MV2 and MV3.
+
+- Funding: the project needs money before Phase 2 can happen. Priority: identify 2–3
+  relevant grant programmes and write one application. EU Open Science Cloud (EOSC)
+  and national science foundation equivalents are the most relevant targets.
+
+
+=======================================================
 DONE
-- [X] Add more metrics for journal quality: citation index, SCImago Journal Rank, CiteScore, Eigenfactor, and Altmetrics.
-- [X] The search bar still doesn’t search for DOI and for example a large sentence give no results 
-- [X] Components needs update so paper cards are less big now lots of white
+=======================================================
 
-
-
-
-
-
-
+- [X] Add more metrics for journal quality: Journal Trust Index (JTI) implemented
+      — Openness + Recognition + Scale + Integrity = 0–100
+- [X] Search bar now handles DOI search and long sentence queries
+- [X] Paper cards: reduced whitespace, better layout
+- [X] Show journal/paper score on paper cards (JTI badge)
+- [X] Chrome extension live on Web Store (v0.1.1)
+- [X] PDF storage via Cloudflare R2 (persistent, survives Render restarts)
+- [X] Profile page: author ID deduplication (3 IDs → merged works)
+- [X] Profile page: trend charts (citations by year, publications by year)
+- [X] Profile page: career timeline and co-authors sidebar
+- [X] Profile page: BibTeX export of all publications
+- [X] Profile page: CV export (print CSS, clean typography, DOI URLs inline)
+- [X] Profile page: Open Science Portfolio in sidebar
+- [X] Tools finder: fixed Safari HTML parser crash (pre-rendered static HTML)
+- [X] Paper page: self-hosted vis-network (fixed 408 CDN errors)
+- [X] Extension: keyboard shortcut Alt+Shift+S saves paper
+- [X] about.html: rewritten — honest, 7 sections, clear narrative arc
+- [X] index.html: updated — honest tagline and features, removed overclaiming on data/code
+- [X] node_modules added to .gitignore
