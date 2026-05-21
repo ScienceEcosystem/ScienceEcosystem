@@ -439,7 +439,10 @@
     }
 
     if ($("aiBio")){
-      var topTopics = concepts.slice(0,5).map(function(c){return c.display_name;}).filter(Boolean);
+      // Prefer SE-set keywords over OpenAlex auto-assigned concepts
+      var topTopics = (_seUser && _seUser.keywords && _seUser.keywords.length)
+        ? _seUser.keywords.slice(0, 5)
+        : concepts.slice(0,5).map(function(c){return c.display_name;}).filter(Boolean);
       // Prefer SE-saved affiliations over OpenAlex guesses for the auto-bio
       var affLabel = (_seUser && _seUser.affiliations && _seUser.affiliations[0])
         ? _seUser.affiliations[0]
@@ -690,8 +693,12 @@
         if (seenIds[w.id]) return false;
         var d = w.doi ? String(w.doi).toLowerCase().replace(/^https?:\/\/doi\.org\//i,'') : null;
         if (d && seenIds['doi:'+d]) return false;
+        // Title dedup — collapses Zenodo multi-version datasets with same title
+        var tk = 'title:' + String(w.title || w.display_name || '').toLowerCase().replace(/\s+/g,' ').trim();
+        if (tk !== 'title:' && seenIds[tk]) return false;
         seenIds[w.id] = true;
         if (d) seenIds['doi:'+d] = true;
+        if (tk !== 'title:') seenIds[tk] = true;
         return true;
       });
       accumulatedWorks = accumulatedWorks.concat(uniqueNew);
@@ -911,10 +918,10 @@
         if (affNode2) affNode2.textContent = seUser.affiliation;
       }
 
-      // Keywords from SE (supplement OpenAlex concepts)
+      // Keywords from SE always take priority over OpenAlex auto-assigned concepts
       if (seUser && seUser.keywords && seUser.keywords.length) {
         var tc = $("tagsContainer");
-        if (tc && !tc.innerHTML.trim()) {
+        if (tc) {
           tc.innerHTML = seUser.keywords.map(function(kw){
             return '<span class="topic-card"><span class="topic-name">'+escapeHtml(kw)+'</span></span>';
           }).join("");
