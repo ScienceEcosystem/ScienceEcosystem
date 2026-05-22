@@ -37,7 +37,13 @@
         </form>
       </div>
       <div class="nav-right">
-        <a class="nav-link" href="about.html">About</a>
+        <div class="nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">About<span class="nav-chevron">▾</span></button>
+        <div class="nav-dropdown-menu">
+          <a class="nav-dropdown-item" href="about.html">About</a>
+          <a class="nav-dropdown-item" href="business-plan.html">Business plan</a>
+        </div>
+      </div>
         <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
         <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
           <span>Login with</span>

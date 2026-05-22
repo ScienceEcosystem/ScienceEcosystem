@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Business Plan | ScienceEcosystem</title>
+  <meta name="description" content="ScienceEcosystem public business plan — mission, governance, funding, technical architecture, and future directions." />
+  <link rel="stylesheet" href="assets/fonts/fonts.css" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="ScienceEco"/>
+  <link rel="apple-touch-icon" href="/assets/logos_se/logo.png"/>
+  <style>
+    .bp-toc {
+      background: var(--surface, #f8fafc);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: .5rem;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .bp-toc h2 {
+      font-size: 1rem;
+      margin: 0 0 .75rem;
+      color: var(--muted, #64748b);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .bp-toc ol {
+      margin: 0;
+      padding-left: 1.25rem;
+      line-height: 2;
+    }
+    .bp-toc ol ol {
+      list-style-type: lower-alpha;
+      margin-top: .25rem;
+    }
+    .bp-toc a {
+      color: var(--accent, #2e7f9f);
+      text-decoration: none;
+    }
+    .bp-toc a:hover { text-decoration: underline; }
+
+    .bp-meta {
+      font-size: .875rem;
+      color: var(--muted, #64748b);
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--border, #e2e8f0);
+      padding-bottom: 1rem;
+    }
+
+    .panel h2 {
+      scroll-margin-top: 5rem;
+    }
+    .panel h3 {
+      scroll-margin-top: 5rem;
+      margin-top: 1.5rem;
+    }
+
+    .appendix-label {
+      font-size: .75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted, #64748b);
+      margin-bottom: .25rem;
+    }
+
+    @media print {
+      .app-nav, .site-footer, .skip-link, .btn { display: none !important; }
+      @page { margin: 2cm 2.5cm; }
+      body { font-size: 11pt; color: #000; background: #fff; font-family: Georgia, serif; }
+      h1 { font-size: 18pt; }
+      h2 { font-size: 14pt; border-bottom: 1pt solid #999; padding-bottom: 3pt; }
+      h3 { font-size: 12pt; }
+      .panel { box-shadow: none !important; border: none !important; padding: 0 !important; margin-bottom: 24pt !important; }
+      .bp-toc { border: 1pt solid #ccc; }
+      .container { max-width: 100% !important; padding: 0 !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+  <div class="nav-inner container">
+    <div class="logo">
+      <a href="index.html" aria-label="ScienceEcosystem Home">
+        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+      </a>
+    </div>
+
+    <div class="nav-center">
+      <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+        <label class="visually-hidden" for="searchInput">Search</label>
+        <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+      </form>
+    </div>
+
+    <div class="nav-right">
+      <div class="nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">About<span class="nav-chevron">▾</span></button>
+        <div class="nav-dropdown-menu">
+          <a class="nav-dropdown-item" href="about.html">About</a>
+          <a class="nav-dropdown-item" href="business-plan.html">Business plan</a>
+        </div>
+      </div>
+      <div class="nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Tools<span class="nav-chevron">▾</span></button>
+        <div class="nav-dropdown-menu">
+          <a class="nav-dropdown-item" href="journal-finder.html">Journal finder</a>
+          <a class="nav-dropdown-item" href="research-tools.html">Tools finder</a>
+        </div>
+      </div>
+
+      <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+
+      <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+        <span>Login with</span>
+        <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID" />
+      </a>
+
+      <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+    </div>
+  </div>
+</nav>
+
+  <main id="main" class="container">
+
+    <header class="hero" style="padding-bottom:1.5rem;">
+      <h1>Business Plan</h1>
+      <p class="lead">Open Infrastructure for Verifiable Science</p>
+    </header>
+
+    <div class="bp-meta">
+      <strong>Prepared by:</strong> Olivier V. Raven &nbsp;·&nbsp;
+      <a href="mailto:olivier.raven@scienceecosystem.org">olivier.raven@scienceecosystem.org</a><br/>
+      This document describes a public-interest infrastructure project and is intended for institutional, academic, and funding stakeholders.
+    </div>
+
+    <!-- TABLE OF CONTENTS -->
+    <nav class="bp-toc" aria-label="Document contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#executive-summary">Executive Summary</a></li>
+        <li><a href="#the-problem">The Problem</a></li>
+        <li><a href="#mission-vision">Mission and Vision</a></li>
+        <li><a href="#core-concept">Core Concept: The Research Object Layer</a></li>
+        <li><a href="#functional-scope">Functional Scope</a></li>
+        <li><a href="#guiding-principles">Guiding Principles</a></li>
+        <li><a href="#governance">Governance and Independence</a></li>
+        <li><a href="#technology">Technology and AI Philosophy</a></li>
+        <li><a href="#funding">Funding and Sustainability</a></li>
+        <li><a href="#partnerships">Partnerships</a></li>
+        <li><a href="#risks">Risks and Mitigation</a></li>
+        <li><a href="#long-term">Long-Term Outlook</a></li>
+      </ol>
+      <ol style="margin-top:.75rem; list-style-type:upper-alpha;">
+        <li><a href="#appendix-governance">Governance Charter</a></li>
+        <li><a href="#appendix-funding">Funding and Sustainability Framework</a></li>
+        <li><a href="#appendix-technical">Technical Architecture Framework</a></li>
+        <li><a href="#appendix-future">Future Directions</a></li>
+      </ol>
+    </nav>
+
+    <!-- EXECUTIVE SUMMARY -->
+    <section class="panel" id="executive-summary">
+      <h2>Executive Summary</h2>
+      <p>ScienceEcosystem is an independent, public-interest digital infrastructure designed to improve how science is conducted, shared, verified, and preserved across generations. Its core purpose is to link scientific results directly to the data, code, and workflows that produced them, creating a transparent and verifiable research record.</p>
+      <p>The platform is not a publisher, journal, repository, or start-up. It is infrastructure. ScienceEcosystem operates as a connective layer that integrates existing systems — such as repositories, identifier services, and development environments — into a coherent, navigable network of research objects.</p>
+      <p>ScienceEcosystem is designed to remain free for all end users, without paywalls or commercial extraction. It is governed with a long-term stewardship mindset, recognising that meaningful improvements to scientific practice require decades rather than funding cycles.</p>
+      <p>The platform already exists in an early functional state, with core components operational and further development underway. Over time, ScienceEcosystem aims to become a trusted backbone for open, reproducible, and transparent science.</p>
+    </section>
+
+    <!-- THE PROBLEM -->
+    <section class="panel" id="the-problem">
+      <h2>The Problem</h2>
+      <p>Modern science generates knowledge at unprecedented scale, yet the scientific record remains fragmented and difficult to verify. Publications, datasets, software, and methods are typically distributed across disconnected platforms, often behind paywalls or with inconsistent metadata.</p>
+      <p>Key structural issues include:</p>
+      <ul>
+        <li>Weak linkage between publications, data, and code</li>
+        <li>Poor documentation of analytical decisions and workflows</li>
+        <li>Fragmented discovery tools and metadata standards</li>
+        <li>Limited practical support for reproducibility and verification</li>
+        <li>Incentive structures that prioritise novelty over robustness</li>
+      </ul>
+      <p>These problems are systemic rather than individual. They cannot be solved through policy alone, but require shared digital infrastructure.</p>
+    </section>
+
+    <!-- MISSION AND VISION -->
+    <section class="panel" id="mission-vision">
+      <h2>Mission and Vision</h2>
+      <h3>Mission</h3>
+      <p>To develop and steward a free, open, and durable digital infrastructure that links scientific papers, data, code, and research context into a single, verifiable, and reusable ecosystem.</p>
+      <h3>Vision</h3>
+      <p>ScienceEcosystem envisions a future in which the global scientific record functions as a living, navigable system rather than a static archive of documents. Transparency, reproducibility, and collaboration emerge as properties of the system itself.</p>
+      <p>Progress will be incremental and conservative, prioritising trust, legitimacy, and continuity over speed or disruption.</p>
+    </section>
+
+    <!-- CORE CONCEPT -->
+    <section class="panel" id="core-concept">
+      <h2>Core Concept: The Research Object Layer</h2>
+      <p>ScienceEcosystem introduces a research object layer that sits above existing repositories and tools. Each research object aggregates and links:</p>
+      <ul>
+        <li>Publications and preprints</li>
+        <li>Underlying datasets</li>
+        <li>Analysis code and computational environments</li>
+        <li>Figures, tables, and derived outputs</li>
+        <li>Provenance metadata, versions, and licences</li>
+      </ul>
+      <p>This structure allows results to be traced, cited, verified, and reused without duplicating storage or replacing existing platforms.</p>
+    </section>
+
+    <!-- FUNCTIONAL SCOPE -->
+    <section class="panel" id="functional-scope">
+      <h2>Functional Scope</h2>
+      <h3>Near-Term Capabilities</h3>
+      <ol>
+        <li>Unified search across publications, authors, institutions, and topics</li>
+        <li>Persistent linkage between papers, datasets, and code repositories</li>
+        <li>Project pages aggregating all research components</li>
+        <li>Integration with GitHub (source control), Zenodo or equivalent (archival DOI), and ORCID (identity)</li>
+        <li>Citation management and export</li>
+        <li>Lightweight collaborative working groups</li>
+      </ol>
+      <h3>Longer-Term Development</h3>
+      <p>Future phases may introduce open annotation, transparent peer review, and versioned web-native publications ("living papers"), contingent on community readiness and institutional support.</p>
+    </section>
+
+    <!-- GUIDING PRINCIPLES -->
+    <section class="panel" id="guiding-principles">
+      <h2>Guiding Principles</h2>
+      <ul>
+        <li>Free and open for all users</li>
+        <li>Built on open standards and interoperability</li>
+        <li>Provenance and transparency by design</li>
+        <li>Accessibility and multilingual participation</li>
+        <li>Neutral, non-commercial governance</li>
+        <li>Long-term durability over short-term optimisation</li>
+      </ul>
+    </section>
+
+    <!-- GOVERNANCE -->
+    <section class="panel" id="governance">
+      <h2>Governance and Independence</h2>
+      <p>ScienceEcosystem is governed to prevent capture and ensure long-term legitimacy. Governance structures will evolve gradually and include:</p>
+      <ul>
+        <li>A Board of Trustees providing fiduciary oversight</li>
+        <li>A Scientific Council representing disciplinary expertise</li>
+        <li>A Community Council elected from active contributors</li>
+        <li>An Ethics and Integrity Board safeguarding neutrality and transparency</li>
+      </ul>
+      <p>The founder serves as initial steward; authority and decision-making will transition institutionally over time.</p>
+    </section>
+
+    <!-- TECHNOLOGY -->
+    <section class="panel" id="technology">
+      <h2>Technology and AI Philosophy</h2>
+      <p>ScienceEcosystem adopts an infrastructure-first and conservative approach to technology. Artificial intelligence is used only to:</p>
+      <ul>
+        <li>Improve linkage, provenance, and discoverability</li>
+        <li>Assist documentation and reproducibility checks</li>
+        <li>Reduce friction in navigation and metadata alignment</li>
+      </ul>
+      <p>AI will not be used to generate research content, assign opaque scores, or replace scientific judgement.</p>
+    </section>
+
+    <!-- FUNDING -->
+    <section class="panel" id="funding">
+      <h2>Funding and Sustainability</h2>
+      <p>ScienceEcosystem will never monetise access, data, metrics, or user attention. Permitted funding sources include:</p>
+      <ul>
+        <li>Public research and infrastructure grants</li>
+        <li>Philanthropic and foundation funding</li>
+        <li>Voluntary donations</li>
+      </ul>
+      <p>Long-term sustainability will be pursued through diversified funding and, eventually, an endowment model.</p>
+    </section>
+
+    <!-- PARTNERSHIPS -->
+    <section class="panel" id="partnerships">
+      <h2>Partnerships</h2>
+      <p>ScienceEcosystem collaborates with:</p>
+      <ul>
+        <li>Universities, libraries, and research institutes</li>
+        <li>National research infrastructures</li>
+        <li>Open metadata and identifier providers</li>
+        <li>International open science policy bodies</li>
+      </ul>
+      <p>All partnerships must preserve platform neutrality and openness.</p>
+    </section>
+
+    <!-- RISKS -->
+    <section class="panel" id="risks">
+      <h2>Risks and Mitigation</h2>
+      <ul>
+        <li><strong>Adoption risk</strong> — mitigated through immediate practical value</li>
+        <li><strong>Technical risk</strong> — mitigated through open standards and audits</li>
+        <li><strong>Funding risk</strong> — mitigated through diversification</li>
+        <li><strong>Governance risk</strong> — mitigated through transparency and term limits</li>
+      </ul>
+    </section>
+
+    <!-- LONG-TERM -->
+    <section class="panel" id="long-term">
+      <h2>Long-Term Outlook</h2>
+      <p>ScienceEcosystem is conceived as a century-scale investment in scientific infrastructure. Success will be measured not by growth metrics or revenue, but by whether future scientists inherit a research system that is more transparent, reproducible, and humane than the one that preceded it.</p>
+      <p>ScienceEcosystem exists to make that outcome possible — patiently and irreversibly.</p>
+    </section>
+
+    <!-- ── APPENDICES ─────────────────────────────────────────── -->
+
+    <section class="panel" id="appendix-governance">
+      <p class="appendix-label">Appendix A</p>
+      <h2>Governance Charter</h2>
+      <p class="muted" style="font-size:.875rem; margin-bottom:1.25rem;">This Charter defines how ScienceEcosystem is stewarded, how decisions are made, and how independence, transparency, and long-term integrity are safeguarded. It is designed to function from the earliest founder-led stage through future institutional maturity. This document establishes constraints on authority, not merely roles.</p>
+
+      <h3>Nature of ScienceEcosystem</h3>
+      <p>ScienceEcosystem is a public-interest digital infrastructure created to support open, verifiable, and reproducible science across generations. It is not a commercial product, publisher, or analytics platform. It exists to serve the scientific community as a whole and is governed accordingly.</p>
+
+      <h3>Core Governance Principles</h3>
+      <ul>
+        <li><strong>Public Interest First:</strong> Decisions must prioritise scientific integrity and societal benefit over institutional, personal, or financial interests.</li>
+        <li><strong>Non-Commercial Independence:</strong> ScienceEcosystem shall not be sold, acquired, or converted into a for-profit entity.</li>
+        <li><strong>Transparency:</strong> Decision-making processes, governance structures, and financial information shall be publicly documented.</li>
+        <li><strong>Accountability:</strong> Authority must be reviewable, limited, and transferable.</li>
+        <li><strong>Durability:</strong> Governance choices must favour long-term stability over short-term optimisation.</li>
+      </ul>
+
+      <h3>Stewardship Model</h3>
+      <p><strong>Founder Stewardship (Initial Phase).</strong> ScienceEcosystem is currently stewarded by its founder, who acts as initial maintainer, custodian of its mission and principles, and interim decision-maker for technical and organisational matters. Founder stewardship is explicitly temporary. Its purpose is to enable early development while preparing for institutional governance.</p>
+      <p><strong>Limits of Founder Authority.</strong> The founder may not unilaterally introduce paywalls or monetise access to content; sell user data or behavioural analytics; enter exclusive partnerships that restrict openness; or alter core governance principles without a public process.</p>
+
+      <h3>Governance Bodies</h3>
+      <p>As ScienceEcosystem matures, governance authority will be distributed across:</p>
+      <ul>
+        <li><strong>Board of Trustees</strong> — fiduciary oversight, mission protection, budget approval. Independent members with expertise in science, infrastructure, law, and ethics. Fixed terms with staggered rotation.</li>
+        <li><strong>Scientific Council</strong> — advise on scientific priorities and disciplinary balance. Appointed based on disciplinary expertise and community standing.</li>
+        <li><strong>Community Council</strong> — represent active users and contributors; advise on usability and accessibility. Elected by the contributor community.</li>
+        <li><strong>Ethics and Integrity Board</strong> — safeguard neutrality, inclusivity, and integrity; review conflicts of interest; oversee ethical complaints and moderation.</li>
+      </ul>
+
+      <h3>Decision-Making and Accountability</h3>
+      <p>All significant decisions must be documented publicly, accompanied by a rationale, and subject to community feedback. Changes to governance principles, data policies, or funding models require a public consultation period and formal approval by the Board of Trustees. ScienceEcosystem shall publish annual activity and governance reports, financial summaries, and roadmap updates.</p>
+
+      <h3>Open Infrastructure and Forkability</h3>
+      <p>ScienceEcosystem commits to open standards and open-source infrastructure wherever feasible. Forkability is treated as a governance safeguard, not a failure mode — it ensures that no single entity can capture or enclose the platform, and that the community retains a credible exit option.</p>
+    </section>
+
+    <section class="panel" id="appendix-funding">
+      <p class="appendix-label">Appendix B</p>
+      <h2>Funding and Sustainability Framework</h2>
+      <p class="muted" style="font-size:.875rem; margin-bottom:1.25rem;">Financial sustainability is defined as the ability to operate reliably across decades without compromising independence, openness, or trust.</p>
+
+      <h3>Funding Philosophy</h3>
+      <p>ScienceEcosystem is funded as public-interest infrastructure. Its financial model is designed to support maintenance, stewardship, and gradual improvement rather than growth, profit, or market dominance.</p>
+
+      <h3>Prohibited Revenue Sources</h3>
+      <p>The following are explicitly prohibited and may not be overturned without formal governance reform:</p>
+      <ul>
+        <li>Paywalls or access fees for users</li>
+        <li>Sale or monetisation of user data or behavioural analytics</li>
+        <li>Advertising or sponsored ranking</li>
+        <li>Venture capital or equity-based investment</li>
+        <li>Exclusive commercial licensing of core infrastructure</li>
+      </ul>
+
+      <h3>Permitted Funding Sources</h3>
+      <ul>
+        <li><strong>Public and Competitive Grants</strong> — national research infrastructure grants; international programmes (EU, UNESCO-aligned initiatives); public digital infrastructure funding. Grants must not impose exclusive control, data enclosure, or directional influence.</li>
+        <li><strong>Philanthropic and Foundation Funding</strong> — science, education, and open-knowledge foundations; long-term mission-aligned philanthropic donors. All donations above a defined threshold are publicly disclosed.</li>
+        <li><strong>Voluntary Contributions</strong> — individual donations; institutional goodwill contributions without contractual control. Voluntary contributions do not confer governance influence.</li>
+      </ul>
+
+      <h3>Financial Transparency</h3>
+      <p>ScienceEcosystem commits to public annual financial summaries, independent audits once legally incorporated, and clear separation of operational and reserve funds.</p>
+
+      <h3>Long-Term Stability</h3>
+      <p>The long-term objective is to establish an endowment covering baseline operational costs, reducing dependency on short-term grants, and supporting multi-decade continuity. Key risks — grant dependency and funding volatility — are mitigated through funding diversification, conservative cost control, and multi-year planning horizons.</p>
+    </section>
+
+    <section class="panel" id="appendix-technical">
+      <p class="appendix-label">Appendix C</p>
+      <h2>Technical Architecture Framework</h2>
+      <p class="muted" style="font-size:.875rem; margin-bottom:1.25rem;">This document outlines the technical principles, architecture, and integration strategy of ScienceEcosystem. It is intended to guide implementation, audits, and long-term maintenance while remaining adaptable to future standards.</p>
+
+      <h3>Architectural Philosophy</h3>
+      <p>ScienceEcosystem is designed as a connective infrastructure layer, not a monolithic platform. Its role is to link, contextualise, and preserve relationships between existing research components. Key design goals: modularity, interoperability, durability, and auditability.</p>
+
+      <h3>Core System Components</h3>
+      <ul>
+        <li><strong>Metadata Layer</strong> — persistent identifiers for papers, datasets, code, authors, and institutions; normalised metadata schemas; versioned provenance records.</li>
+        <li><strong>Relationship Graph</strong> — explicit links between publications, data, code, and outputs; support for temporal and versioned relationships; provenance trails for verification.</li>
+        <li><strong>Storage Strategy</strong> — external repositories remain authoritative. ScienceEcosystem does not duplicate primary storage unnecessarily. Archival snapshots referenced where required.</li>
+        <li><strong>Search and Indexing</strong> — unified search across metadata and relationships; transparent ranking criteria; no algorithmic promotion or suppression.</li>
+      </ul>
+
+      <h3>Integration Strategy</h3>
+      <p>ScienceEcosystem integrates with: source control systems for code; archival repositories for datasets; identifier services for authors and institutions; development environments for reproducible workflows. It acts as the research object and provenance layer binding these components.</p>
+
+      <h3>Reproducibility and Verification</h3>
+      <p>The platform supports reproducibility by linking code and data at version level, recording computational environments where possible, and allowing re-execution and verification workflows. Verification is optional but structurally enabled.</p>
+
+      <h3>Security and Privacy</h3>
+      <p>Compliance with international data protection regulations. Minimal collection of personal data. Regular security audits. No tracking or behavioural profiling is performed.</p>
+
+      <h3>Open Source and Forkability</h3>
+      <p>Core components are open-source where feasible. Documentation and deployment scripts are public to enable independent audits, prevent platform capture, and ensure continuity beyond any single operator.</p>
+
+      <h3>Technical Governance</h3>
+      <p>Major architectural changes require public technical proposals, review by qualified contributors, and alignment with governance principles. Stability and trust outweigh novelty.</p>
+    </section>
+
+    <section class="panel" id="appendix-future">
+      <p class="appendix-label">Appendix D</p>
+      <h2>Future Directions</h2>
+
+      <h3>Linked Data and Knowledge Graph</h3>
+      <p>A publication system whose native format is a knowledge graph — where data entities, method entities, model entities, result entities, claims, provenance, uncertainty, and versions are all first-class objects that can be linked, queried, and traversed.</p>
+
+      <h3>Living Papers</h3>
+      <p>From the researcher's point of view, writing a living paper feels like writing a traditional paper — prose, figures, tables, code, data. What is actually happening behind the scenes is different: the knowledge graph is the truth, and the paper is one rendering of it. The same research object can be rendered as a PDF, a website, a structured summary, or an AI-readable output. The structure is: <em>knowledge graph → rendered paper</em>, not the reverse.</p>
+
+      <h3>Memory Alpha</h3>
+      <p>Scientific knowledge is often lost not because data disappears, but because context, methods, and meaning become disconnected over time. When datasets, code, and publications are stored separately, research becomes difficult to interpret, reuse, or reconstruct as technologies and institutions change.</p>
+      <p>ScienceEcosystem addresses this by acting as a connective knowledge layer — linking data, code, analyses, and publications into coherent, self-describing research objects that preserve provenance and assumptions alongside results. By prioritising meaning over storage, ScienceEcosystem creates a foundation that allows scientific knowledge to remain understandable and resilient in the long term. As this connective layer matures, it can evolve into a broader scientific memory infrastructure, supporting future preservation and continuity initiatives without being tied to any single technology or institution.</p>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span class="js-year">2026</span> ScienceEcosystem. All rights reserved.</p>
+      <div class="footer-utility-row">
+        <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a> &nbsp;·&nbsp; <a class="footer-link" href="privacy.html">Privacy policy</a></p>
+        <div class="footer-socials">
+          <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true"><path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
+          </a>
+          <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/></svg>
+          </a>
+        </div>
+      </div>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+</body>
+</html>

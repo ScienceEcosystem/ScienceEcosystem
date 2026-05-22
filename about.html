@@ -37,7 +37,13 @@ FILE: about.html
     </div>
 
     <div class="nav-right">
-      <a class="nav-link" href="about.html">About</a>
+      <div class="nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">About<span class="nav-chevron">▾</span></button>
+        <div class="nav-dropdown-menu">
+          <a class="nav-dropdown-item" href="about.html">About</a>
+          <a class="nav-dropdown-item" href="business-plan.html">Business plan</a>
+        </div>
+      </div>
       <div class="nav-dropdown">
         <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Tools<span class="nav-chevron">▾</span></button>
         <div class="nav-dropdown-menu">
@@ -61,14 +67,15 @@ FILE: about.html
   <main id="main" class="container">
     <header class="hero">
       <h1>About ScienceEcosystem</h1>
-      <p class="lead">An open platform for discovering research, understanding researcher impact, and evaluating journals — built entirely on public data and free to use.</p>
+      <p class="lead">Scientific knowledge belongs to everyone. ScienceEcosystem is an open platform for discovering research, understanding researcher impact, and evaluating journals — built on public data, free to use, and governed to stay that way.</p>
     </header>
 
     <!-- 1. THE PROBLEM -->
     <section class="panel">
       <h2>Why this exists</h2>
-      <p>Finding research is harder than it should be. Papers are scattered across publisher sites behind paywalls. Metrics for judging journals and researchers rely on proprietary databases — Impact Factor is sold by Clarivate, citation counts are locked in Scopus or Web of Science. A researcher wanting to evaluate a journal or build a literature review often needs multiple expensive subscriptions just to get started.</p>
-      <p>ScienceEcosystem is an attempt to fix that. Everything it does is built on <a href="https://openalex.org/" target="_blank" rel="noopener">OpenAlex</a> — a fully open, public index of 200 million+ research works — so none of it requires a subscription. The platform is independent, non-profit in spirit, and intended to stay that way.</p>
+      <p>Science is produced by researchers, funded by the public, and reviewed by peers. Yet the results are locked away by publishers who had no part in creating them. The tools used to evaluate journals and researchers are owned by companies that sell access back to the very institutions that produced the science.</p>
+      <p>This is not an accident. It is a system that has been commercially optimised over decades at the expense of the thing it was supposed to serve: knowledge that belongs to all of us.</p>
+      <p>ScienceEcosystem starts from a different premise. Scientific knowledge is a public good. It should be openly accessible, transparently evaluated, and preserved in a way that keeps it useful and verifiable — not just today, but across generations. Everything built here uses public data, stays free to use, and is governed to stay independent.</p>
     </section>
 
     <!-- 2. WHAT YOU CAN DO TODAY -->
@@ -148,7 +155,7 @@ FILE: about.html
     <section class="panel">
       <h2>Who is building this</h2>
       <p><strong>Olivier Raven</strong> is a PhD student in Ecology at the University of Waikato, New Zealand. He started ScienceEcosystem because he kept running into the same friction every researcher hits — paywalled tools, proprietary metrics, no single place to find a paper and its underlying evidence. The project is currently led by Olivier alone, with no formal team and no funding yet.</p>
-      <p>That is an honest statement of where things are. It is also an invitation: if you are a developer, researcher, designer, or institution who believes open science infrastructure should exist and be free, Olivier is actively looking for contributors and partners. The public strategy document is on <a href="https://www.overleaf.com/read/xyzyqvjmpdjh#75b02a" target="_blank" rel="noopener">Overleaf</a> and the code is on <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener">GitHub</a>.</p>
+      <p>That is an honest statement of where things are. It is also an invitation: if you are a developer, researcher, designer, or institution who believes open science infrastructure should exist and be free, Olivier is actively looking for contributors and partners. The public strategy document is on <a href="business-plan.html">the business plan page</a> and the code is on <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener">GitHub</a>.</p>
     </section>
 
     <!-- 7. GET INVOLVED -->
