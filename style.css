@@ -86,6 +86,8 @@ body {
   background: transparent;
   border: none;
   color: #fff;
+  font-size: inherit;
+  font-family: inherit;
   font-weight: 600;
   padding: .5rem .25rem;
   border-radius: 6px;
