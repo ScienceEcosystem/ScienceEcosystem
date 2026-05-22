@@ -7,12 +7,6 @@ Last updated: 2026-05-22
 BUGS / QUICK FIXES
 =======================================================
 
-- [ ] Cite button popup on paper page: needs to appear centred on screen, not off to the side
-- [ ] Paper page still shows "SE" prefix before journal score number — remove the prefix
-- [ ] about.html chip links: open-science.html and data-code.html either don't exist yet
-      or are very thin — decide: build them properly or remove the chips
-- [ ] The GitHub link in the footer points to github.com/ScienceEcosystem but the repo
-      may not be public yet — make it public and add a README
 
 
 =======================================================
@@ -35,7 +29,6 @@ USER PROFILE PAGE (currently very empty)
 PAPER PAGE
 - [ ] Include graphical abstracts and figures where available (similar to what journal
       sites show but better organised)
-- [ ] Cite button popup centred on screen
 
 ANALYTICS (private, no cookies, no privacy impact)
 - [ ] Build a private /admin or /stats page (auth-gated, only for Olivier) that shows:
@@ -52,7 +45,6 @@ ANALYTICS (private, no cookies, no privacy impact)
       Recommendation: start with a simple DB counter table, upgrade to Umami later
 
 SECURITY & SESSION MANAGEMENT
-- [ ] Review session expiry: how long before ORCID login expires? Set a reasonable TTL
 - [ ] Shared link safety: make sure a session token in a URL can't log in a different user
 - [ ] CSRF protection on all POST endpoints
 - [ ] Rate limiting on /api/library and search endpoints
@@ -60,7 +52,7 @@ SECURITY & SESSION MANAGEMENT
 BROWSER EXTENSION
 - [ ] Firefox extension port (same codebase, minor manifest differences)
 - [ ] Safari extension port (requires Xcode + Apple developer account — plan for later)
-- [ ] Extension update: show paper JTI score in popup when available
+- [X] Extension update: JTI score shown in popup (v0.1.2, 2026-05-22)
 
 
 =======================================================
@@ -123,8 +115,8 @@ FUNDING STRATEGY
 INFRASTRUCTURE / PLATFORM HEALTH
 =======================================================
 
-- [ ] Make GitHub repo public + write a proper README explaining what the project is,
-      how to run it locally, and how to contribute
+- [X] GitHub repo already public with README at github.com/ScienceEcosystem/ScienceEcosystem
+      node_modules removed from git tracking (2026-05-22)
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Service worker version: currently se-v9 — bump when doing major JS/CSS changes
 - [ ] Neon DB: add indexes if queries get slow as user count grows
@@ -154,6 +146,9 @@ OPEN QUESTIONS / DECISIONS TO MAKE
 DONE
 =======================================================
 
+- [X] Session TTL: already 90 days with sliding window (auto-extends if <45 days remain) — good
+- [X] Cite button popup: now fixed-position, centered on screen with backdrop (2026-05-22)
+- [X] GitHub repo already public; node_modules removed from tracking (2026-05-22)
 - [X] Add more metrics for journal quality: Journal Trust Index (JTI) implemented
       — Openness + Recognition + Scale + Integrity = 0–100
 - [X] Search bar now handles DOI search and long sentence queries

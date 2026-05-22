@@ -58,6 +58,20 @@ async function savePaper({ id, title, doi }) {
 
 // ── OpenAlex lookup ───────────────────────────────────────────────────────────
 
+async function fetchSource(sourceId) {
+  if (!sourceId) return null;
+  try {
+    const clean = sourceId.replace("https://openalex.org/", "");
+    const res = await fetch(
+      `https://api.openalex.org/sources/${clean}?mailto=info@scienceecosystem.org`
+    );
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) {
+    return null;
+  }
+}
+
 async function resolveByDoi(doi) {
   if (!doi) return null;
   try {
@@ -229,6 +243,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     resolveByDoi(msg.doi)
       .then(work => sendResponse({ work }))
       .catch(() => sendResponse({ work: null }));
+    return true;
+  }
+
+  if (msg.type === "FETCH_SOURCE") {
+    fetchSource(msg.sourceId)
+      .then(source => sendResponse({ source }))
+      .catch(() => sendResponse({ source: null }));
     return true;
   }
 

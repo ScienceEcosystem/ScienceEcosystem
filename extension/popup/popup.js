@@ -95,6 +95,14 @@ async function boot() {
     }
   }
 
+  // 3b. Fetch JTI async — fires in background, doesn't block the rest of boot
+  const sourceId = _work?.primary_location?.source?.id;
+  if (sourceId) {
+    msg("FETCH_SOURCE", { sourceId }).then(result => {
+      if (result?.source) renderJTI(computeJTI(result.source));
+    });
+  }
+
   // 4. Check if already saved
   _saved = await msg("CHECK_SAVED", {
     doi: meta.doi,
@@ -128,6 +136,42 @@ function enrichMetaFromWork(work, meta) {
     || work.open_access?.oa_url
     || null;
   if (oaPdf && !_pdfUrls.includes(oaPdf)) _pdfUrls.unshift(oaPdf);
+}
+
+// ── Journal Trust Index ───────────────────────────────────────────────────────
+
+function computeJTI(src) {
+  const isDoaj = !!(src.is_in_doaj);
+  const isOa   = !!(src.is_oa);
+  const openness = isDoaj ? 30 : isOa ? 20 : 0;
+
+  const cite2yr = parseFloat(src.summary_stats?.["2yr_mean_citedness"] || 0);
+  const recognition = cite2yr > 0
+    ? Math.min(40, Math.round(Math.log(cite2yr + 1) / Math.log(51) * 40))
+    : 0;
+
+  const wc = parseInt(src.works_count || 0, 10);
+  const scale = wc > 0
+    ? Math.min(15, Math.round(Math.log(wc + 1) / Math.log(100001) * 15))
+    : 0;
+
+  const type = (src.type || "").toLowerCase();
+  const integrity = type === "journal" ? (isOa ? 15 : 10) : (isOa ? 5 : 0);
+
+  const total = openness + recognition + scale + integrity;
+  const grade = total >= 85 ? "Excellent"
+              : total >= 70 ? "Good"
+              : total >= 50 ? "Fair"
+              : total >= 30 ? "Limited"
+              : "Poor";
+  return { total, grade };
+}
+
+function renderJTI(jti) {
+  const el = $("paperJti");
+  if (!el) return;
+  el.textContent = `Journal: JTI ${jti.total}/100 · ${jti.grade}`;
+  el.hidden = false;
 }
 
 // ── Render the detected-paper state ──────────────────────────────────────────

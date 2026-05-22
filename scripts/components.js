@@ -429,7 +429,7 @@
         (hasMore ? '<span class="abs-full">'+full+'</span>' : '')+
       '</p>'+
       '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '+
-        'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+
+        'style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; max-width:640px; width:min(92vw,640px); max-height:90vh; overflow:auto; box-shadow:0 8px 32px rgba(0,0,0,.28); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+
     '</article>';
   }
 
@@ -505,20 +505,22 @@
     return tpl;
   }
 
-  function positionPopover(card, popover, button){
-    var btnRect = button.getBoundingClientRect();
-    var cardRect = card.getBoundingClientRect();
-    var top = (btnRect.bottom - cardRect.top) + 8;
-    var left = (btnRect.left - cardRect.left);
-    var maxLeft = card.clientWidth - popover.clientWidth - 8;
-    if (left > maxLeft) left = Math.max(8, maxLeft);
-    if (left < 8) left = 8;
-    if (top + popover.clientHeight > card.clientHeight) {
-      top = card.clientHeight - popover.clientHeight - 12;
-      if (top < 8) top = 8;
+  function positionPopover(){ /* centering handled by position:fixed + CSS transform */ }
+
+  function showCiteBackdrop() {
+    var bd = document.getElementById("cite-backdrop");
+    if (!bd) {
+      bd = document.createElement("div");
+      bd.id = "cite-backdrop";
+      bd.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998;";
+      document.body.appendChild(bd);
     }
-    popover.style.left = left + "px";
-    popover.style.top  = top + "px";
+    bd.hidden = false;
+  }
+
+  function hideCiteBackdrop() {
+    var bd = document.getElementById("cite-backdrop");
+    if (bd) bd.hidden = true;
   }
 
   // ---------- Add-to-Library helpers ----------
@@ -650,12 +652,13 @@
 
     // 5) Cite popover open/close/copy
     function closeAllPopovers(){
-      root.querySelectorAll(".paper-card .cite-popover").forEach(function(pop){
+      root.querySelectorAll(".cite-popover").forEach(function(pop){
         pop.hidden = true;
         var card = pop.closest(".paper-card, .header-card, .result-card, article");
         var openBtn = card && card.querySelector('[data-action="open-cite"]');
         if (openBtn) openBtn.setAttribute("aria-expanded","false");
       });
+      hideCiteBackdrop();
     }
 
     root.addEventListener("click", function(e){
@@ -673,9 +676,10 @@
           return;
         }
         closeAllPopovers();
+        showCiteBackdrop();
         pop.hidden = false;
         open.setAttribute("aria-expanded","true");
-        requestAnimationFrame(function(){ positionPopover(card, pop, open); });
+        requestAnimationFrame(function(){ positionPopover(); });
         return;
       }
 
