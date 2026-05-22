@@ -9,55 +9,119 @@
   <link rel="stylesheet" href="style.css"/>
   <style>
     body { background: #f1f5f9; }
+
     .admin-header { background: #0f172a; color: #fff; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; }
     .admin-header h1 { margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
     .admin-header .sub { font-size: .78rem; color: #94a3b8; margin-top: 2px; }
-    .admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-    .kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.25rem; }
-    .kpi-label { font-size: .75rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .25rem; }
-    .kpi-value { font-size: 2rem; font-weight: 700; color: #0f172a; line-height: 1; }
-    .kpi-sub { font-size: .78rem; color: #94a3b8; margin-top: .3rem; }
-    .kpi.highlight .kpi-value { color: #2e7f9f; }
-    .section-title { font-size: .9rem; font-weight: 700; color: #374151; margin: 1.5rem 0 .75rem; }
-    .traffic-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; }
-    .traffic-table th { background: #f8fafc; padding: .6rem 1rem; text-align: left; font-size: .78rem; font-weight: 700; color: #64748b; border-bottom: 1px solid #e2e8f0; }
-    .traffic-table td { padding: .55rem 1rem; font-size: .85rem; border-bottom: 1px solid #f1f5f9; }
-    .traffic-table tr:last-child td { border-bottom: none; }
-    .bar-wrap { display: flex; align-items: center; gap: .5rem; }
-    .bar { height: 8px; border-radius: 4px; background: #2e7f9f; min-width: 2px; transition: width .3s; }
-    .chart-area { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.25rem; }
-    .chart-svg { display: block; width: 100%; height: 160px; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
-    .tab-bar { display: flex; gap: .25rem; margin-bottom: .75rem; }
-    .tab-btn { padding: 4px 12px; border-radius: 6px; font-size: .8rem; font-weight: 600; cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #374151; }
+
+    .admin-wrap { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+
+    /* ── KPI grid ── */
+    .kpi-group-title { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin: 1.5rem 0 .5rem; }
+    .admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .75rem; margin-bottom: .25rem; }
+    .kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: .9rem 1.1rem; }
+    .kpi-label { font-size: .72rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .2rem; }
+    .kpi-value { font-size: 1.9rem; font-weight: 700; color: #0f172a; line-height: 1; }
+    .kpi-sub   { font-size: .75rem; color: #94a3b8; margin-top: .25rem; }
+    .kpi.hi .kpi-value { color: #2e7f9f; }
+    .kpi.green .kpi-value { color: #16a34a; }
+
+    /* ── Charts ── */
+    .chart-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.25rem; }
+    .chart-title { font-size: .82rem; font-weight: 700; color: #374151; margin-bottom: .75rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+    .chart-svg { display: block; width: 100%; height: 140px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .75rem; }
+    @media (max-width: 800px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    /* ── Period selector ── */
+    select.period-sel { font-size: .8rem; padding: 3px 8px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; color: #374151; cursor: pointer; }
+
+    /* ── Tables ── */
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: #f8fafc; padding: .5rem .85rem; text-align: left; font-size: .75rem; font-weight: 700; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+    .data-table td { padding: .5rem .85rem; font-size: .83rem; border-bottom: 1px solid #f1f5f9; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .bar-wrap { display: flex; align-items: center; gap: .4rem; }
+    .bar { height: 7px; border-radius: 4px; background: #2e7f9f; min-width: 2px; }
+
+    /* ── Distrib ── */
+    .distrib { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+    .distrib-item { background: #f1f5f9; border-radius: 8px; padding: .5rem .9rem; text-align: center; flex: 1; min-width: 80px; }
+    .distrib-val { font-size: 1.4rem; font-weight: 700; color: #0f172a; }
+    .distrib-lbl { font-size: .7rem; color: #64748b; margin-top: 2px; }
+
+    /* ── Tab bar ── */
+    .tab-bar { display: flex; gap: .25rem; margin-bottom: .6rem; }
+    .tab-btn { padding: 3px 10px; border-radius: 6px; font-size: .78rem; font-weight: 600; cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #374151; }
     .tab-btn.active { background: #0f172a; color: #fff; border-color: #0f172a; }
+
+    /* ── Grant summary box ── */
+    .grant-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 1rem 1.25rem; margin-top: .75rem; }
+    .grant-box h3 { font-size: .85rem; font-weight: 700; color: #166534; margin: 0 0 .5rem; }
+    .grant-box p { font-size: .85rem; color: #374151; margin: 0; line-height: 1.6; }
+
     #status { padding: 3rem; text-align: center; color: #64748b; font-size: .9rem; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
-  <div class="admin-header">
-    <div>
-      <h1>ScienceEcosystem — Admin</h1>
-      <div class="sub" id="lastUpdated">Loading…</div>
-    </div>
-    <div style="display:flex; gap:.5rem; align-items:center;">
-      <span id="adminOrcid" style="font-size:.75rem; color:#94a3b8;"></span>
-      <button onclick="location.href='index.html'" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:.8rem;">← Site</button>
-    </div>
+
+<div class="admin-header">
+  <div>
+    <h1>ScienceEcosystem — Admin</h1>
+    <div class="sub" id="lastUpdated">Loading…</div>
   </div>
+  <div style="display:flex; gap:.5rem; align-items:center;">
+    <span id="adminOrcid" style="font-size:.75rem; color:#94a3b8;"></span>
+    <button onclick="location.href='index.html'" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:.8rem;">← Site</button>
+  </div>
+</div>
 
-  <main class="container" style="padding: 1rem;">
-    <div id="status">Checking access…</div>
-    <div id="dashboard" style="display:none;">
+<div class="admin-wrap">
+  <div id="status">Checking access…</div>
+  <div id="dashboard" hidden>
 
-      <!-- KPI strip -->
-      <div class="admin-grid" id="kpiGrid"></div>
+    <!-- ── USERS ── -->
+    <div class="kpi-group-title">Users</div>
+    <div class="admin-grid" id="kpiUsers"></div>
 
-      <!-- Daily traffic chart -->
-      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.5rem; margin-top:1.5rem;">
-        <div class="section-title" style="margin:0;">Daily page views</div>
-        <select id="chartPeriodSel" style="font-size:.82rem; padding:4px 10px; border-radius:6px; border:1px solid #e2e8f0; background:#fff; color:#374151; cursor:pointer;">
+    <!-- ── CONTENT ── -->
+    <div class="kpi-group-title">Content</div>
+    <div class="admin-grid" id="kpiContent"></div>
+
+    <!-- ── GRANT SUMMARY ── -->
+    <div class="grant-box">
+      <h3>Grant-ready summary</h3>
+      <p id="grantText">Loading…</p>
+    </div>
+
+    <!-- ── USER GROWTH CHART ── -->
+    <div class="kpi-group-title" style="margin-top:1.5rem;">Growth (last 12 weeks)</div>
+    <div class="grid-2">
+      <div class="chart-card">
+        <div class="chart-title">New users per week</div>
+        <svg id="userGrowthChart" class="chart-svg" viewBox="0 0 500 140" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Papers saved per week</div>
+        <svg id="saveGrowthChart" class="chart-svg" viewBox="0 0 500 140" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+
+    <!-- ── LIBRARY DISTRIBUTION ── -->
+    <div class="kpi-group-title" style="margin-top:1.25rem;">Library size distribution</div>
+    <div class="chart-card">
+      <div class="chart-title">Users by number of saved papers</div>
+      <div class="distrib" id="libDistrib"></div>
+    </div>
+
+    <!-- ── DAILY PAGE VIEWS ── -->
+    <div class="kpi-group-title" style="margin-top:1.25rem;">Page views</div>
+    <div class="chart-card">
+      <div class="chart-title">
+        Daily page views
+        <select id="chartPeriodSel" class="period-sel">
           <option value="7">Last 7 days</option>
           <option value="30" selected>Last 30 days</option>
           <option value="90">Last 90 days</option>
@@ -66,167 +130,254 @@
           <option value="3650">All time</option>
         </select>
       </div>
-      <div class="chart-area" style="margin-top:.5rem;">
-        <svg id="trafficChart" class="chart-svg" viewBox="0 0 800 160" preserveAspectRatio="none"></svg>
-      </div>
+      <svg id="trafficChart" class="chart-svg" viewBox="0 0 800 140" preserveAspectRatio="none" style="height:140px;"></svg>
+    </div>
 
-      <!-- Traffic breakdown -->
-      <div class="section-title" style="margin-top:1.5rem;">Top pages</div>
+    <!-- ── TOP PAGES ── -->
+    <div class="kpi-group-title" style="margin-top:1.25rem;">Top pages</div>
+    <div class="chart-card">
       <div class="tab-bar">
         <button class="tab-btn active" data-period="today">Today</button>
         <button class="tab-btn" data-period="week">This week</button>
         <button class="tab-btn" data-period="period">Selected period</button>
       </div>
-      <table class="traffic-table" id="trafficTable">
-        <thead><tr><th>Page</th><th>Hits</th><th style="width:40%;">Bar</th></tr></thead>
+      <table class="data-table" id="trafficTable">
+        <thead><tr><th>Page</th><th>Hits</th><th style="width:35%;">Bar</th></tr></thead>
         <tbody id="trafficBody"></tbody>
       </table>
-
     </div>
-  </main>
 
-  <script>
-    let _stats = null;
-    let _tablePeriod = "today";
-    let _chartDays = 30;
+    <!-- ── TOP SAVED PAPERS ── -->
+    <div class="kpi-group-title" style="margin-top:1.25rem;">Most saved papers (all users)</div>
+    <div class="chart-card">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Paper</th><th>Saves</th></tr></thead>
+        <tbody id="topPapersBody"></tbody>
+      </table>
+    </div>
 
-    const PERIODS = [
-      { label: "7 days",   days: 7   },
-      { label: "30 days",  days: 30  },
-      { label: "90 days",  days: 90  },
-      { label: "6 months", days: 180 },
-      { label: "1 year",   days: 365 },
-      { label: "All time", days: 3650 }
-    ];
+  </div>
+</div>
 
-    async function load(days) {
-      days = days || _chartDays;
-      const status = document.getElementById("status");
-      try {
-        const r = await fetch(`/api/admin/stats?days=${days}`, { credentials: "include" });
-        if (r.status === 401) { status.textContent = "Please sign in with ORCID first."; return; }
-        if (r.status === 403) { status.textContent = "Access denied. This page is restricted."; return; }
-        if (!r.ok) throw new Error(r.status);
-        _stats = await r.json();
-      } catch (e) {
-        status.textContent = "Failed to load stats: " + e.message;
-        return;
-      }
+<script>
+let _stats = null;
+let _tablePeriod = "today";
+let _chartDays = 30;
 
-      status.style.display = "none";
-      document.getElementById("dashboard").style.display = "";
-      const since = _stats.firstDay ? ` · data since ${_stats.firstDay}` : "";
-      document.getElementById("lastUpdated").textContent = "Updated " + new Date().toLocaleTimeString() + since;
+async function load(days) {
+  days = days || _chartDays;
+  const status = document.getElementById("status");
+  try {
+    const r = await fetch(`/api/admin/stats?days=${days}`, { credentials: "include" });
+    if (r.status === 401) { status.textContent = "Please sign in with ORCID first."; return; }
+    if (r.status === 403) { status.textContent = "Access denied. This page is restricted."; return; }
+    if (!r.ok) throw new Error(r.status);
+    _stats = await r.json();
+  } catch (e) {
+    status.textContent = "Failed to load stats: " + e.message;
+    return;
+  }
 
-      renderKpis(_stats);
-      renderChart(_stats.traffic.daily);
-      renderTrafficTable(_tablePeriod);
+  document.getElementById("status").hidden = true;
+  document.getElementById("dashboard").hidden = false;
+  const since = _stats.firstDay ? ` · data since ${_stats.firstDay}` : "";
+  document.getElementById("lastUpdated").textContent = "Updated " + new Date().toLocaleTimeString() + since;
+
+  renderUserKpis(_stats);
+  renderContentKpis(_stats);
+  renderGrantSummary(_stats);
+  renderBarChart("userGrowthChart", _stats.users.growth, "users");
+  renderBarChart("saveGrowthChart", _stats.content.saveGrowth, "saves");
+  renderLibDistrib(_stats.users.libDistrib);
+  renderLineChart("trafficChart", _stats.traffic.daily, 800);
+  renderTrafficTable(_tablePeriod);
+  renderTopPapers(_stats.content.topPapers);
+}
+
+function renderUserKpis(s) {
+  const engagePct = s.users.total > 0 ? Math.round(s.users.engaged / s.users.total * 100) : 0;
+  const kpis = [
+    { label: "Total users",    value: s.users.total,        sub: "registered with ORCID",       cls: "hi" },
+    { label: "New this week",  value: s.users.newThisWeek,  sub: "accounts last 7 days" },
+    { label: "New this month", value: s.users.newThisMonth, sub: "accounts last 30 days" },
+    { label: "Engaged users",  value: s.users.engaged,      sub: `${engagePct}% have saved ≥1 paper`, cls: "green" },
+    { label: "Avg library",    value: s.users.avgLibSize,   sub: "papers per active user" },
+    { label: "Active sessions",value: s.sessions.active,    sub: "sessions not yet expired" },
+  ];
+  document.getElementById("kpiUsers").innerHTML = kpis.map(k =>
+    `<div class="kpi ${k.cls||''}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join("");
+}
+
+function renderContentKpis(s) {
+  const kpis = [
+    { label: "Papers saved",   value: s.content.libraryItems, sub: "library items total", cls: "hi" },
+    { label: "PDFs stored",    value: s.content.pdfsStored,   sub: "PDF files uploaded" },
+    { label: "Annotations",    value: s.content.annotations,  sub: "highlights & notes" },
+    { label: "Follows",        value: s.content.follows,      sub: "researcher follows" },
+    { label: "Page views",     value: Number(s.allTimeViews).toLocaleString(), sub: "all time", cls: "hi" },
+  ];
+  document.getElementById("kpiContent").innerHTML = kpis.map(k =>
+    `<div class="kpi ${k.cls||''}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join("");
+}
+
+function renderGrantSummary(s) {
+  const engagePct = s.users.total > 0 ? Math.round(s.users.engaged / s.users.total * 100) : 0;
+  const el = document.getElementById("grantText");
+  el.textContent =
+    `ScienceEcosystem has ${s.users.total} registered users across ${s.users.newThisMonth} new sign-ups in the last 30 days. ` +
+    `${s.users.engaged} users (${engagePct}%) have actively built a personal library, saving a combined ${s.content.libraryItems} papers ` +
+    `with an average of ${s.users.avgLibSize} papers per active user. ` +
+    `The platform has recorded ${Number(s.allTimeViews).toLocaleString()} page views since launch. ` +
+    `Users have uploaded ${s.content.pdfsStored} PDFs, created ${s.content.annotations} annotations, ` +
+    `and set ${s.content.follows} researcher follows.`;
+}
+
+function renderBarChart(svgId, data, unit) {
+  const svg = document.getElementById(svgId);
+  if (!data || !data.length) {
+    svg.innerHTML = '<text x="250" y="70" text-anchor="middle" fill="#94a3b8" font-size="12">No data yet</text>';
+    return;
+  }
+  const W = 500, H = 140, pad = { t: 10, r: 10, b: 28, l: 30 };
+  const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+  const maxV = Math.max(...data.map(d => d.count), 1);
+  const n = data.length;
+  const bw = Math.max(4, (iW / n) - 3);
+  let bars = "", labels = "";
+  data.forEach((d, i) => {
+    const x = pad.l + (i / n) * iW + 1;
+    const bh = Math.max(2, (d.count / maxV) * iH);
+    const y = pad.t + iH - bh;
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="#2e7f9f" rx="2" opacity=".85">
+      <title>${d.week}: ${d.count} ${unit}</title></rect>`;
+    if (i === 0 || i === n - 1 || i === Math.floor(n / 2)) {
+      labels += `<text x="${(x + bw/2).toFixed(1)}" y="${H - 4}" text-anchor="middle" fill="#94a3b8" font-size="9">${d.week.slice(5)}</text>`;
     }
+  });
+  // Y axis labels
+  let yLabels = "";
+  for (let i = 0; i <= 3; i++) {
+    const y = pad.t + (iH / 3) * i;
+    const val = Math.round(maxV * (1 - i / 3));
+    yLabels += `<text x="${pad.l - 3}" y="${y + 4}" text-anchor="end" fill="#94a3b8" font-size="9">${val}</text>`;
+    yLabels += `<line x1="${pad.l}" y1="${y}" x2="${W - pad.r}" y2="${y}" stroke="#f1f5f9" stroke-width="1"/>`;
+  }
+  svg.innerHTML = yLabels + bars + labels;
+}
 
-    function renderKpis(s) {
-      const periodLabel = PERIODS.find(p => p.days === _chartDays)?.label || `${_chartDays} days`;
-      const kpis = [
-        { label: "Total users",        value: s.users.total,         sub: "registered with ORCID", cls: "highlight" },
-        { label: "New this week",      value: s.users.newThisWeek,   sub: "accounts created in last 7 days" },
-        { label: "New this month",     value: s.users.newThisMonth,  sub: "accounts created in last 30 days" },
-        { label: "Total page views",   value: s.allTimeViews,        sub: "all time, all pages", cls: "highlight" },
-        { label: "Library items",      value: s.content.libraryItems,sub: "papers saved across all users" },
-        { label: "PDFs stored",        value: s.content.pdfsStored,  sub: "PDF files uploaded" },
-        { label: "Annotations",        value: s.content.annotations, sub: "highlights & notes" },
-        { label: "Follows",            value: s.content.follows,     sub: "researcher follows" },
-        { label: "Active sessions",    value: s.sessions.active,     sub: "sessions not yet expired" },
-      ];
-      document.getElementById("kpiGrid").innerHTML = kpis.map(k =>
-        `<div class="kpi ${k.cls || ''}">
-          <div class="kpi-label">${k.label}</div>
-          <div class="kpi-value">${Number(k.value).toLocaleString()}</div>
-          <div class="kpi-sub">${k.sub}</div>
-        </div>`
-      ).join("");
-    }
+function renderLineChart(svgId, daily, W) {
+  const svg = document.getElementById(svgId);
+  if (!daily || !daily.length) {
+    svg.innerHTML = `<text x="${W/2}" y="70" text-anchor="middle" fill="#94a3b8" font-size="13">No traffic data yet.</text>`;
+    return;
+  }
+  const H = 140, pad = { t: 10, r: 10, b: 28, l: 40 };
+  const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+  const maxHits = Math.max(...daily.map(d => d.hits), 1);
+  const n = daily.length;
+  const pts = daily.map((d, i) => ({
+    x: pad.l + (i / Math.max(n - 1, 1)) * iW,
+    y: pad.t + iH - (d.hits / maxHits) * iH,
+    day: d.day, hits: d.hits
+  }));
+  const area = "M" + pts.map(p => `${p.x},${p.y}`).join("L") + `L${pts[pts.length-1].x},${pad.t+iH} L${pts[0].x},${pad.t+iH} Z`;
+  const line = "M" + pts.map(p => `${p.x},${p.y}`).join("L");
+  let grid = "", xLabels = "";
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + (iH / 4) * i;
+    const val = Math.round(maxHits * (1 - i / 4));
+    grid += `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="#f1f5f9" stroke-width="1"/>`;
+    grid += `<text x="${pad.l-4}" y="${y+4}" text-anchor="end" fill="#94a3b8" font-size="10">${val}</text>`;
+  }
+  const labelEvery = n <= 30 ? 4 : n <= 90 ? 14 : n <= 180 ? 28 : 60;
+  pts.forEach((p, i) => {
+    if (i === 0 || i === n - 1 || i % labelEvery === 0)
+      xLabels += `<text x="${p.x}" y="${H-4}" text-anchor="middle" fill="#94a3b8" font-size="9">${p.day.slice(0, n > 365 ? 7 : 5)}</text>`;
+  });
+  svg.innerHTML =
+    `<defs><linearGradient id="aG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2e7f9f" stop-opacity=".25"/>
+      <stop offset="100%" stop-color="#2e7f9f" stop-opacity="0"/>
+    </linearGradient></defs>`
+    + grid + xLabels
+    + `<path d="${area}" fill="url(#aG)"/>`
+    + `<path d="${line}" fill="none" stroke="#2e7f9f" stroke-width="2" stroke-linejoin="round"/>`;
+}
 
-    function renderChart(daily) {
-      const svg = document.getElementById("trafficChart");
-      if (!daily || !daily.length) {
-        svg.innerHTML = '<text x="400" y="80" text-anchor="middle" fill="#94a3b8" font-size="14">No traffic data yet — visit some pages first.</text>';
-        return;
-      }
-      const W = 800, H = 160, pad = { t: 10, r: 10, b: 30, l: 44 };
-      const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
-      const maxHits = Math.max(...daily.map(d => d.hits), 1);
-      const n = daily.length;
-      const pts = daily.map((d, i) => ({
-        x: pad.l + (i / Math.max(n - 1, 1)) * iW,
-        y: pad.t + iH - (d.hits / maxHits) * iH,
-        day: d.day, hits: d.hits
-      }));
-      const area = "M" + pts.map(p => `${p.x},${p.y}`).join("L")
-        + `L${pts[pts.length-1].x},${pad.t+iH} L${pts[0].x},${pad.t+iH} Z`;
-      const line = "M" + pts.map(p => `${p.x},${p.y}`).join("L");
-      let grid = "", xLabels = "";
-      for (let i = 0; i <= 4; i++) {
-        const y = pad.t + (iH / 4) * i;
-        const val = Math.round(maxHits * (1 - i / 4));
-        grid += `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="#f1f5f9" stroke-width="1"/>`;
-        grid += `<text x="${pad.l-4}" y="${y+4}" text-anchor="end" fill="#94a3b8" font-size="10">${val}</text>`;
-      }
-      // Show fewer x-axis labels for large ranges
-      const labelEvery = n <= 30 ? 4 : n <= 90 ? 14 : n <= 180 ? 28 : 60;
-      pts.forEach((p, i) => {
-        if (i === 0 || i === n - 1 || i % labelEvery === 0) {
-          xLabels += `<text x="${p.x}" y="${H-4}" text-anchor="middle" fill="#94a3b8" font-size="9">${p.day.slice(0, n > 365 ? 7 : 5)}</text>`;
-        }
-      });
-      svg.innerHTML =
-        `<defs><linearGradient id="aG" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#2e7f9f" stop-opacity=".25"/>
-          <stop offset="100%" stop-color="#2e7f9f" stop-opacity="0"/>
-        </linearGradient></defs>`
-        + grid + xLabels
-        + `<path d="${area}" fill="url(#aG)"/>`
-        + `<path d="${line}" fill="none" stroke="#2e7f9f" stroke-width="2" stroke-linejoin="round"/>`;
-    }
+function renderLibDistrib(d) {
+  if (!d) return;
+  const el = document.getElementById("libDistrib");
+  el.innerHTML = [
+    { val: d.zero,           lbl: "No papers yet" },
+    { val: d.one_to_four,    lbl: "1–4 papers" },
+    { val: d.five_to_nineteen, lbl: "5–19 papers" },
+    { val: d.twenty_plus,   lbl: "20+ papers" },
+  ].map(item => `<div class="distrib-item">
+    <div class="distrib-val">${item.val}</div>
+    <div class="distrib-lbl">${item.lbl}</div>
+  </div>`).join("");
+}
 
-    function renderTrafficTable(period) {
-      const key = period === "today" ? "today" : period === "week" ? "thisWeek" : "thisPeriod";
-      const rows = _stats.traffic[key] || [];
-      const maxH = Math.max(...rows.map(r => r.hits), 1);
-      const tbody = document.getElementById("trafficBody");
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="3" style="color:#94a3b8;padding:1rem;">No data yet for this period.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = rows.map(r => {
-        const pct = Math.round((r.hits / maxH) * 100);
-        const label = r.page === "/" ? "Home" : r.page.replace(/^\//, "");
-        return `<tr>
-          <td><a href="${r.page}" target="_blank" style="color:#2e7f9f;">${label}</a></td>
-          <td style="font-weight:600;">${Number(r.hits).toLocaleString()}</td>
-          <td><div class="bar-wrap"><div class="bar" style="width:${pct}%; max-width:200px;"></div></div></td>
-        </tr>`;
-      }).join("");
-    }
+function renderTrafficTable(period) {
+  const key = period === "today" ? "today" : period === "week" ? "thisWeek" : "thisPeriod";
+  const rows = _stats.traffic[key] || [];
+  const maxH = Math.max(...rows.map(r => r.hits), 1);
+  const tbody = document.getElementById("trafficBody");
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:#94a3b8;padding:.75rem;">No data for this period.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const pct = Math.round((r.hits / maxH) * 100);
+    const label = r.page === "/" ? "Home" : r.page.replace(/^\//, "");
+    return `<tr>
+      <td><a href="${r.page}" target="_blank" style="color:#2e7f9f;">${label}</a></td>
+      <td style="font-weight:600;">${Number(r.hits).toLocaleString()}</td>
+      <td><div class="bar-wrap"><div class="bar" style="width:${pct}%; max-width:180px;"></div></div></td>
+    </tr>`;
+  }).join("");
+}
 
-    // Wire up controls after dashboard is visible
-    function wireControls() {
-      // Chart period selector
-      document.getElementById("chartPeriodSel").addEventListener("change", function() {
-        _chartDays = Number(this.value);
-        load(_chartDays);
-      });
-      // Traffic table tabs
-      document.querySelectorAll(".tab-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          _tablePeriod = btn.dataset.period;
-          renderTrafficTable(_tablePeriod);
-        });
-      });
-    }
+function renderTopPapers(papers) {
+  const tbody = document.getElementById("topPapersBody");
+  if (!papers || !papers.length) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:#94a3b8;padding:.75rem;">No data yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = papers.map((p, i) => {
+    const url = p.id ? `paper.html?id=${encodeURIComponent(p.id)}` : "#";
+    return `<tr>
+      <td style="color:#94a3b8;font-weight:600;">${i + 1}</td>
+      <td><a href="${url}" target="_blank" style="color:#2e7f9f;">${p.title || "Untitled"}</a></td>
+      <td style="font-weight:600;">${p.saves}</td>
+    </tr>`;
+  }).join("");
+}
 
-    load(_chartDays).then(wireControls);
-    setInterval(() => load(_chartDays), 5 * 60 * 1000);
-  </script>
+// Wire controls
+document.getElementById("chartPeriodSel").addEventListener("change", function() {
+  _chartDays = Number(this.value);
+  load(_chartDays);
+});
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    _tablePeriod = btn.dataset.period;
+    renderTrafficTable(_tablePeriod);
+  });
+});
+
+load(_chartDays);
+setInterval(() => load(_chartDays), 5 * 60 * 1000);
+</script>
 </body>
 </html>

@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "ScienceEcosystem",
+  "short_name": "ScienceEco",
+  "version": "0.1.2",
+  "description": "Save papers and PDFs to your ScienceEcosystem library from any publisher site — one click.",
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "extension@scienceecosystem.org",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": ["none"],
+        "optional": []
+      }
+    }
+  },
+
+  "icons": {
+    "16":  "icons/icon16.png",
+    "32":  "icons/icon32.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "ScienceEcosystem — Save this paper",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+
+  "background": {
+    "scripts": ["background/service-worker.js"]
+  },
+
+  "omnibox": { "keyword": "se" },
+
+  "commands": {
+    "save-paper": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Save current paper to ScienceEcosystem library"
+    }
+  },
+
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "notifications"
+  ],
+
+  "host_permissions": [
+    "https://scienceecosystem.org/*",
+    "https://api.openalex.org/*",
+    "https://doi.org/*"
+  ],
+
+  "web_accessible_resources": []
+}

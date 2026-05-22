@@ -50,7 +50,7 @@ SECURITY & SESSION MANAGEMENT
 - [ ] Rate limiting on /api/library and search endpoints
 
 BROWSER EXTENSION
-- [ ] Firefox extension port (same codebase, minor manifest differences)
+- [X] Firefox extension port: submitted to addons.mozilla.org (2026-05-22), awaiting review
 - [ ] Safari extension port (requires Xcode + Apple developer account — plan for later)
 - [X] Extension update: JTI score shown in popup (v0.1.2, 2026-05-22)
 

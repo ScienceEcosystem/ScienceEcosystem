@@ -501,6 +501,10 @@ async function pgInit() {
   // Collections: map Zotero keys (optional)
   await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS zotero_key TEXT`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS collections_orcid_zotero_key_idx ON collections(orcid, zotero_key) WHERE zotero_key IS NOT NULL`);
+
+  // Growth tracking — added 2026-05-22
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`);
 }
 try {
   await pgInit();
@@ -1584,41 +1588,99 @@ app.get("/api/admin/stats", async (req, res) => {
       hitsToday, hitsWeek, hitsPeriod, hitsPeriodDaily
     ] = await Promise.all([
       pool.query(`SELECT COUNT(*) FROM users`),
-      pool.query(`SELECT COUNT(*) FROM library_items`),
+      pool.query(`SELECT COUNT(*) FROM library_items WHERE deleted_at IS NULL`),
       pool.query(`SELECT COUNT(*) FROM library_pdfs`).catch(() => empty),
       pool.query(`SELECT COUNT(*) FROM pdf_annotations`).catch(() => empty),
       pool.query(`SELECT COUNT(*) FROM followed_authors`).catch(() => empty),
       pool.query(`SELECT COUNT(*) FROM sessions WHERE expires_at > $1`, [Date.now()]),
-      // Traffic — all with .catch() so a missing table never breaks the endpoint
       pool.query(`SELECT page, hits FROM page_hits WHERE day = CURRENT_DATE ORDER BY hits DESC LIMIT 20`).catch(() => emptyRows),
       pool.query(`SELECT page, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - 6 GROUP BY page ORDER BY hits DESC LIMIT 20`).catch(() => emptyRows),
       pool.query(`SELECT page, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - ($1::int) GROUP BY page ORDER BY hits DESC LIMIT 20`, [days - 1]).catch(() => emptyRows),
       pool.query(`SELECT day::text, SUM(hits) AS hits FROM page_hits WHERE day >= CURRENT_DATE - ($1::int) GROUP BY day ORDER BY day`, [days - 1]).catch(() => emptyRows)
     ]);
 
-    // All-time total and earliest data point — safe fallbacks if table is new
-    const allTimeResult = await pool.query(`SELECT COALESCE(SUM(hits),0) AS hits FROM page_hits`).catch(() => ({ rows: [{ hits: 0 }] }));
-    const allTimeTotal = Number(allTimeResult.rows[0].hits);
-
+    // All-time totals
+    const allTimeResult  = await pool.query(`SELECT COALESCE(SUM(hits),0) AS hits FROM page_hits`).catch(() => ({ rows: [{ hits: 0 }] }));
+    const allTimeTotal   = Number(allTimeResult.rows[0].hits);
     const firstDayResult = await pool.query(`SELECT MIN(day)::text AS first FROM page_hits`).catch(() => ({ rows: [{ first: null }] }));
-    const firstDay = firstDayResult.rows[0]?.first || null;
+    const firstDay       = firstDayResult.rows[0]?.first || null;
 
-    // New users registered in last 7 / 30 days (count from users table by session creation proxy)
-    // Active sessions = sessions not yet expired; we use that as a live activity signal instead
-    const newUsersWeek  = await pool.query(`SELECT COUNT(*) FROM users WHERE orcid IN (SELECT orcid FROM sessions WHERE expires_at > $1 AND expires_at < $2)`, [Date.now() + (90-7)*24*3600*1000, Date.now() + (90+1)*24*3600*1000]).catch(() => empty);
-    const newUsersMonth = await pool.query(`SELECT COUNT(*) FROM users WHERE orcid IN (SELECT orcid FROM sessions WHERE expires_at > $1 AND expires_at < $2)`, [Date.now() + (90-30)*24*3600*1000, Date.now() + (90+1)*24*3600*1000]).catch(() => empty);
+    // New users this week / month (from created_at if available, else session proxy)
+    const newUsersWeek  = await pool.query(
+      `SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '7 days'`
+    ).catch(() => empty);
+    const newUsersMonth = await pool.query(
+      `SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '30 days'`
+    ).catch(() => empty);
+
+    // Engagement
+    const engagedUsers = await pool.query(
+      `SELECT COUNT(DISTINCT orcid) FROM library_items WHERE deleted_at IS NULL`
+    ).catch(() => empty);
+    const avgLibSize = await pool.query(
+      `SELECT ROUND(AVG(cnt),1) AS avg FROM (SELECT COUNT(*) AS cnt FROM library_items WHERE deleted_at IS NULL GROUP BY orcid) t`
+    ).catch(() => ({ rows: [{ avg: 0 }] }));
+
+    // User growth by week (last 12 weeks)
+    const userGrowth = await pool.query(
+      `SELECT TO_CHAR(DATE_TRUNC('week', created_at), 'YYYY-MM-DD') AS week, COUNT(*) AS count
+       FROM users WHERE created_at IS NOT NULL AND created_at >= NOW() - INTERVAL '12 weeks'
+       GROUP BY DATE_TRUNC('week', created_at) ORDER BY DATE_TRUNC('week', created_at)`
+    ).catch(() => emptyRows);
+
+    // Library saves by week (last 12 weeks)
+    const saveGrowth = await pool.query(
+      `SELECT TO_CHAR(DATE_TRUNC('week', created_at), 'YYYY-MM-DD') AS week, COUNT(*) AS count
+       FROM library_items WHERE deleted_at IS NULL AND created_at IS NOT NULL AND created_at >= NOW() - INTERVAL '12 weeks'
+       GROUP BY DATE_TRUNC('week', created_at) ORDER BY DATE_TRUNC('week', created_at)`
+    ).catch(() => emptyRows);
+
+    // Top saved papers across all users
+    const topPapers = await pool.query(
+      `SELECT title, id, COUNT(*) AS saves
+       FROM library_items WHERE deleted_at IS NULL AND title IS NOT NULL
+       GROUP BY title, id ORDER BY saves DESC LIMIT 10`
+    ).catch(() => emptyRows);
+
+    // Follows growth by week
+    const followGrowth = await pool.query(
+      `SELECT TO_CHAR(DATE_TRUNC('week', created_at), 'YYYY-MM-DD') AS week, COUNT(*) AS count
+       FROM followed_authors WHERE created_at >= NOW() - INTERVAL '12 weeks'
+       GROUP BY DATE_TRUNC('week', created_at) ORDER BY DATE_TRUNC('week', created_at)`
+    ).catch(() => emptyRows);
+
+    // Items per user distribution (for grant narrative)
+    const libDistrib = await pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE cnt = 0)   AS zero,
+         COUNT(*) FILTER (WHERE cnt BETWEEN 1 AND 4) AS one_to_four,
+         COUNT(*) FILTER (WHERE cnt BETWEEN 5 AND 19) AS five_to_nineteen,
+         COUNT(*) FILTER (WHERE cnt >= 20)  AS twenty_plus
+       FROM (
+         SELECT u.orcid, COUNT(li.id) AS cnt
+         FROM users u LEFT JOIN library_items li ON li.orcid = u.orcid AND li.deleted_at IS NULL
+         GROUP BY u.orcid
+       ) t`
+    ).catch(() => ({ rows: [{ zero: 0, one_to_four: 0, five_to_nineteen: 0, twenty_plus: 0 }] }));
 
     res.json({
       users: {
         total:        Number(usersTotal.rows[0].count),
         newThisWeek:  Number(newUsersWeek.rows[0].count),
-        newThisMonth: Number(newUsersMonth.rows[0].count)
+        newThisMonth: Number(newUsersMonth.rows[0].count),
+        engaged:      Number(engagedUsers.rows[0].count),
+        avgLibSize:   Number(avgLibSize.rows[0]?.avg || 0),
+        growth:       userGrowth.rows.map(r => ({ week: r.week, count: Number(r.count) })),
+        libDistrib:   libDistrib.rows[0]
       },
       content: {
         libraryItems: Number(libTotal.rows[0].count),
         pdfsStored:   Number(libPdfs.rows[0].count),
         annotations:  Number(annoTotal.rows[0].count),
-        follows:      Number(followTotal.rows[0].count)
+        follows:      Number(followTotal.rows[0].count),
+        saveGrowth:   saveGrowth.rows.map(r => ({ week: r.week, count: Number(r.count) })),
+        followGrowth: followGrowth.rows.map(r => ({ week: r.week, count: Number(r.count) })),
+        topPapers:    topPapers.rows.map(r => ({ title: r.title, id: r.id, saves: Number(r.saves) }))
       },
       sessions:     { active: Number(activeSessions.rows[0].count) },
       allTimeViews: allTimeTotal,
