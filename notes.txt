@@ -117,7 +117,7 @@ FUNDING STRATEGY
       science and open-knowledge foundations (Wellcome Trust, Sloan Foundation, etc.)
 - [ ] No: venture capital, paywalls, user data sales, advertising, sponsored ranking
 - [ ] Long-term goal: endowment covering baseline operational costs
-
+ 
 
 =======================================================
 INFRASTRUCTURE / PLATFORM HEALTH
