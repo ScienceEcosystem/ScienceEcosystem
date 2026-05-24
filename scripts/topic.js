@@ -103,12 +103,22 @@
   function makeIdFromText(t) {
     return ("sec-" + t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64));
   }
+  // Neutralise resource-loading attributes before any HTML parsing.
+  // Safari (WebKit) eagerly fetches src/srcset/poster even inside a DOMParser
+  // document that is never attached to the main document.
+  function neutralizeResourceAttrs(html) {
+    return html
+      .replace(/(\s)src=/g, "$1data-src=")
+      .replace(/(\s)srcset=/g, "$1data-srcset=")
+      .replace(/(\s)poster=/g, "$1data-poster=");
+  }
+
   function sanitiseWikipediaHTML(html, lang) {
     const wikiLang = lang || "en";
 
-    // DOMParser avoids triggering resource fetches during parsing
+    // Neutralise before parsing so WebKit never sees a live src/srcset/poster
     const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
+    const doc = parser.parseFromString(neutralizeResourceAttrs(html), "text/html");
     const src = doc.body || doc.createElement("div");
 
     // Strip elements we never want before the clone walk
@@ -175,7 +185,8 @@
           }
         }
       } else if (tag === "IMG") {
-        let srcAttr = node.getAttribute("src") || "";
+        // Read data-src (neutralized from src before parsing)
+        let srcAttr = node.getAttribute("data-src") || "";
         if (/^(https?:)?\/\/upload\.wikimedia\.org\//i.test(srcAttr)) {
           if (srcAttr.startsWith("//")) srcAttr = "https:" + srcAttr;
           const alt = node.getAttribute("alt") || "";
@@ -408,7 +419,7 @@
   // Parse reference items directly from the mobile-html (fallback when REST API returns 404)
   function extractRefsFromMobileHTML(html) {
     const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
+    const doc = parser.parseFromString(neutralizeResourceAttrs(html), "text/html");
     const items = Array.from(doc.querySelectorAll('li[id^="cite_note-"]'));
     return items.map((li, i) => {
       const refEl = li.querySelector(".reference-text, .mw-reference-text");
