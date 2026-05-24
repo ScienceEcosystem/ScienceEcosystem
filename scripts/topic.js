@@ -105,9 +105,22 @@
   }
   function sanitiseWikipediaHTML(html, lang) {
     const wikiLang = lang || "en";
-    const src = document.createElement("div");
-    src.innerHTML = html;
-    src.querySelectorAll("style, link, script, noscript").forEach((n) => n.remove());
+
+    // DOMParser avoids triggering resource fetches during parsing
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const src = doc.body || doc.createElement("div");
+
+    // Strip elements we never want before the clone walk
+    src.querySelectorAll([
+      "style", "link", "script", "noscript", "meta",
+      "video", "audio", "source", "track",
+      'figure[typeof*="Video"]', 'figure[typeof*="Audio"]',
+      ".mw-editsection", ".mw-editsection-bracket",
+      ".sistersitebox", ".sister-wikipedia", ".noprint",
+      ".navbox", ".mbox-small", ".ambox", ".tmbox",
+      ".mw-authority-control", ".mw-pb-wikibase-link"
+    ].join(",")).forEach((n) => n.remove());
 
     const out = document.createElement("div");
     out.className = "se-wiki-clean";
@@ -160,8 +173,11 @@
         let srcAttr = node.getAttribute("src") || "";
         if (/^(https?:)?\/\/upload\.wikimedia\.org\//i.test(srcAttr)) {
           if (srcAttr.startsWith("//")) srcAttr = "https:" + srcAttr;
-          el.setAttribute("src", srcAttr);
           const alt = node.getAttribute("alt") || "";
+          // Drop UI/logo icons that have no meaningful alt text
+          const uiIcon = /\/(OOjs_UI_|Commons-logo|Wikibooks-logo|Wikiquote|Wikisource|Wiktionary|Wikinews|Wikiversity|Wikivoyage|Wikipedia-logo|Powered_by_MediaWiki)/i;
+          if (!alt && uiIcon.test(srcAttr)) return document.createTextNode("");
+          el.setAttribute("src", srcAttr);
           if (alt) el.setAttribute("alt", alt);
           el.setAttribute("loading", "lazy");
           el.style.maxWidth = "100%";
@@ -347,7 +363,7 @@
     parts.push(`${escapeHtml(title)}.`);
     if (venue) parts.push(`<i>${escapeHtml(venue)}</i>.`);
     if (doiHref) parts.push(`<a href="${doiHref}" target="_blank" rel="noopener">${doi ? "https://doi.org/" + escapeHtml(doi) : "Link"}</a>`);
-    if (workIdTail) parts.push(` · <a href="paper.html?id=${encodeURIComponent(workIdTail)}">SE paper page</a>`);
+    if (workIdTail) parts.push(` · <a href="paper.html?id=${encodeURIComponent(workIdTail)}">Paper page</a>`);
     return parts.join(" ");
   }
   function dedupByDOI(arr) {
@@ -390,7 +406,7 @@
     ]);
 
     if (wikiRefs.length) {
-      // Extract DOIs and batch-look up SE paper pages
+      // Extract DOIs and batch-look up Paper pages
       const dois = wikiRefs.map(r => extractDoiFromWikiRef(r)).filter(Boolean);
       let doiToWorkId = {};
       if (dois.length) {
@@ -418,12 +434,12 @@
         }
         if (!inner) inner = "(Reference details unavailable)";
 
-        // Try to add an SE paper page link via DOI match
+        // Add paper page link via DOI match
         const doi = extractDoiFromWikiRef(ref);
         const normDoi = doi ? doi.toLowerCase() : null;
         const workId = normDoi ? doiToWorkId[normDoi] : null;
         const seLink = workId
-          ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">SE paper page</a>`
+          ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">Paper page</a>`
           : "";
         const doiLink = doi
           ? ` · <a href="https://doi.org/${encodeURIComponent(doi)}" target="_blank" rel="noopener">DOI</a>`
@@ -432,7 +448,7 @@
         return `<li id="se-ref-li-${idx}" value="${idx}"><a id="se-ref-${idx}" class="ref-anchor"></a>${inner}${doiLink}${seLink}</li>`;
       }).join("");
 
-      referencesWhy.textContent = "References from the Wikipedia article. Links to SE paper pages added where a DOI match was found.";
+      referencesWhy.textContent = "References from the Wikipedia article. Links to Paper pages added where a DOI match was found.";
     } else {
       // Fallback to OpenAlex influential papers if Wikipedia refs unavailable
       const nowY = new Date().getUTCFullYear();
