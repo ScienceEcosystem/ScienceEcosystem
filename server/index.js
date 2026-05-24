@@ -279,6 +279,7 @@ async function pgInit() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS website_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS affiliations TEXT[] DEFAULT '{}'`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
 
   // Privacy-safe page hit counters — aggregate only, no personal data, no IP
   await pool.query(`
@@ -588,7 +589,7 @@ function requireAuth(req, res) {
 -------------*/
 const USER_COLS = `orcid, name, affiliation, affiliations, bio, keywords, languages, links, visibility,
   openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
-  github_url, linkedin_url, twitter_url, website_url`;
+  github_url, linkedin_url, twitter_url, website_url, avatar_url`;
 
 async function upsertUser({ orcid, name, affiliation, bio = null, keywords = null, languages = null, links = null, visibility = null }) {
   await pool.query(
@@ -1565,6 +1566,47 @@ app.get("/api/profile/orcid/:orcid", async (req, res) => {
   } catch (e) {
     console.error("GET /api/profile/orcid failed:", e);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── Avatar upload ────────────────────────────────────────────────────────────
+app.post("/api/profile/avatar", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  try {
+    const { files } = await parseMultipartForm(req, 8 * 1024 * 1024);
+    const file = files.find(f => f.field === "avatar");
+    if (!file || !file.buffer.length) return res.status(400).json({ error: "No file received" });
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    const ct = (file.contentType || "").toLowerCase();
+    if (!allowed.some(t => ct.includes(t.split("/")[1])))
+      return res.status(400).json({ error: "Only JPEG, PNG, WebP, or GIF images allowed" });
+    const safeOrcid = sess.orcid.replace(/[^a-z0-9-]/gi, "_");
+    const key = `avatars/${safeOrcid}.jpg`;
+    await uploadToR2(key, file.buffer, "image/jpeg");
+    await pool.query("UPDATE users SET avatar_url=$1 WHERE orcid=$2", [`r2:${key}`, sess.orcid]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /api/profile/avatar failed:", e);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+// ── Avatar serve ─────────────────────────────────────────────────────────────
+app.get("/api/avatar/:orcid", async (req, res) => {
+  try {
+    const orcid = decodeURIComponent(req.params.orcid);
+    const row = await pool.query("SELECT avatar_url FROM users WHERE orcid=$1", [orcid]);
+    const avatarUrl = row.rows[0]?.avatar_url;
+    if (!avatarUrl || !avatarUrl.startsWith("r2:")) return res.status(404).end();
+    const key = avatarUrl.slice(3);
+    const cmd = new GetObjectCommand({ Bucket: R2_BUCKET, Key: key });
+    const obj = await r2Client.send(cmd);
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    obj.Body.pipe(res);
+  } catch (e) {
+    res.status(404).end();
   }
 });
 

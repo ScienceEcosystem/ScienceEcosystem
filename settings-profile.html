@@ -68,6 +68,23 @@
 
     <form id="profileForm" onsubmit="return false;">
 
+      <!-- ── Profile photo ─────────────────────────────────────── -->
+      <section class="panel" style="margin-bottom:1rem;">
+        <h2 style="margin:0 0 1rem; font-size:1rem;">Profile photo</h2>
+        <div style="display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;">
+          <div id="avatarPreviewWrap" style="width:80px; height:80px; border-radius:50%; overflow:hidden; background:#e2e8f0; flex-shrink:0; display:flex; align-items:center; justify-content:center;">
+            <img id="avatarPreview" src="" alt="Profile photo" style="width:100%; height:100%; object-fit:cover; display:none;" />
+            <span id="avatarInitials" style="font-size:1.5rem; color:#64748b; font-weight:600;"></span>
+          </div>
+          <div>
+            <label class="btn btn-secondary" for="avatarInput" style="cursor:pointer; display:inline-block;">Choose photo</label>
+            <input type="file" id="avatarInput" accept="image/jpeg,image/png,image/webp" style="display:none;" />
+            <p class="muted" style="font-size:.8rem; margin:.4rem 0 0;">JPEG, PNG, or WebP. Max 5 MB. Resized to 400×400.</p>
+            <p id="avatarMsg" style="font-size:.8rem; margin:.3rem 0 0; color:#16a34a; display:none;"></p>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Basic info ──────────────────────────────────────────── -->
       <section class="panel" style="margin-bottom:1rem;">
         <h2 style="margin:0 0 1rem; font-size:1rem;">Basic information</h2>
@@ -278,6 +295,18 @@
       try { me = await api("/api/me"); }
       catch { msg.textContent = "Please sign in with ORCID to edit your profile."; return; }
 
+      // Avatar preview
+      const initials = (me.name || "?").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
+      document.getElementById("avatarInitials").textContent = initials;
+      if (me.avatar_url) {
+        const img = document.getElementById("avatarPreview");
+        const orcidEnc = encodeURIComponent(me.orcid);
+        img.src = "/api/avatar/" + orcidEnc + "?t=" + Date.now();
+        img.style.display = "block";
+        document.getElementById("avatarInitials").style.display = "none";
+        img.onerror = function(){ img.style.display="none"; document.getElementById("avatarInitials").style.display=""; };
+      }
+
       setVal("name", me.name);
       setVal("bio", me.bio);
       setVal("keywords", (me.keywords || []).join(", "));
@@ -390,6 +419,52 @@
       });
       document.getElementById("newClaimId").addEventListener("keydown", e => {
         if (e.key === "Enter") { e.preventDefault(); document.getElementById("addClaimBtn").click(); }
+      });
+
+      // Avatar upload
+      document.getElementById("avatarInput").addEventListener("change", async function() {
+        const file = this.files[0];
+        if (!file) return;
+        const msg = document.getElementById("avatarMsg");
+        msg.style.color = "#16a34a";
+        msg.textContent = "Uploading…";
+        msg.style.display = "block";
+        try {
+          // Resize client-side to max 400×400 before uploading
+          const blob = await new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+              const MAX = 400;
+              const ratio = Math.min(MAX / img.naturalWidth, MAX / img.naturalHeight, 1);
+              const w = Math.round(img.naturalWidth * ratio);
+              const h = Math.round(img.naturalHeight * ratio);
+              const canvas = document.createElement("canvas");
+              canvas.width = w; canvas.height = h;
+              canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+              URL.revokeObjectURL(url);
+              canvas.toBlob(resolve, "image/jpeg", 0.88);
+            };
+            img.onerror = reject;
+            img.src = url;
+          });
+          const form = new FormData();
+          form.append("avatar", blob, "avatar.jpg");
+          const res = await fetch("/api/profile/avatar", {
+            method: "POST", credentials: "include", body: form
+          });
+          if (!res.ok) throw new Error(await res.text());
+          // Show preview
+          const preview = document.getElementById("avatarPreview");
+          preview.src = URL.createObjectURL(blob);
+          preview.style.display = "block";
+          document.getElementById("avatarInitials").style.display = "none";
+          msg.textContent = "Photo saved!";
+          setTimeout(() => { msg.style.display = "none"; }, 3000);
+        } catch(e) {
+          msg.style.color = "#dc2626";
+          msg.textContent = "Upload failed. " + (e.message || "");
+        }
       });
     });
   </script>

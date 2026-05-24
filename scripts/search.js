@@ -401,9 +401,10 @@ function fallbackPaperCard(w){
   `;
 }
 
+const BOOL_OPS = new Set(["AND","OR","NOT"]);
 function highlight(text, q){
   if (!text || !q) return escapeHtml(text||"");
-  const terms = q.split(/\s+/).filter(Boolean).map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
+  const terms = q.replace(/[()]/g," ").split(/\s+/).filter(t=>t && !BOOL_OPS.has(t) && !/^".*"$/.test(t)).map(t=>t.replace(/^"|"$/g,"").replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).filter(Boolean);
   if (!terms.length) return escapeHtml(text);
   const re = new RegExp("(" + terms.join("|") + ")", "ig");
   return escapeHtml(text).replace(re, "<mark>$1</mark>");

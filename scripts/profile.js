@@ -48,6 +48,47 @@
     box.innerHTML = html || "";
   }
 
+  // ── Render keywords as topic-page links where possible ───────────────────────
+  function kwChip(label, conceptTail) {
+    if (conceptTail) {
+      return '<a class="topic-card" href="topic.html?id='+encodeURIComponent(conceptTail)+'">'
+        + '<span class="topic-name">'+escapeHtml(label)+'</span></a>';
+    }
+    return '<span class="topic-card"><span class="topic-name">'+escapeHtml(label)+'</span></span>';
+  }
+
+  async function renderKeywordsWithLinks(keywords, container) {
+    // First pass: render immediately using the concept map we already have
+    container.innerHTML = keywords.map(function(kw) {
+      var tail = _conceptNameMap[kw.toLowerCase()] || null;
+      return kwChip(kw, tail);
+    }).join("");
+
+    // Second pass: for any keyword not yet matched, try the OpenAlex concepts API
+    var unmatched = keywords.filter(function(kw){ return !_conceptNameMap[kw.toLowerCase()]; });
+    if (!unmatched.length) return;
+
+    await Promise.all(unmatched.map(async function(kw) {
+      try {
+        var res = await fetch(API + "/concepts?search=" + encodeURIComponent(kw) + "&per_page=1");
+        if (!res.ok) return;
+        var data = await res.json();
+        var match = Array.isArray(data.results) && data.results[0];
+        if (!match) return;
+        // Only accept if display name matches closely (avoid false positives)
+        if (match.display_name.toLowerCase() !== kw.toLowerCase()) return;
+        var tail = String(match.id).replace(/^https?:\/\/openalex\.org\//i, "");
+        _conceptNameMap[kw.toLowerCase()] = tail;
+      } catch(_) {}
+    }));
+
+    // Re-render with any newly resolved IDs
+    container.innerHTML = keywords.map(function(kw) {
+      var tail = _conceptNameMap[kw.toLowerCase()] || null;
+      return kwChip(kw, tail);
+    }).join("");
+  }
+
   // ── Render Open Science Portfolio ─────────────────────────────────────────────
   function renderOpenSciencePortfolio(works) {
     if (!works || !works.length) return;
@@ -297,7 +338,7 @@
     // Claim prompt
     var claim = document.getElementById("claimPrompt");
     if (claim) {
-      var needsClaim = !user?.name || !user?.affiliation;
+      var needsClaim = !user?.name || (!user?.affiliation && !(user?.affiliations && user.affiliations.length));
       claim.innerHTML = needsClaim
         ? `Claim your ORCID profile to complete your public info. <a href="settings-profile.html">Add details</a>.`
         : "";
@@ -343,7 +384,8 @@
   // Registered user with no claimed OpenAlex ID yet
   function showSEOnlyProfile(seUser, isOwner) {
     if ($("profileName")) $("profileName").textContent = seUser.name || "Researcher";
-    if ($("profileAffiliation")) $("profileAffiliation").textContent = seUser.affiliation || "";
+    var _affs = (seUser.affiliations && seUser.affiliations.length) ? seUser.affiliations : (seUser.affiliation ? [seUser.affiliation] : []);
+    if ($("profileAffiliation")) $("profileAffiliation").textContent = _affs.join(' · ');
     if ($("otherNames")) $("otherNames").textContent = "";
     if ($("followAuthorBtn")) $("followAuthorBtn").style.display = "none";
     if (isOwner) {
@@ -381,6 +423,7 @@
   // ---- Sidebar derived state ----
   var authorTail  = null;                // "A12345" — primary ID
   var authorTails = Object.create(null); // set of all claimed author tails
+  var _conceptNameMap = Object.create(null); // lowercase concept name → OpenAlex concept tail (C12345)
   var coauthors = Object.create(null);   // idTail -> { name, tail, count }
   var affYears  = Object.create(null);   // instTail -> { name, tail, min, max }
 
@@ -472,7 +515,23 @@
       $("profileOrcid").textContent = "ORCID: "+orcidHref.split("/").pop();
       $("profileOrcid").style.display = "inline-block";
     }
-    if (a.display_picture && $("profilePhoto")) $("profilePhoto").src = a.display_picture;
+    // Avatar: SE-uploaded photo takes priority over OpenAlex display_picture
+    var photoEl = $("profilePhoto");
+    if (photoEl) {
+      var orcidForAvatar = a.orcid ? String(a.orcid).replace(/^https?:\/\/orcid\.org\//i,"") : null;
+      if (orcidForAvatar) {
+        photoEl.src = "/api/avatar/" + encodeURIComponent(orcidForAvatar);
+        photoEl.onerror = function() {
+          if (a.display_picture) { photoEl.src = a.display_picture; photoEl.onerror = function(){ photoEl.style.display="none"; }; }
+          else photoEl.style.display = "none";
+        };
+        photoEl.style.display = "";
+      } else if (a.display_picture) {
+        photoEl.src = a.display_picture;
+        photoEl.onerror = function(){ photoEl.style.display="none"; };
+        photoEl.style.display = "";
+      }
+    }
 
     var h = get(a,"summary_stats.h_index",0) || 0;
     var i10 = get(a,"summary_stats.i10_index",0) || 0;
@@ -491,6 +550,11 @@
 
     var concepts = Array.isArray(a.x_concepts) ? a.x_concepts.slice() : [];
     concepts.sort(function(x,y){ return (y.score||0)-(x.score||0); });
+    concepts.forEach(function(c){
+      if (c.display_name && c.id) {
+        _conceptNameMap[c.display_name.toLowerCase()] = String(c.id).replace(/^https?:\/\/openalex\.org\//i,"");
+      }
+    });
     if ($("tagsContainer")){
       $("tagsContainer").innerHTML = concepts.slice(0,12).map(function(c){
         var tid = c.id ? c.id.split("/").pop() : "";
@@ -509,9 +573,10 @@
         : (_seUser && _seUser.affiliation)
           ? _seUser.affiliation
           : (lki && lki.display_name ? lki.display_name : null);
+      var wc0 = a.works_count || 0;
       $("aiBio").textContent =
         (a.display_name||"This researcher")+" studies "+(topTopics.join(", ")||"various topics")+". "+
-        "They have "+((a.works_count||0).toLocaleString())+" works and "+(totalCitations.toLocaleString())+" citations. "+
+        "They have "+(wc0.toLocaleString())+" "+(wc0 === 1 ? "work" : "works")+" and "+(totalCitations.toLocaleString())+" citations. "+
         "Current h-index is "+h+"."+(affLabel ? " Current affiliation: "+affLabel+"." : "");
     }
 
@@ -987,9 +1052,7 @@
       if (seUser && seUser.keywords && seUser.keywords.length) {
         var tc = $("tagsContainer");
         if (tc) {
-          tc.innerHTML = seUser.keywords.map(function(kw){
-            return '<span class="topic-card"><span class="topic-name">'+escapeHtml(kw)+'</span></span>';
-          }).join("");
+          renderKeywordsWithLinks(seUser.keywords, tc);
         }
       }
 
@@ -1056,9 +1119,44 @@
 
         var fakeAuthor = { counts_by_year: Object.values(citeCounts).sort(function(a,b){ return a.year-b.year; }) };
         renderTrendCharts(fakeAuthor);
+
+        // Update stats and auto-bio with merged totals
+        var mergedCites = Object.values(citeCounts).reduce(function(s, r){ return s + (r.cited_by_count || 0); }, 0);
+        var mergedWorks = accumulatedWorks.length;
+        if ($("totalCitations")) $("totalCitations").textContent = mergedCites.toLocaleString();
+        if ($("aiBio") && $("aiBio").textContent) {
+          var bioEl = $("aiBio");
+          bioEl.textContent = bioEl.textContent
+            .replace(/They have \d[\d,]* works?/, "They have " + mergedWorks.toLocaleString() + " " + (mergedWorks === 1 ? "work" : "works"))
+            .replace(/\d[\d,]* citations/, mergedCites.toLocaleString() + " citations");
+        }
       } else {
         renderTrendCharts(author);
         await loadWorks(author);
+      }
+
+      // Semantic Scholar citation augmentation (non-blocking)
+      var s2Url = opts.seUser && opts.seUser.semantic_scholar_url;
+      if (s2Url) {
+        var s2IdMatch = String(s2Url).match(/\/(\d+)\s*$/);
+        if (s2IdMatch) {
+          (async function(s2Id) {
+            try {
+              var r = await fetch("https://api.semanticscholar.org/graph/v1/author/" + encodeURIComponent(s2Id) + "?fields=citationCount");
+              if (!r.ok) return;
+              var d = await r.json();
+              var s2Cites = d.citationCount || 0;
+              if (!s2Cites) return;
+              var curEl = $("totalCitations");
+              var curVal = curEl ? parseInt((curEl.textContent || "").replace(/,/g, ""), 10) : 0;
+              if (s2Cites > curVal) {
+                if (curEl) curEl.textContent = s2Cites.toLocaleString();
+                var bioEl = $("aiBio");
+                if (bioEl) bioEl.textContent = bioEl.textContent.replace(/\d[\d,]* citations/, s2Cites.toLocaleString() + " citations");
+              }
+            } catch(_) {}
+          })(s2IdMatch[1]);
+        }
       }
 
       // Open Science Portfolio (computed after works load)

@@ -93,6 +93,12 @@
     if (!doiRaw) return null;
     return String(doiRaw).replace(/^doi:/i,"");
   }
+  function pmcidFromWork(p){
+    var raw = get(p,"ids.pmcid",null) || "";
+    if (!raw) return null;
+    var m = String(raw).match(/PMC\d+/i);
+    return m ? m[0].toUpperCase() : null;
+  }
   function getOpenAccessPdf(p){
     return get(p,"best_oa_location.pdf_url",null)
       || get(p,"best_oa_location.url_for_pdf",null)
@@ -206,6 +212,7 @@
   async function fetchCitingPapers(paperOpenAlexIdOrUrl){
     var s = String(paperOpenAlexIdOrUrl || "");
     var idTail = s.replace(/^https?:\/\/openalex\.org\//i, "");
+    if (!idTail || !/^W\d+$/i.test(idTail)) return [];
     var url = API + "/works?filter=cites:" + encodeURIComponent(idTail) + "&per_page=200&sort=cited_by_count:desc";
     try {
       var data = await getJSON(url);
@@ -765,7 +772,7 @@
       : null;
     var altmetricHtml = cleanDoiA
       ? '<div class="stat altmetric-stat" style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:.25rem;">'
-          + '<div class="altmetric-embed" data-badge-type="donut" data-hide-no-mentions="true" data-doi="'+escapeHtml(cleanDoiA)+'"></div>'
+          + '<div class="altmetric-embed" data-badge-type="donut" data-doi="'+escapeHtml(cleanDoiA)+'"></div>'
           + '<div class="stat-label">Altmetric</div>'
         + '</div>'
       : '';
@@ -1325,7 +1332,8 @@
     if (!idsToFetch.length) return out;
     var BATCH = 25;
     for (var j=0;j<idsToFetch.length;j+=BATCH){
-      var slice = idsToFetch.slice(j, j+BATCH);
+      var slice = idsToFetch.slice(j, j+BATCH).filter(function(t){ return /^W\d+$/i.test(t); });
+      if (!slice.length) continue;
       var ids = slice.map(function(t){ return "https://openalex.org/" + t; }).join("|");
       var data = await getJSON(API + "/works?filter=ids.openalex:" + encodeURIComponent(ids) + "&per_page=" + slice.length);
       var results = data && Array.isArray(data.results) ? data.results : [];
@@ -1352,7 +1360,7 @@
     var THRESH = opts.jaccardThreshold || 0.08;
 
     var refs = Array.isArray(seed.referenced_works) ? seed.referenced_works.slice(0, MAX_REF) : [];
-    var candTails = refs.map(function(x){ return String(x).split("/").pop(); });
+    var candTails = refs.map(function(x){ return String(x).split("/").pop(); }).filter(function(t){ return /^W\d+$/i.test(t); });
 
     var citingTrim = (citing||[]).slice(0, MAX_CIT);
     for (var i=0;i<citingTrim.length;i++){
@@ -1525,10 +1533,11 @@
 
     var base = await buildConnectedLikeGraph(main, cited, citing, { maxReferences:220, maxCiters:220, jaccardThreshold:Math.max(0.04, MIN_SIM) });
 
-    var candIdsFull = base.candidateIds.map(function(t){ return "https://openalex.org/"+t; });
+    var candIdsFull = base.candidateIds.filter(function(t){ return /^W\d+$/i.test(t); }).map(function(t){ return "https://openalex.org/"+t; });
     var meta = [];
     for (var i=0;i<candIdsFull.length;i+=50){
       var chunk = candIdsFull.slice(i,i+50).join("|");
+      if (!chunk) continue;
       var data = await getJSON(API + "/works?filter=ids.openalex:" + encodeURIComponent(chunk) + "&per_page=50");
       if (data && Array.isArray(data.results)) meta = meta.concat(data.results);
     }
@@ -1828,8 +1837,19 @@
     $("paperHeaderMain").innerHTML = buildHeaderMain(p);
     $("paperActions").innerHTML   = buildActionsBar(p);
     $("paperStats").innerHTML     = buildStatsHeader(p);
-    // Re-run Altmetric after injecting the badge div (script may have already scanned)
-    setTimeout(function(){ if (window._altmetric_embed) window._altmetric_embed.init(); }, 400);
+    // Load Altmetric lazily — only when there's actually a badge div to populate
+    setTimeout(function(){
+      if (document.querySelector(".altmetric-embed")) {
+        if (window._altmetric_embed) {
+          window._altmetric_embed.init();
+        } else if (!document.querySelector("script[src*='d1bxh8']")) {
+          var s = document.createElement("script");
+          s.src = "https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js";
+          s.async = true;
+          document.body.appendChild(s);
+        }
+      }
+    }, 800);
     __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
     wireHeaderToggles();
     startHeaderObserver();
@@ -1891,6 +1911,9 @@
     renderJournalBlockSimple(p, source);
     renderReproducibilityScore(p, ros);
 
+    var pmcid = pmcidFromWork(p);
+    if (pmcid) loadFigures(pmcid);
+
     var doi = doiFromWork(p);
     if (doi) {
       if (!abstractHtml) loadAbstractFallback(doi);
@@ -1901,6 +1924,72 @@
     }
 
     await renderJournalIntegrityBlock(p, source);
+  }
+
+  // ── Figures from Europe PMC (PMC papers only) ────────────────────────────
+  async function loadFigures(pmcid) {
+    var block = $("figuresBlock");
+    if (!block) return;
+    try {
+      var res = await fetch(
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/" + encodeURIComponent(pmcid) + "/figures/json"
+      );
+      if (!res.ok) return;
+      var data = await res.json();
+      var figs = Array.isArray(data.figures) ? data.figures : [];
+      var withImg = figs.filter(function(f){ return f.href; });
+      if (!withImg.length) return;
+
+      var graphical = withImg.filter(function(f){
+        return /graphical/i.test(f.fig_type || "") || /graphical/i.test(f.label || "");
+      });
+      var regular = withImg.filter(function(f){
+        return !/graphical/i.test(f.fig_type || "") && !/graphical/i.test(f.label || "");
+      });
+
+      var html = "<h2>Figures</h2>";
+
+      if (graphical.length) {
+        html += '<div class="figure-graphical-abstract">';
+        graphical.forEach(function(f){
+          html += '<figure class="paper-figure">'
+            + '<img src="' + escapeHtml(f.href) + '" alt="' + escapeHtml(f.label || "Graphical abstract") + '" loading="lazy">'
+            + (f.caption ? '<figcaption>' + escapeHtml(f.caption.slice(0,400)) + (f.caption.length > 400 ? "…" : "") + "</figcaption>" : "")
+            + "</figure>";
+        });
+        html += "</div>";
+      }
+
+      if (regular.length) {
+        html += '<div class="figures-grid">';
+        regular.slice(0, 12).forEach(function(f){
+          html += '<figure class="paper-figure" data-src="' + escapeHtml(f.href) + '">'
+            + '<img src="' + escapeHtml(f.href) + '" alt="' + escapeHtml(f.label || "Figure") + '" loading="lazy">'
+            + '<figcaption>'
+            + (f.label ? "<strong>" + escapeHtml(f.label) + ".</strong> " : "")
+            + (f.caption ? escapeHtml(f.caption.slice(0,200)) + (f.caption.length > 200 ? "…" : "") : "")
+            + "</figcaption></figure>";
+        });
+        html += "</div>";
+      }
+
+      block.innerHTML = html;
+      block.style.display = "";
+
+      // Lightbox on click for grid figures
+      block.querySelectorAll(".figures-grid .paper-figure img").forEach(function(img){
+        img.addEventListener("click", function(){
+          var ov = document.createElement("div");
+          ov.className = "figure-lightbox-overlay";
+          var big = document.createElement("img");
+          big.src = img.src;
+          big.alt = img.alt;
+          ov.appendChild(big);
+          ov.addEventListener("click", function(){ ov.remove(); });
+          document.body.appendChild(ov);
+        });
+      });
+    } catch(_) {}
   }
 
   // Load linked resources for a paper
