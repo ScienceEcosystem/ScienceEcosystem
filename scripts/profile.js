@@ -386,6 +386,14 @@
     if ($("profileName")) $("profileName").textContent = seUser.name || "Researcher";
     var _affs = (seUser.affiliations && seUser.affiliations.length) ? seUser.affiliations : (seUser.affiliation ? [seUser.affiliation] : []);
     if ($("profileAffiliation")) $("profileAffiliation").textContent = _affs.join(' · ');
+    // Show uploaded avatar if available
+    var photoEl = $("profilePhoto");
+    if (photoEl && seUser.orcid && seUser.avatar_url) {
+      var orcidClean = String(seUser.orcid).replace(/^https?:\/\/orcid\.org\//i, "");
+      photoEl.src = "/api/avatar/" + encodeURIComponent(orcidClean);
+      photoEl.onerror = function() { photoEl.style.display = "none"; };
+      photoEl.style.display = "";
+    }
     if ($("otherNames")) $("otherNames").textContent = "";
     if ($("followAuthorBtn")) $("followAuthorBtn").style.display = "none";
     if (isOwner) {
@@ -519,6 +527,10 @@
     var photoEl = $("profilePhoto");
     if (photoEl) {
       var orcidForAvatar = a.orcid ? String(a.orcid).replace(/^https?:\/\/orcid\.org\//i,"") : null;
+      // Fallback to SE user's ORCID if the OpenAlex author record has no ORCID
+      if (!orcidForAvatar && opts && opts.seUser && opts.seUser.orcid) {
+        orcidForAvatar = String(opts.seUser.orcid).replace(/^https?:\/\/orcid\.org\//i,"");
+      }
       if (orcidForAvatar) {
         photoEl.src = "/api/avatar/" + encodeURIComponent(orcidForAvatar);
         photoEl.onerror = function() {

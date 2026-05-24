@@ -176,7 +176,15 @@
     }
 
     function renderHero(me) {
-      document.getElementById("dashAvatar").textContent = initials(me.name);
+      var avatarEl = document.getElementById("dashAvatar");
+      avatarEl.textContent = initials(me.name);
+      if (me.orcid && me.avatar_url) {
+        var img = document.createElement("img");
+        img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;";
+        img.alt = me.name || "Profile photo";
+        img.onload = function() { avatarEl.textContent = ""; avatarEl.appendChild(img); };
+        img.src = "/api/avatar/" + encodeURIComponent(me.orcid);
+      }
       document.getElementById("dashName").textContent   = me.name || "Your profile";
       var parts = [];
       if (me.affiliations && me.affiliations.length) parts.push(me.affiliations[0]);
