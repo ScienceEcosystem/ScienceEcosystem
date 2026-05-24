@@ -454,18 +454,17 @@
         }
         if (!inner) inner = "(Reference details unavailable)";
 
-        // Add paper page link via DOI match
         const doi = extractDoiFromWikiRef(ref);
         const normDoi = doi ? doi.toLowerCase() : null;
         const workId = normDoi ? doiToWorkId[normDoi] : null;
-        const seLink = workId
-          ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">Paper page</a>`
-          : "";
+        // DOI links to our paper page when matched, else doi.org
         const doiLink = doi
-          ? ` · <a href="https://doi.org/${encodeURIComponent(doi)}" target="_blank" rel="noopener">DOI</a>`
+          ? workId
+            ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">DOI</a>`
+            : ` · <a href="https://doi.org/${encodeURIComponent(doi)}" target="_blank" rel="noopener">DOI</a>`
           : "";
 
-        return `<li id="se-ref-li-${idx}" value="${idx}"><a id="se-ref-${idx}" class="ref-anchor"></a>${inner}${doiLink}${seLink}</li>`;
+        return `<li id="se-ref-li-${idx}" value="${idx}"><a id="se-ref-${idx}" class="ref-anchor"></a>${inner}${doiLink}</li>`;
       }).join("");
 
       referencesWhy.textContent = "References from the Wikipedia article. Links to Paper pages added where a DOI match was found.";
@@ -494,9 +493,13 @@
           const inner = escapeHtml(ref.text);
           const normDoi = ref.doi ? ref.doi.toLowerCase() : null;
           const workId = normDoi ? doiToWorkId[normDoi] : null;
-          const seLink = workId ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">Paper page</a>` : "";
-          const doiLink = ref.doi ? ` · <a href="https://doi.org/${encodeURIComponent(ref.doi)}" target="_blank" rel="noopener">DOI</a>` : "";
-          return `<li id="se-ref-li-${idx}" value="${idx}"><a id="se-ref-${idx}" class="ref-anchor"></a>${inner}${doiLink}${seLink}</li>`;
+          // DOI links to our paper page when matched, else doi.org
+          const doiLink = ref.doi
+            ? workId
+              ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">DOI</a>`
+              : ` · <a href="https://doi.org/${encodeURIComponent(ref.doi)}" target="_blank" rel="noopener">DOI</a>`
+            : "";
+          return `<li id="se-ref-li-${idx}" value="${idx}"><a id="se-ref-${idx}" class="ref-anchor"></a>${inner}${doiLink}</li>`;
         }).join("");
         referencesWhy.textContent = "References from the Wikipedia article. Links to Paper pages added where a DOI match was found.";
       } else {
