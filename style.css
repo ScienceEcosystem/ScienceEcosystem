@@ -1646,6 +1646,39 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   object-fit: contain;
   border-radius: 4px;
 }
+
+/* ── Topic page ─────────────────────────────────────────────────────────── */
+.se-topic-link {
+  color: #2563eb;
+  text-decoration: none;
+}
+.se-topic-link:hover { text-decoration: underline; }
+
+.refs-list {
+  padding-left: 1.5rem;
+  margin: 0;
+}
+.refs-list li {
+  margin-bottom: .6rem;
+  font-size: .92rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.refs-list li a {
+  color: #2563eb;
+}
+.ref-anchor {
+  display: block;
+  height: 0;
+  visibility: hidden;
+}
+.se-cite-link {
+  color: #2563eb;
+  font-size: .8em;
+  vertical-align: super;
+  text-decoration: none;
+}
+.se-cite-link:hover { text-decoration: underline; }
 @media (max-width: 600px) {
   .figures-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .paper-figure img { height: 130px; }

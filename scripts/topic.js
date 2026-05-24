@@ -146,7 +146,8 @@
         }
         if (/^#/.test(href) || /^https?:\/\//i.test(href) || href.startsWith("topic.html")) {
           el.setAttribute("href", href);
-          if (!/^#/.test(href)) {
+          if (!asTopicLink && !/^#/.test(href)) {
+            // External links (non-topic) open in new tab; topic links stay in same tab
             el.setAttribute("target", "_blank");
             el.setAttribute("rel", "noopener");
           }
@@ -201,13 +202,37 @@
     }
     (concept.ancestors || []).forEach((a) => add(a.display_name, a.id));
     (concept.related_concepts || []).forEach((r) => add(r.display_name, r.id));
+    // Also include the concept itself and any siblings if available
+    if (concept.display_name && concept.id) add(concept.display_name, concept.id);
     return pairs;
   }
+
+  // Collect additional link pairs from existing <a class="se-topic-link"> elements
+  // already embedded in the sanitised Wikipedia HTML — their text and data-topic-id
+  // give us the full set of concepts Wikipedia already linked.
+  function collectExistingTopicLinks(container) {
+    const pairs = [];
+    const seen = new Set();
+    container.querySelectorAll("a.se-topic-link[data-topic-id]").forEach(a => {
+      const term = (a.textContent || "").trim();
+      const idTail = a.getAttribute("data-topic-id") || "";
+      if (!term || !idTail) return;
+      const key = term.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      pairs.push({ term, idTail });
+    });
+    return pairs;
+  }
+
   function linkifyContainer(container, linkPairs) {
     if (!linkPairs.length) return;
     const sorted = linkPairs.slice().sort((a, b) => b.term.length - a.term.length);
     const pattern = "\\b(" + sorted.map((p) => p.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")\\b";
     const rx = new RegExp(pattern, "gi");
+
+    // Track first-mention-only: each term linked at most once per container
+    const linked = new Set();
 
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
@@ -227,19 +252,29 @@
       rx.lastIndex = 0;
       const frag = document.createDocumentFragment();
       let last = 0;
+      let changed = false;
       txt.replace(rx, (match, p1, idx) => {
+        const key = p1.toLowerCase();
+        if (linked.has(key)) {
+          // Already linked once — leave as plain text
+          return p1;
+        }
+        const found = sorted.find((p) => p.term.toLowerCase() === key);
+        if (!found) return p1;
         const pre = txt.slice(last, idx);
         if (pre) frag.appendChild(document.createTextNode(pre));
-        const found = sorted.find((p) => p.term.toLowerCase() === p1.toLowerCase());
         const a = document.createElement("a");
         a.href = "topic.html?id=" + encodeURIComponent(found.idTail);
         a.textContent = p1;
         a.className = "se-topic-link";
         a.setAttribute("data-topic-id", found.idTail);
         frag.appendChild(a);
+        linked.add(key);
         last = idx + p1.length;
+        changed = true;
         return p1;
       });
+      if (!changed) return;
       const rest = txt.slice(last);
       if (rest) frag.appendChild(document.createTextNode(rest));
       node.parentNode.replaceChild(frag, node);
@@ -325,45 +360,94 @@
   }
 
   // ---------- Sections ----------
-  async function loadReferences(conceptIdTail) {
-    const nowY = new Date().getUTCFullYear();
-    const reviewURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},type:review&sort=cited_by_count:desc&per_page=10`;
-    const recentURL = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},from_publication_date:${nowY - 2}-01-01&sort=cited_by_count:desc&per_page=10`;
-    const [rev, rec] = await Promise.all([fetchOpenAlexJSON(reviewURL), fetchOpenAlexJSON(recentURL)]);
-    const works = dedupByDOI([...(rev.results || []), ...(rec.results || [])]);
-    if (!works.length) {
-      referencesList.innerHTML = '<li class="muted">No references available.</li>';
-      return;
-    }
 
-    function renderReferenceCard(w, idx) {
-      const anchor = `<a id="se-ref-${idx}" class="ref-anchor"></a>`;
-      const back = `<a class="se-ref-back muted" href="#" title="Back to text" aria-label="Back to text">↩︎</a>`;
-      if (window.SE?.components?.renderPaperCard) {
-        const card = SE.components.renderPaperCard(w, { compact: true });
-        return `<li id="se-ref-li-${idx}" class="ref-card" style="list-style:none; margin:0 0 1rem; padding:0;">
-          <div class="ref-card-inner" style="position:relative; border:1px solid var(--border-color,#e5e7eb); border-radius:12px; padding:.75rem; background:#fff;">
-            ${anchor}
-            <div class="ref-num" style="position:absolute; top:10px; right:12px; font-weight:700; font-size:.95rem;">[${idx}]</div>
-            <div class="ref-card-num" style="font-weight:700; margin-bottom:.35rem;">[${idx}] Reference</div>
-            ${card}
-            <div style="margin-top:.35rem;">${back}</div>
-          </div>
-        </li>`;
+  // Fetch Wikipedia's own reference list for a page title + lang
+  async function fetchWikiReferences(title, lang) {
+    try {
+      const url = `https://${lang}.wikipedia.org/api/rest_v1/page/references/${encodeURIComponent(title)}`;
+      const res = await fetch(url, { headers: { Accept: "application/json" }, mode: "cors", credentials: "omit" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      // References are in data.references_by_id (object keyed by ref id) or data.references (array)
+      const raw = data.references_by_id
+        ? Object.values(data.references_by_id)
+        : (Array.isArray(data.references) ? data.references : []);
+      return raw;
+    } catch (_) { return []; }
+  }
+
+  function extractDoiFromWikiRef(ref) {
+    // doi field, or inside content/text
+    if (ref.doi) return String(ref.doi).trim();
+    const text = ref.content || ref.text || ref.html || "";
+    const m = String(text).match(/10\.\d{4,9}\/[^\s"<>]+/);
+    return m ? m[0].replace(/[.,;]$/, "") : null;
+  }
+
+  async function loadReferences(conceptIdTail, wpTitle, wpLang) {
+    const [wikiRefs] = await Promise.all([
+      fetchWikiReferences(wpTitle, wpLang || "en")
+    ]);
+
+    if (wikiRefs.length) {
+      // Extract DOIs and batch-look up SE paper pages
+      const dois = wikiRefs.map(r => extractDoiFromWikiRef(r)).filter(Boolean);
+      let doiToWorkId = {};
+      if (dois.length) {
+        try {
+          // OpenAlex filter allows up to ~100 DOIs at once
+          const batch = dois.slice(0, 50).map(d => encodeURIComponent(d)).join("|");
+          const res = await fetchOpenAlexJSON(`${API_OA}/works?filter=doi:${batch}&per_page=50&select=id,doi`);
+          (res.results || []).forEach(w => {
+            const d = (w.doi || "").replace(/^https?:\/\/doi\.org\//i, "").toLowerCase();
+            if (d) doiToWorkId[d] = tail(w.id);
+          });
+        } catch (_) {}
       }
-      return `<li id="se-ref-li-${idx}" style="list-style:none; margin:0 0 1rem; padding:0;">
-        <div class="ref-card-inner" style="position:relative; border:1px solid var(--border-color,#e5e7eb); border-radius:12px; padding:.75rem; background:#fff;">
-          ${anchor}
-          <div class="ref-num" style="position:absolute; top:10px; right:12px; font-weight:700; font-size:.95rem;">[${idx}]</div>
-          <div class="ref-card-num" style="font-weight:700; margin-bottom:.35rem;">[${idx}] Reference</div>
-          <div>${citeLine(w, idx)}</div>
-          <div style="margin-top:.35rem;">${back}</div>
-        </div>
-      </li>`;
-    }
 
-    referencesList.innerHTML = works.map((w, i) => renderReferenceCard(w, i + 1)).join("");
-    referencesWhy.textContent = "Selected via OpenAlex: citation impact (reviews) and recent influential works (last two years).";
+      referencesList.innerHTML = wikiRefs.slice(0, 80).map((ref, i) => {
+        const idx = i + 1;
+        // Build the text: prefer ref.content (HTML), else ref.text
+        let inner = "";
+        const rawContent = ref.content || ref.text || ref.html || "";
+        if (rawContent) {
+          // Strip any HTML tags to keep it plain, then sanitise
+          const tmp = document.createElement("div");
+          tmp.innerHTML = rawContent;
+          inner = escapeHtml(tmp.textContent || tmp.innerText || "");
+        }
+        if (!inner) inner = "(Reference details unavailable)";
+
+        // Try to add an SE paper page link via DOI match
+        const doi = extractDoiFromWikiRef(ref);
+        const normDoi = doi ? doi.toLowerCase() : null;
+        const workId = normDoi ? doiToWorkId[normDoi] : null;
+        const seLink = workId
+          ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">SE paper page</a>`
+          : "";
+        const doiLink = doi
+          ? ` · <a href="https://doi.org/${encodeURIComponent(doi)}" target="_blank" rel="noopener">DOI</a>`
+          : "";
+
+        return `<li id="se-ref-li-${idx}" value="${idx}"><a id="se-ref-${idx}" class="ref-anchor"></a>${inner}${doiLink}${seLink}</li>`;
+      }).join("");
+
+      referencesWhy.textContent = "References from the Wikipedia article. Links to SE paper pages added where a DOI match was found.";
+    } else {
+      // Fallback to OpenAlex influential papers if Wikipedia refs unavailable
+      const nowY = new Date().getUTCFullYear();
+      const [rev, rec] = await Promise.all([
+        fetchOpenAlexJSON(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},type:review&sort=cited_by_count:desc&per_page=10`),
+        fetchOpenAlexJSON(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},from_publication_date:${nowY - 2}-01-01&sort=cited_by_count:desc&per_page=10`)
+      ]);
+      const works = dedupByDOI([...(rev.results || []), ...(rec.results || [])]);
+      if (!works.length) { referencesList.innerHTML = '<li class="muted">No references available.</li>'; return; }
+      referencesList.innerHTML = works.map((w, i) => {
+        const idx = i + 1;
+        return `<li id="se-ref-li-${idx}" value="${idx}">${citeLine(w, idx)}</li>`;
+      }).join("");
+      referencesWhy.textContent = "Wikipedia references unavailable — showing influential papers from OpenAlex instead.";
+    }
   }
 
   async function loadTopPapers(conceptIdTail) {
@@ -695,8 +779,13 @@
       const bodyWrap = document.createElement("div");
       restNodes.forEach((n) => bodyWrap.appendChild(n));
 
-      // Internal linkify (blue words) for both lead and body
+      // Internal linkify (blue words) for both lead and body.
+      // Seed with OpenAlex ancestors/related, then extend with every concept
+      // already linked by Wikipedia itself (extracted from the sanitised DOM).
       const linkPairs = buildLinkPairsFromConcept(topic);
+      const wikiLinked = collectExistingTopicLinks(bodyWrap);
+      const seen = new Set(linkPairs.map(p => p.term.toLowerCase()));
+      wikiLinked.forEach(p => { if (!seen.has(p.term.toLowerCase())) { seen.add(p.term.toLowerCase()); linkPairs.push(p); } });
       linkifyContainer(leadWrap, linkPairs);
       linkifyContainer(bodyWrap, linkPairs);
 
@@ -709,7 +798,7 @@
 
       // References / people / infobox / trend
       renderRelated(topic);
-      await loadReferences(idTail);
+      await loadReferences(idTail, wpTitle, lang);
       await loadTopPapers(idTail);
       await loadTopAuthors(idTail);
       const sortSel = $("topicSort");
