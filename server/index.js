@@ -2663,6 +2663,64 @@ app.get("/api/paper/oa", async (req, res) => {
 });
 
 /* ---------------------------
+   Citation contexts (Semantic Scholar)
+----------------------------*/
+app.get("/api/paper/citation-contexts", async (req, res) => {
+  const doi = normalizeDoi(req.query?.doi || "");
+  if (!doi) return res.status(400).json({ error: "doi required" });
+
+  const cacheKey = `s2ctx:${doi.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const headers = { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" };
+  const s2Key = process.env.SEMANTIC_SCHOLAR_KEY;
+  if (s2Key) headers["x-api-key"] = s2Key;
+
+  try {
+    // 1. Resolve DOI → S2 paper ID and citation count
+    const meta = await fetchJSONTimeout(
+      `https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=paperId,citationCount,title`,
+      { headers }, 8000
+    );
+    if (!meta?.paperId) return res.status(404).json({ error: "Paper not found on Semantic Scholar" });
+
+    // 2. Fetch up to 50 citing papers with context sentences
+    const citing = await fetchJSONTimeout(
+      `https://api.semanticscholar.org/graph/v1/paper/${meta.paperId}/citations`
+      + `?fields=contexts,intents,citingPaper.title,citingPaper.authors,citingPaper.year,citingPaper.externalIds,citingPaper.paperId&limit=50`,
+      { headers }, 10000
+    );
+
+    const results = (citing?.data || [])
+      .filter(c => c.contexts && c.contexts.length > 0)
+      .map(c => ({
+        paper: {
+          title: c.citingPaper?.title || null,
+          year: c.citingPaper?.year || null,
+          authors: (c.citingPaper?.authors || []).map(a => a.name),
+          doi: c.citingPaper?.externalIds?.DOI || null,
+          s2id: c.citingPaper?.paperId || null,
+        },
+        contexts: c.contexts,
+        intents: c.intents || [],
+      }));
+
+    const payload = {
+      total_citations: meta.citationCount || 0,
+      contexts_available: results.length,
+      results,
+    };
+    // Cache for 6 hours — citation contexts don't change minute-to-minute
+    OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/paper/citation-contexts failed:", err.message);
+    res.status(502).json({ error: "Semantic Scholar unavailable" });
+  }
+});
+
+/* ---------------------------
    Identity + alerts + activity
 ----------------------------*/
 app.get("/api/identity/status", async (req, res) => {

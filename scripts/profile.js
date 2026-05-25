@@ -871,6 +871,107 @@
     if ($("totalWorks")) $("totalWorks").textContent = (total || 0).toLocaleString();
   }
 
+  // ---- Who cited me ----
+  async function loadWhoCitedMe(works) {
+    var section = $("whoCitedMeSection");
+    var list = $("whoCitedMeList");
+    if (!section || !list) return;
+
+    // Collect DOIs from the loaded works, skip works without DOIs
+    var dois = [];
+    for (var i = 0; i < works.length; i++) {
+      var doi = works[i].doi ? String(works[i].doi).replace(/^https?:\/\/doi\.org\//i, "") : null;
+      if (doi && dois.indexOf(doi) === -1) dois.push(doi);
+      if (dois.length >= 20) break; // cap at 20 papers to avoid hammering S2
+    }
+    if (!dois.length) return;
+
+    section.style.display = "";
+    list.innerHTML = '<p class="muted">Loading citation contexts…</p>';
+
+    var allGroups = [];
+    // Fetch one at a time to respect 1 req/sec — stagger with a small delay
+    for (var d = 0; d < dois.length; d++) {
+      if (d > 0) await new Promise(function(r){ setTimeout(r, 1100); });
+      try {
+        var resp = await fetch("/api/paper/citation-contexts?doi=" + encodeURIComponent(dois[d]), { credentials: "include" });
+        if (!resp.ok) continue;
+        var data = await resp.json();
+        if (data.results && data.results.length > 0) {
+          allGroups.push({ doi: dois[d], total: data.total_citations, results: data.results });
+        }
+      } catch(_) {}
+    }
+
+    if (!allGroups.length) {
+      list.innerHTML = '<p class="muted">No citation contexts available yet for your papers.</p>';
+      return;
+    }
+
+    var html = "";
+    for (var g = 0; g < allGroups.length; g++) {
+      var group = allGroups[g];
+      // Find the matching work title
+      var workTitle = "";
+      for (var w2 = 0; w2 < works.length; w2++) {
+        var wd = works[w2].doi ? String(works[w2].doi).replace(/^https?:\/\/doi\.org\//i, "") : null;
+        if (wd === group.doi) { workTitle = works[w2].title || group.doi; break; }
+      }
+      var paperHref = "paper.html?id=" + encodeURIComponent("https://doi.org/" + group.doi);
+      html += '<div class="cited-me-group" style="margin-bottom:2rem;">';
+      html += '<h3 style="font-size:1rem; margin-bottom:.5rem;">'
+            + '<a href="' + paperHref + '">' + escapeHtml(workTitle) + '</a>'
+            + ' <span class="muted" style="font-size:.85rem; font-weight:normal;">'
+            + group.total.toLocaleString() + ' citation' + (group.total !== 1 ? 's' : '')
+            + '</span></h3>';
+
+      for (var r = 0; r < group.results.length && r < 5; r++) {
+        var c = group.results[r];
+        var citingDoi = c.paper.doi;
+        var citingHref = citingDoi
+          ? "paper.html?id=" + encodeURIComponent("https://doi.org/" + citingDoi)
+          : null;
+        var authorsStr = c.paper.authors.slice(0, 3).join(", ")
+          + (c.paper.authors.length > 3 ? " et al." : "");
+        var intentBadges = (c.intents || []).map(function(it) {
+          var label = it === "background" ? "Background"
+                    : it === "methodology" ? "Methodology"
+                    : it === "result" ? "Result"
+                    : it;
+          return '<span class="stance-badge stance-' + escapeHtml(it) + '">' + escapeHtml(label) + '</span>';
+        }).join(" ");
+
+        html += '<div class="cited-me-item" style="border-left:3px solid #e2e8f0; padding:.5rem .75rem; margin-bottom:.75rem;">';
+        html += '<div style="font-size:.85rem; margin-bottom:.3rem;">';
+        if (citingHref) {
+          html += '<a href="' + citingHref + '" style="font-weight:500;">' + escapeHtml(c.paper.title || "Untitled") + '</a>';
+        } else {
+          html += '<span style="font-weight:500;">' + escapeHtml(c.paper.title || "Untitled") + '</span>';
+        }
+        html += ' <span class="muted">(' + (c.paper.year || "?") + ')</span>';
+        if (authorsStr) html += ' · <span class="muted">' + escapeHtml(authorsStr) + '</span>';
+        html += '</div>';
+        if (intentBadges) html += '<div style="margin-bottom:.35rem;">' + intentBadges + '</div>';
+        for (var ctx = 0; ctx < c.contexts.length && ctx < 2; ctx++) {
+          html += '<p style="font-size:.85rem; font-style:italic; color:#4b5563; margin:.2rem 0;">"' + escapeHtml(c.contexts[ctx]) + '"</p>';
+        }
+        html += '</div>';
+      }
+
+      if (group.results.length > 5) {
+        html += '<p class="muted" style="font-size:.82rem;">+'
+              + (group.results.length - 5) + ' more citing papers with context available</p>';
+      }
+      html += '</div>';
+    }
+    list.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    if (!str) return "";
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
   // ---- Derivations from works: co-authors + affiliation years ----
   function idTail(any){ return any ? String(any).replace(/^https?:\/\/openalex\.org\//i,"") : null; }
 
@@ -1173,6 +1274,11 @@
 
       // Open Science Portfolio (computed after works load)
       renderOpenSciencePortfolio(accumulatedWorks);
+
+      // Who cited me — only show on own profile, fire-and-forget
+      if (opts && opts.enhanced) {
+        loadWhoCitedMe(accumulatedWorks);
+      }
 
       var sortSel = $("pubSort");
       var orderSel = $("orderSort");

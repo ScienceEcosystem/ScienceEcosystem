@@ -1683,3 +1683,17 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   .figures-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .paper-figure img { height: 130px; }
 }
+
+/* ---- Stance badges (citation context) ---- */
+.stance-badge {
+  display: inline-block;
+  font-size: .75rem;
+  padding: .15rem .45rem;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  font-weight: 500;
+  margin-right: .25rem;
+}
+.stance-background  { color: #64748b; background: #f8fafc; }
+.stance-methodology { color: #7c3aed; background: #f5f3ff; }
+.stance-result      { color: #0369a1; background: #e0f2fe; }
