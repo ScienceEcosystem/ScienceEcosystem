@@ -100,7 +100,7 @@ REPRODUCIBLE WORKSPACES
 
 =======================================================
 VISION — THE LIVING SCIENCE RECORD
-(for business plan / future.tex)
+(narrative in business_plan/future.tex — this section is the working build plan)
 =======================================================
 
 THE PROBLEM WE ARE ACTUALLY SOLVING
@@ -236,6 +236,730 @@ Long-term (Phase 3):
 - [ ] Topic pages show field-level consensus, contested areas, open questions
 - [ ] Living paper format: new papers published directly into the graph,
       not as static PDFs but as structured claim sets with linked evidence
+
+
+=======================================================
+DETAILED BUILD PLAN — STEP BY STEP
+How we get from here to the living science record
+=======================================================
+
+This is the working document for development decisions.
+The full narrative is in business_plan/future.tex.
+Each stage must be fully stable before the next begins.
+Each stage must be independently useful — not just a stepping stone.
+
+
+───────────────────────────────────────────────────────
+STAGE 1 — BE USEFUL TODAY
+Status: substantially done. Ongoing maintenance.
+───────────────────────────────────────────────────────
+
+What we have:
+  [X] Paper pages: metadata, abstract, citations, figures (Europe PMC),
+      citation graph (vis-network), Altmetric badge, open access status
+  [X] Author profiles: publication list, citation trends, co-authors,
+      career timeline, keywords linking to topic pages, avatar upload,
+      multi-affiliation support, Semantic Scholar citation augmentation
+  [X] Topic pages: Wikipedia article, blue linked words, references,
+      related topics, top papers, top authors, citation trend chart
+  [X] Library: save papers, collections, Zotero sync, PDF storage (R2)
+  [X] Search: full-text, DOI, boolean operators, author search
+  [X] Browser extension: Chrome live, Firefox submitted
+  [X] Admin stats dashboard
+
+Still needed in Stage 1 (before moving to Stage 2):
+  [ ] CSRF protection on all POST endpoints (security, should be done first)
+  [ ] Rate limiting on /api/library and search
+  [ ] Terms of Service (currently only Privacy Policy)
+  [ ] CONTRIBUTING.md so others can contribute
+  [ ] Public roadmap page on the site
+
+DECISION: Do not start Stage 2 features until CSRF and rate limiting are done.
+These are baseline security requirements for a platform that stores user data.
+
+
+───────────────────────────────────────────────────────
+STAGE 2 — MAKING THE CONVERSATION VISIBLE
+Status: planned. Buildable with current infrastructure.
+No additional funding required. Primarily dev time.
+───────────────────────────────────────────────────────
+
+Goal: for every paper, show not just that it was cited but HOW it was cited —
+the actual sentences, and what kind of response those citations represent.
+Give cited authors a voice in that record.
+
+This is the first feature that does not exist anywhere else at this scale.
+It is also the foundation that Stage 3 and 4 are built on — we need this
+data before we can aggregate it at topic level or extract claim-level patterns.
+
+──── 2A. "WHO CITED ME" ON PROFILE PAGES ────
+
+What: a section on researcher profiles listing papers that cite their work,
+grouped by paper being cited. Not just a count — actual papers with links.
+
+Why now: OpenAlex already returns cited_by data. We have it.
+This is the simplest possible starting point and immediately useful.
+
+How to build:
+  - On profile page, add "My work has been cited in" section
+  - Query OpenAlex: works?filter=cites:W{id} for each of the user's papers
+  - Or more efficiently: fetch the user's works with cited_by_count > 0,
+    then for the top papers fetch citing works
+  - Display as a grouped list: "Your paper X was cited in: [paper A], [paper B]..."
+  - Cap at 50 most recent citing papers to start
+
+DB changes needed: none — all data from OpenAlex API, not stored locally
+
+Decision to make: do we cache citing papers in our DB or always fetch live?
+  → Start with live fetch, cache if it gets slow.
+  → Semantic Scholar may give better data here — see 2B.
+
+  [ ] Build "Who cited me" section on profile pages
+
+──── 2B. CITATION CONTEXT — SHOW THE ACTUAL SENTENCES ────
+
+What: on a paper page, show the sentences from citing papers where this
+paper is mentioned. The reader sees not "cited 47 times" but the actual
+text of how each citation was used.
+
+Source: Semantic Scholar API
+  - Endpoint: GET https://api.semanticscholar.org/graph/v1/paper/{id}/citations
+  - Fields: contexts, intents, isInfluential, paperId, title, authors, year
+  - {id} can be a DOI: use "DOI:{doi}" format
+  - Returns up to 1000 citations per call (use offset for pagination)
+  - Rate limit: 100 req/5min without key, 1 req/sec with free API key
+  - Get a free API key: https://www.semanticscholar.org/product/api
+
+  Response includes:
+    contexts: ["In line with Smith et al. [3], we found...", "..."]
+    intents: ["background", "methodology", "result"]  ← their classification
+
+  This is free data. We already use Semantic Scholar for citation counts
+  on author profiles. Extend that.
+
+How to display:
+  - New collapsible section on paper page: "How this paper is cited"
+  - Each citing paper listed with: title, year, authors
+  - Under each: the 1-3 sentences where the citation appears (the "context")
+  - Context shown in a subtle blockquote style, not as a card
+  - Initially collapsed (don't overwhelm the page), expandable
+
+DB changes needed:
+  - New table: citation_contexts
+      paper_id TEXT,          -- our paper's OpenAlex ID
+      citing_paper_s2_id TEXT,  -- Semantic Scholar paper ID
+      citing_paper_doi TEXT,
+      citing_paper_title TEXT,
+      citing_paper_year INT,
+      contexts JSONB,         -- array of context strings
+      s2_intents JSONB,       -- Semantic Scholar's own intent labels
+      fetched_at TIMESTAMPTZ
+      PRIMARY KEY (paper_id, citing_paper_s2_id)
+  - Cache for 30 days — citation contexts don't change often
+  - Fetch on demand when paper page is loaded, store in cache
+
+Server endpoint needed:
+  - GET /api/paper/:id/citation-contexts
+  - Checks cache, fetches from S2 if stale/missing, returns JSON
+  - Falls back gracefully if S2 doesn't have this paper
+
+  [ ] Get Semantic Scholar API key
+  [ ] Add citation_contexts table to DB
+  [ ] Build server endpoint GET /api/paper/:id/citation-contexts
+  [ ] Build UI section on paper.html "How this paper is cited"
+  [ ] Test with papers that have high citation counts
+
+──── 2C. CITATION STANCE CLASSIFICATION ────
+
+What: for each citation context sentence, classify the relationship as:
+  Supports     — citing paper agrees with / builds directly on the finding
+  Challenges   — citing paper contests the interpretation or finding
+  Corrects     — citing paper identifies a specific error or limitation
+  Extends      — citing paper takes the finding further in a new direction
+  Uses method  — citing paper uses the methodology but not the finding
+  Background   — general reference, not engaging specifically with the claim
+
+Why this is better than Semantic Scholar's intent classification:
+  S2 classifies WHAT the citation is for (background/method/result)
+  We classify the STANCE (agreement/disagreement/correction)
+  These are orthogonal dimensions. A "result" citation can support or challenge.
+  Nobody does stance classification at scale on live literature. This is new.
+
+How to build:
+  - For each context sentence already fetched in 2B, send to Claude API
+  - Prompt (short, cheap — context sentences are 1-3 sentences each):
+
+    "A researcher is citing a paper. Here is the sentence from the citing paper:
+
+    '{context}'
+
+    Classify the citation stance as exactly one of:
+    Supports / Challenges / Corrects / Extends / Uses method / Background
+
+    Respond with only the single word label. If genuinely ambiguous, choose
+    the most prominent stance."
+
+  - Cost estimate: ~800 tokens per classification (context + prompt + response)
+    At Claude Haiku pricing (~$0.25/M input tokens): ~$0.0002 per citation
+    A paper with 100 citing papers: ~$0.02 total
+    This is negligible. Run it server-side, cache the result permanently.
+
+  - Store result in the citation_contexts table:
+      stance TEXT  -- our classified stance label
+      stance_classified_at TIMESTAMPTZ
+
+  - Classify lazily: when a paper's citation contexts are fetched for display,
+    classify any that don't yet have a stance. Background jobs can batch the rest.
+
+Display:
+  - Show a colour-coded label next to each citing paper in the "How cited" section:
+      Supports     → green
+      Challenges   → amber
+      Corrects     → red
+      Extends      → blue
+      Uses method  → grey
+      Background   → light grey
+  - Show a summary at the top: "47 citations: 18 supporting, 6 challenging,
+    3 correcting, 12 extending, 5 methodological, 3 background"
+  - This summary is immediately more informative than a raw citation count
+
+DB changes: add stance + stance_classified_at columns to citation_contexts
+
+Decisions to make:
+  → Use Claude Haiku (cheapest, good for classification) or Sonnet?
+    Haiku should be sufficient for single-label classification.
+  → Classify all contexts at fetch time, or background batch?
+    Both: classify at fetch time, also run a background job for cached papers.
+  → What if the context is not in English?
+    Claude handles multilingual well. Keep it simple, classify anyway.
+  → Show confidence score or just the label?
+    Just the label for now. Confidence adds complexity without clear user value.
+
+  [ ] Add stance columns to citation_contexts table
+  [ ] Build stance classification in server endpoint (call Claude API)
+  [ ] Add colour-coded stance labels to paper page citation section
+  [ ] Add stance summary counts to paper page header area
+  [ ] Test classification quality on 20-30 real examples manually
+
+──── 2D. AUTHOR RESPONSE FIELD ────
+
+What: the author of a paper can attach a note that is visible to all readers
+on their paper's page. It appears in the "How this paper is cited" section.
+The note can address misinterpretations, point to follow-up work, acknowledge
+corrections, or provide any context the author thinks important.
+
+This is the first mechanism in academic publishing that gives cited authors
+a voice in their own citation record. It doesn't require journal involvement.
+It doesn't require the citing author to agree. It simply adds the original
+author's perspective to the record.
+
+How to build:
+  - Only shown to the paper's owner (matched by ORCID in our DB)
+  - A simple textarea: "Add a note about how this paper has been cited..."
+  - Max 1000 characters. Plain text only. Editable.
+  - Displayed in a distinct style ("Author's note") in the citation section
+  - Visible to all readers whether logged in or not
+
+DB changes:
+  - New table: author_paper_notes
+      paper_id TEXT NOT NULL,
+      orcid TEXT NOT NULL REFERENCES users(orcid),
+      note TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (paper_id, orcid)
+
+Server endpoints:
+  - GET  /api/paper/:id/author-note  (public, returns note if exists)
+  - POST /api/paper/:id/author-note  (auth required, owner only)
+  - DELETE /api/paper/:id/author-note (auth required, owner only)
+
+Ownership check: user is "owner" if their ORCID matches any author on the
+paper (as stored in OpenAlex authorships). We already have this logic for
+profile pages.
+
+  [ ] Add author_paper_notes table
+  [ ] Build server endpoints (GET/POST/DELETE)
+  [ ] Add author note display to paper page (visible to all)
+  [ ] Add author note editor to paper page (owner-only, replaces display)
+  [ ] Test ownership check edge cases (multiple authors, merged IDs)
+
+──── STAGE 2 SUMMARY ────
+
+When Stage 2 is complete, a researcher visiting their paper page sees:
+  - How many times it was cited (already there)
+  - The actual papers that cited it (2A)
+  - The sentence(s) in which each citation appears (2B)
+  - A colour-coded label for each: Supports / Challenges / Corrects / etc. (2C)
+  - A summary: "47 citations: 18 supporting, 6 challenging..." (2C)
+  - A field where they can add their own note to the record (2D)
+
+This is the conversation made visible. No platform has it.
+Estimated dev time: 3-5 weeks of focused work.
+
+
+───────────────────────────────────────────────────────
+STAGE 3 — TOPIC PAGES AS FIELD RECORDS
+Status: dependent on Stage 2 data. Medium-term target.
+Needs some data accumulation from Stage 2 before this is meaningful.
+───────────────────────────────────────────────────────
+
+Goal: topic pages stop being "Wikipedia + papers" and start showing
+the actual state of knowledge in a field — where there is consensus,
+where there is active debate, what questions are open.
+
+This stage requires no new external data sources. It aggregates and
+presents the citation stance data built in Stage 2. It also introduces
+the first community contribution features — researchers can add to the
+record, not just read it.
+
+Prerequisites:
+  - Stage 2 complete and generating stance data
+  - At least a few months of data accumulation across popular topics
+  - Some basic governance/editorial thinking done (see decisions below)
+
+──── 3A. FIELD CONSENSUS SUMMARY ON TOPIC PAGES ────
+
+What: a "State of the field" section on topic pages showing:
+  - The most-cited claims in this topic area and their overall stance profile
+    ("Protein X inhibits pathway Y — 34 papers support, 4 challenge")
+  - The most-challenged papers in this topic (where debate is active)
+  - Recent corrections or retractions (flagged clearly)
+
+How to build:
+  - Aggregate citation stance data by topic (join citation_contexts with
+    paper topics from OpenAlex concepts)
+  - For each topic: find papers with high citation counts + interesting
+    stance distributions (many challenges = active debate)
+  - Surface papers where "Corrects" or "Challenges" stances are high
+    relative to "Supports" — these are the contested areas
+
+  [ ] Build topic-level stance aggregation query
+  [ ] Design "State of the field" UI section for topic pages
+  [ ] Add "Most debated papers in this topic" subsection
+  [ ] Test on 5-10 well-studied topics (e.g. CRISPR, mRNA vaccines, MOND)
+
+──── 3B. OPEN QUESTIONS TRACKER ────
+
+What: identify claims that were made or called for in a topic area
+but have not been adequately tested since. These are the open questions.
+
+Sources:
+  - Paper conclusions: "Future work should investigate..."
+    (LLM extraction from conclusions sections — see Stage 4 groundwork)
+  - Citation deserts: papers that made specific claims and have received
+    few citations (the claim was not picked up by the community)
+  - Replication gaps: highly cited papers where the central finding has
+    few direct replications in the citation record
+
+This is harder to build well than 3A. Start with the simplest version:
+  - Flag papers that were highly cited 5+ years ago and have received
+    almost no citations in the last 2 years — "may need revisiting"
+  - This is a proxy for "the field has moved on but may not have resolved this"
+
+  [ ] Design open question detection heuristic (start simple: old+few recent cites)
+  [ ] Add "Open questions" section to topic pages
+  [ ] Test and refine the heuristic on topics where we know the field state
+
+──── 3C. FIELD TIMELINE ────
+
+What: a visual or narrative timeline on topic pages showing how
+understanding of a topic has evolved. What was the dominant view in 2010?
+What changed, when, and because of which papers?
+
+How to approach:
+  - We already have "papers by year" charts on topic pages
+  - Extend: identify "turning point" papers — papers that received
+    a disproportionate number of "Challenges" or "Corrects" stances
+    relative to earlier work
+  - These papers represent moments where the field shifted
+  - Display as annotated timeline: [year] — [paper title] —
+    "Challenged the dominant view of X; 12 subsequent papers built on this"
+
+  [ ] Define "turning point" detection algorithm
+  [ ] Build timeline UI component for topic pages
+  [ ] Test on topics with well-known historical turning points
+
+──── 3D. COMMUNITY ANNOTATION (FIRST VERSION) ────
+
+What: allow verified researchers to add short structured annotations
+to topic pages. Not free-text edits (too hard to govern) but structured:
+  - "This claim is now widely accepted" + required citation
+  - "This claim is contested — see debate between [paper A] and [paper B]"
+  - "This method is no longer considered valid — replaced by [paper]"
+
+This is the first community contribution feature. It is governance-heavy.
+Design the governance model before building the feature.
+
+Governance decisions to make before building this:
+  → Who can annotate? Verified researchers only? Any logged-in user?
+    → Start: any user with a claimed ORCID profile.
+  → How are annotations reviewed? Community voting? Editorial review?
+    → Start: show annotations with contributor name and citation.
+      Flag if multiple users dispute an annotation.
+  → How are disputes resolved?
+    → Initially: contact process, then governance board when we have one.
+  → Can annotations be removed?
+    → Yes, by the contributor. By admins for violations.
+  → Are annotations versioned?
+    → Yes. Full history stored. Transparency is fundamental.
+
+  [ ] Design annotation data model (structured, not free text)
+  [ ] Write governance rules document (public, versioned)
+  [ ] Build annotation submission UI on topic pages
+  [ ] Build annotation display with contributor attribution
+  [ ] Build dispute flagging mechanism
+  [ ] Build admin moderation interface
+
+──── STAGE 3 SUMMARY ────
+
+When Stage 3 is complete, a researcher visiting a topic page sees:
+  - Wikipedia overview (already there)
+  - State of the field: consensus areas and contested claims (3A)
+  - Open questions: what hasn't been adequately answered yet (3B)
+  - Field timeline: how understanding has evolved (3C)
+  - Community annotations from verified researchers (3D)
+
+This is what a domain expert holds in their head after years in a field.
+For the first time, it is written down, structured, and updatable.
+Estimated timeline: 6-12 months after Stage 2, depending on data accumulation.
+Likely requires at least one additional developer and some funding.
+
+
+───────────────────────────────────────────────────────
+STAGE 4 — CLAIMS AS FIRST-CLASS OBJECTS
+Status: long-term vision. Requires funding, team, community.
+Do not start until Stage 3 is stable and trusted.
+───────────────────────────────────────────────────────
+
+Goal: the claim — not the paper — becomes the primary navigable unit
+of the scientific record. The knowledge graph is no longer just papers,
+authors, and topics. It now includes the assertions that papers make,
+linked to the evidence that supports or contests them.
+
+This is the hardest stage. The technical challenges are real but solvable.
+The harder problems are governance (who decides a claim is "supported"?)
+and community adoption (researchers need to see this as legitimate, not
+as an external authority overriding their judgement).
+
+──── 4A. CLAIM EXTRACTION ────
+
+What: for each paper in the indexed literature, extract the specific
+empirical claims it makes. Starting with abstracts (structured, short,
+contain most key findings). Later: results sections, conclusions.
+
+A claim is: a falsifiable assertion with these components:
+  Entity      — what is the claim about? (a compound, a method, a population)
+  Relation    — what is asserted? (inhibits, outperforms, correlates with)
+  Conditions  — under what conditions? (in vitro, in population X, at dose Y)
+  Confidence  — how confident? (significantly, tends to, may)
+  Quantitative — is there a number? (p<0.05, r=0.72, 40% reduction)
+
+How to build:
+  - LLM extraction from abstract text (Claude API)
+  - Structured output: JSON with the five components above
+  - Extraction prompt needs careful design and testing
+  - Start with a specific domain (e.g. cancer biology) to validate quality
+    before running across all topics
+
+Prompt structure (rough):
+  "Extract the main empirical claims from this abstract. For each claim
+   provide: entity, relation, conditions, confidence qualifier, quantitative
+   value if present. Return as JSON. Abstract: {text}"
+
+  - Expected: 2-5 claims per abstract on average
+  - Cost: ~2000 tokens per abstract at Haiku pricing: ~$0.0005 per paper
+    For 1 million papers: ~$500 total. Very affordable.
+  - Cache permanently. Claims don't change once extracted.
+
+DB schema for claims:
+  claims:
+    id UUID PRIMARY KEY,
+    paper_id TEXT NOT NULL,     -- OpenAlex paper ID
+    entity TEXT,
+    relation TEXT,
+    conditions TEXT,
+    confidence_qualifier TEXT,
+    quantitative_value TEXT,
+    full_text TEXT,             -- the original claim as a sentence
+    extraction_model TEXT,      -- which model extracted this
+    extracted_at TIMESTAMPTZ,
+    human_reviewed BOOLEAN DEFAULT FALSE
+
+  DECISION: Do we expose unreviewed AI-extracted claims to users?
+    → Not as authoritative claims. Show as "AI-extracted, unverified"
+      with clear labelling. Allow researchers to verify (confirm/edit/reject).
+      Only verified claims enter the primary claim graph.
+
+  [ ] Design claim extraction prompt (test on 100 abstracts manually)
+  [ ] Validate extraction quality — what % are accurate? what % are wrong?
+  [ ] Build extraction pipeline (server-side, batch, cached)
+  [ ] Add claims table to DB
+  [ ] Build UI to display extracted claims on paper pages
+  [ ] Build researcher verification flow (confirm/edit/reject)
+
+──── 4B. CLAIM DEDUPLICATION AND LINKING ────
+
+What: the same claim appears in many papers. "Aspirin inhibits
+COX-1" appears in hundreds of papers. These should be linked to
+a single canonical claim node, not treated as 100 separate claims.
+
+This is technically hard. Options:
+
+  Option A: Embedding similarity
+    - Generate embeddings for all extracted claims (use a text embedding model)
+    - Cluster by semantic similarity
+    - Candidates for merging: claims with cosine similarity > threshold
+    - Human review confirms or rejects each merge proposal
+    → Pros: scalable, can run on all claims
+    → Cons: requires embedding infrastructure, similarity threshold is tricky,
+      "aspirin inhibits COX-1 in vitro" and "aspirin inhibits COX-1 in vivo"
+      are similar but NOT the same claim
+
+  Option B: Community-driven linking
+    - Show researchers "This claim looks similar to [claim X] — are they the same?"
+    - Community votes to merge or keep separate
+    → Pros: human judgement, builds community engagement
+    → Cons: slow, requires active community
+
+  Option C: Hybrid
+    - Embedding similarity generates candidates
+    - Community reviews candidates
+    → Best approach for long-term quality. Start with Option B only
+      (simpler to build), add embedding in Stage 4B later.
+
+  DB schema extension:
+    canonical_claims:
+      id UUID PRIMARY KEY,
+      canonical_text TEXT,    -- human-reviewed statement of the claim
+      topic_id TEXT,          -- which topic this belongs to
+      evidence_status TEXT,   -- supported/contested/refuted/unknown
+      evidence_status_updated_at TIMESTAMPTZ,
+      last_reviewed_at TIMESTAMPTZ
+
+    claim_instances:
+      canonical_claim_id UUID REFERENCES canonical_claims,
+      source_claim_id UUID REFERENCES claims,
+      linked_by TEXT,         -- 'ai_similarity' or 'community'
+      linked_at TIMESTAMPTZ
+
+  DECISION: Who can propose claim merges? Any verified user?
+    → Yes, with human review by a second verified user to confirm.
+
+  [ ] Design canonical claim data model
+  [ ] Build "propose merge" UI for researchers
+  [ ] Build review/confirmation flow
+  [ ] Test on a specific topic with well-understood claim structure
+
+──── 4C. EVIDENCE STATUS AND UPDATES ────
+
+What: for each canonical claim, maintain a current evidence status:
+  Supported    — strong, consistent evidence across multiple papers
+  Likely       — good evidence, limited replication
+  Contested    — significant disagreement in the literature
+  Refuted      — preponderance of evidence runs against the claim
+  Retracted    — the primary paper making this claim has been retracted
+  Insufficient — claim made but inadequately tested
+  Unknown      — no assessment made yet
+
+This is governance-heavy. The evidence status represents what the
+platform says the field believes. Getting this wrong is harmful.
+
+How to determine status:
+  - Algorithmically: based on aggregated citation stances from Stage 2
+    If 80% of citing papers with a stance label say "Supports": likely Supported
+    If 30%+ say "Challenges" or "Corrects": flag as Contested
+  - With community review: researchers can propose a status change,
+    citing their sources. Other researchers review the proposal.
+  - Show confidence: "Based on 47 citing papers with stance data"
+  - Always show the evidence, not just the label
+
+  DECISION: What happens when the AI-derived status disagrees with
+  community consensus? → Community consensus wins. AI provides a starting
+  point, not a verdict.
+
+  DECISION: Can a claim's status be Refuted if the original authors
+  dispute this? → Yes, with both perspectives shown. The platform
+  does not take sides; it shows the state of evidence. The author's
+  response field (Stage 2D) is where original authors can present
+  their view.
+
+  [ ] Design evidence status algorithm (threshold-based from stance data)
+  [ ] Build evidence status display on canonical claim pages
+  [ ] Build evidence status review flow for community
+  [ ] Write public documentation of how status is determined
+  [ ] Legal review: does calling a claim "Refuted" create liability?
+
+──── 4D. TOPIC PAGES POWERED BY CLAIM GRAPH ────
+
+What: at this stage, topic pages are no longer summaries of the Wikipedia
+article with papers attached. They are generated from the claim graph.
+
+A topic page now shows:
+  - The major supported claims in this area
+  - The contested claims and the nature of the disagreement
+  - The refuted claims (what the field used to believe but no longer does)
+  - The open claims (asserted but inadequately tested)
+  - The key papers: not just the most cited, but the most pivotal
+    (papers that changed the evidence status of a claim)
+
+This is the first version of the "living field record" described in the vision.
+
+  [ ] Rebuild topic page generation from claim graph data
+  [ ] Design topic page layout for claim-based view
+  [ ] Add claim status legend and documentation for readers
+  [ ] Test on topics with well-known historical trajectories
+  [ ] User testing with domain experts — does this match their mental model?
+
+──── 4E. LIVING PAPER FORMAT ────
+
+What: a submission format for new research. Researchers who want to
+publish new work through ScienceEcosystem do so by:
+  1. Writing their paper in a structured editor (prose + figures + data + code)
+  2. The platform extracts the claim structure and knowledge graph entries
+  3. The researcher reviews and confirms the extracted claims
+  4. The paper is published and immediately enters the claim graph
+
+This is the step that closes the loop: new science is born into the graph
+rather than converted into it retroactively.
+
+IMPORTANT: this does not replace peer review. Peer review can still happen —
+the claims are simply structured from the start. A paper submitted here
+can simultaneously be submitted to a journal. The platform adds structure;
+it does not substitute for community validation.
+
+  DECISION: Do we want to be a preprint server?
+    → Not necessarily. The living paper format can work as a supplement
+      to existing preprint servers (arXiv, bioRxiv) rather than a replacement.
+      A researcher deposits a preprint there AND structures their claims here.
+
+  DECISION: Who does the peer review for living papers?
+    → Not us, initially. The claim structure is neutral — it records what
+      the paper claims, not whether those claims are correct. Review happens
+      through the same citation stance + community annotation process as
+      for existing literature.
+
+  [ ] Design structured editor (probably a long way off — needs dedicated work)
+  [ ] Define living paper schema (what fields are required)
+  [ ] Build claim review/confirmation flow for submitting authors
+  [ ] Design publication and indexing process
+  [ ] Consider integration with existing preprint servers
+
+──── STAGE 4 SUMMARY ────
+
+When Stage 4 is complete, the platform has:
+  - Claims extracted from every paper in the literature (gradually)
+  - Canonical claims linking the same assertion across multiple papers
+  - Evidence status for each claim, based on aggregated stance data
+  - Topic pages showing field-level consensus, debate, and open questions
+    generated from the claim graph, not Wikipedia summaries
+  - A submission format for new papers that enters them directly into the graph
+
+Timeline: this is years of work, not months. It requires a team, funding,
+and a community that trusts the platform. The earlier stages build toward all
+three. Do not rush this. A poorly governed claim status system is worse than
+no claim status system.
+
+
+───────────────────────────────────────────────────────
+CROSS-CUTTING DECISIONS (need answers before or during Stage 2)
+───────────────────────────────────────────────────────
+
+1. SEMANTIC SCHOLAR API KEY
+   Apply at: https://www.semanticscholar.org/product/api
+   Free tier: 1 req/sec. Should be sufficient for lazy-loading.
+   Without key: 100 req/5min (too slow for production).
+   → ACTION: apply for API key before starting Stage 2B.
+
+2. CLAUDE API FOR CLASSIFICATION
+   We will use Claude Haiku for stance classification (cheapest, sufficient).
+   Estimated cost: negligible (<$1 per 5000 citations processed).
+   Need Anthropic API key (separate from Claude Code).
+   → Is there already an Anthropic API key configured on Render?
+   → If not: set up billing + key + store in environment variables.
+   → ACTION: confirm API key situation before starting Stage 2C.
+
+3. PAPER OWNERSHIP VERIFICATION
+   For author response (Stage 2D), we need to verify that the person
+   claiming to be an author of a paper is actually an author.
+   Current approach: ORCID match against OpenAlex authorships.
+   This is imperfect (not all papers have ORCID-linked authors in OpenAlex).
+   Alternative: email verification against institutional address.
+   → Decision: start with ORCID match, flag unmatched cases as "unverified claim",
+     add email verification in a later iteration.
+
+4. WHAT TO DO WHEN STANCE IS CLEARLY WRONG
+   LLM classification will sometimes be wrong. A "Challenges" label on a
+   citation that is actually supportive would be misleading and embarrassing.
+   → Decision: show stance labels with a "Report this label" link.
+     On report: hide the label pending review. Review queue for admins.
+   → Also: allow the citing paper's authors to dispute a stance label
+     (same ownership verification as above).
+
+5. LANGUAGE AND NON-ENGLISH LITERATURE
+   A significant portion of scientific literature is not in English.
+   Claude handles multilingual input well for classification.
+   Citation contexts may be in any language.
+   → Decision: classify in any language, display context in original language,
+     show stance label in English. Add translated context display later.
+
+6. GOVERNANCE DOCUMENTATION
+   Before any community contribution feature goes live (Stage 3D onwards),
+   we need public documentation explaining:
+     - How stance classification works and its limitations
+     - How evidence status is determined
+     - How disputes are resolved
+     - Who can change what, and why
+   This documentation must be versioned (git), public, and linked from
+   every page that shows AI-derived or community-derived content.
+   → ACTION: draft governance document before Stage 3D begins.
+
+7. LEGAL
+   Displaying "Challenges" or "Corrects" labels on papers could theoretically
+   expose us to claims from paper authors who feel their work is misrepresented.
+   → Get legal review before any stance data is publicly displayed.
+   → Labels should always be attributed: "Based on AI classification of
+     citation context. This may be inaccurate. Report an error."
+   → We are showing what citing authors wrote, not making our own judgements.
+     This is closer to indexing than editorialising.
+
+
+───────────────────────────────────────────────────────
+KNOWLEDGE GRAPH — NODE AND EDGE INVENTORY
+What exists now vs what we're building toward
+───────────────────────────────────────────────────────
+
+NODE TYPES:
+  [X] Paper          — OpenAlex work record
+  [X] Author         — OpenAlex/SE user
+  [X] Topic          — OpenAlex concept
+  [X] Institution    — OpenAlex institution
+  [X] Journal        — OpenAlex source
+  [ ] CitationContext — Stage 2B (the actual citing sentence)
+  [ ] Stance          — Stage 2C (the relationship type)
+  [ ] AuthorResponse  — Stage 2D (author's note on their citation record)
+  [ ] CanonicalClaim  — Stage 4B (the deduplicated claim node)
+  [ ] ClaimInstance   — Stage 4A (a specific claim in a specific paper)
+  [ ] Method          — Stage 4A (a research method referenced by papers)
+  [ ] Dataset         — Phase 2 (a dataset referenced by papers)
+
+EDGE TYPES:
+  [X] cites(Paper → Paper)
+  [X] authored_by(Paper → Author)
+  [X] about(Paper → Topic)
+  [X] employed_by(Author → Institution)
+  [X] published_in(Paper → Journal)
+  [ ] cites_with_stance(Paper → Paper, via Stance)    — Stage 2C
+  [ ] responded_to(AuthorResponse → Paper)             — Stage 2D
+  [ ] makes_claim(Paper → ClaimInstance)               — Stage 4A
+  [ ] instance_of(ClaimInstance → CanonicalClaim)      — Stage 4B
+  [ ] tests_claim(Paper → CanonicalClaim, via Stance)  — Stage 4C
+  [ ] uses_method(Paper → Method)                      — Stage 4A
+  [ ] uses_dataset(Paper → Dataset)                    — Phase 2
+
+The graph is intentionally built on PostgreSQL for as long as possible.
+Dedicated graph DB (Neo4j, etc.) is premature until query complexity demands it.
+PostgreSQL with good indexing and recursive CTEs handles this well at our scale.
 
 GOVERNANCE (once there is a team and funding)
 - [ ] Board of Trustees (independent, science/infrastructure/law/ethics expertise)

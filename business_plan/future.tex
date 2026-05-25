@@ -1,48 +1,364 @@
-\subsection*{Purpose of this Document}
+%% ScienceEcosystem — Future Vision
+%% Section: The Living Science Record
+%% For inclusion in the main business plan document
 
+% ─────────────────────────────────────────────────────────────────────────────
+\section*{The Future of ScienceEcosystem: Toward a Living Science Record}
+% ─────────────────────────────────────────────────────────────────────────────
 
-\section*{1. Linked data \& Knowledge graph}
+\subsection*{The Problem We Are Actually Solving}
 
+Science does not have a memory problem. It has a conversation problem.
 
-A publication system whose native format is a knowledge graph.
+Every year hundreds of thousands of papers are published. Most of them respond
+to, correct, challenge, or extend earlier work. But the paper that started the
+conversation sits frozen — a PDF issued on a fixed date, unchanged, carrying no
+trace of what happened to its claims after publication.
 
-\section*{2. Living papers}
-front stage)
-From the researcher’s point of view:
-I write a paper
-→ I include text, figures, tables, code, data
-→ ScienceEcosystem publishes it nicely
-They experience:
-Writing prose
-Adding figures
-Uploading data
-Running code
-Seeing a “paper”
-This illusion is critical.
-3. What is actually happening (backstage)
-Behind the scenes, SE must do this:
-Graph (truth)
-→ data entities
-→ method entities
-→ model entities
-→ result entities
-→ claim entities
-→ provenance
-→ uncertainty
-→ versions
+A reader encountering that paper today has no way of knowing whether its central
+finding was later replicated or failed replication; whether a key method was
+subsequently shown to be flawed; whether three papers challenged its
+interpretation; whether the authors themselves issued a correction; or whether
+the field has quietly moved on. This information exists. It is scattered across
+citing papers, letters to editors, conference presentations, informal online
+discussions, and private knowledge held by researchers who have followed the
+field for years. It is simply never assembled in one place, attached to the
+original claim.
 
-↓ rendered as ↓
+The result is that the scientific record looks cumulative but is not navigable
+as one. Each paper is an island. The ocean between them — the actual scientific
+discourse — is invisible.
 
-Paper / website / PDF / summary / AI output
-So the real structure is:
-Knowledge graph → rendered paper
+This is not a technical failure. It is a structural one. The infrastructure of
+science — journals, citation indices, institutional repositories — was designed
+to preserve and distribute individual publications, not to represent the
+evolving state of knowledge. It does the former well and the latter not at all.
 
+\subsection*{The Current System's Three Structural Failures}
 
+\textbf{1. Publication bias.}
+Positive results are published; null results and failures to replicate largely
+are not. A paper claiming an effect enters the record permanently. The five
+papers that subsequently failed to reproduce it are either unpublished or
+scattered, with no mechanism to attach their findings to the original claim.
+The record accumulates a systematic distortion that individual researchers must
+correct privately, by reading widely and remembering selectively.
 
-\section*{3. Memory Alpha}
-Scientific knowledge is often lost not because data disappears, but because context, methods, and meaning become disconnected over time. When datasets, code, and publications are stored separately, research becomes difficult to interpret, reuse, or reconstruct as technologies and institutions change.
+\textbf{2. Fragmented discourse.}
+Scientific arguments unfold across dozens of papers, over years, in multiple
+journals. There is no place where the argument is assembled and made visible as
+an argument. A junior researcher entering a field, a policymaker trying to
+understand the evidence, or a journalist reporting on a contested finding must
+reconstruct the debate manually — if they have the time and the access. Most
+do not.
 
-ScienceEcosystem addresses this by acting as a connective knowledge layer. It links data, code, analyses, and publications into coherent, self-describing research objects that preserve provenance and assumptions alongside results.
+\textbf{3. Static authority.}
+Once a paper is published it cannot be updated. Corrections are published as
+separate documents, rarely read by those who read the original. Retractions are
+indexed in a separate database that most literature searches do not surface.
+The scientific record accumulates errors that are technically resolved but
+practically invisible to all but the most careful readers.
 
-By prioritising meaning over storage, ScienceEcosystem creates a foundation that allows scientific knowledge to remain understandable and resilient in the long term. As this connective layer matures, it can evolve into a broader scientific memory infrastructure, supporting future preservation and continuity initiatives without being tied to any single technology or institution.
+All three failures share the same root cause: papers are treated as terminal
+documents rather than contributions to an ongoing conversation. The publication
+event is the end of the process. ScienceEcosystem treats it as the beginning.
 
+\subsection*{The Vision: Science as a Living Record}
+
+The long-term goal of ScienceEcosystem is to build the connective layer that
+currently does not exist: a structured, navigable, continuously updated record
+of what the scientific community has claimed, tested, challenged, and come to
+believe — organised not just by paper, author, and journal, but by
+\emph{claim}.
+
+\subsubsection*{The Claim as the Unit of Science}
+
+The fundamental unit of science is not the paper. It is the claim.
+
+A paper makes a number of specific assertions: that a compound inhibits a
+pathway at a given concentration; that one method outperforms another on a
+specific task; that a correlation holds in a particular population. These claims
+have independent fates. Some accumulate strong support. Some are contradicted by
+subsequent work. Some are refined and qualified. Some are never tested again.
+
+The scientific record as it currently exists does not track these fates. A
+citation index knows that Paper B cited Paper A. It does not know whether Paper
+B supported, challenged, or corrected the specific claim in Paper A that it was
+responding to. A citation count measures attention, not the direction or quality
+of the scientific response.
+
+ScienceEcosystem's long-term architecture treats claims as first-class objects
+in the knowledge graph. Each claim is:
+
+\begin{itemize}
+  \item Linked to the paper and section where it was made
+  \item Linked to every subsequent paper that tested, challenged, supported,
+        or qualified it, with the nature of that relationship recorded
+  \item Annotated with the current state of evidence — supported, contested,
+        refuted, replicated, qualified — based on the accumulated weight of
+        subsequent work
+  \item Readable by anyone; editable by verified researchers under defined
+        governance rules
+  \item Traceable: every annotation cites the source it derives from
+\end{itemize}
+
+This is not a replacement for papers. Papers remain the authoritative record of
+methodology, context, and detail. The claim layer sits above them — a
+navigable, living map of what the community currently believes and on what
+evidence it rests.
+
+\subsubsection*{The Topic Page as Field Record}
+
+ScienceEcosystem's topic pages are already the closest existing approximation
+of this vision. They currently aggregate a Wikipedia overview, the most
+associated papers, key authors, and publication and citation trends. They are
+already more useful than a raw literature search for understanding a field.
+
+The mature version of a topic page becomes the living record of a scientific
+field. It shows:
+
+\begin{itemize}
+  \item The central claims and their current evidential status
+  \item Where the field has reached consensus and where active debate continues
+  \item The methodological fault lines — which results depend on which methods,
+        and what it means when methods produce different outcomes
+  \item The open questions: what has been called for but not yet investigated
+  \item A timeline of how understanding evolved — what was believed in 2010,
+        what changed and why, what the current picture is
+\end{itemize}
+
+This is the knowledge that currently exists only in the heads of domain experts.
+A researcher who has spent five years in a field holds a detailed mental model
+of the terrain — the reliable findings, the contested claims, the known
+artefacts of specific methods. That model is never written down in a single
+place. The senior researcher retires; the model is lost. ScienceEcosystem makes
+it structural, citable, and updatable.
+
+\subsubsection*{The Living Paper Format}
+
+The culmination of this vision is a publication format whose native structure
+is the knowledge graph rather than the linear document. A researcher submitting
+a paper to ScienceEcosystem writes prose, adds figures, uploads data, and runs
+code — the experience is that of writing a paper. Behind the surface, every
+entity, method, result, claim, and provenance relationship is stored as a node
+or edge in the graph.
+
+The rendered output — the paper that readers see — is generated from the graph
+and can be rendered as a traditional article, a structured dataset, a summary,
+or an AI-queryable object. The graph is the truth; the paper is a view of it.
+
+This means that when a subsequent paper challenges one finding in the original,
+that challenge attaches to the specific claim node, not to the paper as a whole.
+The paper does not become invalid; one of its claims is updated in the record.
+The conversation is visible, structured, and permanently attached to the science
+it concerns.
+
+\subsection*{The Strategic Approach: Incremental and Useful at Every Stage}
+
+The central strategic insight of ScienceEcosystem's roadmap is that the path to
+transforming scientific infrastructure is to be genuinely useful at every
+intermediate stage — not to build the full vision first and then ask researchers
+to adopt it.
+
+Most projects attempting to reform scientific publishing fail for the same
+reason: they build the ideal system first, then discover that researchers will
+not change their workflow until the system is already the norm. They need the
+community to adopt the tool, but the community will not adopt the tool until
+the community has already adopted the tool.
+
+ScienceEcosystem avoids this by starting with what researchers already need —
+a better way to find, read, and track papers — and expanding from there. Each
+step is an improvement on what exists. The infrastructure for the next step is
+built by building the current step well. By the time the platform reaches the
+full claim-layer vision, researchers are not being asked to change how they
+work; they are being offered an extension of something they already depend on.
+
+The four stages of this progression are described below.
+
+\subsubsection*{Stage 1 — Useful Today}
+
+A better place to find, read, and track papers than any existing alternative.
+Clean author profiles, rich topic pages, a personal library, and a browser
+extension that connects any publisher page or PDF to the platform's data.
+This stage builds the user base, establishes credibility, and demonstrates
+that the platform is maintained and reliable. No vision is required at this
+stage — it simply has to work better than what exists.
+
+\textbf{Status:} Substantially complete. The platform is live with all core
+features functional.
+
+\subsubsection*{Stage 2 — Making the Conversation Visible}
+
+The first step that does not exist anywhere else. Citation context and stance
+classification: for each paper, show the actual sentences in which it is cited
+by other papers, and classify the relationship as supporting, challenging,
+correcting, extending, methodological, or background. Add an author response
+field — the cited author can attach a note visible to all readers, creating
+the first mechanism for direct scientific dialogue on the publication record.
+
+This stage produces the first layer of claim-level data. It requires no
+structural change to how research is conducted or published. It works
+retroactively on the existing literature. And it gives researchers something
+they genuinely want: not just a count of citations, but a sense of how their
+work has been received.
+
+\textbf{Technical foundation:} Semantic Scholar API (citation context
+sentences); LLM-based stance classification (short, cheap inference on
+sentence-level input); author response stored per paper in the platform
+database.
+
+\textbf{Status:} Planned. Buildable with current infrastructure and no
+additional funding.
+
+\subsubsection*{Stage 3 — Topic Pages as Field Records}
+
+Once stance-classified citation data accumulates at scale, it can be
+aggregated at the topic level. A topic page begins to show not just the
+papers and authors in a field but the current state of its arguments —
+where evidence is strong, where it is contested, where claims have been
+made but not adequately tested. Open questions become visible as a category,
+not just as a sentence at the end of individual papers.
+
+This stage requires no new data sources — it is an aggregation and
+presentation layer over the citation stance data built in Stage 2. It is
+however where the product becomes qualitatively different from everything
+that exists: the first place where a non-expert can genuinely understand the
+evidential state of a scientific field without reading hundreds of papers.
+
+\textbf{Status:} Dependent on Stage 2 data accumulation. Medium-term target.
+Requires modest infrastructure investment and possibly a small team.
+
+\subsubsection*{Stage 4 — Claims as First-Class Objects}
+
+The full realisation of the vision. Claims extracted from the literature —
+beginning with abstracts and results sections, using LLM-based extraction —
+become nodes in the knowledge graph. Claims from different papers that address
+the same assertion are linked. The graph represents not papers and citations
+but assertions and their evidential histories.
+
+Topic pages at this stage show field-level consensus maps. The living paper
+format becomes available for new submissions. The platform becomes a genuine
+alternative publication venue for structured science, not just an indexing
+layer above existing journals.
+
+This stage requires significant infrastructure investment, a functioning team,
+and a community of researchers willing to engage with the annotation and
+governance systems. It is a long-term target, not a near-term deliverable.
+
+\textbf{Status:} Long-term vision. Requires funding and team. The earlier
+stages build toward this in both technical infrastructure and community trust.
+
+\subsection*{The Knowledge Graph Architecture}
+
+The knowledge graph underlying this vision has multiple node types and edge
+types that accumulate progressively across the four stages.
+
+\textbf{Existing nodes (Stage 1):}
+Paper $\cdot$ Author $\cdot$ Topic $\cdot$ Institution $\cdot$ Journal
+
+\textbf{Added in Stage 2:}
+CitationContext $\cdot$ Stance $\cdot$ AuthorResponse
+
+\textbf{Added in Stage 3:}
+FieldConsensus $\cdot$ OpenQuestion $\cdot$ MethodologicalLineage
+
+\textbf{Added in Stage 4:}
+Claim $\cdot$ Method $\cdot$ Dataset $\cdot$ EvidenceStatus $\cdot$ ReplicationRecord
+
+\textbf{Key edges:}
+\texttt{cites\_with\_stance(Paper, Paper, Stance)} $\cdot$
+\texttt{makes\_claim(Paper, Claim)} $\cdot$
+\texttt{tests\_claim(Paper, Claim, Result)} $\cdot$
+\texttt{uses\_method(Paper, Method)} $\cdot$
+\texttt{produces\_dataset(Paper, Dataset)} $\cdot$
+\texttt{responds\_to(AuthorResponse, CitationContext)}
+
+The graph is intentionally built on standard relational database infrastructure
+(PostgreSQL) in the early stages, with graph traversal handled through
+recursive queries. This avoids premature investment in specialised graph
+database infrastructure while maintaining the structural integrity needed for
+the later stages.
+
+\subsection*{On AI and the Knowledge Graph}
+
+A common question in building this kind of system is whether a knowledge
+graph is needed at all, or whether large language models can simply answer
+queries about the scientific literature on demand.
+
+The answer is that both are needed, and they serve different functions.
+
+LLMs are used for extraction: reading citation context sentences and
+classifying stance, extracting claims from abstracts, identifying
+methodological relationships. They are fast, cheap for short inputs, and
+continuously improving. They are the tool that makes it practical to process
+the existing literature at scale.
+
+The knowledge graph is needed for storage, provenance, and queryability. An
+LLM cannot tell you reliably what the current state of evidence on a specific
+claim is across ten thousand papers — it has no ground truth, only training
+data. The graph stores the results of extractions with their sources, allows
+structured queries across the full literature, and provides the auditable
+record that scientific infrastructure requires.
+
+The combination — AI for extraction, graph for storage and traversal — is the
+architecture that makes the vision achievable. Neither alone is sufficient.
+
+\subsection*{Why This is Different From Existing Approaches}
+
+Several projects have attempted parts of this vision. None has built the full
+connective layer.
+
+\textbf{Semantic Scholar} classifies citation intent (background, methodology,
+result) but not stance (agrees, challenges, corrects). It does not expose
+claims or support author response. It is a research tool, not a community
+infrastructure.
+
+\textbf{PubPeer} supports post-publication annotation but is structured as a
+comment thread attached to a paper identifier. It has no stance classification,
+no claim linking, no topic-level aggregation, and no governance model for
+claim status.
+
+\textbf{ResearchGate} is a social network with paper hosting. Its primary
+value is access to paywalled PDFs. It has no claim layer, no citation stance,
+and its incentive model (gamified RG Score) does not align with surfacing
+contested or failed results.
+
+\textbf{Wikipedia} aggregates field knowledge but is not structured at the
+claim level, does not link to primary literature systematically, has no
+mechanism for representing contested claims with their evidential basis, and
+is written by volunteers rather than the researchers who produced the work.
+
+ScienceEcosystem occupies a position none of these occupy: a platform that
+starts with the existing literature and the researchers who produced it, and
+builds the connective layer — claim by claim, stance by stance — that makes
+the scientific discourse navigable.
+
+\subsection*{The Infrastructure Perspective}
+
+It is worth stating directly what kind of project ScienceEcosystem is.
+
+It is not a product in the commercial sense. It is infrastructure — like a
+library, a road, or a communication protocol. Its value is not in what it sells
+but in what it enables. Infrastructure of this kind has specific properties:
+it is more valuable when it is open (because openness maximises the number of
+people who can build on it), it should not be owned by any single institution
+(because dependence on a single owner creates fragility and potential for
+capture), and it should be designed to outlast the organisations and
+technologies of the moment it was built in.
+
+This is why the non-profit structure, the open data principles, and the
+governance model described elsewhere in this plan are not secondary to the
+technical vision — they are constitutive of it. An infrastructure that can be
+acquired, paywalled, or shut down when it becomes inconvenient is not
+infrastructure. It is a product with a temporary public benefit.
+
+The living science record, as described here, is only possible if researchers
+and institutions trust that it will be there in fifty years, that the data they
+contribute will not be sold or withheld, and that the governance of what counts
+as good evidence will not be controlled by those with a commercial interest
+in the answer.
+
+That trust is built slowly, step by step, in exactly the way this roadmap
+proposes: by being reliable before being ambitious, by being useful before
+asking for commitment, and by demonstrating at every stage that the platform
+serves science rather than extracting value from it.
