@@ -97,6 +97,146 @@ REPRODUCIBLE WORKSPACES
 - [ ] Link code at version level, record computational environments, allow re-execution
       and verification workflows.
 
+
+=======================================================
+VISION — THE LIVING SCIENCE RECORD
+(for business plan / future.tex)
+=======================================================
+
+THE PROBLEM WE ARE ACTUALLY SOLVING
+
+Science does not have a memory problem. It has a conversation problem.
+
+Every year hundreds of thousands of papers are published. Most of them respond
+to, correct, challenge, or extend earlier work. But the paper that started the
+conversation sits frozen — a PDF issued on a fixed date, unchanged, showing
+no trace of what happened to its claims after publication.
+
+A reader encountering that paper today has no way of knowing:
+- Whether its central finding was later replicated or failed replication
+- Whether a key method was shown to be flawed
+- Whether three subsequent papers challenged its interpretation
+- Whether the authors themselves issued a correction
+- Whether the field has quietly moved on
+
+This information exists. It is scattered across citing papers, letters to
+editors, conference presentations, PubPeer threads, and private knowledge
+held by people who have been following the field for years. It is simply
+never assembled in one place, attached to the original claim.
+
+The result: the scientific record looks cumulative but is not navigable as one.
+Each paper is an island. The ocean between them — the actual scientific
+discourse — is invisible.
+
+THE CLAIM LAYER
+
+The unit of science is not the paper. It is the claim.
+
+A paper makes a number of specific claims: "compound X inhibits pathway Y at
+concentration Z", "method A outperforms method B on task C", "the correlation
+between D and E is 0.72 in population F". These claims have independent
+fates. Some are supported by follow-up work. Some are contradicted. Some are
+refined, qualified, or shown to hold only under specific conditions. Some are
+simply never tested again.
+
+Our long-term vision is to make these claims — not papers — the primary unit
+of the scientific record. Each claim is a living node:
+
+  - Linked to the paper and section where it was made
+  - Linked to every subsequent paper that tested, challenged, supported,
+    or qualified it
+  - Annotated with the current state of evidence (supported / contested /
+    refuted / replicated / qualified)
+  - Readable by anyone, editable by the research community under governance rules
+  - Traceable: every annotation cites its source
+
+This is not a replacement for papers. Papers remain the authoritative
+source of methodology and context. The claim layer sits above them —
+a navigable, living map of what the scientific community currently believes
+and on what evidence.
+
+FROM CITATION COUNT TO CITATION STANCE
+
+The current infrastructure treats all citations as identical. A paper cited
+200 times looks the same whether those citations say "building on the landmark
+work of Smith et al." or "contrary to Smith et al., we found no such effect."
+
+The first step toward the claim layer — buildable now — is citation stance
+classification: reading the sentence(s) in which a paper is cited and
+classifying the relationship as:
+
+  Supports / Challenges / Corrects / Extends / Uses method / Background mention
+
+Combined with author response (the cited author can attach a note visible on
+their paper page), this turns citations from a one-way reference system into
+a visible scientific dialogue. A researcher reading a paper sees not just
+how many times it was cited but how the field has responded to it — and
+the original authors can participate in that record directly.
+
+This is the first concrete step. It is feasible today using LLM-based
+classification on citation context sentences (Semantic Scholar provides
+these). No platform currently does this at scale.
+
+THE TOPIC PAGE AS LIVING RECORD
+
+ScienceEcosystem's topic pages are already closer to this vision than
+anything else that exists. A topic page today aggregates:
+- The Wikipedia overview of a concept
+- The papers most associated with it
+- The key authors
+- Citation and publication trends over time
+
+The next version of a topic page becomes the living record of a field:
+- The central claims and their current evidential status
+- The key debates: where does the field agree, where does it not
+- The methodological fault lines: which results depend on which methods
+- The open questions that have not yet been answered
+- A timeline of how understanding evolved
+
+This is what a researcher holds in their head after five years in a field.
+We make it visible, citable, and updatable — not frozen in a review paper
+published in 2019.
+
+WHY THIS IS BETTER THAN THE CURRENT SYSTEM
+
+The current system has three structural failures:
+
+1. Publication bias: positive results are published, null results and
+   failures to replicate largely are not. The claim layer, by tracking
+   what happened to claims after publication, surfaces these silences.
+
+2. Fragmented discourse: scientific arguments happen across dozens of papers
+   over years. There is no place where the argument is assembled. Junior
+   researchers, policymakers, and the public cannot follow it.
+
+3. Static authority: once a paper is published it cannot be updated.
+   Corrections are published as separate documents, rarely read by those
+   who read the original. The scientific record accumulates errors that
+   are technically corrected but practically invisible.
+
+The living science record addresses all three — not by replacing peer review
+or publication, but by building the connective layer that sits above the
+existing literature and makes its evolution visible.
+
+CONCRETE ROADMAP TOWARD THIS VISION
+
+Near-term (buildable now):
+- [ ] Citation context display on paper pages (Semantic Scholar API)
+- [ ] Citation stance classification using Claude API
+      (short prompt on citation sentences → Supports/Challenges/Corrects/etc.)
+- [ ] Author response field on paper pages (owner-only, visible to all)
+
+Medium-term (Phase 2 foundation):
+- [ ] Claim extraction from paper abstracts and results sections
+- [ ] Claim-to-claim linking across papers (same claim, different papers)
+- [ ] Community annotation layer with governance rules and source requirements
+
+Long-term (Phase 3):
+- [ ] Full claim graph: every major claim in the indexed literature as a node
+- [ ] Topic pages show field-level consensus, contested areas, open questions
+- [ ] Living paper format: new papers published directly into the graph,
+      not as static PDFs but as structured claim sets with linked evidence
+
 GOVERNANCE (once there is a team and funding)
 - [ ] Board of Trustees (independent, science/infrastructure/law/ethics expertise)
 - [ ] Scientific Council (disciplinary advisors)
