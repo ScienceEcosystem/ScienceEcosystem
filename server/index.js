@@ -1790,12 +1790,103 @@ app.patch("/api/library/:id", async (req, res) => {
   if (typeof body.notes_raw === "string") {
     vals.push(body.notes_raw); sets.push(`notes_raw = $${vals.length}`);
   }
+  if (body.deleted_at !== undefined) {
+    vals.push(body.deleted_at || null); sets.push(`deleted_at = $${vals.length}`);
+  }
+  // User-editable metadata fields
+  const metaFields = ["title", "authors", "year", "venue", "doi", "abstract"];
+  for (const f of metaFields) {
+    if (f in body) {
+      const v = body[f] === null || body[f] === "" ? null : body[f];
+      vals.push(f === "year" ? (v ? parseInt(v, 10) : null) : v);
+      sets.push(`${f} = $${vals.length}`);
+    }
+  }
   if (!sets.length) return res.status(400).json({ error: "Nothing to update" });
   const { rows } = await pool.query(
     `UPDATE library_items SET ${sets.join(",")} WHERE orcid=$1 AND id=$2 RETURNING *`,
     vals
   );
   res.json(rows[0] || {});
+});
+
+app.post("/api/library/merge", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const { keep_id, trash_id } = req.body || {};
+  if (!keep_id || !trash_id || keep_id === trash_id) {
+    return res.status(400).json({ error: "keep_id and trash_id required and must differ" });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Load both items
+    const { rows: both } = await client.query(
+      `SELECT * FROM library_items WHERE orcid=$1 AND id = ANY($2::text[])`,
+      [sess.orcid, [keep_id, trash_id]]
+    );
+    const keeper = both.find(r => r.id === keep_id);
+    const loser  = both.find(r => r.id === trash_id);
+    if (!keeper || !loser) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Item not found" }); }
+
+    // Build merged metadata: keeper wins on filled fields, loser fills gaps
+    const fillableFields = ["title", "authors", "year", "venue", "doi", "abstract", "pdf_url", "openalex_id", "openalex_url"];
+    const mergedSets = [], mergedVals = [sess.orcid, keep_id];
+    for (const f of fillableFields) {
+      const kv = keeper[f]; const lv = loser[f];
+      const keeperEmpty = kv === null || kv === undefined || kv === "";
+      if (keeperEmpty && lv !== null && lv !== undefined && lv !== "") {
+        mergedVals.push(lv); mergedSets.push(`${f} = $${mergedVals.length}`);
+      }
+    }
+    // Merge tags (union)
+    const mergedTags = [...new Set([...(keeper.tags || []), ...(loser.tags || [])])];
+    mergedVals.push(mergedTags); mergedSets.push(`tags = $${mergedVals.length}`);
+
+    if (mergedSets.length) {
+      await client.query(
+        `UPDATE library_items SET ${mergedSets.join(",")} WHERE orcid=$1 AND id=$2`,
+        mergedVals
+      );
+    }
+
+    // Transfer collection memberships from loser to keeper (avoid duplicates)
+    const { rows: loserColls } = await client.query(
+      `SELECT collection_id FROM collection_items WHERE item_id=$1`, [trash_id]
+    );
+    for (const { collection_id } of loserColls) {
+      await client.query(
+        `INSERT INTO collection_items (collection_id, item_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+        [collection_id, keep_id]
+      );
+    }
+
+    // Transfer PDF annotations if keeper has none
+    const { rows: keeperAnnot } = await client.query(
+      `SELECT 1 FROM pdf_annotations WHERE orcid=$1 AND paper_id=$2`, [sess.orcid, keep_id]
+    );
+    if (!keeperAnnot.length) {
+      await client.query(
+        `UPDATE pdf_annotations SET paper_id=$1 WHERE orcid=$2 AND paper_id=$3`,
+        [keep_id, sess.orcid, trash_id]
+      );
+    }
+
+    // Soft-delete loser
+    await client.query(
+      `UPDATE library_items SET deleted_at=NOW() WHERE orcid=$1 AND id=$2`,
+      [sess.orcid, trash_id]
+    );
+
+    await client.query("COMMIT");
+    res.json({ ok: true, kept: keep_id, trashed: trash_id });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("POST /api/library/merge failed:", err.message);
+    res.status(500).json({ error: "Merge failed" });
+  } finally {
+    client.release();
+  }
 });
 
 app.get("/api/library/pdf-annotations", async (req, res) => {

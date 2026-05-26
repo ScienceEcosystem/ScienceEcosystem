@@ -533,8 +533,65 @@
     return first || "-";
   }
 
+  function countFilledFields(it){
+    return ["title","authors","year","venue","doi","abstract","pdf_url"].filter(f => it[f] !== null && it[f] !== undefined && it[f] !== "").length;
+  }
+
+  async function mergeItems(keepId, trashId){
+    try{
+      await api("/api/library/merge", {method:"POST", body:JSON.stringify({keep_id:keepId, trash_id:trashId})});
+      await safeRefreshItems();
+      renderTable();
+      toast("Merged — duplicate moved to trash","success");
+    } catch(e){
+      toast("Merge failed: "+(e.message||"error"), "error");
+    }
+  }
+
   function renderTable(){
     const tbody=$("#itemsTbody"); if(!tbody) return;
+
+    // Duplicates merge panel
+    let mergePanelEl = $("#dupMergePanel");
+    if(currentCollectionId === "__duplicates__"){
+      const {dupGroups} = computeDuplicates(items.filter(it=>!it.deleted_at));
+      const panelHtml = dupGroups.length === 0
+        ? `<div id="dupMergePanel" style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;color:#166534;">No duplicates found.</div>`
+        : `<div id="dupMergePanel" style="margin-bottom:1rem;">
+            <p style="font-size:.85rem;font-weight:600;margin:0 0 .5rem 0;color:#374151;">${dupGroups.length} duplicate ${dupGroups.length===1?"group":"groups"} found</p>
+            ${dupGroups.map((grp,gi)=>{
+              const winner = grp.slice().sort((a,b)=>countFilledFields(b)-countFilledFields(a))[0];
+              return `<div style="background:#fafafa;border:1px solid #e2e8f0;border-radius:6px;padding:.6rem .8rem;margin-bottom:.5rem;font-size:.83rem;">
+                ${grp.map(it=>`
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.2rem 0;">
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(it.title)}">${esc(it.title)}</span>
+                    <span class="muted" style="flex-shrink:0;">${it.year||"?"} · ${countFilledFields(it)} fields</span>
+                    ${it.id===winner.id?`<span style="font-size:.78rem;color:#16a34a;font-weight:600;flex-shrink:0;">↑ keep</span>`:`<span style="font-size:.78rem;color:#9ca3af;flex-shrink:0;">discard</span>`}
+                  </div>`).join(`<hr style="margin:.25rem 0;border:none;border-top:1px solid #e5e7eb;">`)}
+                <button class="btn btn-secondary" data-merge-gi="${gi}" style="margin-top:.5rem;font-size:.8rem;">Merge (discard → trash)</button>
+              </div>`;
+            }).join("")}
+          </div>`;
+      if(mergePanelEl){ mergePanelEl.outerHTML = panelHtml; }
+      else {
+        tbody.closest("table")?.insertAdjacentHTML("beforebegin", panelHtml);
+      }
+      // Bind merge buttons
+      $$("[data-merge-gi]").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          const gi = parseInt(btn.getAttribute("data-merge-gi"), 10);
+          const {dupGroups:dg} = computeDuplicates(items.filter(it=>!it.deleted_at));
+          const grp = dg[gi]; if(!grp) return;
+          const winner = grp.slice().sort((a,b)=>countFilledFields(b)-countFilledFields(a))[0];
+          const losers = grp.filter(it=>it.id!==winner.id);
+          for(const loser of losers) await mergeItems(winner.id, loser.id);
+        });
+      });
+    } else {
+      // Remove panel if switching away from duplicates view
+      $("#dupMergePanel")?.remove();
+    }
+
     const cols=visibleColumns();
     const sortBy=$("#sortBy")?.value||"title";
     const sortDir=$("#sortDir")?.value||"asc";
@@ -662,9 +719,47 @@
 
     host.innerHTML = `
       <div style="padding:.75rem 1rem;">
-        <h4 style="margin:0 0 .25rem 0;">${esc(item.title)}</h4>
-        <p class="muted" style="margin:.25rem 0;">${esc(item.authors||"-")}</p>
-        <p class="meta"><strong>${esc(item.year??"-")}</strong> · ${esc(item.venue||"-")}</p>
+        <!-- Metadata (view mode) -->
+        <div id="metaView">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;">
+            <h4 style="margin:0 0 .25rem 0;flex:1;">${esc(item.title)}</h4>
+            <button class="btn btn-secondary" id="editMetaBtn" style="flex-shrink:0;font-size:.78rem;padding:.2rem .55rem;" title="Edit details">✏ Edit</button>
+          </div>
+          <p class="muted" style="margin:.25rem 0;">${esc(item.authors||"-")}</p>
+          <p class="meta"><strong>${esc(item.year??"-")}</strong> · ${esc(item.venue||"-")}</p>
+          ${item.doi?`<p class="meta" style="font-size:.8rem;">DOI: ${esc(item.doi)}</p>`:""}
+        </div>
+
+        <!-- Metadata (edit mode, hidden initially) -->
+        <div id="metaEdit" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:.75rem;margin-bottom:.5rem;">
+          <p style="font-size:.8rem;font-weight:600;margin:0 0 .5rem 0;color:#374151;">Edit details</p>
+          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">Title
+            <input id="editTitle" class="input" value="${esc(item.title||"")}" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
+          </label>
+          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">Authors
+            <input id="editAuthors" class="input" value="${esc(item.authors||"")}" placeholder="Last, First; Last, First" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
+          </label>
+          <div style="display:flex;gap:.5rem;margin-bottom:.35rem;">
+            <label style="font-size:.8rem;flex:1;">Year
+              <input id="editYear" class="input" type="number" value="${esc(String(item.year||""))}" min="1000" max="2099" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
+            </label>
+            <label style="font-size:.8rem;flex:2;">Journal / Venue
+              <input id="editVenue" class="input" value="${esc(item.venue||"")}" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
+            </label>
+          </div>
+          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">DOI
+            <input id="editDoi" class="input" value="${esc(item.doi||"")}" placeholder="10.xxxx/xxxxx" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
+          </label>
+          <label style="font-size:.8rem;display:block;margin-bottom:.5rem;">Abstract
+            <textarea id="editAbstract" class="input" rows="4" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;resize:vertical;">${esc(item.abstract||"")}</textarea>
+          </label>
+          <div style="display:flex;gap:.4rem;">
+            <button class="btn btn-primary" id="saveMetaBtn" style="font-size:.82rem;">Save</button>
+            <button class="btn btn-secondary" id="cancelMetaBtn" style="font-size:.82rem;">Cancel</button>
+          </div>
+          <p id="metaSaveStatus" style="font-size:.8rem;margin:.35rem 0 0 0;"></p>
+        </div>
+
         <!-- Secondary reference links -->
         <p style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.25rem 0;">
           ${chip(doiUrl,"Publisher page")}
@@ -719,6 +814,40 @@
 
     // Load PDF annotations from server and render in the panel
     renderAnnotationPanel(id, pdfViewerUrl);
+
+    // ---- Edit metadata ----
+    $("#editMetaBtn")?.addEventListener("click", () => {
+      $("#metaView").style.display = "none";
+      $("#metaEdit").style.display = "";
+      $("#editTitle").focus();
+    });
+    $("#cancelMetaBtn")?.addEventListener("click", () => {
+      $("#metaView").style.display = "";
+      $("#metaEdit").style.display = "none";
+    });
+    $("#saveMetaBtn")?.addEventListener("click", async () => {
+      const statusEl = $("#metaSaveStatus");
+      statusEl.textContent = "Saving…";
+      const patch = {
+        title:    $("#editTitle").value.trim()   || item.title,
+        authors:  $("#editAuthors").value.trim() || null,
+        year:     $("#editYear").value.trim()    || null,
+        venue:    $("#editVenue").value.trim()   || null,
+        doi:      $("#editDoi").value.trim()     || null,
+        abstract: $("#editAbstract").value.trim() || null,
+      };
+      try {
+        const updated = await api(`/api/library/${encodeURIComponent(id)}`, {
+          method: "PATCH", body: JSON.stringify(patch)
+        });
+        Object.assign(item, updated);
+        statusEl.textContent = "Saved.";
+        setTimeout(() => renderInspector(id), 600);
+      } catch (e) {
+        statusEl.style.color = "red";
+        statusEl.textContent = "Save failed: " + (e.message || "unknown error");
+      }
+    });
 
     // Add to collection
     $("#addToCollectionBtn").onclick=()=>addItemToCollection(id);
