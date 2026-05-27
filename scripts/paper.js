@@ -478,8 +478,9 @@
     for (var i=0;i<authorships.length;i++){
       var authorId = get(authorships[i],"author.id",null);
       var authorName = escapeHtml(get(authorships[i],"author.display_name","Unknown"));
-      var authorHtml = authorId
-        ? '<a href="profile.html?id='+encodeURIComponent(authorId.split("/").pop())+'">'+authorName+'</a>'
+      var authorIdTail = authorId ? authorId.split("/").pop() : null;
+      var authorHtml = authorIdTail
+        ? '<a href="profile.html?id='+encodeURIComponent(authorIdTail)+'" data-preview-type="author" data-preview-id="'+escapeHtml(authorIdTail)+'">'+authorName+'</a>'
         : authorName;
 
         
@@ -490,7 +491,7 @@
         if (!instName) continue;
         var instId = get(insts[j], "id", null);
         var instTail = instId ? String(instId).replace(/^https?:\/\/openalex\.org\//i, "") : null;
-        if (instTail) instParts.push('<a href="institute.html?id='+encodeURIComponent(instTail)+'">'+escapeHtml(instName)+'</a>');
+        if (instTail) instParts.push('<a href="institute.html?id='+encodeURIComponent(instTail)+'" data-preview-type="institution" data-preview-id="'+escapeHtml(instTail)+'">'+escapeHtml(instName)+'</a>');
         else instParts.push(escapeHtml(instName));
       }
 
@@ -523,7 +524,7 @@
     var list = collectInstitutions(authorships);
     if (!list.length) return { shortHtml: "-", allHtml: "-", moreCount: 0 };
     function render(item){
-      if (item.idTail) return '<a href="institute.html?id='+encodeURIComponent(item.idTail)+'">'+escapeHtml(item.name)+'</a>';
+      if (item.idTail) return '<a href="institute.html?id='+encodeURIComponent(item.idTail)+'" data-preview-type="institution" data-preview-id="'+escapeHtml(item.idTail)+'">'+escapeHtml(item.name)+'</a>';
       return escapeHtml(item.name);
     }
     var short = list.slice(0,8).map(render).join(", ");
@@ -594,7 +595,7 @@
     var venue = get(p, "host_venue.display_name", null) || get(p, "primary_location.source.display_name", null) || "Unknown venue";
     var sourceTail = sourceTailFromPaper(p);
     var venueHtml = sourceTail
-      ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'">'+escapeHtml(venue)+'</a>'
+      ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'" data-preview-type="journal" data-preview-id="'+escapeHtml(sourceTail)+'">'+escapeHtml(venue)+'</a>'
       : escapeHtml(venue);
 
     var doiRaw = p.doi || get(p,"ids.doi",null);
@@ -791,7 +792,7 @@
     var venueType  = get(source, 'type', get(p, 'primary_location.source.type', '-'));
     var sourceTail = source ? idTailFrom(source.id) : sourceTailFromPaper(p);
     var journalLinkHtml = sourceTail
-      ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'">'+escapeHtml(journalName)+'</a>'
+      ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'" data-preview-type="journal" data-preview-id="'+escapeHtml(sourceTail)+'">'+escapeHtml(journalName)+'</a>'
       : escapeHtml(journalName);
 
     var isPreprint = isPreprintVenue(journalName, venueType);
@@ -941,7 +942,7 @@
 
     var sourceTail = source ? idTailFrom(source.id) : sourceTailFromPaper(p);
     var journalLinkHtml = sourceTail
-      ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'">'+escapeHtml(journalName)+'</a>'
+      ? '<a href="journal.html?id='+encodeURIComponent(sourceTail)+'" data-preview-type="journal" data-preview-id="'+escapeHtml(sourceTail)+'">'+escapeHtml(journalName)+'</a>'
       : escapeHtml(journalName);
 
     // Fast client-side ISSN check — fires immediately, no network needed
@@ -2347,4 +2348,157 @@
   }
 
   document.addEventListener("DOMContentLoaded", boot);
+
+  // ── Hover preview cards ───────────────────────────────────────────────────────
+  (function(){
+    var card = null;
+    var hideTimer = null;
+    var fetchCache = Object.create(null);
+
+    function getCard(){
+      if (!card){
+        card = document.createElement("div");
+        card.id = "hoverPreviewCard";
+        card.setAttribute("role","tooltip");
+        document.body.appendChild(card);
+        card.addEventListener("mouseenter", function(){ clearTimeout(hideTimer); });
+        card.addEventListener("mouseleave", hideCard);
+      }
+      return card;
+    }
+
+    function hideCard(){
+      hideTimer = setTimeout(function(){
+        if (card) { card.style.display = "none"; card.innerHTML = ""; }
+      }, 150);
+    }
+
+    function positionCard(anchorEl){
+      var c = getCard();
+      var rect = anchorEl.getBoundingClientRect();
+      var scrollY = window.scrollY || document.documentElement.scrollTop;
+      var scrollX = window.scrollX || document.documentElement.scrollLeft;
+      c.style.display = "block";
+      // Default: below the anchor
+      var top = rect.bottom + scrollY + 8;
+      var left = rect.left + scrollX;
+      // Clamp right edge
+      var cardW = 280;
+      if (left + cardW > window.innerWidth - 16) left = window.innerWidth - cardW - 16;
+      if (left < 8) left = 8;
+      c.style.top = top + "px";
+      c.style.left = left + "px";
+    }
+
+    function fmt(n){ return n != null ? Number(n).toLocaleString() : null; }
+
+    function renderAuthor(data){
+      var name = data.display_name || "Unknown";
+      var aff  = (data.last_known_institution && data.last_known_institution.display_name) || null;
+      var works = fmt(data.works_count);
+      var cites = fmt(data.cited_by_count);
+      var orcid = data.orcid ? data.orcid.replace("https://orcid.org/","") : null;
+      return '<div class="hp-name">'+escapeHtml(name)+'</div>'
+           + (aff  ? '<div class="hp-sub">'+escapeHtml(aff)+'</div>' : '')
+           + '<div class="hp-stats">'
+           + (works ? '<span>'+works+' works</span>' : '')
+           + (cites ? '<span>'+cites+' citations</span>' : '')
+           + '</div>'
+           + (orcid ? '<div class="hp-meta">ORCID '+escapeHtml(orcid)+'</div>' : '');
+    }
+
+    function renderInstitution(data){
+      var name    = data.display_name || "Unknown";
+      var country = data.country_code || null;
+      var type    = data.type || null;
+      var works   = fmt(data.works_count);
+      var cites   = fmt(data.cited_by_count);
+      var homepage = data.homepage_url || null;
+      return '<div class="hp-name">'+escapeHtml(name)+'</div>'
+           + '<div class="hp-sub">'+(type ? escapeHtml(type) : '')+(country ? ' · '+escapeHtml(country) : '')+'</div>'
+           + '<div class="hp-stats">'
+           + (works ? '<span>'+works+' works</span>' : '')
+           + (cites ? '<span>'+cites+' citations</span>' : '')
+           + '</div>'
+           + (homepage ? '<div class="hp-meta">'+escapeHtml(homepage)+'</div>' : '');
+    }
+
+    function renderJournal(data){
+      var name      = data.display_name || "Unknown";
+      var publisher = data.host_organization_name || null;
+      var issn      = (data.issn_l) || (data.issn && data.issn[0]) || null;
+      var works     = fmt(data.works_count);
+      var cites     = fmt(data.cited_by_count);
+      var isOA      = data.is_oa;
+      return '<div class="hp-name">'+escapeHtml(name)+'</div>'
+           + (publisher ? '<div class="hp-sub">'+escapeHtml(publisher)+'</div>' : '')
+           + '<div class="hp-stats">'
+           + (works ? '<span>'+works+' papers</span>' : '')
+           + (cites ? '<span>'+cites+' citations</span>' : '')
+           + (isOA  ? '<span class="hp-oa">Open Access</span>' : '')
+           + '</div>'
+           + (issn  ? '<div class="hp-meta">ISSN '+escapeHtml(issn)+'</div>' : '');
+    }
+
+    async function fetchPreview(type, id){
+      var key = type+":"+id;
+      if (fetchCache[key]) return fetchCache[key];
+      var url;
+      if (type === "author")      url = API + "/authors/" + encodeURIComponent(id)
+        + "?fields=display_name,last_known_institution,works_count,cited_by_count,orcid";
+      else if (type === "institution") url = API + "/institutions/" + encodeURIComponent(id)
+        + "?fields=display_name,country_code,type,works_count,cited_by_count,homepage_url";
+      else if (type === "journal") url = API + "/sources/" + encodeURIComponent(id)
+        + "?fields=display_name,host_organization_name,issn_l,issn,works_count,cited_by_count,is_oa";
+      else return null;
+      var r = await fetch(url, { headers:{"User-Agent":"ScienceEcosystem/1.0"} });
+      if (!r.ok) return null;
+      var data = await r.json();
+      fetchCache[key] = data;
+      return data;
+    }
+
+    function showLoading(anchorEl){
+      var c = getCard();
+      c.innerHTML = '<div class="hp-loading">Loading…</div>';
+      positionCard(anchorEl);
+    }
+
+    function showData(type, data, anchorEl){
+      var c = getCard();
+      var inner = type === "author"      ? renderAuthor(data)
+                : type === "institution" ? renderInstitution(data)
+                : renderJournal(data);
+      c.innerHTML = inner;
+      positionCard(anchorEl);
+    }
+
+    document.addEventListener("mouseover", function(e){
+      var el = e.target.closest("a[data-preview-type]");
+      if (!el) return;
+      clearTimeout(hideTimer);
+      var type = el.getAttribute("data-preview-type");
+      var id   = el.getAttribute("data-preview-id");
+      if (!type || !id) return;
+      var key = type+":"+id;
+      if (fetchCache[key]){
+        showData(type, fetchCache[key], el);
+      } else {
+        showLoading(el);
+        fetchPreview(type, id).then(function(data){
+          if (!data){ hideCard(); return; }
+          showData(type, data, el);
+        }).catch(function(){ hideCard(); });
+      }
+    });
+
+    document.addEventListener("mouseout", function(e){
+      var el = e.target.closest("a[data-preview-type]");
+      if (!el) return;
+      var relTarget = e.relatedTarget;
+      if (relTarget && (relTarget === card || (card && card.contains(relTarget)))) return;
+      hideCard();
+    });
+  })();
+
 })();
