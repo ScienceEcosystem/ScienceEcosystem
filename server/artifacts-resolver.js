@@ -300,6 +300,102 @@ async function fetchPublisherDoiLinks(doi) {
   return out;
 }
 
+// Europe PMC: structured data links + full-text DOI scan
+async function fetchEPMCDataLinks(doi) {
+  if (!doi) return [];
+  const out = [];
+  const RE_REPO = /10\.(5281|6084|17605|7910|26008|15468|25080|7910)\/[^\s"'<>),;]+/gi;
+
+  // 1. Core search — returns dataLinksData and fullTextUrlList
+  const data = await safeFetch(
+    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:${encodeURIComponent(doi)}&resultType=core&format=json`,
+    {}, 10000
+  );
+  const result = data?.resultList?.result?.[0];
+  if (!result) return [];
+
+  // 1a. dataLinksData — directly linked datasets
+  const dataLinks = result.dataLinksData || [];
+  for (const dl of dataLinks) {
+    const url = dl.url || dl.entityUrl || "";
+    const rawDoi = dl.accessionNumber || dl.identifier || "";
+    const repoName = dl.dataBank || dl.dataSource || "";
+    const doiInUrl = url.match(RE_REPO);
+    const resolvedDoi = normDOI(rawDoi.includes("/") ? rawDoi : (doiInUrl?.[0] || ""));
+    const prefix = doiPrefix(resolvedDoi);
+    const repo = REPO_PREFIXES[prefix];
+    out.push({
+      source: "Europe PMC",
+      type: repo ? (repo.type === "auto" ? classifyType(repoName) : repo.type) : classifyType(repoName + " " + (dl.entityType || "")),
+      title: dl.entityTitle || dl.identifier || repoName || url,
+      doi: resolvedDoi || "",
+      url: url || (resolvedDoi ? `https://doi.org/${resolvedDoi}` : ""),
+      repository: repoName || repo?.name || "",
+      confidence: 90
+    });
+  }
+
+  // 1b. Scan the abstract for repo DOIs (data availability often ends up in abstracts)
+  const abstract = result.abstractText || "";
+  if (abstract) {
+    let m;
+    RE_REPO.lastIndex = 0;
+    while ((m = RE_REPO.exec(abstract)) !== null) {
+      const clean = normDOI(m[0].replace(/[),.;]+$/, ""));
+      if (!clean) continue;
+      const prefix = doiPrefix(clean);
+      const repo = REPO_PREFIXES[prefix];
+      if (!repo) continue;
+      const exists = out.some(x => x.doi && normDOI(x.doi) === clean);
+      if (!exists) {
+        out.push({
+          source: "Europe PMC",
+          type: repo.type === "auto" ? "Dataset" : repo.type,
+          title: clean,
+          doi: clean,
+          url: `https://doi.org/${clean}`,
+          repository: repo.name,
+          confidence: 82
+        });
+      }
+    }
+  }
+
+  // 2. Full-text XML scan for data availability DOIs (OA papers only)
+  const pmcId = result.pmcid || result.pmcId || "";
+  if (pmcId && !out.length) {
+    const xml = await safeFetchText(
+      `https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcId.replace(/^PMC/i,"")}/fullTextXML`,
+      {}, 12000
+    );
+    if (xml) {
+      let m2;
+      RE_REPO.lastIndex = 0;
+      while ((m2 = RE_REPO.exec(xml)) !== null) {
+        const clean = normDOI(m2[0].replace(/[),.;]+$/, ""));
+        if (!clean) continue;
+        const prefix = doiPrefix(clean);
+        const repo = REPO_PREFIXES[prefix];
+        if (!repo) continue;
+        const exists = out.some(x => x.doi && normDOI(x.doi) === clean);
+        if (!exists) {
+          out.push({
+            source: "Europe PMC",
+            type: repo.type === "auto" ? "Dataset" : repo.type,
+            title: clean,
+            doi: clean,
+            url: `https://doi.org/${clean}`,
+            repository: repo.name,
+            confidence: 78
+          });
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
 async function fetchGitHub(title, authors, doi) {
   const surname = firstAuthorSurname(authors);
   const st = shortTitle(title);
@@ -398,7 +494,8 @@ export async function resolveArtifacts({ doi, title, authors, openAlexId, minCon
     openalexCited,
     figshare,
     github,
-    publisherDois
+    publisherDois,
+    epmcLinks
   ] = await Promise.all([
     fetchDataCite(cleanDOI),
     fetchZenodoByDOI(cleanDOI),
@@ -406,7 +503,8 @@ export async function resolveArtifacts({ doi, title, authors, openAlexId, minCon
     fetchOpenAlexCitedRepos(openAlexId || ""),
     fetchFigshare(cleanDOI, title || ""),
     fetchGitHub(title || "", authors || "", cleanDOI),
-    fetchPublisherDoiLinks(cleanDOI)
+    fetchPublisherDoiLinks(cleanDOI),
+    fetchEPMCDataLinks(cleanDOI)
   ]);
 
   let all = [
@@ -416,7 +514,8 @@ export async function resolveArtifacts({ doi, title, authors, openAlexId, minCon
     ...openalexCited,
     ...figshare,
     ...github,
-    ...publisherDois
+    ...publisherDois,
+    ...epmcLinks
   ];
 
   const hasHighConfidence = all.some(x => x.confidence >= 70);

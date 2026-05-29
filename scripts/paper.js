@@ -302,20 +302,29 @@
       });
     }catch(e){ return []; }
   }
-  async function fetchPdfReferenceDois(pdfUrl){
-    if (!pdfUrl) return [];
+  var _pdfExtractCache = Object.create(null);
+  async function fetchPdfData(pdfUrl){
+    if (!pdfUrl) return { references: [], repoDois: [] };
+    if (_pdfExtractCache[pdfUrl]) return _pdfExtractCache[pdfUrl];
     try{
       var resp = await fetch("/api/pdf/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pdfUrl: pdfUrl })
       });
-      if (!resp.ok) return [];
+      if (!resp.ok) return { references: [], repoDois: [] };
       var data = await resp.json();
-      var refs = Array.isArray(data.references) ? data.references : [];
       if (Array.isArray(data.supplementaryLinks)) setSupplementaryLinks(data.supplementaryLinks);
-      return refs.filter(function(r){ return r && r.doi; });
-    }catch(e){ return []; }
+      var result = {
+        references: (Array.isArray(data.references) ? data.references : []).filter(function(r){ return r && r.doi; }),
+        repoDois: Array.isArray(data.repoDois) ? data.repoDois : []
+      };
+      _pdfExtractCache[pdfUrl] = result;
+      return result;
+    }catch(e){ return { references: [], repoDois: [] }; }
+  }
+  async function fetchPdfReferenceDois(pdfUrl){
+    return (await fetchPdfData(pdfUrl)).references;
   }
   function isLikelyDataCodeRef(ref){
     var doi = String(ref?.doi || "").toLowerCase();
@@ -430,30 +439,49 @@
 
     // If still empty or low confidence, scan PDF references for repository DOIs
     try {
-      var hasHigh = all.some(function(x){ return (x.type === "Dataset" || x.type === "Software") && (x.confidence || 0) >= 70; });
-      if (!hasHigh) {
-        var pdfUrl = getOpenAccessPdf(paper) || get(paper, "best_oa_location.url_for_pdf", null) || get(paper, "primary_location.pdf_url", null);
-        if (pdfUrl) {
-          var pdfRefs = await fetchPdfReferenceDois(pdfUrl);
-          var repoPrefixes = ["10.5281","10.6084","10.17605","10.7910","10.26008"];
-          pdfRefs.forEach(function(ref){
-            if (!ref || !ref.doi) return;
-            if (!isLikelyDataCodeRef(ref)) return;
-            var doiRef = String(ref.doi || "").replace(/^doi:/i, "");
-            var prefix = doiRef.split("/")[0];
-            if (!repoPrefixes.includes(prefix)) return;
-            var exists = all.some(function(x){ return x.doi && String(x.doi).toLowerCase() === String(doiRef).toLowerCase(); });
-            if (exists) return;
-            all.push({
-              provenance: "PDF References",
-              type: classifyRefType(ref),
-              title: ref.title || doiRef,
-              doi: doiRef,
-              url: doiRef ? ("https://doi.org/" + doiRef) : "",
-              confidence: 75
-            });
+      var pdfUrl = getOpenAccessPdf(paper) || get(paper, "best_oa_location.url_for_pdf", null) || get(paper, "primary_location.pdf_url", null);
+      if (pdfUrl) {
+        var pdfData = await fetchPdfData(pdfUrl);
+        var repoPrefixes = ["10.5281","10.6084","10.17605","10.7910","10.26008"];
+
+        // From reference list
+        pdfData.references.forEach(function(ref){
+          if (!ref || !ref.doi) return;
+          if (!isLikelyDataCodeRef(ref)) return;
+          var doiRef = String(ref.doi || "").replace(/^doi:/i, "");
+          var prefix = doiRef.split("/")[0];
+          if (!repoPrefixes.includes(prefix)) return;
+          var exists = all.some(function(x){ return x.doi && String(x.doi).toLowerCase() === String(doiRef).toLowerCase(); });
+          if (exists) return;
+          all.push({
+            provenance: "PDF References",
+            type: classifyRefType(ref),
+            title: ref.title || doiRef,
+            doi: doiRef,
+            url: "https://doi.org/" + doiRef,
+            confidence: 75
           });
-        }
+        });
+
+        // From body text (data availability statements)
+        pdfData.repoDois.forEach(function(item){
+          if (!item || !item.doi) return;
+          var doiRef = String(item.doi).replace(/^doi:/i, "").replace(/^https?:\/\/(dx\.)?doi\.org\//i, "");
+          var exists = all.some(function(x){ return x.doi && String(x.doi).toLowerCase() === doiRef.toLowerCase(); });
+          if (exists) return;
+          var typeStr = doiRef.includes("zenodo") ? "Dataset"
+                      : doiRef.includes("figshare") ? "Dataset"
+                      : doiRef.split("/")[0] === "10.26008" ? "Dataset"
+                      : "Dataset";
+          all.push({
+            provenance: "PDF Data Availability",
+            type: typeStr,
+            title: doiRef,
+            doi: doiRef,
+            url: "https://doi.org/" + doiRef,
+            confidence: item.fromDataAvailability ? 85 : 70
+          });
+        });
       }
     } catch(_) {}
 

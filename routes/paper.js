@@ -239,6 +239,11 @@ function parseGrobidTEI(teiXml) {
     }
   }
 
+  // Repo DOI prefixes to watch for in body text (data availability statements)
+  const REPO_PREFIXES_RE = /10\.(5281|6084|17605|7910|26008|15468)\/[^\s"'<>),;]+/gi;
+  const repoDois = [];
+  const repoDoiSeen = new Set();
+
   try {
     const text = stripTags(teiXml);
     const urlRegex = /https?:\/\/[^\s)]+/g;
@@ -276,6 +281,19 @@ function parseGrobidTEI(teiXml) {
       const context = text.slice(start, end);
       pushLink(url, context);
     }
+
+    // Scan body text for data-repository DOIs (data availability statements)
+    let rm;
+    REPO_PREFIXES_RE.lastIndex = 0;
+    while ((rm = REPO_PREFIXES_RE.exec(text)) !== null) {
+      const raw = rm[0].replace(/[).,;]+$/, '').replace(/^https?:\/\/(dx\.)?doi\.org\//i, '');
+      if (!raw || repoDoiSeen.has(raw.toLowerCase())) continue;
+      repoDoiSeen.add(raw.toLowerCase());
+      const start = Math.max(0, rm.index - 200);
+      const ctx = text.slice(start, rm.index + raw.length + 50).toLowerCase();
+      const isDataAvail = /data.{0,30}availab|availab.{0,30}data|zenodo|figshare|osf|dryad|dataverse|code.{0,20}availab|supplementar/i.test(ctx);
+      repoDois.push({ doi: raw, url: `https://doi.org/${raw}`, fromDataAvailability: isDataAvail });
+    }
   } catch (_) {}
 
   return {
@@ -283,6 +301,7 @@ function parseGrobidTEI(teiXml) {
     figures: figures,
     tables: tables,
     supplementaryLinks,
+    repoDois,
     metadata: {
       totalReferences: references.length,
       totalFigures: figures.length,
