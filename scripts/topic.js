@@ -431,104 +431,73 @@
     }).filter(r => r.text.length > 5);
   }
 
-  async function loadReferences(conceptIdTail, wpTitle, wpLang) {
-    const [wikiRefs] = await Promise.all([
-      fetchWikiReferences(wpTitle, wpLang || "en")
-    ]);
+  async function loadReferences(conceptIdTail, wpTitle, wpLang, articleHTML) {
+    // Tier 1: Wikipedia REST references API
+    const wikiRefs = await fetchWikiReferences(wpTitle, wpLang || "en");
 
-    if (wikiRefs.length) {
-      // Extract DOIs and batch-look up Paper pages
-      const dois = wikiRefs.map(r => extractDoiFromWikiRef(r)).filter(Boolean);
-      let doiToWorkId = {};
-      if (dois.length) {
-        try {
-          // OpenAlex filter allows up to ~100 DOIs at once
-          const batch = dois.slice(0, 50).map(d => encodeURIComponent(d)).join("|");
-          const res = await fetchOpenAlexJSON(`${API_OA}/works?filter=doi:${batch}&per_page=50&select=id,doi`);
-          (res.results || []).forEach(w => {
-            const d = (w.doi || "").replace(/^https?:\/\/doi\.org\//i, "").toLowerCase();
-            if (d) doiToWorkId[d] = tail(w.id);
-          });
-        } catch (_) {}
-      }
+    // Tier 2: parse cite_note items from the mobile HTML we already fetched
+    // (pass directly to avoid localStorage size limits killing the cache write)
+    const mobileRefs = (!wikiRefs.length && articleHTML)
+      ? extractRefsFromMobileHTML(articleHTML)
+      : [];
 
-      referencesList.innerHTML = wikiRefs.slice(0, 80).map((ref, i) => {
+    const refs = wikiRefs.length ? wikiRefs : null;
+    const mobile = mobileRefs.length ? mobileRefs : null;
+
+    if (!refs && !mobile) {
+      // No Wikipedia references found — hide section cleanly, no fake fallback
+      referencesList.innerHTML = '<li class="muted">No references available for this article.</li>';
+      referencesWhy.textContent = "";
+      return;
+    }
+
+    async function batchDoiLookup(dois) {
+      if (!dois.length) return {};
+      try {
+        const batch = dois.slice(0, 50).map(d => encodeURIComponent(d)).join("|");
+        const res = await fetchOpenAlexJSON(`${API_OA}/works?filter=doi:${batch}&per_page=50&select=id,doi`);
+        const map = {};
+        (res.results || []).forEach(w => {
+          const d = (w.doi || "").replace(/^https?:\/\/doi\.org\//i, "").toLowerCase();
+          if (d) map[d] = tail(w.id);
+        });
+        return map;
+      } catch (_) { return {}; }
+    }
+
+    if (refs) {
+      const dois = refs.map(r => extractDoiFromWikiRef(r)).filter(Boolean);
+      const doiToWorkId = await batchDoiLookup(dois);
+      referencesList.innerHTML = refs.slice(0, 80).map((ref, i) => {
         const idx = i + 1;
-        // Build the text: prefer ref.content (HTML), else ref.text
-        let inner = "";
-        const rawContent = ref.content || ref.text || ref.html || "";
-        if (rawContent) {
-          // Strip any HTML tags to keep it plain, then sanitise
-          const tmp = document.createElement("div");
-          tmp.innerHTML = rawContent;
-          inner = escapeHtml(tmp.textContent || tmp.innerText || "");
-        }
-        if (!inner) inner = "(Reference details unavailable)";
-
+        const tmp = document.createElement("div");
+        tmp.innerHTML = ref.content || ref.text || ref.html || "";
+        const inner = escapeHtml(tmp.textContent || tmp.innerText || "") || "(Reference details unavailable)";
         const doi = extractDoiFromWikiRef(ref);
-        const normDoi = doi ? doi.toLowerCase() : null;
-        const workId = normDoi ? doiToWorkId[normDoi] : null;
-        // DOI links to our paper page when matched, else doi.org
+        const workId = doi ? doiToWorkId[doi.toLowerCase()] : null;
         const doiLink = doi
           ? workId
             ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">DOI</a>`
             : ` · <a href="https://doi.org/${encodeURIComponent(doi)}" target="_blank" rel="noopener">DOI</a>`
           : "";
-
         return `<li id="se-ref-li-${idx}" value="${idx}"><a id="se-ref-${idx}" class="ref-anchor"></a>${inner}${doiLink}</li>`;
       }).join("");
-
-      referencesWhy.textContent = "References from the Wikipedia article. Links to Paper pages added where a DOI match was found.";
     } else {
-      // Second attempt: extract references directly from the mobile-html we already cached
-      const cachedHtml = cacheRead(conceptIdTail, "wp_html");
-      const mobileRefs = cachedHtml ? extractRefsFromMobileHTML(cachedHtml) : [];
-
-      if (mobileRefs.length) {
-        // Batch DOI lookup for Paper page links
-        const dois = mobileRefs.map(r => r.doi).filter(Boolean);
-        let doiToWorkId = {};
-        if (dois.length) {
-          try {
-            const batch = dois.slice(0, 50).map(d => encodeURIComponent(d)).join("|");
-            const res = await fetchOpenAlexJSON(`${API_OA}/works?filter=doi:${batch}&per_page=50&select=id,doi`);
-            (res.results || []).forEach(w => {
-              const d = (w.doi || "").replace(/^https?:\/\/doi\.org\//i, "").toLowerCase();
-              if (d) doiToWorkId[d] = tail(w.id);
-            });
-          } catch (_) {}
-        }
-
-        referencesList.innerHTML = mobileRefs.map(ref => {
-          const idx = ref.idx;
-          const inner = escapeHtml(ref.text);
-          const normDoi = ref.doi ? ref.doi.toLowerCase() : null;
-          const workId = normDoi ? doiToWorkId[normDoi] : null;
-          // DOI links to our paper page when matched, else doi.org
-          const doiLink = ref.doi
-            ? workId
-              ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">DOI</a>`
-              : ` · <a href="https://doi.org/${encodeURIComponent(ref.doi)}" target="_blank" rel="noopener">DOI</a>`
-            : "";
-          return `<li id="se-ref-li-${idx}" value="${idx}"><a id="se-ref-${idx}" class="ref-anchor"></a>${inner}${doiLink}</li>`;
-        }).join("");
-        referencesWhy.textContent = "References from the Wikipedia article. Links to Paper pages added where a DOI match was found.";
-      } else {
-        // Last resort: OpenAlex influential papers
-        const nowY = new Date().getUTCFullYear();
-        const [rev, rec] = await Promise.all([
-          fetchOpenAlexJSON(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},type:review&sort=cited_by_count:desc&per_page=10`),
-          fetchOpenAlexJSON(`${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)},from_publication_date:${nowY - 2}-01-01&sort=cited_by_count:desc&per_page=10`)
-        ]);
-        const works = dedupByDOI([...(rev.results || []), ...(rec.results || [])]);
-        if (!works.length) { referencesList.innerHTML = '<li class="muted">No references available.</li>'; return; }
-        referencesList.innerHTML = works.map((w, i) => {
-          const idx = i + 1;
-          return `<li id="se-ref-li-${idx}" value="${idx}">${citeLine(w, idx)}</li>`;
-        }).join("");
-        referencesWhy.textContent = "Wikipedia references unavailable — showing influential papers from OpenAlex instead.";
-      }
+      const dois = mobile.map(r => r.doi).filter(Boolean);
+      const doiToWorkId = await batchDoiLookup(dois);
+      referencesList.innerHTML = mobile.map(ref => {
+        const idx = ref.idx;
+        const inner = escapeHtml(ref.text);
+        const workId = ref.doi ? doiToWorkId[ref.doi.toLowerCase()] : null;
+        const doiLink = ref.doi
+          ? workId
+            ? ` · <a href="paper.html?id=${encodeURIComponent(workId)}">DOI</a>`
+            : ` · <a href="https://doi.org/${encodeURIComponent(ref.doi)}" target="_blank" rel="noopener">DOI</a>`
+          : "";
+        return `<li id="se-ref-li-${idx}" value="${idx}"><a id="se-ref-${idx}" class="ref-anchor"></a>${inner}${doiLink}</li>`;
+      }).join("");
     }
+    referencesWhy.textContent = "References from the Wikipedia article. Links to Paper pages added where a DOI match was found.";
   }
 
   // ── World of Crayfish field data integration ─────────────────────────────────
@@ -1026,7 +995,7 @@
 
       // References / people / infobox / trend
       renderRelated(topic);
-      await loadReferences(idTail, wpTitle, lang);
+      await loadReferences(idTail, wpTitle, lang, articleHTML);
       await loadTopPapers(idTail);
       await loadTopAuthors(idTail);
       const sortSel = $("topicSort");
