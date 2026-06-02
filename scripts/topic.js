@@ -500,6 +500,41 @@
     referencesWhy.textContent = "References from the Wikipedia article. Links to Paper pages added where a DOI match was found.";
   }
 
+  // ── Claude topic synthesis ────────────────────────────────────────────────────
+  async function loadTopicSynthesis(conceptIdTail) {
+    if (!conceptIdTail) return;
+    const block   = $("synthBlock");
+    const content = $("synthContent");
+    const refresh = $("synthRefresh");
+    if (!block || !content) return;
+
+    async function fetch_synthesis(bust) {
+      const url = "/api/topic/synthesis?id=" + encodeURIComponent(conceptIdTail) + (bust ? "&bust=1" : "");
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      return resp.json();
+    }
+
+    try {
+      const data = await fetch_synthesis(false);
+      if (!data?.synthesis) return;
+      content.innerHTML = data.synthesis.split("\n\n").map(p =>
+        `<p style="margin:.5rem 0;font-size:.9rem;line-height:1.6;color:#1f2937;">${escapeHtml(p.trim())}</p>`
+      ).join("");
+      block.style.display = "";
+      if (refresh) refresh.addEventListener("click", async e => {
+        e.preventDefault();
+        content.innerHTML = '<p class="muted">Regenerating…</p>';
+        const fresh = await fetch_synthesis(true);
+        if (fresh?.synthesis) {
+          content.innerHTML = fresh.synthesis.split("\n\n").map(p =>
+            `<p style="margin:.5rem 0;font-size:.9rem;line-height:1.6;color:#1f2937;">${escapeHtml(p.trim())}</p>`
+          ).join("");
+        }
+      });
+    } catch (_) {}
+  }
+
   // ── World of Crayfish field data integration ─────────────────────────────────
   async function loadFieldData(displayName) {
     // Only try for binomial species names (two words, first capitalised)
@@ -589,7 +624,7 @@
         <p class="woc-section-label" style="margin-top:1rem;">Records by country (top 10)</p>
         <div class="woc-bars">${countryBars}</div>
 
-        ${d.narrative ? `<p class="woc-narrative">${escapeHtml(d.narrative)}</p>` : ""}
+        ${d.geo_narrative ? `<p class="woc-narrative">${escapeHtml(d.geo_narrative)}</p>` : (d.api_narrative ? `<p class="woc-narrative">${escapeHtml(d.api_narrative)}</p>` : "")}
 
         <div class="woc-footer">
           <a href="${escapeHtml(d.woc_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
@@ -998,6 +1033,8 @@
 
       // Field data (non-blocking, fires in background)
       loadFieldData(topic.display_name || humanName);
+      // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
+      loadTopicSynthesis(idTail);
 
       // References / people / infobox / trend
       renderRelated(topic);

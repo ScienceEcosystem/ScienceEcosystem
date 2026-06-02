@@ -1836,3 +1836,6 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   padding-top: .75rem;
   border-top: 1px solid #f1f5f9;
 }
+
+/* ── Topic synthesis ── */
+.se-synthesis { border-left: 3px solid #2563eb; padding-left: .85rem; }

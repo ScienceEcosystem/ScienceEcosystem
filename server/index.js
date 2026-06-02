@@ -2837,19 +2837,49 @@ app.get("/api/field-data/woc", async (req, res) => {
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
 
+    const native    = b.population_status?.["indigenous"]      || 0;
+    const nonNative = b.population_status?.["non-indigenous"]  || 0;
+    const total     = native + nonNative || 1;
+    const nativePct = Math.round(native / total * 100);
+    const topNative    = topCountries.filter(c => native > 0).slice(0, 3).map(c => c.name);
+    const topNonNative = topCountries.filter(c => nonNative > 0).slice(0, 5).map(c => c.name);
+    const yearFrom = b.year_range?.[0] || "?";
+    const yearTo   = b.year_range?.[1] || "?";
+    const highAcc  = b.accuracy?.high  || 0;
+    const totalAcc = (b.accuracy?.high || 0) + (b.accuracy?.low || 0) || 1;
+    const highPct  = Math.round(highAcc / totalAcc * 100);
+
+    // Template-generated geo-narrative from structured data
+    const countriesCount = Object.keys(b.countries || {}).length;
+    const nativeStr    = native    ? `${native.toLocaleString("en")} native` : "";
+    const nonNativeStr = nonNative ? `${nonNative.toLocaleString("en")} non-indigenous` : "";
+    const recordBreakdown = [nativeStr, nonNativeStr].filter(Boolean).join(" and ");
+    const topNonNativeStr = topNonNative.length
+      ? `Non-indigenous populations have been documented in ${topNonNative.slice(0,-1).join(", ")}${topNonNative.length > 1 ? " and " + topNonNative[topNonNative.length-1] : topNonNative[0]}${countriesCount > 5 ? ` and ${countriesCount - 5} others` : ""}.`
+      : "";
+    const geoNarrative = `${species} is documented in the World of Crayfish® database with `
+      + `${b.total_records.toLocaleString("en")} validated occurrence records spanning `
+      + `${countriesCount} countries and ${b.total_hexagons.toLocaleString("en")} hexagonal grid cells. `
+      + `Records span the period ${yearFrom}–${yearTo}. `
+      + (recordBreakdown ? `The dataset comprises ${recordBreakdown} records (${nativePct}% native). ` : "")
+      + topNonNativeStr
+      + ` ${highPct}% of records meet high-accuracy spatial criteria. `
+      + `Mean record density per cell: ${b.density?.mean ?? "?"} (range: ${b.density?.min ?? "?"}–${b.density?.max ?? "?"}).`;
+
     const payload = {
-      species:       b.species,
-      total_records: b.total_records,
-      total_hexagons:b.total_hexagons,
-      countries_count: Object.keys(b.countries || {}).length,
-      top_countries: topCountries,
-      year_range:    b.year_range,
+      species:         b.species,
+      total_records:   b.total_records,
+      total_hexagons:  b.total_hexagons,
+      countries_count: countriesCount,
+      top_countries:   topCountries,
+      year_range:      b.year_range,
       population_status: b.population_status || {},
-      accuracy:      b.accuracy || {},
-      density:       b.density || {},
-      narrative:     data.narrative?.results || "",
-      citation:      data.meta?.citation || "World of Crayfish® database",
-      woc_url:       `https://world.crayfish.ro/species/${encodeURIComponent(species.replace(/ /g, "-"))}`,
+      accuracy:        b.accuracy || {},
+      density:         b.density || {},
+      geo_narrative:   geoNarrative,
+      api_narrative:   data.narrative?.results || "",
+      citation:        data.meta?.citation || "World of Crayfish® database",
+      woc_url:         `https://world.crayfish.ro/species/${encodeURIComponent(species.replace(/ /g, "-"))}`,
     };
     // Cache 24 hours — field data doesn't change frequently
     OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
@@ -2857,6 +2887,84 @@ app.get("/api/field-data/woc", async (req, res) => {
   } catch (err) {
     console.error("GET /api/field-data/woc failed:", err.message);
     res.status(502).json({ error: "World of Crayfish unavailable" });
+  }
+});
+
+/* ---------------------------
+   Topic synthesis — Claude Haiku
+----------------------------*/
+app.get("/api/topic/synthesis", async (req, res) => {
+  const conceptId = (req.query?.id || "").trim();
+  if (!conceptId) return res.status(400).json({ error: "id required" });
+
+  const cacheKey = `synthesis:${conceptId.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) return res.status(503).json({ error: "Synthesis not available" });
+
+  try {
+    // Fetch concept data from OpenAlex
+    const concept = await fetchJSONTimeout(
+      `https://api.openalex.org/concepts/${encodeURIComponent(conceptId)}`
+      + `?select=display_name,description,works_count,cited_by_count,level,ancestors,related_concepts,counts_by_year`,
+      { headers: { "User-Agent": "ScienceEcosystem/1.0" } }, 8000
+    );
+    if (!concept?.display_name) return res.status(404).json({ error: "Concept not found" });
+
+    // Build trend description from counts_by_year
+    const byYear = (concept.counts_by_year || []).sort((a,b) => a.year - b.year);
+    const recent = byYear.slice(-5);
+    const trend = recent.length >= 2
+      ? (recent[recent.length-1].works_count > recent[0].works_count ? "growing" : "declining")
+      : "stable";
+    const recentAvg = recent.length
+      ? Math.round(recent.reduce((s,r) => s + r.works_count, 0) / recent.length)
+      : null;
+
+    const ancestors = (concept.ancestors || []).slice(0, 5).map(a => a.display_name).join(" → ");
+    const related   = (concept.related_concepts || []).slice(0, 8).map(r => r.display_name).join(", ");
+
+    const prompt = `You are writing a concise scientific topic overview for a research platform. Write 2–3 short paragraphs summarising the scientific landscape of "${concept.display_name}" based on the data below. Focus on: what this field studies, its scale in the literature, how it connects to related fields, and its current research activity. Write for a researcher audience. Do not mention ScienceEcosystem. Do not add headers. Be specific and factual.
+
+Data:
+- Field: ${concept.display_name}
+- Description: ${concept.description || "not available"}
+- Hierarchy: ${ancestors || "not available"}
+- Related fields: ${related || "not available"}
+- Total papers in OpenAlex: ${concept.works_count?.toLocaleString("en") || "unknown"}
+- Total citations: ${concept.cited_by_count?.toLocaleString("en") || "unknown"}
+- Publication trend: ${trend}${recentAvg ? `, averaging ${recentAvg} new papers/year recently` : ""}`;
+
+    const aiResp = await fetchJSONTimeout(
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        headers: {
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5",
+          max_tokens: 400,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      },
+      20000
+    );
+
+    const text = aiResp?.content?.[0]?.text?.trim() || "";
+    if (!text) return res.status(502).json({ error: "Synthesis generation failed" });
+
+    const payload = { synthesis: text, concept: concept.display_name };
+    // Cache 7 days — topic synthesis is stable
+    OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/topic/synthesis failed:", err.message);
+    res.status(502).json({ error: "Synthesis unavailable" });
   }
 });
 
