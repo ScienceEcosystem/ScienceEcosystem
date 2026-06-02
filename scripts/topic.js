@@ -531,6 +531,115 @@
     }
   }
 
+  // ── World of Crayfish field data integration ─────────────────────────────────
+  async function loadFieldData(displayName) {
+    // Only try for binomial species names (two words, first capitalised)
+    if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
+
+    const block   = $("fieldDataBlock");
+    const content = $("fieldDataContent");
+    const source  = $("fieldDataSource");
+    if (!block || !content) return;
+
+    try {
+      const resp = await fetch("/api/field-data/woc?species=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.total_records) return;
+
+      // ── Stats row ────────────────────────────────────────────────────────────
+      const native    = d.population_status?.indigenous   || 0;
+      const nonNative = d.population_status?.["non-indigenous"] || 0;
+      const total     = native + nonNative || 1;
+      const nativePct = Math.round(native / total * 100);
+      const yearFrom  = d.year_range?.[0] || "?";
+      const yearTo    = d.year_range?.[1] || "?";
+      const highAcc   = d.accuracy?.high || 0;
+      const lowAcc    = d.accuracy?.low  || 0;
+      const totalAcc  = highAcc + lowAcc || 1;
+      const highPct   = Math.round(highAcc / totalAcc * 100);
+
+      // ── Top countries bar chart ───────────────────────────────────────────────
+      const maxCount  = d.top_countries?.[0]?.count || 1;
+      const countryBars = (d.top_countries || []).map(c => {
+        const pct = Math.round(c.count / maxCount * 100);
+        return `<div class="woc-bar-row">
+          <span class="woc-bar-label">${escapeHtml(c.name)}</span>
+          <div class="woc-bar-track"><div class="woc-bar-fill" style="width:${pct}%"></div></div>
+          <span class="woc-bar-count">${c.count.toLocaleString()}</span>
+        </div>`;
+      }).join("");
+
+      content.innerHTML = `
+        <div class="woc-stats-grid">
+          <div class="woc-stat">
+            <div class="woc-stat-value">${d.total_records.toLocaleString()}</div>
+            <div class="woc-stat-label">Validated occurrence records</div>
+          </div>
+          <div class="woc-stat">
+            <div class="woc-stat-value">${d.total_hexagons.toLocaleString()}</div>
+            <div class="woc-stat-label">Hexagonal grid cells</div>
+          </div>
+          <div class="woc-stat">
+            <div class="woc-stat-value">${d.countries_count}</div>
+            <div class="woc-stat-label">Countries</div>
+          </div>
+          <div class="woc-stat">
+            <div class="woc-stat-value">${yearFrom}–${yearTo}</div>
+            <div class="woc-stat-label">Observation period</div>
+          </div>
+        </div>
+
+        <div class="woc-two-col">
+          <div>
+            <p class="woc-section-label">Population status</p>
+            <div class="woc-split-bar">
+              <div class="woc-split-native" style="width:${nativePct}%" title="Native: ${native.toLocaleString()} records"></div>
+              <div class="woc-split-nonnative" style="width:${100 - nativePct}%" title="Non-indigenous: ${nonNative.toLocaleString()} records"></div>
+            </div>
+            <div class="woc-split-legend">
+              <span class="woc-dot woc-dot-native"></span> Native (${nativePct}%)
+              &nbsp;&nbsp;
+              <span class="woc-dot woc-dot-nonnative"></span> Non-indigenous (${100 - nativePct}%)
+            </div>
+          </div>
+          <div>
+            <p class="woc-section-label">Data quality</p>
+            <div class="woc-split-bar">
+              <div class="woc-split-high" style="width:${highPct}%" title="High accuracy: ${highAcc.toLocaleString()}"></div>
+              <div class="woc-split-low" style="width:${100 - highPct}%" title="Low accuracy: ${lowAcc.toLocaleString()}"></div>
+            </div>
+            <div class="woc-split-legend">
+              <span class="woc-dot woc-dot-high"></span> High accuracy (${highPct}%)
+              &nbsp;&nbsp;
+              <span class="woc-dot woc-dot-low"></span> Lower accuracy (${100 - highPct}%)
+            </div>
+          </div>
+        </div>
+
+        <p class="woc-section-label" style="margin-top:1rem;">Records by country (top 10)</p>
+        <div class="woc-bars">${countryBars}</div>
+
+        ${d.narrative ? `<p class="woc-narrative">${escapeHtml(d.narrative)}</p>` : ""}
+
+        <div class="woc-footer">
+          <a href="${escapeHtml(d.woc_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View interactive distribution map →
+          </a>
+          <span class="muted" style="font-size:.75rem; margin-left:.75rem;">
+            Data: <a href="https://world.crayfish.ro" target="_blank" rel="noopener">World of Crayfish®</a>
+            ${d.citation ? "· " + escapeHtml(d.citation) : ""}
+          </span>
+        </div>
+      `;
+
+      source.textContent = "· World of Crayfish®";
+      block.style.display = "";
+    } catch (_) {
+      // No WoC data — panel stays hidden
+    }
+  }
+
   async function loadTopPapers(conceptIdTail) {
     const sortSel = $("topicSort");
     const orderSel = $("topicOrder");
@@ -896,6 +1005,9 @@
 
       // ToC (from body only)
       buildTOC(bodyWrap);
+
+      // Field data (non-blocking, fires in background)
+      loadFieldData(topic.display_name || humanName);
 
       // References / people / infobox / trend
       renderRelated(topic);

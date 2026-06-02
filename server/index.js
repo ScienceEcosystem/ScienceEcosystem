@@ -2812,6 +2812,55 @@ app.get("/api/paper/citation-contexts", async (req, res) => {
 });
 
 /* ---------------------------
+   Field data — World of Crayfish proxy
+----------------------------*/
+app.get("/api/field-data/woc", async (req, res) => {
+  const species = (req.query?.species || "").trim();
+  if (!species) return res.status(400).json({ error: "species required" });
+
+  const cacheKey = `woc:${species.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const data = await fetchJSONTimeout(
+      `https://world.crayfish.ro/services/api/check-engine.php?baseline=${encodeURIComponent(species)}`,
+      { headers: { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" } },
+      12000
+    );
+    if (!data?.baseline?.total_records) return res.status(404).json({ error: "Species not found in WoC" });
+
+    const b = data.baseline;
+    // Sort countries by record count, take top 10
+    const topCountries = Object.entries(b.countries || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count }));
+
+    const payload = {
+      species:       b.species,
+      total_records: b.total_records,
+      total_hexagons:b.total_hexagons,
+      countries_count: Object.keys(b.countries || {}).length,
+      top_countries: topCountries,
+      year_range:    b.year_range,
+      population_status: b.population_status || {},
+      accuracy:      b.accuracy || {},
+      density:       b.density || {},
+      narrative:     data.narrative?.results || "",
+      citation:      data.meta?.citation || "World of Crayfish® database",
+      woc_url:       `https://world.crayfish.ro/species/${encodeURIComponent(species.replace(/ /g, "-"))}`,
+    };
+    // Cache 24 hours — field data doesn't change frequently
+    OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/woc failed:", err.message);
+    res.status(502).json({ error: "World of Crayfish unavailable" });
+  }
+});
+
+/* ---------------------------
    Identity + alerts + activity
 ----------------------------*/
 app.get("/api/identity/status", async (req, res) => {

@@ -1755,3 +1755,84 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   text-align: center;
   padding: .25rem 0;
 }
+
+/* ── World of Crayfish field data panel ── */
+.woc-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+}
+.woc-stat {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: .6rem .85rem;
+}
+.woc-stat-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.2;
+}
+.woc-stat-label {
+  font-size: .75rem;
+  color: #6b7280;
+  margin-top: .15rem;
+}
+.woc-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1rem;
+}
+@media (max-width: 600px) { .woc-two-col { grid-template-columns: 1fr; } }
+.woc-section-label {
+  font-size: .78rem;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 .35rem 0;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.woc-split-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #e5e7eb;
+  margin-bottom: .35rem;
+}
+.woc-split-native    { background: #16a34a; }
+.woc-split-nonnative { background: #dc2626; }
+.woc-split-high      { background: #2563eb; }
+.woc-split-low       { background: #d1d5db; }
+.woc-split-legend    { font-size: .75rem; color: #6b7280; display: flex; align-items: center; flex-wrap: wrap; gap: .15rem; }
+.woc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.woc-dot-native    { background: #16a34a; }
+.woc-dot-nonnative { background: #dc2626; }
+.woc-dot-high      { background: #2563eb; }
+.woc-dot-low       { background: #d1d5db; }
+.woc-bars { display: flex; flex-direction: column; gap: .3rem; margin-bottom: 1rem; }
+.woc-bar-row { display: flex; align-items: center; gap: .5rem; font-size: .8rem; }
+.woc-bar-label { width: 120px; flex-shrink: 0; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.woc-bar-track { flex: 1; height: 7px; background: #f1f5f9; border-radius: 4px; overflow: hidden; }
+.woc-bar-fill  { height: 100%; background: #2563eb; border-radius: 4px; }
+.woc-bar-count { width: 55px; text-align: right; flex-shrink: 0; color: #6b7280; }
+.woc-narrative {
+  font-size: .83rem;
+  color: #4b5563;
+  line-height: 1.55;
+  border-left: 3px solid #e2e8f0;
+  padding: .4rem .75rem;
+  margin: 1rem 0;
+}
+.woc-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-top: 1rem;
+  padding-top: .75rem;
+  border-top: 1px solid #f1f5f9;
+}
