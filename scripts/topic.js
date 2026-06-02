@@ -127,6 +127,7 @@
       "video", "audio", "source", "track",
       'figure[typeof*="Video"]', 'figure[typeof*="Audio"]',
       ".mw-editsection", ".mw-editsection-bracket",
+      ".pcs-edit-section", ".pcs-edit-section-link",  // mobile HTML edit buttons
       ".sistersitebox", ".sister-wikipedia", ".noprint",
       ".navbox", ".mbox-small", ".ambox", ".tmbox",
       ".mw-authority-control", ".mw-pb-wikibase-link"
@@ -426,7 +427,14 @@
       const text = (refEl || li).textContent.trim();
       const doiEl = li.querySelector('a[href*="doi.org"], a[href*="doi:"]');
       const doiRaw = doiEl ? (doiEl.getAttribute("href") || "") : "";
-      const doi = doiRaw ? doiRaw.replace(/^https?:\/\/doi\.org\//i, "").trim() : null;
+      const doi = doiRaw
+        ? doiRaw
+            .replace(/^https?:\/\/doi\.org\//i, "")  // https://doi.org/
+            .replace(/^\/\/doi\.org\//i, "")          // //doi.org/ (protocol-relative)
+            .replace(/^doi:/i, "")                    // doi: prefix
+            .replace(/%2F/gi, "/")                    // decode encoded slashes
+            .trim()
+        : null;
       return { text, doi, idx: i + 1 };
     }).filter(r => r.text.length > 5);
   }
