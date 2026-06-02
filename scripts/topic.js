@@ -508,6 +508,85 @@
     referencesWhy.textContent = "References from the Wikipedia article. Links to Paper pages added where a DOI match was found.";
   }
 
+  // ── iNaturalist citizen science data ─────────────────────────────────────────
+  async function loadInatData(displayName) {
+    if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
+    const container = $("inatContent");
+    if (!container) return;
+
+    try {
+      const resp = await fetch("/api/field-data/inat?species=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.total_observations) return;
+
+      // Ensure parent field data block is visible
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+
+      // Sparkline from year_trend
+      const trend = d.year_trend || [];
+      const maxCount = Math.max(...trend.map(r => r.count), 1);
+      const barW = 100 / Math.max(trend.length, 1);
+      const sparkBars = trend.map(r => {
+        const h = Math.round(r.count / maxCount * 100);
+        return `<div class="inat-spark-bar" style="width:${barW}%;height:${h}%" title="${r.year}: ${r.count.toLocaleString()} obs"></div>`;
+      }).join("");
+
+      // Recent growth label
+      const newest = trend[trend.length - 1];
+      const oldest = trend[0];
+      const growthStr = (newest && oldest && oldest.count > 0)
+        ? `${Math.round(newest.count / oldest.count)}× growth over ${newest.year - oldest.year} years`
+        : "";
+
+      container.innerHTML = `
+        <div class="inat-panel">
+          <div class="inat-header">
+            <img src="https://static.inaturalist.org/sites/1-logo_square.png" class="inat-logo" alt="iNaturalist" width="20" height="20">
+            <span class="inat-title">iNaturalist · Citizen Science Observations</span>
+          </div>
+
+          ${d.photo ? `
+          <div class="inat-photo-row">
+            <img src="${escapeHtml(d.photo.url)}" class="inat-photo" alt="${escapeHtml(displayName)}">
+            <span class="inat-photo-credit">${escapeHtml(d.photo.attribution)}</span>
+          </div>` : ""}
+
+          <div class="woc-stats-grid" style="margin-top:.75rem;">
+            <div class="woc-stat">
+              <div class="woc-stat-value">${d.total_observations.toLocaleString()}</div>
+              <div class="woc-stat-label">Total observations</div>
+            </div>
+            <div class="woc-stat">
+              <div class="woc-stat-value">${d.research_grade.toLocaleString()}</div>
+              <div class="woc-stat-label">Research grade</div>
+            </div>
+            <div class="woc-stat">
+              <div class="woc-stat-value">${d.observers_count.toLocaleString()}</div>
+              <div class="woc-stat-label">Observers</div>
+            </div>
+          </div>
+
+          ${trend.length ? `
+          <p class="woc-section-label" style="margin-top:.75rem;">Observations per year (research grade)</p>
+          <div class="inat-sparkline">${sparkBars}</div>
+          <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#9ca3af;margin-top:.2rem;">
+            <span>${oldest?.year || ""}</span>
+            ${growthStr ? `<span style="color:#16a34a;font-weight:500;">${escapeHtml(growthStr)}</span>` : ""}
+            <span>${newest?.year || ""}</span>
+          </div>` : ""}
+
+          <div class="woc-footer" style="margin-top:.75rem;">
+            <a href="${escapeHtml(d.inat_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+              View on iNaturalist →
+            </a>
+          </div>
+        </div>
+      `;
+    } catch (_) {}
+  }
+
   // ── Claude topic synthesis ────────────────────────────────────────────────────
   async function loadTopicSynthesis(conceptIdTail) {
     if (!conceptIdTail) return;
@@ -1041,6 +1120,7 @@
 
       // Field data (non-blocking, fires in background)
       loadFieldData(topic.display_name || humanName);
+      loadInatData(topic.display_name || humanName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 

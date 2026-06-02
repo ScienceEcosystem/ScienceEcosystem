@@ -1839,3 +1839,54 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 
 /* ── Topic synthesis ── */
 .se-synthesis { border-left: 3px solid #2563eb; padding-left: .85rem; }
+
+/* ── iNaturalist panel ── */
+.inat-panel {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+}
+.inat-header {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  margin-bottom: .6rem;
+}
+.inat-logo { border-radius: 3px; flex-shrink: 0; }
+.inat-title { font-size: .8rem; font-weight: 600; color: #374151; }
+.inat-photo-row {
+  display: flex;
+  align-items: flex-end;
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+.inat-photo {
+  width: 90px;
+  height: 70px;
+  object-fit: cover;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.inat-photo-credit {
+  font-size: .7rem;
+  color: #9ca3af;
+  line-height: 1.3;
+}
+.inat-sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 48px;
+  background: #f8fafc;
+  border-radius: 4px;
+  padding: 4px 4px 0;
+  overflow: hidden;
+}
+.inat-spark-bar {
+  background: #74ac00;
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  flex-shrink: 0;
+  transition: opacity .1s;
+}
+.inat-spark-bar:hover { opacity: .75; }

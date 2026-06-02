@@ -2891,6 +2891,81 @@ app.get("/api/field-data/woc", async (req, res) => {
 });
 
 /* ---------------------------
+   Field data — iNaturalist proxy
+----------------------------*/
+app.get("/api/field-data/inat", async (req, res) => {
+  const species = (req.query?.species || "").trim();
+  if (!species) return res.status(400).json({ error: "species required" });
+
+  const cacheKey = `inat:${species.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const headers = { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" };
+
+  try {
+    // 1. Resolve taxon
+    const taxaData = await fetchJSONTimeout(
+      `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(species)}&rank=species&per_page=1`,
+      { headers }, 8000
+    );
+    const taxon = taxaData?.results?.[0];
+    if (!taxon?.id) return res.status(404).json({ error: "Species not found on iNaturalist" });
+
+    const taxonId = taxon.id;
+
+    // 2. Parallel: research-grade count, observer count, year histogram
+    const [obsData, observerData, histData] = await Promise.all([
+      fetchJSONTimeout(
+        `https://api.inaturalist.org/v1/observations?taxon_id=${taxonId}&quality_grade=research&per_page=0&verifiable=true`,
+        { headers }, 8000
+      ),
+      fetchJSONTimeout(
+        `https://api.inaturalist.org/v1/observations/observers?taxon_id=${taxonId}&quality_grade=research&per_page=1`,
+        { headers }, 8000
+      ),
+      fetchJSONTimeout(
+        `https://api.inaturalist.org/v1/observations/histogram?taxon_id=${taxonId}&quality_grade=research&date_field=observed_on&interval=year`,
+        { headers }, 8000
+      ),
+    ]);
+
+    // Build year trend — last 10 years, skip current partial year
+    const currentYear = new Date().getUTCFullYear();
+    const histRaw = histData?.results?.year || {};
+    const yearTrend = Object.entries(histRaw)
+      .map(([dateStr, count]) => ({ year: parseInt(dateStr.slice(0, 4), 10), count }))
+      .filter(r => r.year >= currentYear - 10 && r.year < currentYear)
+      .sort((a, b) => a.year - b.year);
+
+    // Photo — only include if CC-licensed
+    const photo = taxon.default_photo;
+    const ccLicenses = ["cc-by", "cc-by-nc", "cc-by-sa", "cc-by-nc-sa", "cc0", "cc-by-nd", "cc-by-nc-nd"];
+    const photoData = (photo && photo.license_code && ccLicenses.includes(photo.license_code))
+      ? { url: photo.medium_url, attribution: photo.attribution, license: photo.license_code }
+      : null;
+
+    const payload = {
+      taxon_id:           taxonId,
+      species:            taxon.name,
+      total_observations: taxon.observations_count || 0,
+      research_grade:     obsData?.total_results || 0,
+      observers_count:    observerData?.total_results || 0,
+      year_trend:         yearTrend,
+      photo:              photoData,
+      inat_url:           `https://www.inaturalist.org/taxa/${taxonId}`,
+    };
+
+    // Cache 24 hours
+    OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/inat failed:", err.message);
+    res.status(502).json({ error: "iNaturalist unavailable" });
+  }
+});
+
+/* ---------------------------
    Topic synthesis — Claude Haiku
 ----------------------------*/
 app.get("/api/topic/synthesis", async (req, res) => {
