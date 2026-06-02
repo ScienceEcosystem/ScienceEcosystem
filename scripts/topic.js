@@ -610,6 +610,7 @@
   }
 
   async function loadTopPapers(conceptIdTail) {
+    if (!conceptIdTail) { papersCards.innerHTML = '<p class="muted">No papers found.</p>'; return; }
     const sortSel = $("topicSort");
     const orderSel = $("topicOrder");
     const sortField = (sortSel && sortSel.value === "date") ? "publication_year" : "cited_by_count";
@@ -630,6 +631,7 @@
   }
 
   async function loadTopAuthors(conceptIdTail) {
+    if (!conceptIdTail) { if (topicPeople) topicPeople.innerHTML = '<li class="muted">No people listed</li>'; return; }
     try {
       const u = new URL(`${API_OA}/authors`);
       u.searchParams.set("filter", `x_concepts.id:${conceptIdTail}`);
@@ -695,6 +697,7 @@
     `;
   }
   async function loadTrend(conceptIdTail){
+    if (!conceptIdTail) return;
     try{
       const url = `${API_OA}/works?filter=concepts.id:${encodeURIComponent(conceptIdTail)}&group_by=publication_year&per_page=200`;
       const data = await fetchOpenAlexJSON(url);
@@ -940,6 +943,9 @@
       const topicCache = cacheRead(idTail, "concept");
       const topic = topicCache || (await fetchConceptByIdOrSearch(idTail));
       if (!topicCache) cacheWrite(idTail, "concept", topic);
+      // If stub was returned (no OpenAlex concept found), clear idTail so all
+      // downstream OpenAlex API calls skip gracefully instead of sending invalid queries
+      if (!topic.id) idTail = "";
 
       const lang = detectWikiLangFromTopic(topic);
       document.title = `${topic.display_name} | Topic | ScienceEcosystem`;
