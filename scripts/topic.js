@@ -944,6 +944,21 @@
         const c = data.results?.[0];
         if (c?.id) { idTail = tail(c.id); return c; }
       } catch (_) {}
+      // Second fallback: Wikipedia search resolves common names → scientific names
+      // e.g. "Red swamp crayfish" → "Procambarus clarkii"
+      try {
+        const wpUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search"
+          + "&srsearch=" + encodeURIComponent(searchTerm)
+          + "&srlimit=3&format=json&origin=*";
+        const wpData = await fetchOpenAlexJSON(wpUrl);
+        const wpTitles = (wpData?.query?.search || []).map(r => r.title).filter(Boolean);
+        for (const title of wpTitles) {
+          if (title.toLowerCase() === searchTerm.toLowerCase()) continue;
+          const altData = await fetchOpenAlexJSON(`${API_OA}/concepts?search=${encodeURIComponent(title)}&per_page=1`);
+          const c = altData.results?.[0];
+          if (c?.id) { idTail = tail(c.id); return c; }
+        }
+      } catch (_) {}
       // Last resort: return a stub so the Wikipedia article still loads
       if (isWikiSlug) {
         return { display_name: humanName, description: "", id: "", related_concepts: [], ancestors: [] };

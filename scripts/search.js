@@ -258,7 +258,23 @@ async function fetchTopics(query, signal) {
   try {
     const url = `${API_BASE}/concepts?search=${encodeURIComponent(query)}&per_page=5`;
     const data = await fetchJSON(url, signal);
-    return data.results || [];
+    if (data.results?.length) return data.results;
+
+    // Fallback: common names / alternate names via Wikipedia search
+    // e.g. "red swamp crayfish" → Wikipedia finds "Procambarus clarkii" → OpenAlex finds the concept
+    const wpUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search"
+      + "&srsearch=" + encodeURIComponent(query)
+      + "&srlimit=3&format=json&origin=*";
+    const wpData = await fetchJSON(wpUrl, signal);
+    const wpTitles = (wpData?.query?.search || []).map(r => r.title).filter(Boolean);
+    for (const title of wpTitles) {
+      if (title.toLowerCase() === query.toLowerCase()) continue; // same query, skip
+      const altData = await fetchJSON(
+        `${API_BASE}/concepts?search=${encodeURIComponent(title)}&per_page=5`, signal
+      );
+      if (altData.results?.length) return altData.results;
+    }
+    return [];
   } catch (err) {
     if (err.name !== "AbortError") console.warn("Topic fetch failed", err.message);
     return [];
