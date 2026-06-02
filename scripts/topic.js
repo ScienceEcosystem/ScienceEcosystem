@@ -676,20 +676,30 @@
 
     async function loadPreview(idTail) {
       if (cache.has(idTail)) return cache.get(idTail);
+      let data = null;
+      // Try direct fetch (works for C-prefixed OpenAlex IDs)
       try {
-        const data = await fetchJSON(`${API_OA}/concepts/${encodeURIComponent(idTail)}`);
-        const item = {
-          title: data.display_name || "Topic",
-          desc: (data.description || "").split(/\.\s/).slice(0,2).join(". ") + (data.description ? "." : ""),
-          count: data.works_count || 0
-        };
-        cache.set(idTail, item);
-        return item;
-      } catch {
-        const item = { title: "Topic", desc: "Preview unavailable.", count: 0 };
-        cache.set(idTail, item);
-        return item;
+        const res = await fetchJSON(`${API_OA}/concepts/${encodeURIComponent(idTail)}`);
+        if (res && res.id) data = res;
+      } catch (_) {}
+      // Fallback: search by name (Wikipedia slugs use underscores instead of spaces)
+      if (!data) {
+        try {
+          const searchTerm = idTail.replace(/_/g, " ");
+          const res = await fetchOpenAlexJSON(`${API_OA}/concepts?search=${encodeURIComponent(searchTerm)}&per_page=1`);
+          const c = res.results?.[0];
+          if (c?.id) data = c;
+        } catch (_) {}
       }
+      const item = data
+        ? {
+            title: data.display_name || idTail.replace(/_/g, " "),
+            desc: (data.description || "").split(/\.\s/).slice(0, 2).join(". ") + (data.description ? "." : ""),
+            count: data.works_count || 0
+          }
+        : { title: idTail.replace(/_/g, " "), desc: "", count: 0 };
+      cache.set(idTail, item);
+      return item;
     }
 
     function show(content, x, y) {
