@@ -806,19 +806,29 @@
     if (!idParam) { topicTitle.textContent = "Missing topic ID."; return; }
     let idTail = idParam.includes("openalex.org") ? idParam.split("/").pop() : idParam;
 
+    // Detect Wikipedia-slug style IDs (underscores as spaces, not a C+digits concept ID)
+    const isWikiSlug = idTail && !/^C\d+$/i.test(idTail);
+    // Human-readable name: replace underscores with spaces
+    const humanName = idTail.replace(/_/g, " ");
+
     async function fetchConceptByIdOrSearch(idOrName) {
-      // Try direct fetch
+      // Try direct fetch (works for C-prefixed OpenAlex IDs)
       try {
         const res = await fetch(`${API_OA}/concepts/${encodeURIComponent(idOrName)}`);
         if (res.ok) return await res.json();
       } catch (_) {}
-      // Fallback: search by name/title
+      // Fallback: search by name — replace underscores with spaces so Wikipedia slugs match
+      const searchTerm = idOrName.replace(/_/g, " ");
       try {
-        const searchURL = `${API_OA}/concepts?search=${encodeURIComponent(idOrName)}&per_page=1`;
+        const searchURL = `${API_OA}/concepts?search=${encodeURIComponent(searchTerm)}&per_page=1`;
         const data = await fetchOpenAlexJSON(searchURL);
         const c = data.results?.[0];
         if (c?.id) { idTail = tail(c.id); return c; }
       } catch (_) {}
+      // Last resort: return a stub so the Wikipedia article still loads
+      if (isWikiSlug) {
+        return { display_name: humanName, description: "", id: "", related_concepts: [], ancestors: [] };
+      }
       throw new Error("Concept not found");
     }
 
