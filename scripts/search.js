@@ -144,8 +144,23 @@ function clearAdvancedFilters() {
 function isDoiQuery(q) {
   const s = (q || "").trim();
   if (!s) return false;
-  const m = s.match(/10\.\d{4,9}\/\S+/i);
-  return !!m;
+  return /10\.\d{4,9}\/\S+/i.test(s);
+}
+
+// Extract the DOI from any string — works for bare DOIs, doi.org URLs,
+// and full citation strings that contain a DOI somewhere in the text.
+function extractDoi(s) {
+  const str = String(s || "").trim();
+  // Full URL: https://doi.org/10.xxxx/...
+  const urlMatch = str.match(/https?:\/\/(?:dx\.)?doi\.org\/(10\.\d{4,9}\/\S+)/i);
+  if (urlMatch) return urlMatch[1].replace(/[.,;)\]]+$/, "");
+  // doi: prefix
+  const prefixMatch = str.match(/doi:\s*(10\.\d{4,9}\/\S+)/i);
+  if (prefixMatch) return prefixMatch[1].replace(/[.,;)\]]+$/, "");
+  // Bare DOI anywhere in the string
+  const bareMatch = str.match(/10\.\d{4,9}\/\S+/i);
+  if (bareMatch) return bareMatch[0].replace(/[.,;)\]]+$/, "");
+  return "";
 }
 
 function normalizeDoi(s) {
@@ -763,17 +778,26 @@ async function runUnifiedSearch(){
   setBusy(true);
 
   try {
-    const doiOverride = advanced.doi || (isDoiQuery(query) ? query : "");
+    const doiOverride = advanced.doi || (isDoiQuery(query) ? extractDoi(query) : "");
     if (doiOverride) {
       const papers = await fetchPaperByDoi(doiOverride, searchAbort.signal);
       totalResults = papers.length;
       renderPapers(papers);
-      if (rList) rList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
-      if (tList) tList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
-      if (iList) iList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
-      if (jList) jList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
-      if (pList) pList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
-      if (fList) fList.innerHTML = `<li class="muted">Skipped for DOI search.</li>`;
+      // If the paper was found, show its authors in the sidebar
+      if (papers.length && papers[0].authorships?.length) {
+        const paperAuthors = papers[0].authorships
+          .map(a => a.author)
+          .filter(a => a?.id)
+          .slice(0, 5);
+        renderAuthors(paperAuthors);
+      } else if (rList) {
+        rList.innerHTML = `<li class="muted">No authors found.</li>`;
+      }
+      if (tList) tList.innerHTML = `<li class="muted">-</li>`;
+      if (iList) iList.innerHTML = `<li class="muted">-</li>`;
+      if (jList) jList.innerHTML = `<li class="muted">-</li>`;
+      if (pList) pList.innerHTML = `<li class="muted">-</li>`;
+      if (fList) fList.innerHTML = `<li class="muted">-</li>`;
       return;
     }
 
