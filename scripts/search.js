@@ -256,25 +256,39 @@ async function fetchAuthors(query, signal) {
 
 async function fetchTopics(query, signal) {
   try {
+    // 1. Direct OpenAlex concept search
     const url = `${API_BASE}/concepts?search=${encodeURIComponent(query)}&per_page=5`;
     const data = await fetchJSON(url, signal);
     if (data.results?.length) return data.results;
 
-    // Fallback: common names / alternate names via Wikipedia search
-    // e.g. "red swamp crayfish" → Wikipedia finds "Procambarus clarkii" → OpenAlex finds the concept
+    // 2. Wikipedia search — resolves common names, synonyms, species not in OpenAlex
     const wpUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search"
       + "&srsearch=" + encodeURIComponent(query)
-      + "&srlimit=3&format=json&origin=*";
+      + "&srlimit=5&format=json&origin=*&srprop=snippet";
     const wpData = await fetchJSON(wpUrl, signal);
-    const wpTitles = (wpData?.query?.search || []).map(r => r.title).filter(Boolean);
+    const wpResults = wpData?.query?.search || [];
+    const wpTitles = wpResults.map(r => r.title).filter(Boolean);
+
+    // 3. Try each Wikipedia title as an OpenAlex concept search
     for (const title of wpTitles) {
-      if (title.toLowerCase() === query.toLowerCase()) continue; // same query, skip
+      if (title.toLowerCase() === query.toLowerCase()) continue;
       const altData = await fetchJSON(
         `${API_BASE}/concepts?search=${encodeURIComponent(title)}&per_page=5`, signal
       );
       if (altData.results?.length) return altData.results;
     }
-    return [];
+
+    // 4. Final fallback: return Wikipedia results directly as topic stubs.
+    //    topic.html already handles Wikipedia-only topics via the stub mechanism —
+    //    it loads the Wikipedia article and any field data (WoC, iNaturalist) even
+    //    when no OpenAlex concept exists.
+    return wpResults.slice(0, 4).map(r => ({
+      id: null,  // no OpenAlex ID
+      display_name: r.title,
+      description: (r.snippet || "").replace(/<[^>]+>/g, "").slice(0, 120),
+      works_count: null,
+      _wikipedia_only: true,
+    }));
   } catch (err) {
     if (err.name !== "AbortError") console.warn("Topic fetch failed", err.message);
     return [];
@@ -452,10 +466,17 @@ function renderTopics(topics) {
   if (!el) return;
   el.innerHTML = topics.length
     ? topics.map(t => {
-        const id = t.id.split("/").pop();
+        // OpenAlex topics use their concept ID; Wikipedia-only topics use the display name as slug
+        const id = t.id ? t.id.split("/").pop() : t.display_name.replace(/ /g, "_");
+        const sub = t.description
+          ? `<div class="muted" style="font-size:.8rem;margin-top:.1rem;">${escapeHtml(t.description.slice(0, 100))}</div>`
+          : "";
+        const badge = t._wikipedia_only
+          ? `<span style="font-size:.7rem;color:#9ca3af;margin-left:.4rem;">Wikipedia</span>`
+          : "";
         return `
           <li class="list-item list-card" onclick="location.href='topic.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button" aria-label="${escapeHtml(t.display_name)}">
-            ${escapeHtml(t.display_name)}
+            <div>${escapeHtml(t.display_name)}${badge}</div>${sub}
           </li>
         `;
       }).join("")
