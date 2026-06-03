@@ -109,7 +109,7 @@ app.use((req, res, next) => {
   res.setHeader("Content-Security-Policy", [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' https://d1bxh8uas1mnw7.cloudfront.net https://embed.altmetric.com https://unpkg.com",
-    "style-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://unpkg.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
     "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk https://*.wikipedia.org https://api.inaturalist.org https://www.inaturalist.org",
@@ -2823,9 +2823,10 @@ app.get("/api/field-data/woc", async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
+    const wocHeaders = { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" };
     const data = await fetchJSONTimeout(
       `https://world.crayfish.ro/services/api/check-engine.php?baseline=${encodeURIComponent(species)}`,
-      { headers: { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" } },
+      { headers: wocHeaders },
       12000
     );
     if (!data?.baseline?.total_records) return res.status(404).json({ error: "Species not found in WoC" });
@@ -2836,8 +2837,8 @@ app.get("/api/field-data/woc", async (req, res) => {
 
     // Fetch SEB narrative and EOO geojson in parallel (EOO is only ~756 bytes)
     const [narrativeData, eooGeoJSON] = await Promise.allSettled([
-      fetchJSONTimeout(`${sebBase}/narratives/${slug}_narrative.json`, { headers }, 8000),
-      fetchJSONTimeout(`${sebBase}/maps/${slug}_EOO.geojson`, { headers }, 8000),
+      fetchJSONTimeout(`${sebBase}/narratives/${slug}_narrative.json`, { headers: wocHeaders }, 8000),
+      fetchJSONTimeout(`${sebBase}/maps/${slug}_EOO.geojson`, { headers: wocHeaders }, 8000),
     ]);
 
     const fullNarrative = narrativeData.status === "fulfilled" ? narrativeData.value?.narrative || "" : "";

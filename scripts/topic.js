@@ -543,7 +543,7 @@
       container.innerHTML = `
         <div class="inat-panel">
           <div class="inat-header">
-            <img src="https://static.inaturalist.org/sites/1-logo_square.png" class="inat-logo" alt="iNaturalist" width="20" height="20">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#74ac00"/><text x="10" y="14" text-anchor="middle" font-size="11" font-family="sans-serif" font-weight="bold" fill="white">iN</text></svg>
             <span class="inat-title">iNaturalist · Citizen Science Observations</span>
           </div>
 
