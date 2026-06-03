@@ -1890,3 +1890,19 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   transition: opacity .1s;
 }
 .inat-spark-bar:hover { opacity: .75; }
+
+/* ── WoC Leaflet map ── */
+.woc-map-container {
+  height: 280px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  margin-bottom: .75rem;
+}
+.woc-narrative-block {
+  border-left: 3px solid #D48D00;
+  padding: .5rem .85rem;
+  background: #fffbf0;
+  border-radius: 0 4px 4px 0;
+  margin-bottom: .5rem;
+}

@@ -661,6 +661,18 @@
         </div>`;
       }).join("");
 
+      // Render markdown narrative — bold, italic, line breaks only (no HTML injection)
+      function renderWocMarkdown(md) {
+        if (!md) return "";
+        return md
+          .split("\n\n").map(para => {
+            const line = para.trim()
+              .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+              .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+            return `<p style="margin:.45rem 0;font-size:.875rem;line-height:1.6;color:#1f2937;">${line}</p>`;
+          }).join("");
+      }
+
       content.innerHTML = `
         <div class="woc-stats-grid">
           <div class="woc-stat">
@@ -711,18 +723,48 @@
         <p class="woc-section-label" style="margin-top:1rem;">Records by country (top 10)</p>
         <div class="woc-bars">${countryBars}</div>
 
-        ${d.geo_narrative ? `<p class="woc-narrative">${escapeHtml(d.geo_narrative)}</p>` : (d.api_narrative ? `<p class="woc-narrative">${escapeHtml(d.api_narrative)}</p>` : "")}
+        ${d.eoo_geojson ? `
+        <p class="woc-section-label" style="margin-top:1rem;">Native range extent (EOO)</p>
+        <div id="wocMapContainer" class="woc-map-container"></div>
+        ` : ""}
+
+        ${d.geo_narrative ? `
+        <p class="woc-section-label" style="margin-top:1rem;">Biogeographical overview</p>
+        <div class="woc-narrative-block">${renderWocMarkdown(d.geo_narrative)}</div>
+        ` : ""}
 
         <div class="woc-footer">
           <a href="${escapeHtml(d.woc_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
-            View interactive distribution map →
+            View full distribution map →
           </a>
           <span class="muted" style="font-size:.75rem; margin-left:.75rem;">
             Data: <a href="https://world.crayfish.ro" target="_blank" rel="noopener">World of Crayfish®</a>
-            ${d.citation ? "· " + escapeHtml(d.citation) : ""}
+            ${d.citation ? " · " + escapeHtml(d.citation) : ""}
           </span>
         </div>
       `;
+
+      // Render Leaflet map with EOO polygon
+      if (d.eoo_geojson && typeof L !== "undefined") {
+        const mapEl = document.getElementById("wocMapContainer");
+        if (mapEl) {
+          const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false });
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            maxZoom: 10
+          }).addTo(map);
+          const layer = L.geoJSON(d.eoo_geojson, {
+            style: feat => ({
+              color: feat.properties?.stroke || "#D48D00",
+              weight: feat.properties?.["stroke-width"] || 1.5,
+              fillColor: feat.properties?.fill || "#FFFF00",
+              fillOpacity: feat.properties?.["fill-opacity"] ?? 0.25,
+            })
+          }).addTo(map);
+          try { map.fitBounds(layer.getBounds(), { padding: [20, 20] }); }
+          catch(_) { map.setView([30, 0], 2); }
+        }
+      }
 
       source.textContent = "· World of Crayfish®";
       block.style.display = "";

@@ -108,11 +108,11 @@ app.use((req, res, next) => {
   // CSP: lock down to known origins; 'unsafe-inline' needed for current inline scripts
   res.setHeader("Content-Security-Policy", [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://d1bxh8uas1mnw7.cloudfront.net https://embed.altmetric.com",
+    "script-src 'self' 'unsafe-inline' https://d1bxh8uas1mnw7.cloudfront.net https://embed.altmetric.com https://unpkg.com",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
-    "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk https://*.wikipedia.org",
+    "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk https://*.wikipedia.org https://api.inaturalist.org https://www.inaturalist.org",
     "media-src https://upload.wikimedia.org",
     "frame-src 'none'",
     "object-src 'none'",
@@ -2831,7 +2831,18 @@ app.get("/api/field-data/woc", async (req, res) => {
     if (!data?.baseline?.total_records) return res.status(404).json({ error: "Species not found in WoC" });
 
     const b = data.baseline;
-    // Sort countries by record count, take top 10
+    const slug = species.replace(/ /g, "_");
+    const sebBase = `https://world.crayfish.ro/processed/checkover/1.0/${slug}`;
+
+    // Fetch SEB narrative and EOO geojson in parallel (EOO is only ~756 bytes)
+    const [narrativeData, eooGeoJSON] = await Promise.allSettled([
+      fetchJSONTimeout(`${sebBase}/narratives/${slug}_narrative.json`, { headers }, 8000),
+      fetchJSONTimeout(`${sebBase}/maps/${slug}_EOO.geojson`, { headers }, 8000),
+    ]);
+
+    const fullNarrative = narrativeData.status === "fulfilled" ? narrativeData.value?.narrative || "" : "";
+    const eooGeo = eooGeoJSON.status === "fulfilled" ? eooGeoJSON.value : null;
+
     const topCountries = Object.entries(b.countries || {})
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
@@ -2841,45 +2852,31 @@ app.get("/api/field-data/woc", async (req, res) => {
     const nonNative = b.population_status?.["non-indigenous"]  || 0;
     const total     = native + nonNative || 1;
     const nativePct = Math.round(native / total * 100);
-    const topNative    = topCountries.filter(c => native > 0).slice(0, 3).map(c => c.name);
-    const topNonNative = topCountries.filter(c => nonNative > 0).slice(0, 5).map(c => c.name);
-    const yearFrom = b.year_range?.[0] || "?";
-    const yearTo   = b.year_range?.[1] || "?";
-    const highAcc  = b.accuracy?.high  || 0;
-    const totalAcc = (b.accuracy?.high || 0) + (b.accuracy?.low || 0) || 1;
-    const highPct  = Math.round(highAcc / totalAcc * 100);
-
-    // Template-generated geo-narrative from structured data
+    const yearFrom  = b.year_range?.[0] || "?";
+    const yearTo    = b.year_range?.[1] || "?";
+    const highAcc   = b.accuracy?.high  || 0;
+    const totalAcc  = (b.accuracy?.high || 0) + (b.accuracy?.low || 0) || 1;
+    const highPct   = Math.round(highAcc / totalAcc * 100);
     const countriesCount = Object.keys(b.countries || {}).length;
-    const nativeStr    = native    ? `${native.toLocaleString("en")} native` : "";
-    const nonNativeStr = nonNative ? `${nonNative.toLocaleString("en")} non-indigenous` : "";
-    const recordBreakdown = [nativeStr, nonNativeStr].filter(Boolean).join(" and ");
-    const topNonNativeStr = topNonNative.length
-      ? `Non-indigenous populations have been documented in ${topNonNative.slice(0,-1).join(", ")}${topNonNative.length > 1 ? " and " + topNonNative[topNonNative.length-1] : topNonNative[0]}${countriesCount > 5 ? ` and ${countriesCount - 5} others` : ""}.`
-      : "";
-    const geoNarrative = `${species} is documented in the World of Crayfish® database with `
-      + `${b.total_records.toLocaleString("en")} validated occurrence records spanning `
-      + `${countriesCount} countries and ${b.total_hexagons.toLocaleString("en")} hexagonal grid cells. `
-      + `Records span the period ${yearFrom}–${yearTo}. `
-      + (recordBreakdown ? `The dataset comprises ${recordBreakdown} records (${nativePct}% native). ` : "")
-      + topNonNativeStr
-      + ` ${highPct}% of records meet high-accuracy spatial criteria. `
-      + `Mean record density per cell: ${b.density?.mean ?? "?"} (range: ${b.density?.min ?? "?"}–${b.density?.max ?? "?"}).`;
 
     const payload = {
-      species:         b.species,
-      total_records:   b.total_records,
-      total_hexagons:  b.total_hexagons,
-      countries_count: countriesCount,
-      top_countries:   topCountries,
-      year_range:      b.year_range,
+      species:           b.species,
+      total_records:     b.total_records,
+      total_hexagons:    b.total_hexagons,
+      countries_count:   countriesCount,
+      top_countries:     topCountries,
+      year_range:        b.year_range,
       population_status: b.population_status || {},
-      accuracy:        b.accuracy || {},
-      density:         b.density || {},
-      geo_narrative:   geoNarrative,
-      api_narrative:   data.narrative?.results || "",
-      citation:        data.meta?.citation || "World of Crayfish® database",
-      woc_url:         `https://world.crayfish.ro/species/${encodeURIComponent(species.replace(/ /g, "-"))}`,
+      accuracy:          b.accuracy || {},
+      density:           b.density || {},
+      // SEB full narrative (markdown) — preferred over template
+      geo_narrative:     fullNarrative || "",
+      // EOO GeoJSON for Leaflet map (native range polygon)
+      eoo_geojson:       eooGeo || null,
+      // Links
+      citation:          data.meta?.citation || "World of Crayfish® database",
+      woc_url:           `https://world.crayfish.ro/species/${encodeURIComponent(species.replace(/ /g, "-"))}`,
+      seb_url:           `${sebBase}/narratives/${slug}_canonical.md`,
     };
     // Cache 24 hours — field data doesn't change frequently
     OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
