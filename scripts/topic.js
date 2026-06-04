@@ -730,7 +730,7 @@
 
         ${d.geo_narrative ? `
         <p class="woc-section-label" style="margin-top:1rem;">Biogeographical overview</p>
-        <div class="woc-narrative-block">${renderWocMarkdown(d.geo_narrative)}</div>
+        <div class="woc-narrative-block" id="wocNarrativeBlock"></div>
         ` : ""}
 
         <div class="woc-footer">
@@ -744,30 +744,83 @@
         </div>
       `;
 
-      // Render Leaflet map with EOO polygon
-      if (d.eoo_geojson && typeof L !== "undefined") {
-        const mapEl = document.getElementById("wocMapContainer");
-        if (mapEl) {
-          const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false });
-          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-            maxZoom: 10
-          }).addTo(map);
-          const layer = L.geoJSON(d.eoo_geojson, {
-            style: feat => ({
-              color: feat.properties?.stroke || "#D48D00",
-              weight: feat.properties?.["stroke-width"] || 1.5,
-              fillColor: feat.properties?.fill || "#FFFF00",
-              fillOpacity: feat.properties?.["fill-opacity"] ?? 0.25,
-            })
-          }).addTo(map);
-          try { map.fitBounds(layer.getBounds(), { padding: [20, 20] }); }
-          catch(_) { map.setView([30, 0], 2); }
+      // Render expandable narrative
+      if (d.geo_narrative) {
+        const narrativeEl = document.getElementById("wocNarrativeBlock");
+        if (narrativeEl) {
+          const paragraphs = d.geo_narrative.split("\n\n").map(p => p.trim()).filter(Boolean);
+          const previewCount = 2;
+          const hasMore = paragraphs.length > previewCount;
+
+          function renderParagraphs(paras) {
+            return paras.map(p => {
+              const html = p
+                .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+                .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+              return `<p style="margin:.45rem 0;font-size:.875rem;line-height:1.6;color:#1f2937;">${html}</p>`;
+            }).join("");
+          }
+
+          if (hasMore) {
+            narrativeEl.innerHTML = renderParagraphs(paragraphs.slice(0, previewCount))
+              + `<p><button id="wocNarrativeToggle" class="link-btn" style="font-size:.85rem;">Read full overview ↓</button></p>`;
+            document.getElementById("wocNarrativeToggle").addEventListener("click", function() {
+              narrativeEl.innerHTML = renderParagraphs(paragraphs)
+                + `<p><button id="wocNarrativeToggle" class="link-btn" style="font-size:.85rem;">Show less ↑</button></p>`;
+              document.getElementById("wocNarrativeToggle").addEventListener("click", function() {
+                narrativeEl.innerHTML = renderParagraphs(paragraphs.slice(0, previewCount))
+                  + `<p><button id="wocNarrativeToggle" class="link-btn" style="font-size:.85rem;">Read full overview ↓</button></p>`;
+                document.getElementById("wocNarrativeToggle").addEventListener("click", arguments.callee);
+              });
+            });
+          } else {
+            narrativeEl.innerHTML = renderParagraphs(paragraphs);
+          }
         }
       }
 
+      // Show block FIRST so Leaflet can measure the container dimensions
       source.textContent = "· World of Crayfish®";
       block.style.display = "";
+
+      // Render Leaflet map — load self-hosted Leaflet only when we have a map to show
+      if (d.eoo_geojson) {
+        function initWocMap() {
+          requestAnimationFrame(() => {
+            const mapEl = document.getElementById("wocMapContainer");
+            if (!mapEl || typeof L === "undefined") return;
+            const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false });
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+              maxZoom: 10
+            }).addTo(map);
+            const layer = L.geoJSON(d.eoo_geojson, {
+              style: feat => ({
+                color:       feat.properties?.stroke           || "#D48D00",
+                weight:      feat.properties?.["stroke-width"] || 1.5,
+                fillColor:   feat.properties?.fill             || "#FFFF00",
+                fillOpacity: feat.properties?.["fill-opacity"] ?? 0.25,
+              })
+            }).addTo(map);
+            try { map.fitBounds(layer.getBounds(), { padding: [20, 20] }); }
+            catch(_) { map.setView([30, 0], 2); }
+          });
+        }
+
+        if (typeof L !== "undefined") {
+          initWocMap();
+        } else {
+          // Load self-hosted Leaflet on demand — only on species pages that have a map
+          const link = document.createElement("link");
+          link.rel = "stylesheet";
+          link.href = "/assets/vendor/leaflet.min.css";
+          document.head.appendChild(link);
+          const script = document.createElement("script");
+          script.src = "/assets/vendor/leaflet.min.js";
+          script.onload = initWocMap;
+          document.head.appendChild(script);
+        }
+      }
     } catch (_) {
       // No WoC data — panel stays hidden
     }
