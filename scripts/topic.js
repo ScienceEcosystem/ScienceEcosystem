@@ -788,26 +788,50 @@
       // Render Leaflet map — load self-hosted Leaflet only when we have a map to show
       if (d.eoo_geojson) {
         function initWocMap() {
-          requestAnimationFrame(() => {
+          requestAnimationFrame(async () => {
             const mapEl = document.getElementById("wocMapContainer");
             if (!mapEl || typeof L === "undefined") return;
-            // No external tile layer — avoids 408 timeouts from tile CDNs.
-            // The EOO polygon itself is the data; background is plain light grey.
+
             const map = L.map(mapEl, {
               zoomControl: true,
               scrollWheelZoom: false,
               attributionControl: false
             });
+
+            // Load self-hosted world countries as background (no external requests)
+            try {
+              const worldResp = await fetch("/assets/vendor/world-countries.geojson");
+              if (worldResp.ok) {
+                const worldData = await worldResp.json();
+                L.geoJSON(worldData, {
+                  style: {
+                    color: "#adb5bd",
+                    weight: 0.5,
+                    fillColor: "#dee2e6",
+                    fillOpacity: 1,
+                  },
+                  interactive: false
+                }).addTo(map);
+              }
+            } catch(_) {}
+
+            // EOO polygon on top
             const layer = L.geoJSON(d.eoo_geojson, {
               style: feat => ({
-                color:       feat.properties?.stroke           || "#D48D00",
+                color:       feat.properties?.stroke           || "#c05b00",
                 weight:      feat.properties?.["stroke-width"] || 1.5,
-                fillColor:   feat.properties?.fill             || "#FFFF00",
-                fillOpacity: feat.properties?.["fill-opacity"] ?? 0.25,
+                fillColor:   feat.properties?.fill             || "#f59e0b",
+                fillOpacity: feat.properties?.["fill-opacity"] ?? 0.45,
               })
             }).addTo(map);
-            try { map.fitBounds(layer.getBounds(), { padding: [20, 20] }); }
-            catch(_) { map.setView([30, 0], 2); }
+
+            try { map.fitBounds(layer.getBounds(), { padding: [28, 28] }); }
+            catch(_) { map.setView([20, 0], 2); }
+
+            // Small attribution in corner
+            L.control.attribution({ prefix: false })
+              .addAttribution('© <a href="https://www.naturalearthdata.com/">Natural Earth</a>')
+              .addTo(map);
           });
         }
 
