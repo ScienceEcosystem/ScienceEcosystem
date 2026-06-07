@@ -1898,6 +1898,11 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   overflow: hidden;
   border: 1px solid #e2e8f0;
   margin-bottom: .75rem;
+  background: #e8eef4; /* ocean colour — visible when Leaflet initialises */
+}
+/* Override Leaflet's default white background with a subtle ocean colour */
+.woc-map-container .leaflet-container {
+  background: #e8eef4;
 }
 .woc-narrative-block {
   border-left: 3px solid #D48D00;

@@ -791,14 +791,13 @@
           requestAnimationFrame(() => {
             const mapEl = document.getElementById("wocMapContainer");
             if (!mapEl || typeof L === "undefined") return;
-            const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false });
-            // CartoDB Positron: clean minimal tiles, reliable CDN, free for our usage level
-            L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/">CARTO</a>',
-              subdomains: "abcd",
-              maxZoom: 10,
-              errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
-            }).addTo(map);
+            // No external tile layer — avoids 408 timeouts from tile CDNs.
+            // The EOO polygon itself is the data; background is plain light grey.
+            const map = L.map(mapEl, {
+              zoomControl: true,
+              scrollWheelZoom: false,
+              attributionControl: false
+            });
             const layer = L.geoJSON(d.eoo_geojson, {
               style: feat => ({
                 color:       feat.properties?.stroke           || "#D48D00",
