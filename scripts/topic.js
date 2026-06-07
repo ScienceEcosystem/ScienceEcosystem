@@ -511,6 +511,105 @@
   }
 
   // ── iNaturalist citizen science data ─────────────────────────────────────────
+  // ── GBIF occurrence data + map tiles ─────────────────────────────────────────
+  var _gbifTaxonKey = null; // stored so the map can use it
+
+  async function loadGbifData(displayName) {
+    if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
+
+    try {
+      const resp = await fetch("/api/field-data/gbif?species=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.total_occurrences) return;
+
+      _gbifTaxonKey = d.taxon_key;
+
+      // Ensure field data block is visible
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+
+      // Build GBIF panel and insert into inatContent (after iNat panel)
+      const container = $("inatContent");
+      if (!container) return;
+
+      // Year sparkline
+      const trend = d.year_trend || [];
+      const maxCount = Math.max(...trend.map(r => r.count), 1);
+      const barW = 100 / Math.max(trend.length, 1);
+      const sparkBars = trend.map(r => {
+        const h = Math.round(r.count / maxCount * 100);
+        return `<div class="inat-spark-bar" style="width:${barW}%;height:${h}%;background:#1fb8cd;" title="${r.year}: ${r.count.toLocaleString()} records"></div>`;
+      }).join("");
+
+      const newest = trend[trend.length - 1];
+      const oldest = trend[0];
+      const growthStr = (newest && oldest && oldest.count > 0)
+        ? `${Math.round(newest.count / oldest.count)}× growth over ${newest.year - oldest.year} years`
+        : "";
+
+      const vernStr = d.vernacular_names?.length
+        ? `<div class="inat-title" style="color:#6b7280;font-weight:400;font-size:.78rem;margin-bottom:.4rem;">${d.vernacular_names.join(" · ")}</div>`
+        : "";
+
+      const gbifDiv = document.createElement("div");
+      gbifDiv.className = "inat-panel";
+      gbifDiv.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#1fb8cd"/><text x="10" y="14" text-anchor="middle" font-size="8" font-family="sans-serif" font-weight="bold" fill="white">GBIF</text></svg>
+          <span class="inat-title">GBIF · Global Biodiversity Information Facility</span>
+        </div>
+        ${vernStr}
+        <div class="woc-stats-grid">
+          <div class="woc-stat">
+            <div class="woc-stat-value">${d.total_occurrences.toLocaleString()}</div>
+            <div class="woc-stat-label">Occurrence records</div>
+          </div>
+          <div class="woc-stat">
+            <div class="woc-stat-value">${d.countries_count}</div>
+            <div class="woc-stat-label">Countries</div>
+          </div>
+        </div>
+
+        ${d.top_countries?.length ? `
+        <p class="woc-section-label" style="margin-top:.75rem;">Records by country (top 10)</p>
+        <div class="woc-bars">
+          ${(()=>{
+            const mx = d.top_countries[0].count;
+            return d.top_countries.map(c => {
+              const pct = Math.round(c.count / mx * 100);
+              return `<div class="woc-bar-row">
+                <span class="woc-bar-label">${escapeHtml(c.name)}</span>
+                <div class="woc-bar-track"><div class="woc-bar-fill" style="width:${pct}%;background:#1fb8cd;"></div></div>
+                <span class="woc-bar-count">${c.count.toLocaleString()}</span>
+              </div>`;
+            }).join("");
+          })()}
+        </div>` : ""}
+
+        ${trend.length ? `
+        <p class="woc-section-label" style="margin-top:.75rem;">Records per year (last ${trend.length} years)</p>
+        <div class="inat-sparkline">${sparkBars}</div>
+        <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#9ca3af;margin-top:.2rem;">
+          <span>${oldest?.year || ""}</span>
+          ${growthStr ? `<span style="color:#1fb8cd;font-weight:500;">${escapeHtml(growthStr)}</span>` : ""}
+          <span>${newest?.year || ""}</span>
+        </div>` : ""}
+
+        <div class="woc-footer" style="margin-top:.75rem;">
+          <a href="${escapeHtml(d.gbif_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on GBIF →
+          </a>
+          <span class="muted" style="font-size:.75rem;margin-left:.75rem;">
+            Aggregated from ${d.total_occurrences.toLocaleString()} records worldwide
+          </span>
+        </div>
+      `;
+      container.appendChild(gbifDiv);
+
+    } catch (_) {}
+  }
+
   async function loadInatData(displayName) {
     if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
     const container = $("inatContent");
@@ -726,7 +825,7 @@
         <div class="woc-bars">${countryBars}</div>
 
         ${d.eoo_geojson ? `
-        <p class="woc-section-label" style="margin-top:1rem;">Native range extent (EOO)</p>
+        <p class="woc-section-label" style="margin-top:1rem;">Distribution map <span style="font-weight:400;color:#9ca3af;">(GBIF occurrences · WoC native range boundary)</span></p>
         <div id="wocMapContainer" class="woc-map-container"></div>
         ` : ""}
 
@@ -815,20 +914,34 @@
               }
             } catch(_) {}
 
-            // EOO polygon on top
+            // GBIF occurrence density tiles (if taxon key available)
+            if (_gbifTaxonKey) {
+              L.tileLayer(
+                `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=${_gbifTaxonKey}&style=classic.point`,
+                {
+                  opacity: 0.8,
+                  maxZoom: 10,
+                  errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+                  attribution: '© <a href="https://www.gbif.org">GBIF</a>'
+                }
+              ).addTo(map);
+            }
+
+            // WoC EOO polygon outline on top (native range boundary)
             const layer = L.geoJSON(d.eoo_geojson, {
-              style: feat => ({
-                color:       feat.properties?.stroke           || "#c05b00",
-                weight:      feat.properties?.["stroke-width"] || 1.5,
-                fillColor:   feat.properties?.fill             || "#f59e0b",
-                fillOpacity: feat.properties?.["fill-opacity"] ?? 0.45,
-              })
+              style: {
+                color: "#c05b00",
+                weight: 2,
+                fillColor: "transparent",
+                fillOpacity: 0,
+                dashArray: "5 4",
+              }
             }).addTo(map);
 
             try { map.fitBounds(layer.getBounds(), { padding: [28, 28] }); }
             catch(_) { map.setView([20, 0], 2); }
 
-            // Small attribution in corner
+            // Attribution
             L.control.attribution({ prefix: false })
               .addAttribution('© <a href="https://www.naturalearthdata.com/">Natural Earth</a>')
               .addTo(map);
@@ -1243,6 +1356,7 @@
 
       // Field data (non-blocking, fires in background)
       loadFieldData(topic.display_name || humanName);
+      loadGbifData(topic.display_name || humanName);
       loadInatData(topic.display_name || humanName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);

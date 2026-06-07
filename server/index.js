@@ -112,7 +112,7 @@ app.use((req, res, next) => {
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
-    "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk https://*.wikipedia.org https://api.inaturalist.org https://www.inaturalist.org",
+    "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk https://*.wikipedia.org https://api.inaturalist.org https://www.inaturalist.org https://api.gbif.org",
     "media-src https://upload.wikimedia.org",
     "frame-src 'none'",
     "object-src 'none'",
@@ -2960,6 +2960,95 @@ app.get("/api/field-data/inat", async (req, res) => {
   } catch (err) {
     console.error("GET /api/field-data/inat failed:", err.message);
     res.status(502).json({ error: "iNaturalist unavailable" });
+  }
+});
+
+/* ---------------------------
+   Field data — GBIF proxy
+----------------------------*/
+app.get("/api/field-data/gbif", async (req, res) => {
+  const species = (req.query?.species || "").trim();
+  if (!species) return res.status(400).json({ error: "species required" });
+
+  const cacheKey = `gbif:${species.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const headers = { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" };
+
+  try {
+    // 1. Resolve species name → GBIF taxon key
+    const match = await fetchJSONTimeout(
+      `https://api.gbif.org/v1/species/match?name=${encodeURIComponent(species)}&strict=false`,
+      { headers }, 8000
+    );
+    const taxonKey = match?.usageKey;
+    if (!taxonKey || (match.confidence || 0) < 80) {
+      return res.status(404).json({ error: "Species not found in GBIF" });
+    }
+
+    // 2. Occurrence stats with country + year facets in one call
+    const occ = await fetchJSONTimeout(
+      `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}`
+      + `&limit=0&facet=country&facet=year&facetLimit=200&facetMincount=1`,
+      { headers }, 10000
+    );
+
+    const totalOccurrences = occ?.count || 0;
+    if (!totalOccurrences) return res.status(404).json({ error: "No occurrences in GBIF" });
+
+    // Countries: decode ISO codes → names, take top 10 by count
+    const isoNames = {
+      ES:"Spain", FR:"France", NL:"Netherlands", US:"United States", CH:"Switzerland",
+      IT:"Italy", DE:"Germany", PT:"Portugal", GB:"United Kingdom", BE:"Belgium",
+      JP:"Japan", CN:"China", AU:"Australia", NZ:"New Zealand", ZA:"South Africa",
+      BR:"Brazil", MX:"Mexico", CA:"Canada", AR:"Argentina", KR:"South Korea",
+      TR:"Turkey", IL:"Israel", TW:"Taiwan", RU:"Russia", PL:"Poland",
+      CZ:"Czech Republic", AT:"Austria", SE:"Sweden", HU:"Hungary", GR:"Greece",
+    };
+    const countryFacet = occ?.facets?.find(f => f.field === "COUNTRY");
+    const topCountries = (countryFacet?.counts || [])
+      .slice(0, 10)
+      .map(c => ({ code: c.name, name: isoNames[c.name] || c.name, count: c.count }));
+    const countriesCount = (countryFacet?.counts || []).length;
+
+    // Year trend: last 15 complete years
+    const currentYear = new Date().getUTCFullYear();
+    const yearFacet = occ?.facets?.find(f => f.field === "YEAR");
+    const yearTrend = (yearFacet?.counts || [])
+      .map(c => ({ year: parseInt(c.name, 10), count: c.count }))
+      .filter(r => !isNaN(r.year) && r.year >= currentYear - 14 && r.year < currentYear)
+      .sort((a, b) => a.year - b.year);
+
+    // 3. Vernacular names (top 3 in English)
+    const vernResp = await fetchJSONTimeout(
+      `https://api.gbif.org/v1/species/${taxonKey}/vernacularNames?limit=20`,
+      { headers }, 6000
+    ).catch(() => null);
+    const vernacular = (vernResp?.results || [])
+      .filter(r => r.language === "eng" || r.language === "en")
+      .slice(0, 3)
+      .map(r => r.vernacularName);
+
+    const payload = {
+      taxon_key:          taxonKey,
+      scientific_name:    match.scientificName || species,
+      total_occurrences:  totalOccurrences,
+      countries_count:    countriesCount,
+      top_countries:      topCountries,
+      year_trend:         yearTrend,
+      vernacular_names:   vernacular,
+      // Map tile URL pattern for Leaflet — client substitutes {z}/{x}/{y}
+      map_tile_url:       `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=${taxonKey}&style=classic.point`,
+      gbif_url:           `https://www.gbif.org/species/${taxonKey}`,
+    };
+
+    // Cache 24 hours
+    OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/gbif failed:", err.message);
+    res.status(502).json({ error: "GBIF unavailable" });
   }
 });
 
