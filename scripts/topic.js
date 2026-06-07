@@ -128,7 +128,7 @@
       'figure[typeof*="Video"]', 'figure[typeof*="Audio"]',
       ".mw-editsection", ".mw-editsection-bracket",
       ".pcs-edit-section", ".pcs-edit-section-link",  // mobile HTML edit buttons
-      ".sistersitebox", ".sister-wikipedia", ".noprint",
+      ".sistersitebox", ".sister-wikipedia", ".sister-inline-image", ".noprint",
       ".navbox", ".mbox-small", ".ambox", ".tmbox",
       ".mw-authority-control", ".mw-pb-wikibase-link"
     ].join(",")).forEach((n) => n.remove());
@@ -191,9 +191,11 @@
         if (/^(https?:)?\/\/upload\.wikimedia\.org\//i.test(srcAttr)) {
           if (srcAttr.startsWith("//")) srcAttr = "https:" + srcAttr;
           const alt = node.getAttribute("alt") || "";
-          // Drop UI/logo icons that have no meaningful alt text
-          const uiIcon = /\/(OOjs_UI_|Commons-logo|Wikibooks-logo|Wikiquote|Wikisource|Wiktionary|Wikinews|Wikiversity|Wikivoyage|Wikipedia-logo|Powered_by_MediaWiki)/i;
-          if (!alt && uiIcon.test(srcAttr)) return document.createTextNode("");
+          // Drop UI icons and sister-site logos regardless of alt text —
+          // alt is sometimes set (e.g. "Edit this classification") but these
+          // images are never meaningful content and always cause 408 timeouts
+          const uiIcon = /\/(OOjs_UI_|Commons-logo|Wikibooks-logo|Wikiquote|Wikisource|Wiktionary|Wikinews|Wikiversity|Wikivoyage|Wikipedia-logo|Powered_by_MediaWiki|File:OOjs|sister|noviewer)/i;
+          if (uiIcon.test(srcAttr)) return document.createTextNode("");
           el.setAttribute("src", srcAttr);
           if (alt) el.setAttribute("alt", alt);
           el.setAttribute("loading", "lazy");
@@ -790,9 +792,12 @@
             const mapEl = document.getElementById("wocMapContainer");
             if (!mapEl || typeof L === "undefined") return;
             const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false });
-            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-              maxZoom: 10
+            // CartoDB Positron: clean minimal tiles, reliable CDN, free for our usage level
+            L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+              attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/">CARTO</a>',
+              subdomains: "abcd",
+              maxZoom: 10,
+              errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
             }).addTo(map);
             const layer = L.geoJSON(d.eoo_geojson, {
               style: feat => ({
