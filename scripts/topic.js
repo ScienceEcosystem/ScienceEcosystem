@@ -511,9 +511,86 @@
   }
 
   // ── iNaturalist citizen science data ─────────────────────────────────────────
-  // ── GBIF occurrence data + map tiles ─────────────────────────────────────────
-  var _gbifTaxonKey = null; // stored so the map can use it
+  // ── Shared species map (GBIF owns it, WoC adds EOO polygon on top) ───────────
+  var _leafletMap = null;       // shared Leaflet instance
+  var _pendingEoo = null;       // WoC EOO geojson waiting for map to be ready
 
+  function addEooToMap(map, eooGeoJSON) {
+    if (!map || !eooGeoJSON) return;
+    L.geoJSON(eooGeoJSON, {
+      style: {
+        color: "#c05b00",
+        weight: 2,
+        fillColor: "transparent",
+        fillOpacity: 0,
+        dashArray: "5 4",
+      }
+    }).addTo(map);
+    const label = $("speciesMapLabel");
+    if (label) label.textContent = "(GBIF occurrences · WoC native range boundary)";
+  }
+
+  async function initSpeciesMap(taxonKey) {
+    const mapEl = $("speciesMapContainer");
+    if (!mapEl) return null;
+
+    // Load Leaflet on demand
+    if (typeof L === "undefined") {
+      await new Promise(resolve => {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "/assets/vendor/leaflet.min.css";
+        document.head.appendChild(link);
+        const script = document.createElement("script");
+        script.src = "/assets/vendor/leaflet.min.js";
+        script.onload = resolve;
+        document.head.appendChild(script);
+      });
+    }
+
+    const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false, attributionControl: false });
+    _leafletMap = map;
+
+    // Self-hosted world countries background
+    try {
+      const worldResp = await fetch("/assets/vendor/world-countries.geojson");
+      if (worldResp.ok) {
+        const worldData = await worldResp.json();
+        L.geoJSON(worldData, {
+          style: { color: "#adb5bd", weight: 0.5, fillColor: "#dee2e6", fillOpacity: 1 },
+          interactive: false
+        }).addTo(map);
+      }
+    } catch (_) {}
+
+    // GBIF occurrence density tiles
+    if (taxonKey) {
+      L.tileLayer(
+        `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=${taxonKey}&style=classic.point`,
+        {
+          opacity: 0.85,
+          maxZoom: 10,
+          errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+        }
+      ).addTo(map);
+    }
+
+    // Add any WoC EOO that arrived before the map was ready
+    if (_pendingEoo) { addEooToMap(map, _pendingEoo); _pendingEoo = null; }
+
+    L.control.attribution({ prefix: false })
+      .addAttribution('© <a href="https://www.naturalearthdata.com/">Natural Earth</a> | <a href="https://www.gbif.org">GBIF</a>')
+      .addTo(map);
+
+    map.setView([20, 10], 2);
+
+    const mapSection = $("speciesMapSection");
+    if (mapSection) mapSection.style.display = "";
+
+    return map;
+  }
+
+  // ── GBIF occurrence data + map tiles ─────────────────────────────────────────
   async function loadGbifData(displayName) {
     if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
 
@@ -523,11 +600,10 @@
       const d = await resp.json();
       if (!d.total_occurrences) return;
 
-      _gbifTaxonKey = d.taxon_key;
-
-      // Ensure field data block is visible
+      // Show field data block and initialize the shared species map
       const block = $("fieldDataBlock");
       if (block) block.style.display = "";
+      initSpeciesMap(d.taxon_key); // non-blocking — map loads while panel renders
 
       // Build GBIF panel and insert into inatContent (after iNat panel)
       const container = $("inatContent");
@@ -824,10 +900,7 @@
         <p class="woc-section-label" style="margin-top:1rem;">Records by country (top 10)</p>
         <div class="woc-bars">${countryBars}</div>
 
-        ${d.eoo_geojson ? `
-        <p class="woc-section-label" style="margin-top:1rem;">Distribution map <span style="font-weight:400;color:#9ca3af;">(GBIF occurrences · WoC native range boundary)</span></p>
-        <div id="wocMapContainer" class="woc-map-container"></div>
-        ` : ""}
+        <!-- Map is owned by GBIF panel (speciesMapContainer in topic.html) -->
 
         ${d.geo_narrative ? `
         <p class="woc-section-label" style="margin-top:1rem;">Biogeographical overview</p>
@@ -884,82 +957,12 @@
       source.textContent = "· World of Crayfish®";
       block.style.display = "";
 
-      // Render Leaflet map — load self-hosted Leaflet only when we have a map to show
+      // Add WoC EOO polygon to the shared species map (owned by GBIF)
       if (d.eoo_geojson) {
-        function initWocMap() {
-          requestAnimationFrame(async () => {
-            const mapEl = document.getElementById("wocMapContainer");
-            if (!mapEl || typeof L === "undefined") return;
-
-            const map = L.map(mapEl, {
-              zoomControl: true,
-              scrollWheelZoom: false,
-              attributionControl: false
-            });
-
-            // Load self-hosted world countries as background (no external requests)
-            try {
-              const worldResp = await fetch("/assets/vendor/world-countries.geojson");
-              if (worldResp.ok) {
-                const worldData = await worldResp.json();
-                L.geoJSON(worldData, {
-                  style: {
-                    color: "#adb5bd",
-                    weight: 0.5,
-                    fillColor: "#dee2e6",
-                    fillOpacity: 1,
-                  },
-                  interactive: false
-                }).addTo(map);
-              }
-            } catch(_) {}
-
-            // GBIF occurrence density tiles (if taxon key available)
-            if (_gbifTaxonKey) {
-              L.tileLayer(
-                `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=${_gbifTaxonKey}&style=classic.point`,
-                {
-                  opacity: 0.8,
-                  maxZoom: 10,
-                  errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
-                  attribution: '© <a href="https://www.gbif.org">GBIF</a>'
-                }
-              ).addTo(map);
-            }
-
-            // WoC EOO polygon outline on top (native range boundary)
-            const layer = L.geoJSON(d.eoo_geojson, {
-              style: {
-                color: "#c05b00",
-                weight: 2,
-                fillColor: "transparent",
-                fillOpacity: 0,
-                dashArray: "5 4",
-              }
-            }).addTo(map);
-
-            try { map.fitBounds(layer.getBounds(), { padding: [28, 28] }); }
-            catch(_) { map.setView([20, 0], 2); }
-
-            // Attribution
-            L.control.attribution({ prefix: false })
-              .addAttribution('© <a href="https://www.naturalearthdata.com/">Natural Earth</a>')
-              .addTo(map);
-          });
-        }
-
-        if (typeof L !== "undefined") {
-          initWocMap();
+        if (_leafletMap) {
+          addEooToMap(_leafletMap, d.eoo_geojson);
         } else {
-          // Load self-hosted Leaflet on demand — only on species pages that have a map
-          const link = document.createElement("link");
-          link.rel = "stylesheet";
-          link.href = "/assets/vendor/leaflet.min.css";
-          document.head.appendChild(link);
-          const script = document.createElement("script");
-          script.src = "/assets/vendor/leaflet.min.js";
-          script.onload = initWocMap;
-          document.head.appendChild(script);
+          _pendingEoo = d.eoo_geojson; // GBIF map not ready yet — stored for when it initialises
         }
       }
     } catch (_) {
