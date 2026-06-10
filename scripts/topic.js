@@ -764,6 +764,45 @@
     } catch (_) {}
   }
 
+  // ── Catalogue of Life classification ──────────────────────────────────────────
+  async function loadColData(displayName) {
+    if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
+    const wrap = $("colClassification");
+    if (!wrap) return;
+
+    const rankLabels = {
+      kingdom: "Kingdom", phylum: "Phylum", subphylum: "Subphylum",
+      class: "Class", order: "Order", family: "Family", genus: "Genus",
+    };
+
+    try {
+      const resp = await fetch("/api/field-data/col?species=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.classification?.length) return;
+
+      const rows = d.classification.map(c => `
+        <div style="display:flex;justify-content:space-between;font-size:.82rem;padding:.15rem 0;">
+          <span class="muted">${escapeHtml(rankLabels[c.rank] || c.rank)}</span>
+          <span style="font-style:${c.rank === "genus" ? "italic" : "normal"};">${escapeHtml(c.name)}</span>
+        </div>`).join("");
+
+      const synonymNote = d.status && d.status !== "accepted"
+        ? `<p class="muted" style="font-size:.75rem;margin-top:.35rem;">Status: ${escapeHtml(d.status)}</p>`
+        : "";
+
+      wrap.innerHTML = `
+        <h4 style="margin-bottom:.35rem;">Classification</h4>
+        ${rows}
+        ${synonymNote}
+        <div style="margin-top:.5rem;">
+          <a href="${escapeHtml(d.col_url)}" target="_blank" rel="noopener" style="font-size:.78rem;">View on Catalogue of Life →</a>
+        </div>
+      `;
+      wrap.style.display = "";
+    } catch (_) {}
+  }
+
   // ── Claude topic synthesis ────────────────────────────────────────────────────
   async function loadTopicSynthesis(conceptIdTail) {
     if (!conceptIdTail) return;
@@ -1361,6 +1400,7 @@
       loadFieldData(topic.display_name || humanName);
       loadGbifData(topic.display_name || humanName);
       loadInatData(topic.display_name || humanName);
+      loadColData(topic.display_name || humanName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 

@@ -1052,38 +1052,34 @@ Built so far (2026-06):
       Shows: total observations, research-grade count, observer count,
       year sparkline (last 10 years), CC-licensed photo if available.
 
-Both panels trigger only on binomial species names (regex: /^[A-Z][a-z]+ [a-z]+/).
-Server proxies both APIs with 24h cache. Not visible on non-species topic pages.
+  [X] GBIF (gbif.org) — Global Biodiversity Information Facility, the broadest
+      occurrence database in existence (120M+ records, aggregated from thousands
+      of sources incl. NIWA NZ Freshwater Fish Database).
+      API: api.gbif.org/v1/ — fully open, no auth needed.
+      Shows: total occurrences, country count + bar chart, year trend sparkline,
+      vernacular names, link to GBIF species page.
+      Also owns the shared Leaflet species distribution map (self-hosted Natural
+      Earth background + GBIF occurrence density tile layer); WoC EOO boundary
+      is overlaid on top when available.
+
+  [X] Catalogue of Life (catalogueoflife.org) — authoritative taxonomy.
+      API: api.catalogueoflife.org/dataset/3LR/nameusage/search?q={species}&rank=species
+      Fully open, no auth needed.
+      Shows: classification breadcrumb (kingdom → phylum → ... → genus) with
+      authorships, accepted/synonym status, link to CoL species page.
+      Rendered in the sidebar Infobox panel (#colClassification), not the
+      Field Data block — it's taxonomy reference info, not occurrence data.
+
+All panels trigger only on binomial species names (regex: /^[A-Z][a-z]+ [a-z]+/).
+Server proxies all APIs with 24h cache. Not visible on non-species topic pages.
+
+NOTE: EOL (Encyclopedia of Life) is now behind Cloudflare bot-challenge pages —
+api.eol.org returns an HTML "Just a moment..." challenge instead of JSON.
+Dropped from the roadmap; no workaround without a headless browser.
 
 -------------------------------------------------------
 TO BUILD — TIER 1 (no auth required, high value)
 -------------------------------------------------------
-
-GBIF — Global Biodiversity Information Facility
-  URL: gbif.org | API: api.gbif.org/v1/
-  Data: 120M+ occurrence records, species profiles, aggregated from thousands of sources
-  Key endpoints:
-    Species match:   GET /species/match?name={species}
-    Occurrences:     GET /occurrence/search?scientificName={species}
-    Species info:    GET /species/{key}
-  Why useful: the broadest occurrence database in existence, complements WoC and iNat
-  Note: WoC data likely flows into GBIF — ask the builder how they relate
-
-EOL — Encyclopedia of Life
-  URL: eol.org | API: api.eol.org/
-  Data: 3.5M species pages, CC-licensed photos, descriptions, ecological interactions
-  Key endpoints:
-    Search:    GET /api/search/1.0.json?q={species}
-    Page data: GET /api/pages/1.0/{page_id}.json?details=true&images_per_page=1
-  Why useful: rich multimedia (CC images!), curated descriptions, interaction data
-  Note: good for showing a species photo when iNaturalist has none with CC license
-
-Catalogue of Life (COL)
-  URL: catalogueoflife.org | API: api.catalogueoflife.org/
-  Data: ~2M species names, authoritative taxonomy, synonyms, classification hierarchy
-  Key endpoint: GET /nameusage/search?q={species}&rank=species
-  Why useful: canonical taxonomy — shows full classification path, accepted name vs synonyms
-  Note: could replace or augment the taxonomic hierarchy we derive from OpenAlex ancestors
 
 WoRMS — World Register of Marine Species
   URL: marinespecies.org | API: marinespecies.org/rest/
@@ -1178,8 +1174,7 @@ This is the long-term vision for SE topic pages: not just papers and Wikipedia,
 but the living data layer for every field — each field's equivalent of World of Crayfish.
 
 Priority order for next build session:
-  1. GBIF (no auth, broadest coverage, most complementary to WoC + iNat)
-  2. EOL (no auth, CC photos, species descriptions)
-  3. IUCN Red List (free key, conservation status badge — single most useful data point)
-  4. Catalogue of Life (no auth, authoritative taxonomy hierarchy)
-  5. WoRMS (no auth, essential for aquatic/marine species)
+  1. IUCN Red List (free key, conservation status badge — single most useful data point)
+  2. WoRMS (no auth, essential for aquatic/marine species)
+  3. AmphibiaWeb (no auth, amphibian species accounts)
+  4. OBIS (no auth, marine occurrence data)

@@ -3053,6 +3053,53 @@ app.get("/api/field-data/gbif", async (req, res) => {
 });
 
 /* ---------------------------
+   Field data — Catalogue of Life proxy
+----------------------------*/
+app.get("/api/field-data/col", async (req, res) => {
+  const species = (req.query?.species || "").trim();
+  if (!species) return res.status(400).json({ error: "species required" });
+
+  const cacheKey = `col:${species.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const headers = { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" };
+
+  try {
+    const data = await fetchJSONTimeout(
+      `https://api.catalogueoflife.org/dataset/3LR/nameusage/search?q=${encodeURIComponent(species)}&rank=species&limit=5`,
+      { headers }, 8000
+    );
+    const results = Array.isArray(data?.result) ? data.result : [];
+    const match = results.find(r => {
+      const name = r?.usage?.name?.scientificName || "";
+      return name.toLowerCase() === species.toLowerCase();
+    });
+    if (!match) return res.status(404).json({ error: "Species not found in Catalogue of Life" });
+
+    const usage = match.usage;
+    const wantedRanks = ["kingdom", "phylum", "subphylum", "class", "order", "family", "genus"];
+    const classification = (match.classification || [])
+      .filter(c => wantedRanks.includes(c.rank))
+      .map(c => ({ name: c.name, rank: c.rank, authorship: c.authorship || "" }));
+
+    const payload = {
+      scientific_name: usage.name.scientificName,
+      authorship:      usage.name.authorship || "",
+      status:          usage.status,
+      classification,
+      col_url:         `https://www.catalogueoflife.org/data/taxon/${usage.id}`,
+    };
+
+    OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/col failed:", err.message);
+    res.status(502).json({ error: "Catalogue of Life unavailable" });
+  }
+});
+
+/* ---------------------------
    Topic synthesis — Claude Haiku
 ----------------------------*/
 app.get("/api/topic/synthesis", async (req, res) => {
