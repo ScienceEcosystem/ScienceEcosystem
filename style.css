@@ -5,8 +5,8 @@
   --ink-dim: #475569;
   --surface: #ffffff;
   --nav: #0f172a;
-  --primary: #0284c7;
-  --success: #22c55e;
+  --primary: #0369a1;
+  --success: #15803d;
   --link: #2563eb;
   --ring: #93c5fd;
   --shadow: 0 2px 6px rgba(0,0,0,0.06);
@@ -132,7 +132,7 @@ body {
 
 /* ORCID button kept compact */
 .btn-orcid {
-  background: #16a34a;
+  background: #15803d;
   color: #fff;
   padding: .5rem .75rem;
   font-size: .9rem;
@@ -146,7 +146,7 @@ body {
   white-space: nowrap;
 }
 .btn-orcid:hover,
-.btn-orcid:focus { background: #15803d; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-orcid:focus { background: #166534; outline: 2px solid var(--ring); outline-offset: 2px; }
 .orcid-icon { height: 22px; width: auto; }
 
 /* Buttons & Inputs */
@@ -159,9 +159,9 @@ body {
 }
 .btn:active { transform: translateY(1px); }
 .btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover, .btn-primary:focus { background: #0369a1; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-primary:hover, .btn-primary:focus { background: #075985; outline: 2px solid var(--ring); outline-offset: 2px; }
 .btn-secondary { background: var(--success); color: #fff; }
-.btn-secondary:hover, .btn-secondary:focus { background: #16a34a; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-secondary:hover, .btn-secondary:focus { background: #166534; outline: 2px solid var(--ring); outline-offset: 2px; }
 .btn-link { color: var(--link); text-decoration: underline; padding: 0; border: none; background: none; }
 .btn-link:hover, .btn-link:focus { text-decoration: none; outline: 2px solid var(--ring); outline-offset: 2px; }
 
@@ -289,6 +289,7 @@ body {
 .list-card { background: var(--surface); border: 1px solid #e5e7eb; }
 .list-item + .list-item { margin-top: .5rem; }
 .list-item:hover, .list-item:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
+.list-item-wrap + .list-item-wrap { margin-top: .5rem; }
 
 .meta { color: var(--ink-dim); margin-top: .25rem; }
 .muted { color: var(--ink-dim); }
@@ -400,7 +401,7 @@ body {
 /* ===== User profile redesign ===== */
 body[data-page="user-profile"] {
   --primary: #0f766e;
-  --success: #16a34a;
+  --success: #15803d;
   --link: #0f766e;
   --ring: rgba(16, 185, 129, 0.45);
   background: radial-gradient(circle at top left, #ecfdf5 0%, #f8fafc 40%, #eef2ff 100%);
@@ -480,10 +481,10 @@ body[data-page="user-profile"] h3 {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 0.72rem;
-  color: #64748b;
+  color: #475569;
   margin: 0;
 }
-.sync-status { margin: 0.5rem 0 0; color: #64748b; font-size: 0.95rem; }
+.sync-status { margin: 0.5rem 0 0; color: #475569; font-size: 0.95rem; }
 .hero-actions { display: flex; flex-direction: column; gap: 0.5rem; }
 
 .btn-ghost {
@@ -521,7 +522,7 @@ body[data-page="user-profile"] h3 {
   margin-bottom: 1rem;
 }
 .count-number { font-size: 2.75rem; font-weight: 700; }
-.count-label { color: #64748b; }
+.count-label { color: #475569; }
 
 .library-grid {
   display: grid;
@@ -612,7 +613,7 @@ body[data-page="user-profile"] h3 {
 .orcid-card summary::after {
   content: "+";
   font-size: 1.1rem;
-  color: #64748b;
+  color: #475569;
 }
 .orcid-card[open] summary::after { content: "–"; }
 .orcid-card[open] summary { border-bottom: 1px solid #e5e7eb; }
@@ -1650,9 +1651,9 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 /* ── Topic page ─────────────────────────────────────────────────────────── */
 .se-topic-link {
   color: #2563eb;
-  text-decoration: none;
+  text-decoration: underline;
 }
-.se-topic-link:hover { text-decoration: underline; }
+.se-topic-link:hover { color: #1d4ed8; }
 
 .refs-list {
   padding-left: 1.5rem;
@@ -1694,7 +1695,7 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   font-weight: 500;
   margin-right: .25rem;
 }
-.stance-background  { color: #64748b; background: #f8fafc; }
+.stance-background  { color: #475569; background: #f8fafc; }
 .stance-methodology { color: #7c3aed; background: #f5f3ff; }
 .stance-result      { color: #0369a1; background: #e0f2fe; }
 
@@ -1739,10 +1740,10 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 }
 #hoverPreviewCard .hp-oa {
   background: #f0fdf4 !important;
-  color: #16a34a !important;
+  color: #15803d !important;
 }
 #hoverPreviewCard .hp-meta {
-  color: #9ca3af;
+  color: #6b7280;
   font-size: .75rem;
   margin-top: .2rem;
   overflow: hidden;
@@ -1750,7 +1751,7 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   white-space: nowrap;
 }
 #hoverPreviewCard .hp-loading {
-  color: #9ca3af;
+  color: #6b7280;
   font-size: .82rem;
   text-align: center;
   padding: .25rem 0;
@@ -1869,7 +1870,7 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 }
 .inat-photo-credit {
   font-size: .7rem;
-  color: #9ca3af;
+  color: #6b7280;
   line-height: 1.3;
 }
 .inat-sparkline {

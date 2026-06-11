@@ -18,7 +18,7 @@
     .platform-label { display:flex; align-items:center; gap:.5rem; font-size:.85rem; font-weight:600; color:#374151; }
     .platform-icon { width:18px; height:18px; object-fit:contain; flex-shrink:0; }
     .profile-preview-bar { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:.75rem 1rem; margin-bottom:1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
-    .openalex-hint { font-size:.78rem; color:#64748b; margin-top:.3rem; }
+    .openalex-hint { font-size:.78rem; color:#475569; margin-top:.3rem; }
   </style>
 </head>
 <body data-page="settings-profile">
@@ -74,7 +74,7 @@
         <div style="display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;">
           <div id="avatarPreviewWrap" style="width:80px; height:80px; border-radius:50%; overflow:hidden; background:#e2e8f0; flex-shrink:0; display:flex; align-items:center; justify-content:center;">
             <img id="avatarPreview" src="" alt="Profile photo" style="width:100%; height:100%; object-fit:cover; display:none;" />
-            <span id="avatarInitials" style="font-size:1.5rem; color:#64748b; font-weight:600;"></span>
+            <span id="avatarInitials" style="font-size:1.5rem; color:#475569; font-weight:600;"></span>
           </div>
           <div>
             <label class="btn btn-secondary" for="avatarInput" style="cursor:pointer; display:inline-block;">Choose photo</label>
@@ -384,7 +384,7 @@
     async function deleteAccount() {
       const msg = document.getElementById("deleteMsg");
       if (!confirm("Are you absolutely sure? This will permanently delete your account, library, and all annotations. This cannot be undone.")) return;
-      msg.style.color = "#64748b";
+      msg.style.color = "#475569";
       msg.textContent = "Deleting…";
       try {
         await api("/api/account", { method: "DELETE" });

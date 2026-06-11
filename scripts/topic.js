@@ -182,7 +182,14 @@
           }
           if (asTopicLink) {
             el.classList.add("se-topic-link");
-            el.setAttribute("data-topic-id", decodeURIComponent(href.split("id=").pop() || ""));
+            const topicId = decodeURIComponent(href.split("id=").pop() || "");
+            el.setAttribute("data-topic-id", topicId);
+            // Image/file links often wrap a thumbnail with no link text —
+            // give them an accessible name derived from the filename.
+            if (/^File:/i.test(topicId)) {
+              const fileName = topicId.replace(/^File:/i, "").replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ");
+              el.setAttribute("aria-label", `Image: ${fileName}`);
+            }
           }
         }
       } else if (tag === "IMG") {
@@ -530,9 +537,13 @@
     if (label) label.textContent = "(GBIF occurrences · WoC native range boundary)";
   }
 
-  async function initSpeciesMap(taxonKey) {
+  async function initSpeciesMap(taxonKey, speciesName) {
     const mapEl = $("speciesMapContainer");
     if (!mapEl) return null;
+    mapEl.setAttribute("role", "img");
+    mapEl.setAttribute("aria-label", speciesName
+      ? `Map of ${speciesName} occurrence records and native range`
+      : "Map of species occurrence records and native range");
 
     // Load Leaflet on demand
     if (typeof L === "undefined") {
@@ -603,7 +614,7 @@
       // Show field data block and initialize the shared species map
       const block = $("fieldDataBlock");
       if (block) block.style.display = "";
-      initSpeciesMap(d.taxon_key); // non-blocking — map loads while panel renders
+      initSpeciesMap(d.taxon_key, displayName); // non-blocking — map loads while panel renders
 
       // Build GBIF panel and insert into inatContent (after iNat panel)
       const container = $("inatContent");
@@ -666,9 +677,9 @@
         ${trend.length ? `
         <p class="woc-section-label" style="margin-top:.75rem;">Records per year (last ${trend.length} years)</p>
         <div class="inat-sparkline">${sparkBars}</div>
-        <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#9ca3af;margin-top:.2rem;">
+        <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#6b7280;margin-top:.2rem;">
           <span>${oldest?.year || ""}</span>
-          ${growthStr ? `<span style="color:#1fb8cd;font-weight:500;">${escapeHtml(growthStr)}</span>` : ""}
+          ${growthStr ? `<span style="color:#0e7490;font-weight:500;">${escapeHtml(growthStr)}</span>` : ""}
           <span>${newest?.year || ""}</span>
         </div>` : ""}
 
@@ -748,9 +759,9 @@
           ${trend.length ? `
           <p class="woc-section-label" style="margin-top:.75rem;">Observations per year (research grade)</p>
           <div class="inat-sparkline">${sparkBars}</div>
-          <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#9ca3af;margin-top:.2rem;">
+          <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#6b7280;margin-top:.2rem;">
             <span>${oldest?.year || ""}</span>
-            ${growthStr ? `<span style="color:#16a34a;font-weight:500;">${escapeHtml(growthStr)}</span>` : ""}
+            ${growthStr ? `<span style="color:#15803d;font-weight:500;">${escapeHtml(growthStr)}</span>` : ""}
             <span>${newest?.year || ""}</span>
           </div>` : ""}
 

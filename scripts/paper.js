@@ -523,7 +523,7 @@
         else instParts.push(escapeHtml(instName));
       }
 
-      var instHtml = instParts.length ? ' <span class="author-inst" style="color:#64748b; font-size:.9em;">('+instParts.join(", ")+')</span>' : "";
+      var instHtml = instParts.length ? ' <span class="author-inst" style="color:#475569; font-size:.9em;">('+instParts.join(", ")+')</span>' : "";
       out.push('<span class="author-affiliation">'+authorHtml+instHtml+'</span>');
     }
     var short = out.slice(0,8);
@@ -839,10 +839,10 @@
     var percent = peerReviewScore + journalRankScore + openAccessScore;
 
     var grade = "Poor", color = "#c0392b";
-    if (percent >= 90) { grade = "Excellent"; color = "#27ae60"; }
-    else if (percent >= 70) { grade = "Good"; color = "#2e7f9f"; }
-    else if (percent >= 50) { grade = "Fair"; color = "#f39c12"; }
-    else if (percent >= 30) { grade = "Limited"; color = "#e67e22"; }
+    if (percent >= 90) { grade = "Excellent"; color = "#15803d"; }
+    else if (percent >= 70) { grade = "Good"; color = "#296f8b"; }
+    else if (percent >= 50) { grade = "Fair"; color = "#a16207"; }
+    else if (percent >= 30) { grade = "Limited"; color = "#b35a09"; }
 
     var doi = doiFromWork(p);
     var pubpeerHref = doi ? ("https://pubpeer.com/search?q=" + encodeURIComponent(doi)) : "";
@@ -875,7 +875,7 @@
       return '' +
         '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
           '<span style="font-size:1.2rem;">'+ind.icon+'</span>' +
-          '<span style="flex:1; color:'+(ind.status === "yes" ? "#333" : "#666")+';">'+escapeHtml(ind.label)+'</span>' +
+          '<span style="flex:1; color:'+(ind.status === "yes" ? "#333" : "#6b7280")+';">'+escapeHtml(ind.label)+'</span>' +
         '</div>';
     }).join('');
 
@@ -894,7 +894,7 @@
       '<div class="repro-checklist">' + indicatorsHtml + '</div>' +
       '<p style="margin-top:1rem; font-size:0.9rem; color:#666;"><strong>Journal:</strong> '+journalLinkHtml+' '+seScoreBadge+'</p>' +
       '<details style="margin-top:1rem;">' +
-        '<summary style="cursor:pointer; color:#2e7f9f; font-size:0.9rem;">How is this calculated?</summary>' +
+        '<summary style="cursor:pointer; color:#296f8b; font-size:0.9rem;">How is this calculated?</summary>' +
         '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem; line-height:1.5;">' +
           'Publication quality combines three signals:<br>' +
           '• Peer review (40%) — whether the work is peer reviewed<br>' +
@@ -1063,10 +1063,10 @@
 
   function gradeFromPercent(percent){
     var grade = "Poor", color = "#c0392b";
-    if (percent >= 90) { grade = "Excellent"; color = "#27ae60"; }
-    else if (percent >= 70) { grade = "Good"; color = "#2e7f9f"; }
-    else if (percent >= 50) { grade = "Fair"; color = "#f39c12"; }
-    else if (percent >= 30) { grade = "Limited"; color = "#e67e22"; }
+    if (percent >= 90) { grade = "Excellent"; color = "#15803d"; }
+    else if (percent >= 70) { grade = "Good"; color = "#296f8b"; }
+    else if (percent >= 50) { grade = "Fair"; color = "#a16207"; }
+    else if (percent >= 30) { grade = "Limited"; color = "#b35a09"; }
     return { grade: grade, color: color };
   }
 
@@ -1211,16 +1211,16 @@
           '<div style="background:'+result.color+'; width:'+result.score+'%; height:100%;"></div>' +
         '</div>' +
       '</div>' +
-      (result.note ? '<p style="font-size:0.85rem; color:#2e7f9f; background:#f0f8ff; padding:0.75rem; border-radius:4px; margin-bottom:1rem;">'+escapeHtml(result.note)+'</p>' : '') +
+      (result.note ? '<p style="font-size:0.85rem; color:#296f8b; background:#f0f8ff; padding:0.75rem; border-radius:4px; margin-bottom:1rem;">'+escapeHtml(result.note)+'</p>' : '') +
       '<div class="repro-checklist">' +
         result.checks.map(function(check){ return '' +
           '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
             '<span style="font-size:1.2rem;">'+escapeHtml(check.icon || (check.status==="yes" ? "✅ " : (check.status==="partial" ? "~" : "X")))+'</span>' +
-            '<span style="flex:1; color:'+(check.status==="yes" ? "#333" : "#999")+';">'+escapeHtml(check.label)+'</span>' +
+            '<span style="flex:1; color:'+(check.status==="yes" ? "#333" : "#6b7280")+';">'+escapeHtml(check.label)+'</span>' +
           '</div>'; }).join('') +
       '</div>' +
       '<details style="margin-top:1rem;">' +
-        '<summary style="cursor:pointer; color:#2e7f9f; font-size:0.9rem;">How is this calculated?</summary>' +
+        '<summary style="cursor:pointer; color:#296f8b; font-size:0.9rem;">How is this calculated?</summary>' +
         '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">' +
           getReproducibilityExplanation(result.paperType) +
         '</p>' +
@@ -1451,7 +1451,7 @@
     var isOa = get(w,"open_access.is_oa",false);
     div.innerHTML =
       '<div style="font-weight:700;margin-bottom:4px;color:#0f172a;line-height:1.3;">'+escapeHtml(w.display_name||"Untitled")+'</div>'
-      +(authors.length?'<div style="color:#64748b;margin-bottom:2px;font-size:11px;">'+escapeHtml(authors.join(", "))+((w.authorships||[]).length>3?" et al.":"")+'</div>':"")
+      +(authors.length?'<div style="color:#475569;margin-bottom:2px;font-size:11px;">'+escapeHtml(authors.join(", "))+((w.authorships||[]).length>3?" et al.":"")+'</div>':"")
       +'<div style="color:#94a3b8;margin-bottom:6px;font-size:11px;">'+(w.publication_year||"n.d.")+(venue?" · "+escapeHtml(venue):"")+'</div>'
       +'<div style="display:flex;gap:4px;flex-wrap:wrap;">'
         +'<span style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:10px;">📚 '+cites+'</span>'
@@ -1466,7 +1466,7 @@
     var old = $("graphYearLegend"); if (old) old.remove();
     var el = document.createElement("div");
     el.id = "graphYearLegend";
-    el.style.cssText = "display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:11px;color:#64748b;flex-wrap:wrap;";
+    el.style.cssText = "display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:11px;color:#475569;flex-wrap:wrap;";
     el.innerHTML =
       '<span>'+minY+'</span>'
       +'<div style="width:110px;height:10px;border-radius:5px;background:linear-gradient(to right,#3b82f6,#f59e0b,#ef4444);flex-shrink:0;"></div>'
@@ -1492,7 +1492,7 @@
     panel.innerHTML =
       '<div style="flex:1;min-width:0;width:0;overflow:hidden;">'
         +'<div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-bottom:4px;line-height:1.3;overflow-wrap:anywhere;word-break:break-word;white-space:normal;">'+escapeHtml(w.display_name||"Untitled")+'</div>'
-        +(authStr?'<div style="font-size:.78rem;color:#64748b;margin-bottom:2px;overflow-wrap:anywhere;">'+escapeHtml(authStr)+'</div>':"")
+        +(authStr?'<div style="font-size:.78rem;color:#475569;margin-bottom:2px;overflow-wrap:anywhere;">'+escapeHtml(authStr)+'</div>':"")
         +'<div style="font-size:.78rem;color:#94a3b8;margin-bottom:6px;overflow-wrap:anywhere;">'+(w.publication_year||"")+(venue?" · "+escapeHtml(venue):"")+'</div>'
         +'<div style="display:flex;gap:5px;flex-wrap:wrap;">'
           +'<span style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size:.72rem;">📚 '+cites+' citations</span>'

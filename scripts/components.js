@@ -428,7 +428,7 @@
         (hasMore ? ' <button class="link-btn" data-role="toggle-abs">Show more</button>' : '')+
         (hasMore ? '<span class="abs-full">'+full+'</span>' : '')+
       '</p>'+
-      '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '+
+      '<div class="cite-popover" role="dialog" aria-modal="true" aria-label="Cite this paper" hidden tabindex="-1" '+
         'style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; max-width:640px; width:min(92vw,640px); max-height:90vh; overflow:auto; box-shadow:0 8px 32px rgba(0,0,0,.28); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'+
     '</article>';
   }
@@ -506,6 +506,20 @@
   }
 
   function positionPopover(){ /* centering handled by position:fixed + CSS transform */ }
+
+  // Tracks the trigger button so focus can return to it when a cite popover closes.
+  var _citeOpener = null;
+
+  function trapFocus(pop, e){
+    var focusable = pop.querySelectorAll('a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])');
+    if (!focusable.length) return;
+    var first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first){
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last){
+      e.preventDefault(); first.focus();
+    }
+  }
 
   function showCiteBackdrop() {
     var bd = document.getElementById("cite-backdrop");
@@ -652,13 +666,16 @@
 
     // 5) Cite popover open/close/copy
     function closeAllPopovers(){
+      var hadOpen = false;
       root.querySelectorAll(".cite-popover").forEach(function(pop){
+        if (!pop.hidden) hadOpen = true;
         pop.hidden = true;
         var card = pop.closest(".paper-card, .header-card, .result-card, article");
         var openBtn = card && card.querySelector('[data-action="open-cite"]');
         if (openBtn) openBtn.setAttribute("aria-expanded","false");
       });
       hideCiteBackdrop();
+      if (hadOpen && _citeOpener){ _citeOpener.focus(); _citeOpener = null; }
     }
 
     root.addEventListener("click", function(e){
@@ -679,7 +696,8 @@
         showCiteBackdrop();
         pop.hidden = false;
         open.setAttribute("aria-expanded","true");
-        requestAnimationFrame(function(){ positionPopover(); });
+        _citeOpener = open;
+        requestAnimationFrame(function(){ positionPopover(); pop.focus(); });
         return;
       }
 
@@ -690,6 +708,8 @@
         if (popC){ popC.hidden = true; }
         var openBtn = cardC && cardC.querySelector('[data-action="open-cite"]');
         if (openBtn) openBtn.setAttribute("aria-expanded","false");
+        if (_citeOpener){ _citeOpener.focus(); _citeOpener = null; }
+        hideCiteBackdrop();
         return;
       }
 
@@ -766,9 +786,13 @@
       }
     });
 
-    // 6) Close cite popovers on Escape / outside click
+    // 6) Close cite popovers on Escape / outside click; trap Tab while open
     document.addEventListener("keydown", function(e){
-      if (e.key === "Escape") closeAllPopovers();
+      if (e.key === "Escape") { closeAllPopovers(); return; }
+      if (e.key === "Tab"){
+        var openPop = document.querySelector(".cite-popover:not([hidden])");
+        if (openPop) trapFocus(openPop, e);
+      }
     });
     document.addEventListener("click", function(e){
       var pop = e.target.closest(".cite-popover");
@@ -846,10 +870,10 @@
 
     var total = openness + recognition + scale + integrity;
     var grade = "Poor", color = "#c0392b";
-    if (total >= 85) { grade = "Excellent"; color = "#27ae60"; }
-    else if (total >= 70) { grade = "Good";      color = "#2e7f9f"; }
-    else if (total >= 50) { grade = "Fair";      color = "#f39c12"; }
-    else if (total >= 30) { grade = "Limited";   color = "#e67e22"; }
+    if (total >= 85) { grade = "Excellent"; color = "#15803d"; }
+    else if (total >= 70) { grade = "Good";      color = "#296f8b"; }
+    else if (total >= 50) { grade = "Fair";      color = "#a16207"; }
+    else if (total >= 30) { grade = "Limited";   color = "#b35a09"; }
 
     return { total: total, grade: grade, color: color, openness: openness, recognition: recognition, scale: scale, integrity: integrity };
   }
@@ -862,6 +886,17 @@
       + 'JTI ' + score.total + '/100'
       + '</span>';
   }
+
+  // ---------- keyboard activation for role="button" elements ----------
+  // Native buttons/links fire "click" on Enter/Space automatically; elements
+  // like <li role="button" tabindex="0"> with an onclick handler do not.
+  document.addEventListener("keydown", function(e){
+    if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+    var el = e.target.closest('[role="button"][tabindex]');
+    if (!el) return;
+    if (e.key !== "Enter") e.preventDefault(); // stop page scroll on Space
+    el.click();
+  });
 
   // ---------- export ----------
   (globalThis.SE ??= {}).components = {

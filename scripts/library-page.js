@@ -312,9 +312,11 @@
     const ul=document.createElement("ul"); ul.className="tree";
 
     // Virtual sections: Duplicates + Trash
+    const virtDupLi=document.createElement("li");
     const virtDup=document.createElement("div");
     virtDup.className="virtual-h"; virtDup.textContent="Virtual";
-    ul.appendChild(virtDup);
+    virtDupLi.appendChild(virtDup);
+    ul.appendChild(virtDupLi);
 
     const dupLi=document.createElement("li");
     if(currentCollectionId==="__duplicates__") dupLi.classList.add("active");
@@ -566,7 +568,7 @@
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.2rem 0;">
                     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(it.title)}">${esc(it.title)}</span>
                     <span class="muted" style="flex-shrink:0;">${it.year||"?"} · ${countFilledFields(it)} fields</span>
-                    ${it.id===winner.id?`<span style="font-size:.78rem;color:#16a34a;font-weight:600;flex-shrink:0;">↑ keep</span>`:`<span style="font-size:.78rem;color:#9ca3af;flex-shrink:0;">discard</span>`}
+                    ${it.id===winner.id?`<span style="font-size:.78rem;color:#16a34a;font-weight:600;flex-shrink:0;">↑ keep</span>`:`<span style="font-size:.78rem;color:#6b7280;flex-shrink:0;">discard</span>`}
                   </div>`).join(`<hr style="margin:.25rem 0;border:none;border-top:1px solid #e5e7eb;">`)}
                 <button class="btn btn-secondary" data-merge-gi="${gi}" style="margin-top:.5rem;font-size:.8rem;">Merge (discard → trash)</button>
               </div>`;

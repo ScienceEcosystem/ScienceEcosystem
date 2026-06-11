@@ -467,9 +467,11 @@ function renderAuthors(authors) {
           a.last_known_institutions?.[0]?.display_name ||
           "No affiliation";
         return `
-          <li class="list-item list-card" onclick="location.href='profile.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(a.display_name)}">
-            <div class="title">${escapeHtml(a.display_name)}</div>
-            <div class="muted">${escapeHtml(inst)}</div>
+          <li class="list-item-wrap">
+            <div class="list-item list-card" onclick="location.href='profile.html?id=${id}'" tabindex="0" role="button">
+              <div class="title">${escapeHtml(a.display_name)}</div>
+              <div class="muted">${escapeHtml(inst)}</div>
+            </div>
           </li>
         `;
       }).join("")
@@ -487,11 +489,13 @@ function renderTopics(topics) {
           ? `<div class="muted" style="font-size:.8rem;margin-top:.1rem;">${escapeHtml(t.description.slice(0, 100))}</div>`
           : "";
         const badge = t._wikipedia_only
-          ? `<span style="font-size:.7rem;color:#9ca3af;margin-left:.4rem;">Wikipedia</span>`
+          ? `<span style="font-size:.7rem;color:#6b7280;margin-left:.4rem;">Wikipedia</span>`
           : "";
         return `
-          <li class="list-item list-card" onclick="location.href='topic.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button" aria-label="${escapeHtml(t.display_name)}">
-            <div>${escapeHtml(t.display_name)}${badge}</div>${sub}
+          <li class="list-item-wrap">
+            <div class="list-item list-card" onclick="location.href='topic.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button">
+              <div>${escapeHtml(t.display_name)}${badge}</div>${sub}
+            </div>
           </li>
         `;
       }).join("")
@@ -508,9 +512,11 @@ function renderInstitutions(items) {
         const works = Number.isFinite(inst.works_count) ? `${inst.works_count.toLocaleString()} works` : null;
         const sub = [country, works].filter(Boolean).join(" · ") || "-";
         return `
-          <li class="list-item list-card" onclick="location.href='institute.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button" aria-label="${escapeHtml(inst.display_name)}">
-            <div class="title">${escapeHtml(inst.display_name)}</div>
-            <div class="muted">${escapeHtml(sub)}</div>
+          <li class="list-item-wrap">
+            <div class="list-item list-card" onclick="location.href='institute.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button">
+              <div class="title">${escapeHtml(inst.display_name)}</div>
+              <div class="muted">${escapeHtml(sub)}</div>
+            </div>
           </li>
         `;
       }).join("")
@@ -534,10 +540,12 @@ function renderJournals(items) {
           : `<span class="muted">Publisher: ${escapeHtml(pubName || "Unknown")}</span>`;
 
         return `
-          <li class="list-item list-card" onclick="location.href='journal.html?id=${encodeURIComponent(srcId)}'" tabindex="0" role="button" aria-label="${escapeHtml(j.display_name)}">
-            <div class="title">${escapeHtml(j.display_name)}</div>
-            <div class="muted">${escapeHtml(subLeft)}</div>
-            <div>${pubLink}</div>
+          <li class="list-item-wrap">
+            <div class="list-item list-card" onclick="location.href='journal.html?id=${encodeURIComponent(srcId)}'" tabindex="0" role="button">
+              <div class="title">${escapeHtml(j.display_name)}</div>
+              <div class="muted">${escapeHtml(subLeft)}</div>
+              <div>${pubLink}</div>
+            </div>
           </li>
         `;
       }).join("")
@@ -554,9 +562,11 @@ function renderPublishers(items) {
         const sources = Number.isFinite(p.sources_count) ? `${p.sources_count.toLocaleString()} sources` : null;
         const sub = [works, sources].filter(Boolean).join(" · ") || "Publisher";
         return `
-          <li class="list-item list-card" onclick="location.href='publisher.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button" aria-label="${escapeHtml(p.display_name)}">
-            <div class="title">${escapeHtml(p.display_name)}</div>
-            <div class="muted">${escapeHtml(sub)}</div>
+          <li class="list-item-wrap">
+            <div class="list-item list-card" onclick="location.href='publisher.html?id=${encodeURIComponent(id)}'" tabindex="0" role="button">
+              <div class="title">${escapeHtml(p.display_name)}</div>
+              <div class="muted">${escapeHtml(sub)}</div>
+            </div>
           </li>
         `;
       }).join("")
@@ -575,9 +585,11 @@ function renderFunders(items) {
         const works = Number.isFinite(f.works_count) ? `${f.works_count.toLocaleString()} works` : null;
         const sub = [country, ftype, works].filter(Boolean).join(" · ") || "Funder";
         return `
-          <li class="list-item list-card" onclick="location.href='funders.html?id=${id}'" tabindex="0" role="button" aria-label="${escapeHtml(f.display_name)}">
-            <div class="title">${escapeHtml(f.display_name)}</div>
-            <div class="muted">${escapeHtml(sub)}</div>
+          <li class="list-item-wrap">
+            <div class="list-item list-card" onclick="location.href='funders.html?id=${id}'" tabindex="0" role="button">
+              <div class="title">${escapeHtml(f.display_name)}</div>
+              <div class="muted">${escapeHtml(sub)}</div>
+            </div>
           </li>
         `;
       }).join("")

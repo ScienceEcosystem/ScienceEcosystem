@@ -148,7 +148,7 @@
               </span>
             </span>
           </h3>
-          <ul id="collectionsTree" class="tree"></ul>
+          <div id="collectionsTree" class="tree"></div>
         </aside>
 
         <!-- Resizer -->
@@ -163,11 +163,11 @@
             </div>
             <div class="inline-filters">
               <input id="libFilter" class="input input-pill" placeholder="Filter…"/>
-              <select id="sortBy">
+              <select id="sortBy" aria-label="Sort by">
                 <option value="title">Title</option>
                 <option value="year">Year</option>
               </select>
-              <select id="sortDir">
+              <select id="sortDir" aria-label="Sort direction">
                 <option value="asc">Asc</option>
                 <option value="desc">Desc</option>
               </select>

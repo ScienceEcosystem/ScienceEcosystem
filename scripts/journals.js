@@ -77,7 +77,7 @@ function escJ(str) {
 function oaBadge(isOa, inDoaj) {
   if (inDoaj) return '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:10px;">DOAJ · Gold OA</span>';
   if (isOa)   return '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:10px;">Open Access</span>';
-  return             '<span style="font-size:.72rem;background:#f1f5f9;color:#64748b;padding:1px 7px;border-radius:10px;">Subscription</span>';
+  return             '<span style="font-size:.72rem;background:#f1f5f9;color:#475569;padding:1px 7px;border-radius:10px;">Subscription</span>';
 }
 
 function journalPageUrl(openAlexId) {
@@ -96,7 +96,7 @@ function makeCuratedCard(j) {
     ? 'background:#dcfce7;color:#166534'
     : j.oaPolicy === 'Hybrid'
       ? 'background:#fef9c3;color:#78350f'
-      : 'background:#f1f5f9;color:#64748b';
+      : 'background:#f1f5f9;color:#475569';
 
   card.setAttribute('data-jname', j.name);
   card.innerHTML =
@@ -115,7 +115,7 @@ function makeCuratedCard(j) {
       + '<a href="journal.html?name=' + encodeURIComponent(j.name) + '" '
         + 'style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>'
       + '<a href="' + escJ(j.link) + '" target="_blank" rel="noopener noreferrer" '
-        + 'style="font-size:.8rem;color:#64748b;text-decoration:none;">Website ↗</a>'
+        + 'style="font-size:.8rem;color:#475569;text-decoration:none;">Website ↗</a>'
     + '</div>';
   return card;
 }
@@ -142,7 +142,7 @@ function makeOpenAlexCard(s) {
       + nameHtml
       + oaBadge(s.is_oa, s.is_in_doaj)
     + '</div>'
-    + (pub ? '<p style="font-size:.78rem;color:#64748b;margin:0;">' + escJ(pub) + '</p>' : '')
+    + (pub ? '<p style="font-size:.78rem;color:#475569;margin:0;">' + escJ(pub) + '</p>' : '')
     + '<div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-top:.2rem;">'
       + '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">' + works + ' works</span>'
       + (hIndex ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">h-index ' + hIndex + '</span>' : '')
@@ -150,7 +150,7 @@ function makeOpenAlexCard(s) {
     + '</div>'
     + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
       + (pageUrl ? '<a href="' + escJ(pageUrl) + '" style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>' : '')
-      + (site ? '<a href="' + escJ(site) + '" target="_blank" rel="noopener noreferrer" style="font-size:.8rem;color:#64748b;text-decoration:none;">Website ↗</a>' : '')
+      + (site ? '<a href="' + escJ(site) + '" target="_blank" rel="noopener noreferrer" style="font-size:.8rem;color:#475569;text-decoration:none;">Website ↗</a>' : '')
     + '</div>';
   return card;
 }
@@ -179,8 +179,8 @@ function renderDefault(oaOnly) {
   Object.keys(byDiscipline).sort().forEach(function(disc) {
     const section = document.createElement('div');
     section.style.cssText = 'margin-bottom:2rem;';
-    section.innerHTML = '<h3 style="font-size:.95rem;font-weight:700;color:#374151;'
-      + 'margin:0 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid #e5e7eb;">' + escJ(disc) + '</h3>';
+    section.innerHTML = '<h2 style="font-size:.95rem;font-weight:700;color:#374151;'
+      + 'margin:0 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid #e5e7eb;">' + escJ(disc) + '</h2>';
 
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:.75rem;';

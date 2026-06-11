@@ -982,6 +982,24 @@ INFRASTRUCTURE / PLATFORM HEALTH
 
 - [X] GitHub repo already public with README at github.com/ScienceEcosystem/ScienceEcosystem
       node_modules removed from git tracking (2026-05-22)
+- [X] WCAG 2.1 AA accessibility pass (2026-06-11) — prompted by Emmy Delekta
+      (Auburn University Museum) feedback that this matters for funding.
+      Pass 1+2: Lighthouse accessibility audits across all 28 pages —
+      color-contrast (--primary, --success, #9ca3af, #64748b, #2e7f9f, #6c757d,
+      #1fb8cd, #f39c12, #27ae60, #e67e22, #999 now meet 4.5:1+), removed
+      "link relies on color alone" on topic page, heading-order fixes
+      (h3->h2 on research-tools/journal-finder/journal/profile), removed
+      meta-refresh redirects (settings-privacy, settings-identity), added
+      html lang attrs, fixed list/select-name issues on library.html,
+      aria-labels for image-only links on topic page.
+      Pass 3 (manual keyboard/ARIA review): added Enter/Space activation for
+      role="button" search-result cards (scripts/components.js delegated
+      handler), restructured search.js result <li role="button"> into
+      <li><div role="button">... to fix invalid ARIA-on-li, added focus
+      trap + focus restore to citation popover (aria-modal, returns focus
+      to trigger button), added role="img"+aria-label to species map for
+      screen readers, fixed low-contrast pdf-viewer thumbnail labels.
+      All 28 pages now score 1.0 on Lighthouse accessibility.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Service worker version: currently se-v9 — bump when doing major JS/CSS changes
 - [ ] Neon DB: add indexes if queries get slow as user count grows

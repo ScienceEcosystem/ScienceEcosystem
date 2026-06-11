@@ -50,7 +50,7 @@ main { flex: 1; padding: .75rem .9rem; }
 .state .icon { font-size: 1.8rem; }
 .state p { color: #475569; line-height: 1.4; }
 .state .hint { font-size: .8rem; color: #94a3b8; }
-.muted { color: #64748b; }
+.muted { color: #475569; }
 
 /* Spinner */
 .spinner {
@@ -83,7 +83,7 @@ main { flex: 1; padding: .75rem .9rem; }
 .paper-meta {
   margin-top: .3rem;
   font-size: .78rem;
-  color: #64748b;
+  color: #475569;
   line-height: 1.3;
 }
 .paper-doi {
