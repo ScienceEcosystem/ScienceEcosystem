@@ -1060,6 +1060,41 @@ INFRASTRUCTURE / PLATFORM HEALTH
       doesn't flag text-stroke for shadow-contrast. Lighthouse
       accessibility re-checked at 1.0 on index/about/profile/library/
       research-tools. Bumped service worker to se-v13.
+      RESTORATION pass (2026-06-11): user said the colors from the
+      "FINAL pass" above were still too dark/saturated vs. how the site
+      looked before any WCAG work — restored the PRE-WCAG values:
+      --primary: #0284c7, --success: #22c55e (global replace of
+      #006294 -> #0284c7, ~27 files). Restored the original thicker
+      4-direction 1px black text-shadow outline on .text-science/
+      .text-ecosystem (replacing the -webkit-text-stroke from se-v13) —
+      passes Lighthouse at 1.0 even with the lighter --success, axe-core
+      treats shadow-outlined text differently than a flat fg/bg check.
+      Blue buttons (.btn-primary/.btn-orcid hover/etc.) now use black
+      text on #0284c7 (5.13:1) since white fails at 4.10:1; hover states
+      keep #0369a1 (blue, white text) / #16a34a (green, black text).
+      Found and fixed a secondary regression: research-tools.html's 234
+      "Visit X ->" links and many other small-text/link uses of
+      #0284c7 across admin.html, user-profile.html, settings-profile.html,
+      pdf-viewer.html, search.html, extension/popup/popup.css,
+      scripts/*.js, style.css (.tab-btn.active, .stance-result) all
+      failed 4.5:1 at #0284c7 (4.10:1) — these were originally a
+      separate accent color #2e7f9f (4.51:1), conflated into --primary
+      by an earlier over-broad replace. Reverted them to #2e7f9f, except
+      where the background is tinted (e.g. .stance-result on #e0f2fe,
+      pdf-tab-btn.active on #f8f9fa, settings-profile URL label on
+      #f0f9ff) which needed #0369a1 (5.17-5.93:1) instead. Also fixed
+      remaining white-on-#0284c7 buttons (reset-sw.html, server/index.js
+      404 page, scripts/pdf-reader.js, settings-notifications/privacy/
+      identity/integrations.html, offline.html, research-tools.html
+      favicon-fallback badge, extension popup .btn-primary) to black
+      text, and user-profile.html's .dash-avatar/.dash-btn-primary same
+      way. Found body[data-page="user-profile"] had a stale
+      --success: #15803d override (from the WCAG pass) causing the
+      ORCID login button (black text) to fail at 4.18:1 — updated to
+      #22c55e to match the global restored green. All pages re-checked
+      at 1.0 on Lighthouse accessibility (admin, pdf-viewer,
+      research-tools, settings-profile, user-profile, index). Bumped
+      service worker to se-v14.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate

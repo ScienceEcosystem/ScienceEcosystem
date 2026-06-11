@@ -23,7 +23,7 @@
     .kpi-label { font-size: .72rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .2rem; }
     .kpi-value { font-size: 1.9rem; font-weight: 700; color: #0f172a; line-height: 1; }
     .kpi-sub   { font-size: .75rem; color: #94a3b8; margin-top: .25rem; }
-    .kpi.hi .kpi-value { color: #006294; }
+    .kpi.hi .kpi-value { color: #0284c7; }
     .kpi.green .kpi-value { color: #16a34a; }
 
     /* ── Charts ── */
@@ -43,7 +43,7 @@
     .data-table td { padding: .5rem .85rem; font-size: .83rem; border-bottom: 1px solid #f1f5f9; }
     .data-table tr:last-child td { border-bottom: none; }
     .bar-wrap { display: flex; align-items: center; gap: .4rem; }
-    .bar { height: 7px; border-radius: 4px; background: #006294; min-width: 2px; }
+    .bar { height: 7px; border-radius: 4px; background: #0284c7; min-width: 2px; }
 
     /* ── Distrib ── */
     .distrib { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
@@ -256,7 +256,7 @@ function renderBarChart(svgId, data, unit) {
     const x = pad.l + (i / n) * iW + 1;
     const bh = Math.max(2, (d.count / maxV) * iH);
     const y = pad.t + iH - bh;
-    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="#006294" rx="2" opacity=".85">
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="#0284c7" rx="2" opacity=".85">
       <title>${d.week}: ${d.count} ${unit}</title></rect>`;
     if (i === 0 || i === n - 1 || i === Math.floor(n / 2)) {
       labels += `<text x="${(x + bw/2).toFixed(1)}" y="${H - 4}" text-anchor="middle" fill="#94a3b8" font-size="9">${d.week.slice(5)}</text>`;
@@ -304,12 +304,12 @@ function renderLineChart(svgId, daily, W) {
   });
   svg.innerHTML =
     `<defs><linearGradient id="aG" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#006294" stop-opacity=".25"/>
-      <stop offset="100%" stop-color="#006294" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#0284c7" stop-opacity=".25"/>
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0"/>
     </linearGradient></defs>`
     + grid + xLabels
     + `<path d="${area}" fill="url(#aG)"/>`
-    + `<path d="${line}" fill="none" stroke="#006294" stroke-width="2" stroke-linejoin="round"/>`;
+    + `<path d="${line}" fill="none" stroke="#0284c7" stroke-width="2" stroke-linejoin="round"/>`;
 }
 
 function renderLibDistrib(d) {
@@ -339,7 +339,7 @@ function renderTrafficTable(period) {
     const pct = Math.round((r.hits / maxH) * 100);
     const label = r.page === "/" ? "Home" : r.page.replace(/^\//, "");
     return `<tr>
-      <td><a href="${r.page}" target="_blank" style="color:#006294;">${label}</a></td>
+      <td><a href="${r.page}" target="_blank" style="color:#2e7f9f;">${label}</a></td>
       <td style="font-weight:600;">${Number(r.hits).toLocaleString()}</td>
       <td><div class="bar-wrap"><div class="bar" style="width:${pct}%; max-width:180px;"></div></div></td>
     </tr>`;
@@ -356,7 +356,7 @@ function renderTopPapers(papers) {
     const url = p.id ? `paper.html?id=${encodeURIComponent(p.id)}` : "#";
     return `<tr>
       <td style="color:#94a3b8;font-weight:600;">${i + 1}</td>
-      <td><a href="${url}" target="_blank" style="color:#006294;">${p.title || "Untitled"}</a></td>
+      <td><a href="${url}" target="_blank" style="color:#2e7f9f;">${p.title || "Untitled"}</a></td>
       <td style="font-weight:600;">${p.saves}</td>
     </tr>`;
   }).join("");

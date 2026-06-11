@@ -56,7 +56,7 @@ main { flex: 1; padding: .75rem .9rem; }
 .spinner {
   width: 22px; height: 22px;
   border: 2px solid #e2e8f0;
-  border-top-color: #006294;
+  border-top-color: #0284c7;
   border-radius: 50%;
   animation: spin .7s linear infinite;
 }
@@ -98,7 +98,7 @@ main { flex: 1; padding: .75rem .9rem; }
   margin-top: .3rem;
   font-size: .75rem;
   font-weight: 600;
-  color: #006294;
+  color: #2e7f9f;
 }
 
 /* ── Save status strip ──────────────────────────────────────────────────────── */
@@ -138,7 +138,7 @@ main { flex: 1; padding: .75rem .9rem; }
 .btn:hover { opacity: .88; }
 .btn:disabled { opacity: .5; cursor: default; }
 
-.btn-primary  { background: #006294; color: #fff; flex: 1; justify-content: center; }
+.btn-primary  { background: #0284c7; color: #000; flex: 1; justify-content: center; }
 .btn-secondary { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
 .btn-success  { background: #16a34a; color: #fff; flex: 1; justify-content: center; }
 
@@ -155,7 +155,7 @@ main { flex: 1; padding: .75rem .9rem; }
 }
 .open-link a {
   font-size: .78rem;
-  color: #006294;
+  color: #2e7f9f;
   text-decoration: none;
 }
 .open-link a:hover { text-decoration: underline; }
@@ -171,7 +171,7 @@ main { flex: 1; padding: .75rem .9rem; }
   font-size: .75rem;
 }
 .footer-link {
-  color: #006294;
+  color: #2e7f9f;
   text-decoration: none;
   font-weight: 600;
 }

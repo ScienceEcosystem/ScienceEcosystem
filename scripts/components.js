@@ -871,7 +871,7 @@
     var total = openness + recognition + scale + integrity;
     var grade = "Poor", color = "#c0392b";
     if (total >= 85) { grade = "Excellent"; color = "#15803d"; }
-    else if (total >= 70) { grade = "Good";      color = "#006294"; }
+    else if (total >= 70) { grade = "Good";      color = "#0284c7"; }
     else if (total >= 50) { grade = "Fair";      color = "#a16207"; }
     else if (total >= 30) { grade = "Limited";   color = "#b35a09"; }
 

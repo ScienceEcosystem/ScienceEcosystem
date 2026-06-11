@@ -5,8 +5,8 @@
   --ink-dim: #475569;
   --surface: #ffffff;
   --nav: #0f172a;
-  --primary: #006294;
-  --success: #3fa938;
+  --primary: #0284c7;
+  --success: #22c55e;
   --link: #2563eb;
   --ring: #93c5fd;
   --shadow: 0 2px 6px rgba(0,0,0,0.06);
@@ -133,7 +133,7 @@ body {
 /* ORCID button kept compact */
 .btn-orcid {
   background: var(--success);
-  color: #1e293b;
+  color: #000;
   padding: .5rem .75rem;
   font-size: .9rem;
   line-height: 1;
@@ -146,7 +146,7 @@ body {
   white-space: nowrap;
 }
 .btn-orcid:hover,
-.btn-orcid:focus { background: #136e34; color: #fff; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-orcid:focus { background: #16a34a; color: #000; outline: 2px solid var(--ring); outline-offset: 2px; }
 .orcid-icon { height: 22px; width: auto; }
 
 /* Buttons & Inputs */
@@ -158,10 +158,10 @@ body {
   transition: transform .02s ease, background .2s ease, border .2s ease;
 }
 .btn:active { transform: translateY(1px); }
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover, .btn-primary:focus { background: #005b7f; outline: 2px solid var(--ring); outline-offset: 2px; }
-.btn-secondary { background: var(--success); color: #1e293b; }
-.btn-secondary:hover, .btn-secondary:focus { background: #136e34; color: #fff; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-primary { background: var(--primary); color: #000; }
+.btn-primary:hover, .btn-primary:focus { background: #0369a1; color: #fff; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-secondary { background: var(--success); color: #000; }
+.btn-secondary:hover, .btn-secondary:focus { background: #16a34a; color: #000; outline: 2px solid var(--ring); outline-offset: 2px; }
 .btn-link { color: var(--link); text-decoration: underline; padding: 0; border: none; background: none; }
 .btn-link:hover, .btn-link:focus { text-decoration: none; outline: 2px solid var(--ring); outline-offset: 2px; }
 
@@ -205,13 +205,11 @@ body {
 /* Brand wordmarks */
 .text-science {
   color: var(--primary);
-  -webkit-text-stroke: 1px #000;
-  paint-order: stroke fill;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
 }
 .text-ecosystem {
   color: var(--success);
-  -webkit-text-stroke: 1px #000;
-  paint-order: stroke fill;
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
 }
 
 /* ============ Panels/Content ============ */
@@ -403,7 +401,7 @@ body {
 /* ===== User profile redesign ===== */
 body[data-page="user-profile"] {
   --primary: #0f766e;
-  --success: #15803d;
+  --success: #22c55e;
   --link: #0f766e;
   --ring: rgba(16, 185, 129, 0.45);
   background: radial-gradient(circle at top left, #ecfdf5 0%, #f8fafc 40%, #eef2ff 100%);
@@ -762,7 +760,7 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   pointer-events: auto;
 }
 .citation-highlight.active {
-  outline: 2px solid #006294;
+  outline: 2px solid #0284c7;
   outline-offset: 1px;
 }
 
@@ -847,8 +845,8 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 }
 .tab-btn:hover { background: #f5f5f5; }
 .tab-btn.active {
-  border-bottom-color: #006294;
-  color: #006294;
+  border-bottom-color: #0284c7;
+  color: #2e7f9f;
   font-weight: 600;
 }
 .badge {
@@ -1699,7 +1697,7 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 }
 .stance-background  { color: #475569; background: #f8fafc; }
 .stance-methodology { color: #7c3aed; background: #f5f3ff; }
-.stance-result      { color: #006294; background: #e0f2fe; }
+.stance-result      { color: #0369a1; background: #e0f2fe; }
 
 /* ---- Hover preview card ---- */
 #hoverPreviewCard {

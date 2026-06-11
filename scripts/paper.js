@@ -840,7 +840,7 @@
 
     var grade = "Poor", color = "#c0392b";
     if (percent >= 90) { grade = "Excellent"; color = "#15803d"; }
-    else if (percent >= 70) { grade = "Good"; color = "#006294"; }
+    else if (percent >= 70) { grade = "Good"; color = "#0284c7"; }
     else if (percent >= 50) { grade = "Fair"; color = "#a16207"; }
     else if (percent >= 30) { grade = "Limited"; color = "#b35a09"; }
 
@@ -894,7 +894,7 @@
       '<div class="repro-checklist">' + indicatorsHtml + '</div>' +
       '<p style="margin-top:1rem; font-size:0.9rem; color:#666;"><strong>Journal:</strong> '+journalLinkHtml+' '+seScoreBadge+'</p>' +
       '<details style="margin-top:1rem;">' +
-        '<summary style="cursor:pointer; color:#006294; font-size:0.9rem;">How is this calculated?</summary>' +
+        '<summary style="cursor:pointer; color:#2e7f9f; font-size:0.9rem;">How is this calculated?</summary>' +
         '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem; line-height:1.5;">' +
           'Publication quality combines three signals:<br>' +
           '• Peer review (40%) — whether the work is peer reviewed<br>' +
@@ -1064,7 +1064,7 @@
   function gradeFromPercent(percent){
     var grade = "Poor", color = "#c0392b";
     if (percent >= 90) { grade = "Excellent"; color = "#15803d"; }
-    else if (percent >= 70) { grade = "Good"; color = "#006294"; }
+    else if (percent >= 70) { grade = "Good"; color = "#0284c7"; }
     else if (percent >= 50) { grade = "Fair"; color = "#a16207"; }
     else if (percent >= 30) { grade = "Limited"; color = "#b35a09"; }
     return { grade: grade, color: color };
@@ -1211,7 +1211,7 @@
           '<div style="background:'+result.color+'; width:'+result.score+'%; height:100%;"></div>' +
         '</div>' +
       '</div>' +
-      (result.note ? '<p style="font-size:0.85rem; color:#006294; background:#f0f8ff; padding:0.75rem; border-radius:4px; margin-bottom:1rem;">'+escapeHtml(result.note)+'</p>' : '') +
+      (result.note ? '<p style="font-size:0.85rem; color:#0369a1; background:#f0f8ff; padding:0.75rem; border-radius:4px; margin-bottom:1rem;">'+escapeHtml(result.note)+'</p>' : '') +
       '<div class="repro-checklist">' +
         result.checks.map(function(check){ return '' +
           '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
@@ -1220,7 +1220,7 @@
           '</div>'; }).join('') +
       '</div>' +
       '<details style="margin-top:1rem;">' +
-        '<summary style="cursor:pointer; color:#006294; font-size:0.9rem;">How is this calculated?</summary>' +
+        '<summary style="cursor:pointer; color:#2e7f9f; font-size:0.9rem;">How is this calculated?</summary>' +
         '<p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">' +
           getReproducibilityExplanation(result.paperType) +
         '</p>' +
