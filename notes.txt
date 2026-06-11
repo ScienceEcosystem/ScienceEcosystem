@@ -1014,10 +1014,18 @@ INFRASTRUCTURE / PLATFORM HEALTH
       extension) on #00729f — a hair brighter than the logo blue, chosen
       because the exact logo blue fails the 3:1 contrast rule against the
       black text-shadow outline on the "ScienceEcosystem" hero wordmark.
-      .text-ecosystem now uses --primary (was --success/green) so both halves
-      of "ScienceEcosystem" match the logo. Hover shade #005b7f. All pages
-      re-checked at 1.0 on Lighthouse accessibility. Bumped service worker to
-      se-v10 to bust the CSS cache.
+      Hover shade #005b7f. All pages re-checked at 1.0 on Lighthouse
+      accessibility. Bumped service worker to se-v10 to bust the CSS cache.
+      (.text-ecosystem reverted back to --success/green per user — the
+      two-tone "ScienceEcosystem" wordmark was intentional.)
+      Also brightened --success from #15803d back toward the original
+      brand green #22c55e -> #178541 (closer to the original vibrant
+      green while still passing 4.71:1 vs white text and 3.85:1 vs the
+      wordmark's black shadow). This affects .btn-secondary ("Why
+      ScienceEcosystem" etc.), .text-ecosystem, and .btn-orcid (now
+      var(--success) instead of a separate hardcoded green). Hover
+      shade for both buttons updated to #136e34. Lighthouse
+      accessibility re-checked at 1.0.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
