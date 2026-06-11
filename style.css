@@ -6,7 +6,7 @@
   --surface: #ffffff;
   --nav: #0f172a;
   --primary: #00729f;
-  --success: #178541;
+  --success: #3fa938;
   --link: #2563eb;
   --ring: #93c5fd;
   --shadow: 0 2px 6px rgba(0,0,0,0.06);
@@ -133,7 +133,7 @@ body {
 /* ORCID button kept compact */
 .btn-orcid {
   background: var(--success);
-  color: #fff;
+  color: #1e293b;
   padding: .5rem .75rem;
   font-size: .9rem;
   line-height: 1;
@@ -146,7 +146,7 @@ body {
   white-space: nowrap;
 }
 .btn-orcid:hover,
-.btn-orcid:focus { background: #136e34; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-orcid:focus { background: #136e34; color: #fff; outline: 2px solid var(--ring); outline-offset: 2px; }
 .orcid-icon { height: 22px; width: auto; }
 
 /* Buttons & Inputs */
@@ -160,8 +160,8 @@ body {
 .btn:active { transform: translateY(1px); }
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover, .btn-primary:focus { background: #005b7f; outline: 2px solid var(--ring); outline-offset: 2px; }
-.btn-secondary { background: var(--success); color: #fff; }
-.btn-secondary:hover, .btn-secondary:focus { background: #136e34; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-secondary { background: var(--success); color: #1e293b; }
+.btn-secondary:hover, .btn-secondary:focus { background: #136e34; color: #fff; outline: 2px solid var(--ring); outline-offset: 2px; }
 .btn-link { color: var(--link); text-decoration: underline; padding: 0; border: none; background: none; }
 .btn-link:hover, .btn-link:focus { text-decoration: none; outline: 2px solid var(--ring); outline-offset: 2px; }
 

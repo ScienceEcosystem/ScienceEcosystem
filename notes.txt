@@ -1018,14 +1018,20 @@ INFRASTRUCTURE / PLATFORM HEALTH
       accessibility. Bumped service worker to se-v10 to bust the CSS cache.
       (.text-ecosystem reverted back to --success/green per user — the
       two-tone "ScienceEcosystem" wordmark was intentional.)
-      Also brightened --success from #15803d back toward the original
-      brand green #22c55e -> #178541 (closer to the original vibrant
-      green while still passing 4.71:1 vs white text and 3.85:1 vs the
-      wordmark's black shadow). This affects .btn-secondary ("Why
-      ScienceEcosystem" etc.), .text-ecosystem, and .btn-orcid (now
-      var(--success) instead of a separate hardcoded green). Hover
-      shade for both buttons updated to #136e34. Lighthouse
-      accessibility re-checked at 1.0.
+      Then went further per user request: --success is now the EXACT
+      logo green #3fa938 (sampled from assets/logos_se/logo.png), used
+      for .btn-secondary ("Why ScienceEcosystem" etc.), .btn-orcid, and
+      .text-ecosystem. White text on #3fa938 only gives 3.02:1 (fails
+      4.5:1), so .btn-secondary/.btn-orcid text changed from white to
+      dark navy #1e293b (4.84:1, passes). .text-ecosystem passes at
+      3.02:1 against the white hero bg (large bold text needs 3:1).
+      Hover state for both buttons darkens to #136e34 AND switches text
+      back to white (passes contrast at that darker shade). Checked:
+      dark text on the blue --primary buttons would only give ~2.2-2.7:1
+      (fails badly), so blue buttons keep white text — only green is
+      light enough for dark text. Lighthouse accessibility re-checked
+      at 1.0 on index/profile/library/about. Bumped service worker to
+      se-v12.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
