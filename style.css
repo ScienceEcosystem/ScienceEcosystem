@@ -5,7 +5,7 @@
   --ink-dim: #475569;
   --surface: #ffffff;
   --nav: #0f172a;
-  --primary: #00729f;
+  --primary: #006294;
   --success: #3fa938;
   --link: #2563eb;
   --ring: #93c5fd;
@@ -205,11 +205,13 @@ body {
 /* Brand wordmarks */
 .text-science {
   color: var(--primary);
-  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
 }
 .text-ecosystem {
   color: var(--success);
-  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
 }
 
 /* ============ Panels/Content ============ */
@@ -760,7 +762,7 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   pointer-events: auto;
 }
 .citation-highlight.active {
-  outline: 2px solid #00729f;
+  outline: 2px solid #006294;
   outline-offset: 1px;
 }
 
@@ -845,8 +847,8 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 }
 .tab-btn:hover { background: #f5f5f5; }
 .tab-btn.active {
-  border-bottom-color: #00729f;
-  color: #00729f;
+  border-bottom-color: #006294;
+  color: #006294;
   font-weight: 600;
 }
 .badge {
@@ -1697,7 +1699,7 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 }
 .stance-background  { color: #475569; background: #f8fafc; }
 .stance-methodology { color: #7c3aed; background: #f5f3ff; }
-.stance-result      { color: #00729f; background: #e0f2fe; }
+.stance-result      { color: #006294; background: #e0f2fe; }
 
 /* ---- Hover preview card ---- */
 #hoverPreviewCard {

@@ -963,7 +963,7 @@
     if (!annots.length) {
       panel.innerHTML = pdfViewerUrl
         ? `<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:.6rem .75rem;font-size:.83rem;color:#6b7280;">
-             No highlights or notes yet. <a href="${esc(pdfViewerUrl)}" style="color:#00729f;">Open in PDF viewer</a> to start annotating.
+             No highlights or notes yet. <a href="${esc(pdfViewerUrl)}" style="color:#006294;">Open in PDF viewer</a> to start annotating.
            </div>`
         : "";
       return;
@@ -977,7 +977,7 @@
     const annotHtml = annots.slice(0, 6).map(a => {
       const icon = a.type === "note" ? "📝" : "🖊";
       const color = a.type === "note" ? "rgba(46,127,159,.18)" : "rgba(255,235,59,.45)";
-      const border = a.type === "note" ? "#00729f" : "#d4a017";
+      const border = a.type === "note" ? "#006294" : "#d4a017";
       return `<div style="background:${color};border-left:3px solid ${border};border-radius:0 6px 6px 0;padding:.4rem .6rem;margin:.3rem 0;font-size:.82rem;">
         <span style="margin-right:.3rem;">${icon}</span>${esc(a.quote||"").slice(0,120)}${(a.quote||"").length>120?"…":""}
         ${a.note?`<div style="font-style:italic;color:#555;margin-top:.2rem;font-size:.8rem;">"${esc(a.note)}"</div>`:""}
@@ -992,7 +992,7 @@
       <div style="margin:.25rem 0;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem;">
           <strong style="font-size:.85rem;">${summaryLine}</strong>
-          ${pdfViewerUrl?`<a href="${esc(pdfViewerUrl)}" style="font-size:.8rem;color:#00729f;">Open PDF viewer →</a>`:""}
+          ${pdfViewerUrl?`<a href="${esc(pdfViewerUrl)}" style="font-size:.8rem;color:#006294;">Open PDF viewer →</a>`:""}
         </div>
         ${annotHtml}${moreNote}
       </div>`;

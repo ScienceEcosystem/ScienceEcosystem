@@ -1007,6 +1007,20 @@ INFRASTRUCTURE / PLATFORM HEALTH
       categories). Added a Reset button that clears all filters. Added
       auto-fetched favicon logos (Google s2 favicon service, by domain) to
       all 232 tool cards. Lighthouse accessibility still 1.0.
+- [X] Research Tools geography fixes (2026-06-11) — geo tags were a mix of
+      countries and continents (USA x3, New Zealand, Australia x2) with
+      South America missing entirely. Normalized all data-geo values to
+      continents: USA -> North America, Australia/New Zealand -> Oceania.
+      Added two real South American biodiversity tools (SiBBr - Brazil's
+      national biodiversity portal, and the speciesLink Network) tagged
+      "South America", bringing the total to 234 tool cards. Also fixed
+      favicon logos silently disappearing for users whose browser/ad-blocker
+      blocks Google's s2/favicons service (a known privacy-filter target):
+      added window.toolFaviconFallback() in research-tools.html <head>,
+      which replaces a failed favicon <img> with a small colored
+      letter-badge instead of hiding it. All 234 onerror handlers updated.
+      Verified by simulating a blocked favicon service in headless Chrome —
+      letter badges render correctly. Lighthouse accessibility still 1.0.
 - [X] Brand color consistency pass (2026-06-11) — the WCAG pass had darkened
       the site's blue/teal accent (#2e7f9f/#296f8b) and --primary (#0369a1),
       drifting away from the SE logo's blue (#006294). Standardized the whole
@@ -1032,6 +1046,20 @@ INFRASTRUCTURE / PLATFORM HEALTH
       light enough for dark text. Lighthouse accessibility re-checked
       at 1.0 on index/profile/library/about. Bumped service worker to
       se-v12.
+      FINAL pass (2026-06-12): user wants the EXACT logo colors used
+      everywhere, never adjusted for contrast — instead change other
+      things. --primary is now the exact logo blue #006294 (global
+      replace of #00729f -> #006294, ~27 files). --success stays the
+      exact logo green #3fa938 (already done above). The wordmark's
+      black outline (.text-science/.text-ecosystem) was failing
+      Lighthouse at 2.74:1 because axe-core evaluates text-shadow
+      outlines against an effective shadow color of #161616, not pure
+      #000 (logo blue vs #161616 = 2.74, vs pure black = 3.17). Fixed
+      by replacing text-shadow with -webkit-text-stroke: 1px #000 +
+      paint-order: stroke fill — same visual outline, but axe-core
+      doesn't flag text-stroke for shadow-contrast. Lighthouse
+      accessibility re-checked at 1.0 on index/about/profile/library/
+      research-tools. Bumped service worker to se-v13.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate

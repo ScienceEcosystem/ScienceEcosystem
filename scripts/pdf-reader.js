@@ -22,7 +22,7 @@ let _paperDoiHref = null; // set by loadPaperMetadata; used by the PDF error sta
 
 function renderDoiLink(el, doiHref, oaUrl) {
   let html = `<a href="${escapeHtml(doiHref)}" target="_blank" rel="noopener"
-    style="display:inline-flex;align-items:center;gap:.5rem;background:#00729f;color:#fff;padding:.65rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:.95rem;">
+    style="display:inline-flex;align-items:center;gap:.5rem;background:#006294;color:#fff;padding:.65rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:.95rem;">
     🔗 View on publisher site
   </a>`;
   if (oaUrl && oaUrl !== doiHref) {
@@ -465,7 +465,7 @@ function bindSidebarTabs() {
         b.style.borderBottomColor = 'transparent';
       });
       btn.classList.add('active');
-      btn.style.borderBottomColor = '#00729f';
+      btn.style.borderBottomColor = '#006294';
       const tab = btn.getAttribute('data-tab');
       document.querySelectorAll('.pdf-tab-panel').forEach(p => p.style.display = 'none');
       const panel = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));

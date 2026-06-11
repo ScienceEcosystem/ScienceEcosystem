@@ -133,7 +133,7 @@
     box.innerHTML =
       row("Open access", oaPct + "%", oaPct, oaPct >= 60 ? "#16a34a" : oaPct >= 30 ? "#d97706" : "#dc2626",
           oaCount + " of " + total + " papers freely available")
-      + row("Top 25% cited papers", topPct + "%", topPct, topPct >= 40 ? "#16a34a" : "#00729f",
+      + row("Top 25% cited papers", topPct + "%", topPct, topPct >= 40 ? "#16a34a" : "#006294",
             topCited + " papers in top quartile for their year (OpenAlex)")
       + '<div style="font-size:.82rem;color:#374151;display:flex;gap:1rem;flex-wrap:wrap;margin-top:.25rem;">'
         + (span ? '<span> '+span+' year career span ('+yearMin+'–'+yearMax+')</span>' : "")
