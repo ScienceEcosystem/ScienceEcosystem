@@ -5,7 +5,7 @@ const { createCanvas } = require("canvas"); // npm i canvas
 const fs = require("fs");
 
 const sizes = [16, 32, 48, 128];
-const BG = "#2e7f9f";   // SE brand teal
+const BG = "#00729f";   // SE brand teal
 const FG = "#ffffff";
 
 for (const size of sizes) {

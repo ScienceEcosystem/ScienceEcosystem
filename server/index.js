@@ -3971,7 +3971,7 @@ app.use((req, res) => {
       '<title>Page not found | ScienceEcosystem</title>' +
       '<style>body{font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f8fafc;}' +
       '.box{text-align:center;max-width:380px;padding:2rem;}h1{font-size:1.2rem;margin:0 0 .5rem;}p{color:#475569;font-size:.9rem;margin:0 0 1.5rem;}' +
-      'a{background:#2e7f9f;color:#fff;padding:.6rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;}</style>' +
+      'a{background:#00729f;color:#fff;padding:.6rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;}</style>' +
       '</head><body><div class="box"><p style="font-size:2rem;margin:0 0 1rem">🔍</p>' +
       '<h1>Page not found</h1>' +
       '<p>The page you\'re looking for doesn\'t exist.</p>' +

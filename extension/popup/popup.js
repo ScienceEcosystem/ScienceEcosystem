@@ -78,7 +78,7 @@ async function boot() {
   // Badge: set here instead of from the auto-injected content script
   if (meta?.detected) {
     chrome.action.setBadgeText({ text: "1", tabId: tab.id });
-    chrome.action.setBadgeBackgroundColor({ color: "#2e7f9f", tabId: tab.id });
+    chrome.action.setBadgeBackgroundColor({ color: "#00729f", tabId: tab.id });
   }
 
   if (!meta?.detected) {

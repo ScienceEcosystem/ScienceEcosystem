@@ -43,7 +43,7 @@ function renderToolGrid(list) {
         + '</div>'
         + '<p style="font-size:.82rem;color:#475569;margin:0;line-height:1.45;">' + escT(tool.summary || '') + '</p>'
         + (tool.open ? '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:2px 7px;border-radius:10px;display:inline-block;">Open-source</span>' : '')
-        + (tool.link ? '<div style="margin-top:auto;padding-top:.25rem;"><a href="' + escT(tool.link) + '" target="_blank" rel="noopener noreferrer" style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Visit ' + escT(tool.name) + ' →</a></div>' : '');
+        + (tool.link ? '<div style="margin-top:auto;padding-top:.25rem;"><a href="' + escT(tool.link) + '" target="_blank" rel="noopener noreferrer" style="font-size:.8rem;color:#00729f;text-decoration:none;font-weight:600;">Visit ' + escT(tool.name) + ' →</a></div>' : '');
       row.appendChild(card);
     });
 

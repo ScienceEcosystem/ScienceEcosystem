@@ -5,7 +5,7 @@
   --ink-dim: #475569;
   --surface: #ffffff;
   --nav: #0f172a;
-  --primary: #0369a1;
+  --primary: #00729f;
   --success: #15803d;
   --link: #2563eb;
   --ring: #93c5fd;
@@ -159,7 +159,7 @@ body {
 }
 .btn:active { transform: translateY(1px); }
 .btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover, .btn-primary:focus { background: #075985; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-primary:hover, .btn-primary:focus { background: #005b7f; outline: 2px solid var(--ring); outline-offset: 2px; }
 .btn-secondary { background: var(--success); color: #fff; }
 .btn-secondary:hover, .btn-secondary:focus { background: #166534; outline: 2px solid var(--ring); outline-offset: 2px; }
 .btn-link { color: var(--link); text-decoration: underline; padding: 0; border: none; background: none; }
@@ -208,7 +208,7 @@ body {
   text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
 }
 .text-ecosystem {
-  color: var(--success);
+  color: var(--primary);
   text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
 }
 
@@ -760,7 +760,7 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   pointer-events: auto;
 }
 .citation-highlight.active {
-  outline: 2px solid #2e7f9f;
+  outline: 2px solid #00729f;
   outline-offset: 1px;
 }
 
@@ -845,8 +845,8 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 }
 .tab-btn:hover { background: #f5f5f5; }
 .tab-btn.active {
-  border-bottom-color: #2e7f9f;
-  color: #2e7f9f;
+  border-bottom-color: #00729f;
+  color: #00729f;
   font-weight: 600;
 }
 .badge {
@@ -1697,7 +1697,7 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
 }
 .stance-background  { color: #475569; background: #f8fafc; }
 .stance-methodology { color: #7c3aed; background: #f5f3ff; }
-.stance-result      { color: #0369a1; background: #e0f2fe; }
+.stance-result      { color: #00729f; background: #e0f2fe; }
 
 /* ---- Hover preview card ---- */
 #hoverPreviewCard {

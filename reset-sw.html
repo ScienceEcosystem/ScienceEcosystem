@@ -16,7 +16,7 @@
     const keys = await caches.keys();
     for (const k of keys) await caches.delete(k);
 
-    s.innerHTML = '✅ Done! <strong>' + regs.length + '</strong> service worker(s) removed, <strong>' + keys.length + '</strong> cache(s) cleared.<br><br><a href="research-tools.html" style="background:#2e7f9f;color:#fff;padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:600;">Open Tools page →</a>';
+    s.innerHTML = '✅ Done! <strong>' + regs.length + '</strong> service worker(s) removed, <strong>' + keys.length + '</strong> cache(s) cleared.<br><br><a href="research-tools.html" style="background:#00729f;color:#fff;padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:600;">Open Tools page →</a>';
   } catch(e) {
     s.textContent = 'Error: ' + e.message;
   }

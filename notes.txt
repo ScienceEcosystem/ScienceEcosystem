@@ -1000,8 +1000,25 @@ INFRASTRUCTURE / PLATFORM HEALTH
       to trigger button), added role="img"+aria-label to species map for
       screen readers, fixed low-contrast pdf-viewer thumbnail labels.
       All 28 pages now score 1.0 on Lighthouse accessibility.
+- [X] Research Tools Directory improvements (2026-06-11) — remaining feedback
+      from Emmy Delekta. Added Geography / User level / Taxon group filter
+      dropdowns + data-geo/data-userlevel/data-taxon tags on the 29
+      biodiversity-relevant tools (Biodiversity & ecology + Citizen science
+      categories). Added a Reset button that clears all filters. Added
+      auto-fetched favicon logos (Google s2 favicon service, by domain) to
+      all 232 tool cards. Lighthouse accessibility still 1.0.
+- [X] Brand color consistency pass (2026-06-11) — the WCAG pass had darkened
+      the site's blue/teal accent (#2e7f9f/#296f8b) and --primary (#0369a1),
+      drifting away from the SE logo's blue (#006294). Standardized the whole
+      site (style.css + ~25 HTML/JS/CSS files, including the browser
+      extension) on #00729f — a hair brighter than the logo blue, chosen
+      because the exact logo blue fails the 3:1 contrast rule against the
+      black text-shadow outline on the "ScienceEcosystem" hero wordmark.
+      .text-ecosystem now uses --primary (was --success/green) so both halves
+      of "ScienceEcosystem" match the logo. Hover shade #005b7f. All pages
+      re-checked at 1.0 on Lighthouse accessibility. Bumped service worker to
+      se-v10 to bust the CSS cache.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
-- [ ] Service worker version: currently se-v9 — bump when doing major JS/CSS changes
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
 - [ ] Cloudflare R2: monitor storage usage, set lifecycle rules if needed

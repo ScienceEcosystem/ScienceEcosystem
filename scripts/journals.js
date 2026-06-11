@@ -113,7 +113,7 @@ function makeCuratedCard(j) {
     + '</div>'
     + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
       + '<a href="journal.html?name=' + encodeURIComponent(j.name) + '" '
-        + 'style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>'
+        + 'style="font-size:.8rem;color:#00729f;text-decoration:none;font-weight:600;">Full details →</a>'
       + '<a href="' + escJ(j.link) + '" target="_blank" rel="noopener noreferrer" '
         + 'style="font-size:.8rem;color:#475569;text-decoration:none;">Website ↗</a>'
     + '</div>';
@@ -149,7 +149,7 @@ function makeOpenAlexCard(s) {
       + scoreBadge
     + '</div>'
     + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
-      + (pageUrl ? '<a href="' + escJ(pageUrl) + '" style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>' : '')
+      + (pageUrl ? '<a href="' + escJ(pageUrl) + '" style="font-size:.8rem;color:#00729f;text-decoration:none;font-weight:600;">Full details →</a>' : '')
       + (site ? '<a href="' + escJ(site) + '" target="_blank" rel="noopener noreferrer" style="font-size:.8rem;color:#475569;text-decoration:none;">Website ↗</a>' : '')
     + '</div>';
   return card;
