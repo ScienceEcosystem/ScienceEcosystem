@@ -1095,6 +1095,20 @@ INFRASTRUCTURE / PLATFORM HEALTH
       at 1.0 on Lighthouse accessibility (admin, pdf-viewer,
       research-tools, settings-profile, user-profile, index). Bumped
       service worker to se-v14.
+- [X] Fix pdf-viewer.html whole-page scroll bug (2026-06-11) — the
+      page hardcoded `.pdf-container { height: calc(100vh - 60px);
+      margin-top: 60px; }` assuming a 60px nav, but .app-nav is
+      actually 88px tall. The 28px shortfall made <body> taller than
+      the viewport, so the whole page became scrollable — scrolling it
+      pushed the sidebar's Info/Contents/Refs/Links tab bar out of view
+      under the nav. Fixed by making body a column flexbox
+      (`height:100%; overflow:hidden`) with `.pdf-container { flex:1;
+      min-height:0 }`, so it always exactly fills the space below the
+      nav regardless of nav height/breakpoint. Also made the sidebar
+      tab bar `position:sticky; top:0` (new .pdf-sidebar-tabs class) so
+      it stays visible while sidebar panel content scrolls. Now only
+      the PDF page area (.pdf-main-body), the sidebar panels, and the
+      thumbnail strip scroll — the page itself never does.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate

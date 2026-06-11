@@ -7,15 +7,22 @@
   <link rel="stylesheet" href="assets/fonts/fonts.css" />
   <link rel="stylesheet" href="style.css">
   <style>
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
     body {
       margin: 0;
       font-family: 'Inter', sans-serif;
+      display: flex;
+      flex-direction: column;
     }
 
     .pdf-container {
       display: flex;
-      height: calc(100vh - 60px);
-      margin-top: 60px;
+      flex: 1;
+      min-height: 0;
     }
 
     .pdf-sidebar {
@@ -23,8 +30,16 @@
       background: #f8f9fa;
       border-right: 1px solid #dee2e6;
       overflow-y: auto;
-      padding: 1rem;
+      padding: 0 1rem 1rem;
       flex-shrink: 0;
+    }
+
+    .pdf-sidebar-tabs {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f8f9fa;
+      padding-top: 1rem;
     }
 
     .pdf-main {
@@ -320,7 +335,7 @@
 
     <aside class="pdf-sidebar">
       <!-- Sidebar tabs -->
-      <div style="display:flex;border-bottom:1px solid #e5e7eb;margin-bottom:.75rem;gap:0;">
+      <div class="pdf-sidebar-tabs" style="display:flex;border-bottom:1px solid #e5e7eb;margin-bottom:.75rem;gap:0;">
         <button class="pdf-tab-btn active" data-tab="info" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid #0284c7;cursor:pointer;font-weight:600;">Info</button>
         <button class="pdf-tab-btn" data-tab="contents" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Contents</button>
         <button class="pdf-tab-btn" data-tab="refs" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Refs</button>
