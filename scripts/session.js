@@ -101,6 +101,30 @@ globalThis.SE_SESSION_PROMISE = (async function(){
   }
 })();
 
+// In-app back/forward navigation for the installed PWA — when running in
+// standalone mode there's no browser chrome, so add our own history controls
+// to the nav bar (mirrors the browser's back/forward arrows).
+(function addAppNavHistory() {
+  try {
+    var isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+    if (!isStandalone) return;
+    var logo = document.querySelector(".app-nav .logo");
+    if (!logo || logo.querySelector(".app-nav-history")) return;
+
+    var wrap = document.createElement("div");
+    wrap.className = "app-nav-history";
+    wrap.innerHTML =
+      '<button type="button" aria-label="Go back">&larr;</button>' +
+      '<button type="button" aria-label="Go forward">&rarr;</button>';
+
+    var buttons = wrap.querySelectorAll("button");
+    buttons[0].addEventListener("click", function () { history.back(); });
+    buttons[1].addEventListener("click", function () { history.forward(); });
+
+    logo.insertBefore(wrap, logo.firstChild);
+  } catch (_e) {}
+})();
+
 // PWA Service Worker Registration
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {

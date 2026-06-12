@@ -60,6 +60,12 @@ body {
   height: 88px;
 }
 
+.logo {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
 .logo img {
   height: 90px;
   width: auto;
@@ -67,6 +73,33 @@ body {
   transition: transform .2s ease;
 }
 .logo img:hover { transform: scale(1.03); }
+
+/* In-app back/forward — injected by session.js when running as an
+   installed PWA (standalone), where there's no browser chrome to
+   provide history navigation. */
+.app-nav-history {
+  display: flex;
+  align-items: center;
+  gap: .15rem;
+  margin-right: .25rem;
+}
+.app-nav-history button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.app-nav-history button:hover { background: rgba(255,255,255,0.18); }
+.app-nav-history button:active { background: rgba(255,255,255,0.28); }
 
 .nav-center { display: flex; justify-content: center; }
 .nav-right { display: flex; justify-content: flex-end; align-items: center; gap: 1rem; }

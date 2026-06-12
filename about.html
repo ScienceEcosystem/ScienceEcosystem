@@ -134,6 +134,29 @@ FILE: about.html
       <p><a class="btn btn-primary" href="https://chromewebstore.google.com/detail/scienceecosystem/ikeadbmhdgbfknpppbcbfggghpmmnfjp" target="_blank" rel="noopener">Add to Chrome — free</a></p>
     </section>
 
+    <!-- 4b. CITE ANYWHERE -->
+    <section class="panel">
+      <h2>Cite anywhere — free, no plugin required</h2>
+      <p>Every paper in your <a href="library.html">library</a> can be exported as BibTeX (<code>.bib</code>) or RIS, either one at a time from the "Cite" button on a paper, or as a single file for your whole library via the <strong>↓ Export .bib</strong> button on the library page. That one file is all you need to cite ScienceEcosystem papers from a text editor or Word — no paid Zotero/EndNote plugin required.</p>
+
+      <h3 style="margin:1.5rem 0 .5rem;">Positron / VS Code → Word, PDF, or HTML</h3>
+      <p>The free <a href="https://quarto.org/" target="_blank" rel="noopener">Quarto</a> extension for VS Code and Positron (built in to Positron, installable in VS Code) renders citations from a <code>.bib</code> file using any <a href="https://www.zotero.org/styles" target="_blank" rel="noopener">CSL citation style</a> — APA, Vancouver, Nature, and thousands more from Zotero's style repository.</p>
+      <ol>
+        <li>Export your library as <code>library.bib</code> from the <a href="library.html">library page</a> and save it next to your manuscript.</li>
+        <li>Download a <code>.csl</code> style file for your target journal from <a href="https://www.zotero.org/styles" target="_blank" rel="noopener">zotero.org/styles</a>.</li>
+        <li>In your <code>.qmd</code> or <code>.md</code> file, reference both in the YAML header:
+          <pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.75rem 1rem;overflow-x:auto;font-size:.85rem;"><code>---
+title: "My Manuscript"
+bibliography: library.bib
+csl: apa.csl
+---</code></pre>
+        </li>
+        <li>Cite a paper inline with <code>[@citekey]</code> (the citekey is the part after <code>@article{</code> in the <code>.bib</code> entry). Quarto inserts the formatted in-text citation and builds the reference list automatically.</li>
+        <li>Click <strong>Render</strong> (or run <code>quarto render manuscript.qmd --to docx</code>) to produce a Word document with citations and bibliography already formatted — switching styles is just swapping the <code>.csl</code> file.</li>
+      </ol>
+      <p class="muted" style="font-size:.85rem;">This is the same citation pipeline (Pandoc + citeproc) that Zotero's paid Word plugin uses under the hood — Quarto/Pandoc give you it for free, driven by a plain <code>.bib</code> file you fully control.</p>
+    </section>
+
     <!-- 5. ROADMAP -->
     <section class="panel">
       <h2>What's next</h2>

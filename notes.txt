@@ -1131,6 +1131,31 @@ INFRASTRUCTURE / PLATFORM HEALTH
       assets/tools.json are leftover dead code from earlier failed fix
       attempts (still pre-cached by service-worker.js) — not used by the
       new generator, candidates for removal in a future cleanup.
+- [X] Add in-app back/forward buttons for installed PWA (2026-06-13) —
+      in standalone mode there's no browser chrome, so "go back to
+      previous page" had no equivalent. scripts/session.js now injects
+      a small back/forward button pair into .logo in the nav bar,
+      only when `display-mode: standalone` (or iOS navigator.standalone)
+      is true — calls history.back()/forward(). New .app-nav-history
+      CSS in style.css. Verified injection fires only in standalone
+      mode and Lighthouse accessibility unaffected (1.0). Bumped
+      service worker to se-v15 (session.js changed, loaded everywhere).
+- [X] Library-wide .bib export + "cite anywhere" docs (2026-06-13):
+      1. Added "↓ Export .bib" button to library.html toolbar (next to
+      Add PDF). Handler in scripts/library-page.js exports the current
+      view (collection + filters applied via currentViewItems() +
+      applyFilters()) as one combined .bib file, reusing the existing
+      fmtBibTeX()/downloadText() helpers and de-duping BibTeX keys
+      across items. Filename includes the active collection name.
+      2. Added a new "Cite anywhere — free, no plugin required" section
+      to about.html documenting the free Quarto/Pandoc workflow:
+      export library.bib, grab a .csl style from zotero.org/styles,
+      reference both in the .qmd/.md YAML header, cite with [@citekey],
+      and render straight to Word/PDF/HTML — same Pandoc+citeproc
+      pipeline Zotero's paid Word plugin uses, for free. Verified
+      rendering + Lighthouse accessibility 1.0 on about.html.
+      (Full Zotero CSL style picker with citeproc-js in-app remains a
+      possible future step if requested — not built this round.)
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate

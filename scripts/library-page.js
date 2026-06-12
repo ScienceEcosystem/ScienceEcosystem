@@ -1111,5 +1111,27 @@
         ev.target.value="";
       });
     }
+
+    // Export the currently visible items (selected collection + filters) as one .bib file
+    $("#exportLibBibBtn")?.addEventListener("click",()=>{
+      const list = applyFilters(currentViewItems());
+      if(!list.length){ toast("Nothing to export","error"); return; }
+      const usedKeys = new Set();
+      const entries = list.map(item=>{
+        let entry = fmtBibTeX(item);
+        const m = entry.match(/^@article\{([^,]*),/);
+        if(m){
+          let key = m[1], n = 2;
+          while(usedKeys.has(key)){ key = m[1] + n; n++; }
+          usedKeys.add(key);
+          if(key !== m[1]) entry = entry.replace(/^@article\{[^,]*,/, "@article{"+key+",");
+        }
+        return entry;
+      });
+      const col = collections.find(c=>String(c.id)===String(currentCollectionId));
+      const name = col ? col.name.toLowerCase().replace(/[^a-z0-9]+/g,"-") : "library";
+      downloadText(`scienceecosystem-${name}.bib`, entries.join("\n\n")+"\n");
+      toast(`Exported ${list.length} item${list.length===1?"":"s"} as .bib`,"success");
+    });
   }
 })();
