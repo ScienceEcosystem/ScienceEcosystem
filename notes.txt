@@ -1109,6 +1109,28 @@ INFRASTRUCTURE / PLATFORM HEALTH
       it stays visible while sidebar panel content scrolls. Now only
       the PDF page area (.pdf-main-body), the sidebar panels, and the
       thumbnail strip scroll — the page itself never does.
+- [X] Research Tools Directory 3-part redesign (2026-06-13):
+      1. Added Asia (India Biodiversity Portal) and Africa (SANBI-GBIF)
+      tool cards to research-tools.html — geo filter now covers Asia,
+      Africa, Europe, North/South America, Oceania, Global.
+      2. Taxon filter is now progressive disclosure: hidden by default,
+      only shown when category = "Biodiversity & ecology" or "Citizen
+      science" (the only categories where data-taxon varies).
+      3. Built a safe, build-time generator for the 236+ tool cards:
+      scripts/tools-catalog-data.js holds one entry per tool (journals.js
+      style), scripts/build-research-tools.js regenerates the
+      pre-rendered <article class="tool-card"> blocks between
+      <!-- TOOLS:AUTOGEN:START/END --> markers in research-tools.html.
+      research-tools.html itself stays 100% static pre-rendered HTML at
+      runtime (no fetch) — same Safari-safe approach as the original fix
+      below. To add a tool: edit tools-catalog-data.js, run
+      `node scripts/build-research-tools.js`, check the diff, commit.
+      Verified the generator reproduces the original 236 cards
+      byte-for-byte before relying on it. Lighthouse accessibility still
+      1.0. NOTE: scripts/tools.js, scripts/tools-data.js, and
+      assets/tools.json are leftover dead code from earlier failed fix
+      attempts (still pre-cached by service-worker.js) — not used by the
+      new generator, candidates for removal in a future cleanup.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
