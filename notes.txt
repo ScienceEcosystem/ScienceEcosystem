@@ -1156,6 +1156,19 @@ INFRASTRUCTURE / PLATFORM HEALTH
       rendering + Lighthouse accessibility 1.0 on about.html.
       (Full Zotero CSL style picker with citeproc-js in-app remains a
       possible future step if requested — not built this round.)
+- [X] "Recently cited you" feed on user-profile.html (2026-06-13) —
+      researcher home-base feature: a "citation alert" panel that shows
+      papers that recently cited the logged-in user's work, the
+      lowest-friction "daily check" researchers already do (cf. Google
+      Scholar citation alerts). Client-side, no new backend: uses
+      me.openalex_author_id (+ any /api/claims merged author IDs) to
+      fetch the user's top-25 most-cited OpenAlex works, then one query
+      `works?filter=cites:{id1}|id2|...&sort=publication_date:desc` for
+      recent citing papers, cross-referencing referenced_works to name
+      which of the user's papers was cited. If openalex_author_id isn't
+      linked, shows a prompt pointing to settings-profile.html. Verified
+      live against a real OpenAlex author (rendered titles/authors/dates
+      correctly) and Lighthouse accessibility 1.0.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate

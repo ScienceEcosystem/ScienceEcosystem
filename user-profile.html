@@ -129,6 +129,18 @@
         </section>
       </div>
 
+      <!-- Citations to your work -->
+      <section class="panel" style="margin-top:1rem;" id="citedSection" hidden>
+        <div class="sec-head"><h2>Recently cited you</h2></div>
+        <div id="citedFeed"><p class="empty">Loading…</p></div>
+      </section>
+
+      <!-- Link OpenAlex prompt (shown if no openalex_author_id set) -->
+      <section class="panel" style="margin-top:1rem;" id="linkOpenAlexSection" hidden>
+        <div class="sec-head"><h2>Recently cited you</h2></div>
+        <p class="empty">Link your OpenAlex author profile in <a href="settings-profile.html">settings</a> to see when other papers cite your work.</p>
+      </section>
+
       <!-- Follow feed -->
       <section class="panel" style="margin-top:1rem;" id="feedSection" hidden>
         <div class="sec-head"><h2>New from people you follow</h2></div>
@@ -267,6 +279,72 @@
         .catch(function(){ box.innerHTML='<p class="empty">Could not load feed.</p>'; });
     }
 
+    function workTail(id) {
+      return String(id||"").replace(/^https?:\/\/openalex\.org\//i,"");
+    }
+
+    async function loadCitedFeed(me) {
+      var section = document.getElementById("citedSection");
+      var linkSection = document.getElementById("linkOpenAlexSection");
+      var box = document.getElementById("citedFeed");
+
+      var primaryId = me.openalex_author_id ? me.openalex_author_id.trim() : null;
+      if (!primaryId) { linkSection.hidden = false; return; }
+
+      var allIds = [primaryId];
+      try {
+        var claims = await api("/api/claims");
+        (claims.claims || []).forEach(function(c){
+          var id = (c.author_id||"").trim();
+          if (id && allIds.indexOf(id) === -1) allIds.push(id);
+        });
+      } catch(_) {}
+
+      section.hidden = false;
+
+      try {
+        var authorFilter = allIds.map(function(id){
+          return id.indexOf("http")===0 ? id : "https://openalex.org/"+id;
+        }).join("|");
+
+        // Top cited works by this author — most likely to attract new citations
+        var mine = await fetch(OA+"/works?filter=authorships.author.id:"+encodeURIComponent(authorFilter)
+          +"&sort=cited_by_count:desc&per_page=25&select=id,display_name").then(function(r){ return r.json(); });
+        var myWorks = (mine && mine.results) || [];
+        if (!myWorks.length) { box.innerHTML = '<p class="empty">No publications found for your linked OpenAlex profile.</p>'; return; }
+
+        var myIdsFull = myWorks.map(function(w){ return w.id; });
+        var myTitleById = {};
+        myWorks.forEach(function(w){ myTitleById[w.id] = w.display_name || "Untitled"; });
+
+        var citesFilter = myIdsFull.join("|");
+        var citing = await fetch(OA+"/works?filter=cites:"+encodeURIComponent(citesFilter)
+          +"&sort=publication_date:desc&per_page=10&select=id,display_name,authorships,publication_date,referenced_works")
+          .then(function(r){ return r.json(); });
+        var works = (citing && citing.results) || [];
+        if (!works.length) { box.innerHTML = '<p class="empty">No recent citations found yet.</p>'; return; }
+
+        box.innerHTML = works.map(function(w){
+          var tail = workTail(w.id);
+          var authors = (w.authorships||[]).slice(0,3).map(function(a){
+            return a.author && a.author.display_name || "";
+          }).filter(Boolean).join(", ");
+          var citedTitles = (w.referenced_works||[])
+            .filter(function(rid){ return myTitleById[rid]; })
+            .map(function(rid){ return myTitleById[rid]; });
+          var citedNote = citedTitles.length
+            ? 'cited your paper "'+esc(citedTitles[0])+'"'
+            : "cites your work";
+          return '<div class="paper-row">'
+            + '<div class="paper-row-title"><a href="paper.html?id='+esc(tail)+'">'+esc(w.display_name||"Untitled")+'</a></div>'
+            + '<div class="paper-row-meta">'+esc([authors, w.publication_date].filter(Boolean).join(" · "))+' — '+citedNote+'</div>'
+          + '</div>';
+        }).join("");
+      } catch(_) {
+        box.innerHTML = '<p class="empty">Could not load citation feed.</p>';
+      }
+    }
+
     async function boot(){
       var me;
       try { me = await api("/api/me"); }
@@ -276,6 +354,7 @@
       }
       document.getElementById("dashboard").style.display = "";
       renderHero(me);
+      loadCitedFeed(me);
 
       // Library
       api("/api/library")
