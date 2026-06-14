@@ -1183,6 +1183,18 @@ INFRASTRUCTURE / PLATFORM HEALTH
       renderOpenSciencePortfolio() (Open Science Portfolio panel, now
       visible again) — #16a34a→#15803d, #94a3b8→#64748b. Verified on
       both ?id= and ?orcid= URLs; Lighthouse accessibility back to 1.0.
+- [X] Fix profile.html sidebar layout regression (2026-06-14) — once
+      boot() stopped erroring (above fix), #whoCitedMeSection (a
+      .main-col panel) could become visible and CSS grid auto-placement
+      put it in the sidebar's column/row, pushing #profileSidebar
+      (.side-col: Open Science Portfolio, Trends, Career timeline,
+      Co-authors) into row 2 col 1 — full width under Publications
+      instead of the narrow right column. Fixed in style.css by giving
+      .main-col explicit grid-column:1 and .side-col grid-column:2;
+      grid-row:1/-1, and resetting both to grid-column:1/grid-row:auto
+      in the 1024px single-column breakpoint. Verified via screenshots
+      at 1400px (sidebar correct) and 800px (stacks correctly);
+      Lighthouse accessibility still 1.0.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
