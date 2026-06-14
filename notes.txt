@@ -1169,6 +1169,20 @@ INFRASTRUCTURE / PLATFORM HEALTH
       linked, shows a prompt pointing to settings-profile.html. Verified
       live against a real OpenAlex author (rendered titles/authors/dates
       correctly) and Lighthouse accessibility 1.0.
+- [X] Fix public profile pages rendering empty (2026-06-14) —
+      scripts/profile.js renderAuthorHeader(a) referenced `opts.seUser`
+      on lines ~531-532, but `opts` is boot()'s parameter and
+      renderAuthorHeader is a sibling function, not nested — threw
+      "ReferenceError: opts is not defined" as soon as the header
+      rendered. boot()'s catch swallowed this into "Error: opts is not
+      defined" in the Publications panel, leaving Trends/Co-authors/
+      Career timeline stuck on "Loading…" for every profile.html?id=/
+      ?orcid= page. Fixed by computing seUser/isOwner before the
+      renderAuthorHeader call and passing seUser in directly. Also fixed
+      2 pre-existing color-contrast failures in
+      renderOpenSciencePortfolio() (Open Science Portfolio panel, now
+      visible again) — #16a34a→#15803d, #94a3b8→#64748b. Verified on
+      both ?id= and ?orcid= URLs; Lighthouse accessibility back to 1.0.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate

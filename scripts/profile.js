@@ -126,14 +126,14 @@
           + '<span style="color:'+color+';font-weight:700;">'+escapeHtml(String(value))+'</span>'
         + '</div>'
         + (pct !== null ? bar(pct, color) : "")
-        + (note ? '<p style="font-size:.72rem;color:#94a3b8;margin:0;">'+escapeHtml(note)+'</p>' : "")
+        + (note ? '<p style="font-size:.72rem;color:#64748b;margin:0;">'+escapeHtml(note)+'</p>' : "")
       + '</div>';
     }
 
     box.innerHTML =
-      row("Open access", oaPct + "%", oaPct, oaPct >= 60 ? "#16a34a" : oaPct >= 30 ? "#d97706" : "#dc2626",
+      row("Open access", oaPct + "%", oaPct, oaPct >= 60 ? "#15803d" : oaPct >= 30 ? "#b45309" : "#dc2626",
           oaCount + " of " + total + " papers freely available")
-      + row("Top 25% cited papers", topPct + "%", topPct, topPct >= 40 ? "#16a34a" : "#0284c7",
+      + row("Top 25% cited papers", topPct + "%", topPct, topPct >= 40 ? "#15803d" : "#0284c7",
             topCited + " papers in top quartile for their year (OpenAlex)")
       + '<div style="font-size:.82rem;color:#374151;display:flex;gap:1rem;flex-wrap:wrap;margin-top:.25rem;">'
         + (span ? '<span> '+span+' year career span ('+yearMin+'–'+yearMax+')</span>' : "")
@@ -497,7 +497,7 @@
     }
   }
 
-  function renderAuthorHeader(a){
+  function renderAuthorHeader(a, seUser){
     if ($("profileName")) $("profileName").textContent = a.display_name || "Unknown researcher";
 
     // Main affiliation - link to institute page when possible
@@ -528,8 +528,8 @@
     if (photoEl) {
       var orcidForAvatar = a.orcid ? String(a.orcid).replace(/^https?:\/\/orcid\.org\//i,"") : null;
       // Fallback to SE user's ORCID if the OpenAlex author record has no ORCID
-      if (!orcidForAvatar && opts && opts.seUser && opts.seUser.orcid) {
-        orcidForAvatar = String(opts.seUser.orcid).replace(/^https?:\/\/orcid\.org\//i,"");
+      if (!orcidForAvatar && seUser && seUser.orcid) {
+        orcidForAvatar = String(seUser.orcid).replace(/^https?:\/\/orcid\.org\//i,"");
       }
       if (orcidForAvatar) {
         photoEl.src = "/api/avatar/" + encodeURIComponent(orcidForAvatar);
@@ -1137,11 +1137,12 @@
       authorTail = authorId.replace(/^https?:\/\/openalex\.org\//i,"");
 
       var author = await getJSON(API + "/authors/" + encodeURIComponent(authorTail));
-      renderAuthorHeader(author);
 
       // ── Overlay SE user data (bio, affiliations, external links, ownership controls) ──
       var seUser = opts.seUser || _seUser || null;
       var isOwner = !!(opts.enhanced);
+
+      renderAuthorHeader(author, seUser);
 
       // Bio: prefer user-written bio, fall back to auto-summary
       if (seUser && seUser.bio) {
