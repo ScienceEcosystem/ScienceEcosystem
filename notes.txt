@@ -1195,6 +1195,20 @@ INFRASTRUCTURE / PLATFORM HEALTH
       in the 1024px single-column breakpoint. Verified via screenshots
       at 1400px (sidebar correct) and 800px (stacks correctly);
       Lighthouse accessibility still 1.0.
+- [X] Audit all 237 research-tools.html catalog links (2026-06-15) —
+      checked every link via curl + web search. Fixed 15 dead/moved
+      links in scripts/tools-catalog-data.js (Sci-Hub mirror, GlobalSoilMap,
+      BiodiversityMIP→ISIMIP, Copernicus Open Access Hub→Data Space
+      Ecosystem, GEE Apps Gallery→earthengine.app, Global Wetlands
+      Watch→Global Wetland Watch, Positron download URL, Paper Digest
+      domain, R Discovery→discovery.researcher.life, Australian Water
+      Data Portal→bom.gov.au, DOC Open Data Portal→ArcGIS, FAO
+      GeoNetwork→FAO Agro-Informatic Data Catalog, ResearchPal→.co,
+      GEM OpenQuake Platform→GEM OpenQuake, ReviewMyPaper→Review-it).
+      Removed PubReader (NCBI discontinued it May 2024, no replacement).
+      Rebuilt research-tools.html via build-research-tools.js — 236
+      cards, all links re-verified 200. Did not do a full text-accuracy
+      pass on all 236 descriptions (only the 15 renamed/relinked tools).
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
