@@ -821,6 +821,15 @@ body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
   white-space: nowrap;
 }
 .pdf-sel-toolbar button:hover { background: rgba(255,255,255,.15); }
+.pdf-sel-toolbar .pdf-sel-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: auto .15rem;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.5);
+}
+.pdf-sel-toolbar .pdf-sel-swatch:hover { transform: scale(1.15); }
 
 .citation-tooltip {
   position: absolute;

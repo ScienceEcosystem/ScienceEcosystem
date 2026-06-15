@@ -1045,6 +1045,15 @@ function updateAnnotButtons() {
   document.body.classList.toggle('annot-erase', annotMode === 'erase');
 }
 
+// ---- Highlight color palette ----
+const HIGHLIGHT_COLORS = [
+  { name: 'yellow', value: 'rgba(255,235,59,0.55)' },
+  { name: 'green',  value: 'rgba(105,220,120,0.45)' },
+  { name: 'blue',   value: 'rgba(100,181,246,0.45)' },
+  { name: 'pink',   value: 'rgba(244,143,177,0.50)' },
+];
+const UNDERLINE_COLOR = '#e53935';
+
 // ---- Floating selection toolbar ----
 let _selToolbar = null;
 
@@ -1083,8 +1092,23 @@ function showSelToolbar(x, y, quote, page, normRects) {
     showCopiedToast();
   }));
 
-  tb.appendChild(btn('🖊 Highlight', () => {
-    createAnnotation(page, normRects, quote, 'highlight', '');
+  // Color swatches for highlighting
+  HIGHLIGHT_COLORS.forEach(c => {
+    const sw = document.createElement('button');
+    sw.className = 'pdf-sel-swatch';
+    sw.title = `Highlight (${c.name})`;
+    sw.style.background = c.value;
+    sw.addEventListener('mousedown', (e) => { e.preventDefault(); });
+    sw.addEventListener('click', () => {
+      createAnnotation(page, normRects, quote, 'highlight', '', c.value);
+      removeSelToolbar();
+      window.getSelection()?.removeAllRanges();
+    });
+    tb.appendChild(sw);
+  });
+
+  tb.appendChild(btn('U Underline', () => {
+    createAnnotation(page, normRects, quote, 'underline', '', UNDERLINE_COLOR);
   }));
 
   tb.appendChild(btn('📝 Note', () => {
@@ -1116,10 +1140,10 @@ function showCopiedToast() {
   setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 150); }, 1800);
 }
 
-function createAnnotation(page, normRects, quote, type, note) {
+function createAnnotation(page, normRects, quote, type, note, color) {
   annotations.push({
     id: String(Date.now()) + '_' + Math.random().toString(16).slice(2),
-    page, type, rects: normRects, quote, note
+    page, type, rects: normRects, quote, note, color: color || null
   });
   saveAnnotations();
   renderAnnotationsForPage(page);
@@ -1191,10 +1215,17 @@ function renderAnnotationsForPage(page) {
       d.className = 'pdf-annot';
       d.setAttribute('data-annot-id', a.id);
       d.style.left = `${r.x}px`;
-      d.style.top = `${r.y}px`;
-      d.style.width = `${r.w}px`;
-      d.style.height = `${r.h}px`;
-      d.style.background = a.type === 'note' ? 'rgba(46,127,159,0.25)' : 'rgba(255,235,59,0.55)';
+      if (a.type === 'underline') {
+        d.style.top = `${r.y + r.h - 2}px`;
+        d.style.width = `${r.w}px`;
+        d.style.height = '2px';
+        d.style.background = a.color || UNDERLINE_COLOR;
+      } else {
+        d.style.top = `${r.y}px`;
+        d.style.width = `${r.w}px`;
+        d.style.height = `${r.h}px`;
+        d.style.background = a.color || (a.type === 'note' ? 'rgba(46,127,159,0.25)' : 'rgba(255,235,59,0.55)');
+      }
       if (a.note) d.setAttribute('title', a.note);
       layer.appendChild(d);
     });

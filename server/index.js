@@ -1216,6 +1216,27 @@ app.get("/api/journal/integrity", async (req, res) => {
 const staticRoot = path.resolve(__dirname, STATIC_DIR);
 const uploadDir = path.join(staticRoot, "uploads", "materials");
 const pdfUploadDir = path.join(staticRoot, "uploads", "pdfs");
+
+// ── Unified PDF storage: R2 when configured, local filesystem otherwise ──────
+// Used by both "Attach PDF" (/api/library/pdf) and "Add PDF" import
+// (/api/library/import-pdf) so a saved PDF is always retrievable by
+// sendLibraryPdf() regardless of which backend is active.
+async function storePdfFile(orcid, paperId, buffer, contentType) {
+  const safePaper = String(paperId).replace(/[^\w.\-]/g, "_");
+  const fname = `${safePaper}_${Date.now()}.pdf`;
+
+  if (r2Client) {
+    const r2Key = `pdfs/${orcid}/${fname}`;
+    await uploadToR2(r2Key, buffer, contentType || "application/pdf");
+    return { storagePath: `r2:${r2Key}`, filename: fname };
+  }
+
+  await fsp.mkdir(path.join(pdfUploadDir, orcid), { recursive: true });
+  const fullPath = path.join(pdfUploadDir, orcid, fname);
+  await fsp.writeFile(fullPath, buffer);
+  const safePath = ensureSafePath(pdfUploadDir, fullPath);
+  return { storagePath: safePath, filename: fname, urlPath: `/uploads/pdfs/${orcid}/${fname}` };
+}
 app.use(express.static(staticRoot, {
   extensions: ["html"],
   setHeaders(res, filePath) {
@@ -1778,6 +1799,60 @@ app.post("/api/library", async (req, res) => {
   res.status(201).json({ ok: true });
 });
 
+// Quick-add a paper by pasting a DOI, doi.org URL, or OpenAlex work ID/URL.
+app.post("/api/library/add-by-doi", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const raw = String(req.body?.identifier || "").trim();
+    if (!raw) return res.status(400).json({ error: "identifier required" });
+
+    const doi = normalizeDoi(raw);
+    let idTail;
+    if (/^10\.\d{4,9}\//.test(doi)) {
+      idTail = `doi:${doi}`;
+    } else if (/openalex\.org\/W\d+/i.test(raw) || /^W\d+$/i.test(raw)) {
+      idTail = normalizeOpenAlexId(raw);
+    } else {
+      return res.status(400).json({ error: "Enter a DOI (e.g. 10.1000/xyz123), a doi.org link, or an OpenAlex work ID" });
+    }
+
+    const meta = await hydrateWorkMeta(idTail);
+    const itemId = meta.openalex_url ? normalizeOpenAlexId(meta.openalex_url) : (meta.doi ? `doi:${meta.doi}` : idTail);
+
+    if (meta.doi) {
+      const { rows } = await pool.query(
+        `SELECT id FROM library_items WHERE orcid=$1 AND doi IS NOT NULL AND lower(doi)=lower($2) LIMIT 1`,
+        [sess.orcid, meta.doi]
+      );
+      if (rows.length) return res.json({ ok: true, duplicate: true, existing_id: rows[0].id });
+    }
+
+    await pool.query(
+      `INSERT INTO library_items (
+        orcid, id, title, openalex_id, openalex_url, doi, year, venue, authors, cited_by, abstract, pdf_url, meta_fresh
+      )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE)
+       ON CONFLICT (orcid, id) DO UPDATE SET
+         title=EXCLUDED.title,
+         openalex_id=EXCLUDED.openalex_id,
+         openalex_url=EXCLUDED.openalex_url,
+         doi=EXCLUDED.doi,
+         year=EXCLUDED.year,
+         venue=EXCLUDED.venue,
+         authors=EXCLUDED.authors,
+         cited_by=EXCLUDED.cited_by,
+         abstract=EXCLUDED.abstract,
+         pdf_url=EXCLUDED.pdf_url,
+         meta_fresh=TRUE`,
+      [sess.orcid, itemId, meta.title, itemId, meta.openalex_url, meta.doi, meta.year, meta.venue, meta.authors, meta.cited_by, meta.abstract, meta.pdf_url]
+    );
+    res.json({ ok: true, item: { id: itemId, ...meta } });
+  } catch (e) {
+    console.error("POST /api/library/add-by-doi failed:", e);
+    res.status(500).json({ error: "Could not find that paper. Check the identifier and try again." });
+  }
+});
+
 app.patch("/api/library/:id", async (req, res) => {
   const sess = await getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
@@ -1961,12 +2036,7 @@ app.post("/api/library/pdf", async (req, res) => {
     if (!extOk && !mimeOk) return res.status(400).json({ error: "Only PDF files allowed" });
     if (file.size > 50 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
 
-    const safePaper = paperId.replace(/[^\w.\-]/g, "_");
-    const fname = `${safePaper}_${Date.now()}.pdf`;
-    const r2Key = `pdfs/${sess.orcid}/${fname}`;
-    const storagePath = `r2:${r2Key}`;
-
-    await uploadToR2(r2Key, file.buffer, file.contentType || "application/pdf");
+    const { storagePath, filename: fname, urlPath } = await storePdfFile(sess.orcid, paperId, file.buffer, file.contentType);
 
     await pool.query(
       `INSERT INTO library_pdfs (orcid, paper_id, filename, storage_path, file_size, mime_type, source)
@@ -1981,7 +2051,7 @@ app.post("/api/library/pdf", async (req, res) => {
     );
     await pool.query(
       `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
-      [storagePath, sess.orcid, paperId]
+      [urlPath || storagePath, sess.orcid, paperId]
     );
     res.json({ ok: true, paper_id: paperId });
   } catch (e) {
@@ -2164,19 +2234,15 @@ app.post("/api/library/import-pdf", async (req, res) => {
     if (!extOk && !mimeOk) return res.status(400).json({ error: "Only PDF files allowed" });
     if (file.size > 50 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
 
-    await fsp.mkdir(path.join(pdfUploadDir, sess.orcid), { recursive: true });
-    const fname = `import_${Date.now()}.pdf`;
-    const fullPath = path.join(pdfUploadDir, sess.orcid, fname);
-    await fsp.writeFile(fullPath, file.buffer);
-    const safePath = ensureSafePath(pdfUploadDir, fullPath);
-    const urlPath = `/uploads/pdfs/${sess.orcid}/${fname}`;
-
     const sniff = file.buffer.slice(0, 8192).toString("latin1");
     const doiMatch = sniff.match(/10\.\d{4,9}\/[^\s"<>]+/);
     const doi = doiMatch ? normalizeDoi(doiMatch[0]) : "";
+    const itemId = doi ? `doi:${doi}` : `upload:${Date.now()}`;
+
+    const { storagePath, filename: storedName, urlPath } = await storePdfFile(sess.orcid, itemId, file.buffer, file.contentType);
 
     let item = {
-      id: doi ? `doi:${doi}` : `upload:${Date.now()}`,
+      id: itemId,
       title: filename.replace(/\.pdf$/i, "") || "Imported PDF",
       openalex_id: null,
       openalex_url: null,
@@ -2244,14 +2310,14 @@ app.post("/api/library/import-pdf", async (req, res) => {
          file_size=EXCLUDED.file_size,
          mime_type=EXCLUDED.mime_type,
          source=EXCLUDED.source`,
-      [sess.orcid, item.id, filename, safePath, file.size, file.contentType || "application/pdf", "import"]
+      [sess.orcid, item.id, storedName, storagePath, file.size, file.contentType || "application/pdf", "import"]
     );
     await pool.query(
       `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
-      [urlPath, sess.orcid, item.id]
+      [urlPath || storagePath, sess.orcid, item.id]
     );
 
-    res.json({ item: { ...item, local_pdf_path: urlPath }, pdf_url: urlPath });
+    res.json({ item: { ...item, local_pdf_path: urlPath || storagePath }, pdf_url: urlPath || storagePath });
   } catch (e) {
     console.error("POST /api/library/import-pdf failed:", e);
     res.status(500).json({ error: "Failed to import PDF" });

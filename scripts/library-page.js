@@ -74,6 +74,35 @@
       item.doi?"  doi={"+item.doi+"},":"",
       "}"].filter(Boolean).join("\n");
   }
+  function authorInitials(given){
+    return given.split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()+".").join(" ");
+  }
+  function fmtAPA(item){
+    const authors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const names=authors.map(a=>{ const p=splitName(a); return p.given?`${p.family}, ${authorInitials(p.given)}`:p.family; });
+    let authorStr="";
+    if(names.length===1) authorStr=names[0];
+    else if(names.length===2) authorStr=names.join(", & ");
+    else if(names.length>2) authorStr=names.slice(0,-1).join(", ")+", & "+names[names.length-1];
+    const year=item.year?`(${item.year}). `:"";
+    const title=(item.title||"").trim();
+    const venue=item.venue?` ${item.venue}.`:"";
+    const doi=item.doi?` https://doi.org/${item.doi}`:"";
+    return `${authorStr?authorStr+" ":""}${year}${title}.${venue}${doi}`.trim();
+  }
+  function fmtMLA(item){
+    const authors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const names=authors.map(a=>{ const p=splitName(a); return p.given?`${p.family}, ${p.given}`:p.family; });
+    let authorStr="";
+    if(names.length===1) authorStr=names[0];
+    else if(names.length===2) authorStr=`${names[0]}, and ${authors[1]}`;
+    else if(names.length>2) authorStr=`${names[0]}, et al.`;
+    const title=item.title?`"${item.title}."`:"";
+    const venue=item.venue?` ${item.venue},`:"";
+    const year=item.year?` ${item.year}.`:"";
+    const doi=item.doi?` doi:${item.doi}.`:"";
+    return `${authorStr?authorStr+". ":""}${title}${venue}${year}${doi}`.trim();
+  }
   function fmtRIS(item){
     const authors=(item.authors||"").split(/;| and /i);
     return ["TY  - JOUR",
@@ -512,7 +541,7 @@
     const q=($("#libFilter")?.value||"").trim().toLowerCase();
     const tags=tagFilterTerms;
     return list.filter(it=>{
-      const matchesQ = !q || `${it.title} ${it.authors||""} ${it.venue||""}`.toLowerCase().includes(q);
+      const matchesQ = !q || `${it.title} ${it.authors||""} ${it.venue||""} ${it.abstract||""}`.toLowerCase().includes(q);
       const hasTags = !tags.length || (Array.isArray(it.tags) && tags.every(t=>it.tags.map(s=>s.toLowerCase()).includes(t)));
       return matchesQ && hasTags;
     });
@@ -792,9 +821,14 @@
         <div id="annotPanel" style="margin:.5rem 0;"></div>
 
         <!-- Citation export -->
-        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0;">
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:.5rem 0;">
           <button class="btn btn-secondary" id="exportBibBtn">↓ BibTeX</button>
           <button class="btn btn-secondary" id="exportRisBtn">↓ RIS</button>
+          <select id="citeFormatSelect" class="input" style="padding:.3rem .4rem;font-size:.85rem;">
+            <option value="apa">APA</option>
+            <option value="mla">MLA</option>
+          </select>
+          <button class="btn btn-secondary" id="copyCiteBtn">📋 Copy citation</button>
         </div>
 
         <!-- Tags editor -->
@@ -864,6 +898,16 @@
       const safe=(item.title||"citation").replace(/[^a-z0-9]/gi,"_").slice(0,40);
       downloadText(safe+".ris", fmtRIS(item), "application/x-research-info-systems");
       toast("RIS downloaded","success");
+    });
+    $("#copyCiteBtn")?.addEventListener("click", async ()=>{
+      const fmt = $("#citeFormatSelect")?.value || "apa";
+      const text = fmt==="mla" ? fmtMLA(item) : fmtAPA(item);
+      try{
+        await navigator.clipboard.writeText(text);
+        toast(`${fmt.toUpperCase()} citation copied`,"success");
+      }catch(_e){
+        toast("Could not copy citation","error");
+      }
     });
 
     // Tag editing
@@ -957,7 +1001,7 @@
     } catch(_) {}
 
     const annots = Array.isArray(annotData.annotations) ? annotData.annotations : [];
-    const highlights = annots.filter(a => a.type === "highlight");
+    const highlights = annots.filter(a => a.type === "highlight" || a.type === "underline");
     const notes     = annots.filter(a => a.type === "note");
 
     if (!annots.length) {
@@ -975,12 +1019,13 @@
     ].filter(Boolean).join(", ");
 
     const annotHtml = annots.slice(0, 6).map(a => {
-      const icon = a.type === "note" ? "📝" : "🖊";
-      const color = a.type === "note" ? "rgba(46,127,159,.18)" : "rgba(255,235,59,.45)";
-      const border = a.type === "note" ? "#0284c7" : "#d4a017";
-      return `<div style="background:${color};border-left:3px solid ${border};border-radius:0 6px 6px 0;padding:.4rem .6rem;margin:.3rem 0;font-size:.82rem;">
+      const icon = a.type === "note" ? "📝" : (a.type === "underline" ? "U" : "🖊");
+      const color = a.type === "note" ? "rgba(46,127,159,.18)" : (a.color || "rgba(255,235,59,.45)");
+      const border = a.type === "note" ? "#0284c7" : (a.color || "#d4a017");
+      return `<div data-annot-id="${esc(a.id||"")}" style="background:${color};border-left:3px solid ${border};border-radius:0 6px 6px 0;padding:.4rem .6rem;margin:.3rem 0;font-size:.82rem;">
         <span style="margin-right:.3rem;">${icon}</span>${esc(a.quote||"").slice(0,120)}${(a.quote||"").length>120?"…":""}
         ${a.note?`<div style="font-style:italic;color:#555;margin-top:.2rem;font-size:.8rem;">"${esc(a.note)}"</div>`:""}
+        <div style="margin-top:.25rem;"><button class="btn btn-secondary annot-to-note" style="font-size:.75rem;padding:.15rem .45rem;">→ Send to note</button></div>
       </div>`;
     }).join("");
 
@@ -992,10 +1037,43 @@
       <div style="margin:.25rem 0;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem;">
           <strong style="font-size:.85rem;">${summaryLine}</strong>
-          ${pdfViewerUrl?`<a href="${esc(pdfViewerUrl)}" style="font-size:.8rem;color:#2e7f9f;">Open PDF viewer →</a>`:""}
+          <span>
+            <button class="btn btn-secondary" id="exportAnnotBtn" style="font-size:.75rem;padding:.2rem .5rem;">↓ Export</button>
+            ${pdfViewerUrl?`<a href="${esc(pdfViewerUrl)}" style="font-size:.8rem;color:#2e7f9f;margin-left:.5rem;">Open PDF viewer →</a>`:""}
+          </span>
         </div>
         ${annotHtml}${moreNote}
       </div>`;
+
+    // Send an individual annotation to the Notes panel
+    panel.querySelectorAll(".annot-to-note").forEach(btn=>{
+      btn.addEventListener("click", async ()=>{
+        const wrap = btn.closest("[data-annot-id]");
+        const aid = wrap?.getAttribute("data-annot-id");
+        const a = annots.find(x=>String(x.id)===String(aid));
+        if(!a) return;
+        const text = a.quote ? (a.note ? `"${a.quote}"\n\n${a.note}` : `"${a.quote}"`) : (a.note||"");
+        if(!text) return;
+        try{
+          await api("/api/notes",{method:"POST",body:JSON.stringify({paper_id:paperId,text})});
+          await renderNotes(paperId);
+          toast("Added to notes","success");
+        }catch(e){ toast("Could not add note: "+e.message,"error"); }
+      });
+    });
+
+    // Export all highlights/notes as a markdown file
+    $("#exportAnnotBtn")?.addEventListener("click", ()=>{
+      const lines = annots.map(a=>{
+        const label = a.type === "note" ? "Note" : (a.type === "underline" ? "Underline" : "Highlight");
+        let s = `- **${label}** (p.${a.page}): ${a.quote||""}`;
+        if(a.note) s += `\n  > ${a.note}`;
+        return s;
+      });
+      const md = `# Annotations\n\n${lines.join("\n\n")}\n`;
+      downloadText("annotations.md", md, "text/markdown");
+      toast("Annotations exported","success");
+    });
   }
 
   // ---- Related items: show collection siblings ----
@@ -1084,6 +1162,31 @@
     }
   }
 
+  async function handleAddByDoi(input){
+    const identifier = (input.value || "").trim();
+    if(!identifier) return;
+    try{
+      const res = await api("/api/library/add-by-doi", { method:"POST", body: JSON.stringify({ identifier }) });
+      if(res?.duplicate){
+        toast("Already in your library","info");
+        currentSelection = res.existing_id;
+      } else if(res?.item){
+        const idx = items.findIndex(x=>String(x.id)===String(res.item.id));
+        if(idx>=0) items[idx]=res.item; else items.push(res.item);
+        currentSelection = res.item.id;
+        toast("Added to library","success");
+      } else {
+        await safeRefreshItems();
+      }
+      renderTable();
+      if(currentSelection) await renderInspector(currentSelection);
+      input.value = "";
+    }catch(e){
+      console.error("Add by DOI failed", e);
+      toast(String(e?.message || "Could not find that paper"), "error");
+    }
+  }
+
   // ---- Bind UI & observers ----
   function bindUI(){
     // Persist widths (optional)
@@ -1098,6 +1201,16 @@
     if($(".lib-right")) obs.observe($(".lib-right"));
 
     bindNewCollectionButtons();
+
+    // Add-by-DOI / identifier bindings
+    const addDoiInput = $("#addByDoiInput");
+    const addDoiBtn   = $("#addByDoiBtn");
+    if(addDoiInput && addDoiBtn){
+      addDoiBtn.addEventListener("click", ()=>handleAddByDoi(addDoiInput));
+      addDoiInput.addEventListener("keydown", (ev)=>{
+        if(ev.key === "Enter"){ ev.preventDefault(); handleAddByDoi(addDoiInput); }
+      });
+    }
 
     // PDF import bindings
     const importBtn   = $("#importPdfBtn");

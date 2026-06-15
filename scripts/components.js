@@ -657,7 +657,7 @@
       }
 
       if (typeof globalThis.savePaper === "function") {
-        globalThis.savePaper({ id, title }, btn);
+        globalThis.savePaper({ id, title, doi }, btn);
       } else {
         console.warn("savePaper() missing. Include scripts/library.js first.");
         alert("Please sign in to save papers.");

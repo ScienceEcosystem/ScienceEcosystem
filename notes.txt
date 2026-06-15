@@ -1286,6 +1286,34 @@ DONE
 - [X] about.html: rewritten — honest, 7 sections, clear narrative arc
 - [X] index.html: updated — honest tagline and features, removed overclaiming on data/code
 - [X] node_modules added to .gitignore
+- [X] Library/PDF reader Zotero-parity pass (2026-06-15):
+      1. Unified PDF storage: new storePdfFile() helper used by both
+         "Attach PDF" (/api/library/pdf) and "Add PDF" import
+         (/api/library/import-pdf) — uses R2 when configured, local
+         filesystem otherwise, so a saved PDF always loads in the reader
+         (fixes "R2 not configured" 500s in dev and inconsistent storage
+         between the two upload paths).
+      2. Save flow: savePaper() now sends doi (enables server-side
+         dedup) and immediately calls /api/items/:id/refresh after
+         saving so title/authors/year/abstract are hydrated right away
+         instead of only when the inspector is opened.
+      3. PDF reader: multi-color highlight palette (yellow/green/blue/
+         pink) plus a new "Underline" annotation type, selectable from
+         the floating selection toolbar.
+      4. Library page: "Add by DOI / URL" quick-add box in the toolbar
+         — new POST /api/library/add-by-doi endpoint resolves a DOI/
+         doi.org link/OpenAlex work ID via OpenAlex and inserts the item
+         with full metadata pre-hydrated.
+      5. Library search filter now also matches the abstract text.
+      6. Inspector: "Copy citation" button with APA/MLA format picker
+         (alongside existing BibTeX/RIS export).
+      7. Annotation panel: "→ Send to note" button per highlight/note,
+         and "↓ Export" downloads all annotations as a Markdown file.
+      Note: could not run full DB-backed end-to-end tests this session —
+      the local Neon Postgres connection returned ECONNRESET (pre-existing
+      environment issue, unrelated to these changes). All edited files
+      pass `node --check` and the dev server serves library.html and
+      pdf-viewer.html with the new UI elements present.
 
 
 =======================================================

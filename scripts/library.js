@@ -113,19 +113,27 @@ globalThis.savePaper = async function savePaper(paper, btnEl) {
     return;
   }
   try {
-    await seApi("/api/library", {
+    const result = await seApi("/api/library", {
       method: "POST",
-      body: JSON.stringify({ id: String(paper.id), title: String(paper.title) }),
+      body: JSON.stringify({ id: String(paper.id), title: String(paper.title), doi: paper.doi || null }),
     });
+    const savedId = result?.existing_id ? String(result.existing_id) : String(paper.id);
     // Update local cache + UI
     (SE_LIB_MAP ??= Object.create(null));
+    SE_LIB_MAP[savedId] = true;
     SE_LIB_MAP[String(paper.id)] = true;
     if (btnEl) markSavedButton(btnEl);
-    showSavedToast("Saved to library");
+    showSavedToast(result?.duplicate ? "Already in library" : "Saved to library");
+
+    // Hydrate full metadata (authors, year, venue, abstract) right away so the
+    // item doesn't sit as "Untitled" until the library inspector is opened
+    if (!result?.duplicate) {
+      seApi(`/api/items/${encodeURIComponent(savedId)}/refresh`, { method: "POST" }).catch(() => {});
+    }
 
     // Sync any PDF annotations that were made before this paper was saved
     const pdfUrl = paper.pdfUrl || null;
-    syncLocalAnnotationsForPaper(String(paper.id), pdfUrl).catch(() => {});
+    syncLocalAnnotationsForPaper(savedId, pdfUrl).catch(() => {});
   } catch (e) {
     const msg = String(e?.message || "");
     if (msg.includes("Not signed in")) {
