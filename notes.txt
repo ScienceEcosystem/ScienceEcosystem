@@ -1209,6 +1209,33 @@ INFRASTRUCTURE / PLATFORM HEALTH
       Rebuilt research-tools.html via build-research-tools.js — 236
       cards, all links re-verified 200. Did not do a full text-accuracy
       pass on all 236 descriptions (only the 15 renamed/relinked tools).
+- [X] Add 10 tools from GitHub awesome-lists (2026-06-15) — sourced from
+      maurice-schleussinger/awesome-open-science and Julie-Fabre/
+      awesome_science. Added BioRender (Design & illustration), GenBank
+      and UniProt (Genomics & phylogenetics), eLife and PLOS (Publisher),
+      JOSS (Publishing & archiving), DOAJ (Access & discovery), Re3data
+      (Data repositories & portals), Inciteful (Literature review tool),
+      Obsidian (Writing & collaboration) to scripts/tools-catalog-data.js.
+      Rebuilt research-tools.html via build-research-tools.js — 246 cards,
+      screenshot-verified rendering. Re-ran check-tool-links.js: 19 flagged
+      links, all pre-existing known false positives (bot-blocking/TLS
+      quirks); none of the 10 new tools affected.
+- [X] Add 3 tools recommended by Dr Andy Stapleton (YouTube) (2026-06-15) —
+      reviewed his "free AI tools for researchers" picks (Gemini, Asta,
+      Semantic Scholar, ResearchRabbit, NotebookLM, Goblin Tools).
+      Semantic Scholar and ResearchRabbit already in catalog; skipped
+      Gemini as a general-purpose chatbot (out of scope for this curated
+      list). Added NotebookLM (Literature review tool), Asta (Search
+      engine), Goblin Tools (Project management) to
+      scripts/tools-catalog-data.js. Rebuilt research-tools.html via
+      build-research-tools.js — 249 cards, links verified 200,
+      screenshot-verified rendering.
+- [X] Add Elicit to reach 250 tools (2026-06-15) — found via TnTo/
+      awesome-research GitHub list. Added Elicit (Literature review
+      tool) — AI research assistant that answers questions and extracts
+      data from papers with citations. Link verified 200. Rebuilt
+      research-tools.html via build-research-tools.js — 250 cards,
+      screenshot-verified rendering.
 - [ ] Add CONTRIBUTING.md so outside developers can contribute
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
