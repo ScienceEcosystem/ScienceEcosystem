@@ -12,6 +12,7 @@ let ctx = null;
 let pdfjsLib = null;
 let extractedReferences = [];
 let openAlexRefsList = []; // sorted alphabetically, mirrors the Refs sidebar cards
+let authorYearMap = new Map(); // "lastname_year" -> 1-based ref number
 let currentTextLayer = null;
 let refMatchCache = null;
 let annotMode = 'highlight';
@@ -337,27 +338,62 @@ async function renderLinkLayer(page, viewport, layerEl, pageNumber) {
   }
 }
 
+function buildAuthorYearMap() {
+  authorYearMap = new Map();
+  openAlexRefsList.forEach((w, i) => {
+    const lastName = (w.authorships?.[0]?.author?.display_name || '')
+      .split(' ').pop().toLowerCase().replace(/[^a-z]/g, '');
+    const year = String(w.publication_year || '');
+    if (!lastName || !year) return;
+    const key = `${lastName}_${year}`;
+    if (!authorYearMap.has(key)) authorYearMap.set(key, i + 1);
+  });
+}
+
 function applyCitationHighlights() {
   document.querySelectorAll('.pdf-text-layer').forEach(applyCitationHighlightsToLayer);
 }
 
+// Author-year citation regex: (Smith et al., 2020) / (Smith & Jones, 2019) / (Smith, 2018)
+const _ayRe = /^\s*\(\s*([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s*,?\s*(\d{4}[a-z]?)\s*\)\s*$/;
+
 function applyCitationHighlightsToLayer(layerEl) {
   if (!layerEl || !openAlexRefsList.length) return;
   const maxRef = openAlexRefsList.length;
+  const hasAuthorYear = authorYearMap.size > 0;
   const spans = layerEl.querySelectorAll('span');
   spans.forEach(span => {
-    // Skip if already processed
     if (span.hasAttribute('data-ref-number')) return;
     const text = span.textContent || '';
-    if (!text || !text.includes('[')) return;
-    // Match patterns like [1], [2,3], [4-6], [1, 2]
-    const m = text.match(/^\s*\[(\d[\d,\s\-–]*)\]\s*$/);
-    if (!m) return;
-    // Extract the first number in the bracket
-    const firstNum = parseInt(m[1].match(/\d+/)[0], 10);
-    if (firstNum < 1 || firstNum > maxRef) return;
-    span.classList.add('citation-highlight');
-    span.setAttribute('data-ref-number', String(firstNum));
+    if (!text) return;
+
+    // --- Numbered bracket: [1], [2,3], [4-6] ---
+    if (text.includes('[')) {
+      const m = text.match(/^\s*\[(\d[\d,\s\-–]*)\]\s*$/);
+      if (m) {
+        const firstNum = parseInt(m[1].match(/\d+/)[0], 10);
+        if (firstNum >= 1 && firstNum <= maxRef) {
+          span.classList.add('citation-highlight');
+          span.setAttribute('data-ref-number', String(firstNum));
+          return;
+        }
+      }
+    }
+
+    // --- Author-year: (Smith et al., 2020) ---
+    if (hasAuthorYear && text.includes('(')) {
+      const m = _ayRe.exec(text);
+      if (m) {
+        const lastName = m[1].toLowerCase().replace(/[^a-z]/g, '');
+        const year = m[2].slice(0, 4); // strip trailing letter for lookup
+        const refNum = authorYearMap.get(`${lastName}_${year}`) ||
+                       authorYearMap.get(`${lastName}_${m[2]}`);
+        if (refNum) {
+          span.classList.add('citation-highlight');
+          span.setAttribute('data-ref-number', String(refNum));
+        }
+      }
+    }
   });
 }
 
@@ -399,8 +435,12 @@ function wireCitationHover(layerEl, tooltipEl) {
     const authors = w.authorships?.slice(0, 3).map(a => a.author?.display_name).filter(Boolean).join(', ') || '';
     const hasMore = (w.authorships?.length || 0) > 3;
     const cleanId = w.id?.replace('https://openalex.org/', '') || '';
+    const firstAuthorLast = (w.authorships?.[0]?.author?.display_name || '').split(' ').pop();
+    const refLabel = firstAuthorLast && w.publication_year
+      ? `${firstAuthorLast}, ${w.publication_year}`
+      : `[${refNum}]`;
     tooltipEl.innerHTML = `
-      <div style="font-weight:600;margin-bottom:.3rem;font-size:.85rem;line-height:1.3;">[${escapeHtml(refNum)}] ${escapeHtml(w.title || 'Untitled')}</div>
+      <div style="font-weight:600;margin-bottom:.3rem;font-size:.85rem;line-height:1.3;">${escapeHtml(refLabel)} — ${escapeHtml(w.title || 'Untitled')}</div>
       ${authors ? `<div style="font-size:.78rem;color:#475569;margin-bottom:.15rem;">${escapeHtml(authors)}${hasMore ? ' et al.' : ''}</div>` : ''}
       ${w.publication_year ? `<div style="font-size:.75rem;color:#64748b;margin-bottom:.4rem;">${w.publication_year}</div>` : ''}
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;">
@@ -548,6 +588,7 @@ async function renderAllPages() {
   renderOutline();
   renderThumbnails();
   startScrollPageTracker();
+  extractFiguresTablesFromText();
 }
 
 function scrollToPage(num) {
@@ -932,6 +973,9 @@ async function loadReferencesFromOpenAlex(paper) {
       </div>`;
     }).join('');
 
+  // Build author-year lookup for (Author, YYYY) style citations
+  buildAuthorYearMap();
+
   // Re-apply citation highlights now that we have the list
   applyCitationHighlights();
 }
@@ -1052,6 +1096,71 @@ async function extractPDFReferences(pdfUrl) {
   }
 }
 
+function extractFiguresTablesFromText() {
+  const figures = [];
+  const tables = [];
+  const seen = new Set();
+
+  const pages = Array.from(pageTextIndex.keys()).sort((a, b) => a - b);
+  for (const pageNum of pages) {
+    const entries = pageTextIndex.get(pageNum) || [];
+    if (!entries.length) continue;
+
+    // Group spans into lines by proximity of vertical midpoint
+    const lines = [];
+    for (const e of entries) {
+      const midY = (e.rect.top + e.rect.bottom) / 2;
+      const line = lines.find(l => Math.abs(l.midY - midY) < 8);
+      if (line) {
+        line.parts.push(e.text);
+      } else {
+        lines.push({ midY, parts: [e.text] });
+      }
+    }
+    lines.sort((a, b) => a.midY - b.midY);
+
+    for (let li = 0; li < lines.length; li++) {
+      const lineText = lines[li].parts.join(' ').trim();
+
+      // Figure caption: "Figure 1.", "Fig. 2a", "FIG 3"
+      const figM = lineText.match(/^(fig(?:ure)?s?\.?\s*(\d+[a-z]?))[.\s:–—]/i);
+      if (figM) {
+        const num = figM[2];
+        const key = `fig_${num}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          const rest = lineText.slice(figM[0].length).trim();
+          const nextLine = (lines[li + 1]?.parts.join(' ') || '').trim();
+          const caption = (rest + (nextLine && !nextLine.match(/^(fig|table)/i) ? ' ' + nextLine : '')).slice(0, 220);
+          figures.push({ number: num, caption: caption || lineText.slice(0, 120), page: pageNum });
+        }
+        continue;
+      }
+
+      // Table caption: "Table 1.", "TABLE S2"
+      const tblM = lineText.match(/^(tables?\.?\s*(\d+[a-z]?))[.\s:–—]/i);
+      if (tblM) {
+        const num = tblM[2];
+        const key = `tbl_${num}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          const rest = lineText.slice(tblM[0].length).trim();
+          const nextLine = (lines[li + 1]?.parts.join(' ') || '').trim();
+          const caption = (rest + (nextLine && !nextLine.match(/^(fig|table)/i) ? ' ' + nextLine : '')).slice(0, 220);
+          tables.push({ number: num, caption: caption || lineText.slice(0, 120), page: pageNum });
+        }
+      }
+    }
+  }
+
+  // Sort by number
+  const numSort = (a, b) => parseFloat(a.number) - parseFloat(b.number) || a.number.localeCompare(b.number);
+  figures.sort(numSort);
+  tables.sort(numSort);
+
+  renderFiguresAndTables({ figures, tables });
+}
+
 function renderFiguresAndTables(data) {
   const figuresDiv = document.getElementById('pdfFigures');
   const tablesDiv = document.getElementById('pdfTables');
@@ -1062,13 +1171,14 @@ function renderFiguresAndTables(data) {
 
   if (figuresDiv) {
     if (!figures.length) {
-      figuresDiv.innerHTML = '<p class="muted">No figures found.</p>';
+      figuresDiv.innerHTML = '<p class="muted" style="font-size:.8rem;">No figure captions detected.</p>';
     } else {
       figuresDiv.innerHTML = figures.map(f => `
-        <div class="reference-item">
-          <span class="reference-number">Fig ${escapeHtml(f.number)}</span>
+        <div class="reference-item" style="cursor:pointer;" onclick="scrollToPage(${Number(f.page)})">
+          <span class="reference-number">Fig ${escapeHtml(String(f.number))}</span>
           <div>
-            <strong>${escapeHtml(f.caption || 'No caption')}</strong>
+            <strong style="font-size:.82rem;">${escapeHtml(f.caption || 'No caption')}</strong>
+            <p class="muted small">p. ${f.page}</p>
           </div>
         </div>
       `).join('');
@@ -1077,13 +1187,14 @@ function renderFiguresAndTables(data) {
 
   if (tablesDiv) {
     if (!tables.length) {
-      tablesDiv.innerHTML = '<p class="muted">No tables found.</p>';
+      tablesDiv.innerHTML = '<p class="muted" style="font-size:.8rem;">No table captions detected.</p>';
     } else {
       tablesDiv.innerHTML = tables.map(t => `
-        <div class="reference-item">
-          <span class="reference-number">Table ${escapeHtml(t.number)}</span>
+        <div class="reference-item" style="cursor:pointer;" onclick="scrollToPage(${Number(t.page)})">
+          <span class="reference-number">Table ${escapeHtml(String(t.number))}</span>
           <div>
-            <strong>${escapeHtml(t.caption || 'No caption')}</strong>
+            <strong style="font-size:.82rem;">${escapeHtml(t.caption || 'No caption')}</strong>
+            <p class="muted small">p. ${t.page}</p>
           </div>
         </div>
       `).join('');
@@ -1290,11 +1401,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (paperId) {
     // OpenAlex-based: metadata chains into refs + research objects
     loadPaperMetadata(paperId);
-    // Figures/tables require server extraction which isn't available
+    // Figures/tables extracted from PDF text layer after rendering
     const figs = document.getElementById('pdfFigures');
     const tabs = document.getElementById('pdfTables');
-    if (figs) figs.innerHTML = '<p class="muted" style="font-size:.8rem;">Not available.</p>';
-    if (tabs) tabs.innerHTML = '<p class="muted" style="font-size:.8rem;">Not available.</p>';
+    if (figs) figs.innerHTML = '<p class="muted" style="font-size:.8rem;">Scanning PDF…</p>';
+    if (tabs) tabs.innerHTML = '<p class="muted" style="font-size:.8rem;">Scanning PDF…</p>';
   } else {
     extractPDFReferences(pdfUrl);
     // Hide research objects section — only available when we have an OpenAlex ID
