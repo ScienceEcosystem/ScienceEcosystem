@@ -57,6 +57,39 @@
     };
   }
 
+  // ---- Item type config ----
+  const ITEM_TYPES = {
+    "journal-article": { label: "Journal Article", bibtex: "article",   fields: ["volume","issue","pages","issn"] },
+    "review":          { label: "Review",           bibtex: "article",   fields: ["volume","issue","pages","issn"] },
+    "book":            { label: "Book",             bibtex: "book",      fields: ["publisher","isbn","edition"] },
+    "book-chapter":    { label: "Book Chapter",     bibtex: "incollection", fields: ["publisher","isbn","pages"] },
+    "conference-paper":{ label: "Conference Paper", bibtex: "inproceedings", fields: ["conference","pages"] },
+    "preprint":        { label: "Preprint",         bibtex: "misc",      fields: ["repository","arxiv_id"] },
+    "dataset":         { label: "Dataset",          bibtex: "misc",      fields: ["publisher","repository"] },
+    "dissertation":    { label: "Dissertation",     bibtex: "phdthesis", fields: ["institution"] },
+    "report":          { label: "Report",           bibtex: "techreport",fields: ["publisher"] },
+    "letter":          { label: "Letter",           bibtex: "article",   fields: ["volume","issue","pages"] },
+    "editorial":       { label: "Editorial",        bibtex: "article",   fields: ["volume","issue","pages"] },
+    "other":           { label: "Other",            bibtex: "misc",      fields: [] },
+  };
+  const EXTRA_LABELS = {
+    volume:"Volume", issue:"Issue", pages:"Pages", issn:"ISSN",
+    publisher:"Publisher", isbn:"ISBN", edition:"Edition",
+    conference:"Conference", repository:"Repository",
+    arxiv_id:"arXiv ID", institution:"Institution",
+  };
+
+  function getItemType(item) {
+    return item.item_type && ITEM_TYPES[item.item_type] ? item.item_type : "journal-article";
+  }
+  function getExtraFields(item) {
+    if (!item.extra_fields) return {};
+    if (typeof item.extra_fields === "string") {
+      try { return JSON.parse(item.extra_fields); } catch { return {}; }
+    }
+    return item.extra_fields || {};
+  }
+
   // ---- Citation formatters (lightweight, no deps) ----
   function splitName(full){
     const s=String(full||"").trim();
@@ -64,20 +97,32 @@
     const parts=s.split(/\s+/); const family=parts.pop()||""; return {family,given:parts.join(" ")};
   }
   function fmtBibTeX(item){
+    const ef = getExtraFields(item);
+    const typ = ITEM_TYPES[getItemType(item)] || ITEM_TYPES["journal-article"];
     const authors=(item.authors||"").split(/;| and /i).map(a=>{ const p=splitName(a.trim()); return p.family+(p.given?", "+p.given:""); });
     const key=((authors[0]||"").split(",")[0]||"key").replace(/\s+/g,"")+(item.year||"")+(item.title||"").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,10);
-    return ["@article{"+key+",",
-      "  title={"+esc(item.title||"")+"},",
-      authors.length?"  author={"+authors.join(" and ")+"},":"",
-      item.venue?"  journal={"+item.venue+"},":"",
-      item.year?"  year={"+item.year+"},":"",
-      item.doi?"  doi={"+item.doi+"},":"",
+    const venueKey = typ.bibtex==="book"||typ.bibtex==="phdthesis" ? "  publisher" : (typ.bibtex==="inproceedings" ? "  booktitle" : "  journal");
+    return [`@${typ.bibtex}{${key},`,
+      `  title={${esc(item.title||"")}},`,
+      authors.length?`  author={${authors.join(" and ")}},`:"",
+      item.venue?`${venueKey}={${item.venue}},`:"",
+      ef.conference?`  booktitle={${ef.conference}},`:"",
+      item.year?`  year={${item.year}},`:"",
+      ef.volume?`  volume={${ef.volume}},`:"",
+      ef.issue?`  number={${ef.issue}},`:"",
+      ef.pages?`  pages={${ef.pages}},`:"",
+      ef.publisher?`  publisher={${ef.publisher}},`:"",
+      ef.institution?`  school={${ef.institution}},`:"",
+      ef.isbn?`  isbn={${ef.isbn}},`:"",
+      ef.arxiv_id?`  eprint={${ef.arxiv_id}},archivePrefix={arXiv},`:"",
+      item.doi?`  doi={${item.doi}},`:"",
       "}"].filter(Boolean).join("\n");
   }
   function authorInitials(given){
     return given.split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()+".").join(" ");
   }
   function fmtAPA(item){
+    const ef = getExtraFields(item);
     const authors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
     const names=authors.map(a=>{ const p=splitName(a); return p.given?`${p.family}, ${authorInitials(p.given)}`:p.family; });
     let authorStr="";
@@ -86,22 +131,37 @@
     else if(names.length>2) authorStr=names.slice(0,-1).join(", ")+", & "+names[names.length-1];
     const year=item.year?`(${item.year}). `:"";
     const title=(item.title||"").trim();
-    const venue=item.venue?` ${item.venue}.`:"";
+    const venue=item.venue?` *${item.venue}*`:"";
+    const volIss = ef.volume ? (ef.issue ? `, *${ef.volume}*(${ef.issue})` : `, *${ef.volume}*`) : "";
+    const pages = ef.pages ? `, ${ef.pages}` : "";
     const doi=item.doi?` https://doi.org/${item.doi}`:"";
-    return `${authorStr?authorStr+" ":""}${year}${title}.${venue}${doi}`.trim();
+    const publisher=ef.publisher?` ${ef.publisher}.`:"";
+    const institution=ef.institution?` ${ef.institution}.`:"";
+    const repo=ef.repository?` ${ef.repository}.`:"";
+    const arxiv=ef.arxiv_id?` arXiv:${ef.arxiv_id}`:"";
+    const typeStr = getItemType(item);
+    let source="";
+    if(typeStr==="book"||typeStr==="report") source=publisher;
+    else if(typeStr==="dissertation") source=institution;
+    else if(typeStr==="preprint") source=repo+arxiv;
+    else source=`${venue}${volIss}${pages}.`;
+    return `${authorStr?authorStr+" ":""}${year}${title}.${source}${doi}`.trim();
   }
   function fmtMLA(item){
+    const ef = getExtraFields(item);
     const authors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
     const names=authors.map(a=>{ const p=splitName(a); return p.given?`${p.family}, ${p.given}`:p.family; });
     let authorStr="";
     if(names.length===1) authorStr=names[0];
     else if(names.length===2) authorStr=`${names[0]}, and ${authors[1]}`;
     else if(names.length>2) authorStr=`${names[0]}, et al.`;
-    const title=item.title?`"${item.title}."`:"";
-    const venue=item.venue?` ${item.venue},`:"";
+    const title=item.title?`"${item.title}."`: "";
+    const venue=item.venue?` *${item.venue}*,`:"";
+    const vol=ef.volume?(ef.issue?` vol. ${ef.volume}, no. ${ef.issue},`:` vol. ${ef.volume},`):"";
+    const pages=ef.pages?` pp. ${ef.pages},`:"";
     const year=item.year?` ${item.year}.`:"";
     const doi=item.doi?` doi:${item.doi}.`:"";
-    return `${authorStr?authorStr+". ":""}${title}${venue}${year}${doi}`.trim();
+    return `${authorStr?authorStr+". ":""}${title}${venue}${vol}${pages}${year}${doi}`.trim();
   }
   function fmtRIS(item){
     const authors=(item.authors||"").split(/;| and /i);
@@ -738,6 +798,9 @@
     const chip=(href,label,cls="badge")=>href?`<a class="${cls}" href="${href}" target="_blank" rel="noopener">${label}</a>`:"";
     const doiUrl = item.doi ? (`https://doi.org/${item.doi.replace(/^doi:/i,"")}`) : null;
     const openAlexId = item.openalex_id || item.id || "";
+    const itemType = getItemType(item);
+    const typeInfo = ITEM_TYPES[itemType] || ITEM_TYPES["journal-article"];
+    const extraFields = getExtraFields(item);
     const localPdf = item.local_pdf_path ? `/api/library/pdf?paper_id=${encodeURIComponent(item.id)}` : null;
     const pdfUrl = localPdf || item.pdf_url || null;
     // Always open PDFs through the viewer so annotations sync
@@ -753,21 +816,34 @@
         <!-- Metadata (view mode) -->
         <div id="metaView">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;">
-            <h4 style="margin:0 0 .25rem 0;flex:1;">${esc(item.title)}</h4>
+            <div style="flex:1;">
+              <span style="display:inline-block;background:#e0f2fe;color:#0369a1;font-size:.72rem;font-weight:600;padding:.1rem .4rem;border-radius:4px;margin-bottom:.3rem;letter-spacing:.02em;">${esc(typeInfo.label)}</span>
+              <h4 style="margin:0 0 .25rem 0;">${esc(item.title)}</h4>
+            </div>
             <button class="btn btn-secondary" id="editMetaBtn" style="flex-shrink:0;font-size:.78rem;padding:.2rem .55rem;" title="Edit details">✏ Edit</button>
           </div>
           <p class="muted" style="margin:.25rem 0;">${esc(item.authors||"-")}</p>
           <p class="meta"><strong>${esc(item.year??"-")}</strong> · ${esc(item.venue||"-")}</p>
+          ${(extraFields.volume||extraFields.issue||extraFields.pages)?`<p class="meta" style="font-size:.8rem;">${[extraFields.volume?`Vol. ${esc(extraFields.volume)}`:"", extraFields.issue?`No. ${esc(extraFields.issue)}`:"", extraFields.pages?`pp. ${esc(extraFields.pages)}`:""].filter(Boolean).join(" · ")}</p>`:""}
+          ${extraFields.publisher?`<p class="meta" style="font-size:.8rem;">Publisher: ${esc(extraFields.publisher)}</p>`:""}
+          ${extraFields.conference?`<p class="meta" style="font-size:.8rem;">Conference: ${esc(extraFields.conference)}</p>`:""}
+          ${extraFields.institution?`<p class="meta" style="font-size:.8rem;">Institution: ${esc(extraFields.institution)}</p>`:""}
+          ${extraFields.arxiv_id?`<p class="meta" style="font-size:.8rem;">arXiv: ${esc(extraFields.arxiv_id)}</p>`:""}
           ${item.doi?`<p class="meta" style="font-size:.8rem;">DOI: ${esc(item.doi)}</p>`:""}
         </div>
 
         <!-- Metadata (edit mode, hidden initially) -->
         <div id="metaEdit" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:.75rem;margin-bottom:.5rem;">
           <p style="font-size:.8rem;font-weight:600;margin:0 0 .5rem 0;color:#374151;">Edit details</p>
+          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">Item type
+            <select id="editItemType" class="input" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
+              ${Object.entries(ITEM_TYPES).map(([k,v])=>`<option value="${k}"${k===itemType?" selected":""}>${v.label}</option>`).join("")}
+            </select>
+          </label>
           <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">Title
             <input id="editTitle" class="input" value="${esc(item.title||"")}" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
           </label>
-          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">Authors
+          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">Authors <span style="font-weight:400;color:#6b7280;">(Last, First; Last, First)</span>
             <input id="editAuthors" class="input" value="${esc(item.authors||"")}" placeholder="Last, First; Last, First" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
           </label>
           <div style="display:flex;gap:.5rem;margin-bottom:.35rem;">
@@ -778,6 +854,8 @@
               <input id="editVenue" class="input" value="${esc(item.venue||"")}" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
             </label>
           </div>
+          <!-- Type-specific extra fields (shown/hidden by type select) -->
+          <div id="extraFieldsWrap" style="margin-bottom:.35rem;"></div>
           <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">DOI
             <input id="editDoi" class="input" value="${esc(item.doi||"")}" placeholder="10.xxxx/xxxxx" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
           </label>
@@ -852,6 +930,37 @@
     renderAnnotationPanel(id, pdfViewerUrl);
 
     // ---- Edit metadata ----
+    function renderExtraFieldInputs(type) {
+      const wrap = $("#extraFieldsWrap");
+      if (!wrap) return;
+      const fields = (ITEM_TYPES[type] || ITEM_TYPES["journal-article"]).fields;
+      if (!fields.length) { wrap.innerHTML = ""; return; }
+      // Render a compact grid (max 2 columns) for the type-specific fields
+      const rows = [];
+      for (let i = 0; i < fields.length; i += 2) {
+        const pair = fields.slice(i, i+2);
+        rows.push(`<div style="display:flex;gap:.5rem;margin-bottom:.3rem;">${
+          pair.map(f=>`<label style="font-size:.8rem;flex:1;">${EXTRA_LABELS[f]||f}
+            <input id="ef_${f}" class="input" value="${esc(String(extraFields[f]||""))}" placeholder="${EXTRA_LABELS[f]||f}" style="display:block;width:100%;margin-top:.1rem;font-size:.82rem;">
+          </label>`).join("")
+        }</div>`);
+      }
+      wrap.innerHTML = rows.join("");
+    }
+    renderExtraFieldInputs(itemType);
+    $("#editItemType")?.addEventListener("change", function() { renderExtraFieldInputs(this.value); });
+
+    function collectExtraFields(type) {
+      const fields = (ITEM_TYPES[type] || ITEM_TYPES["journal-article"]).fields;
+      const ef = {};
+      for (const f of fields) {
+        const el = $(`#ef_${f}`);
+        const v = el ? el.value.trim() : (extraFields[f] || "");
+        if (v) ef[f] = v;
+      }
+      return Object.keys(ef).length ? ef : null;
+    }
+
     $("#editMetaBtn")?.addEventListener("click", () => {
       $("#metaView").style.display = "none";
       $("#metaEdit").style.display = "";
@@ -864,12 +973,16 @@
     $("#saveMetaBtn")?.addEventListener("click", async () => {
       const statusEl = $("#metaSaveStatus");
       statusEl.textContent = "Saving…";
+      statusEl.style.color = "";
+      const newType = $("#editItemType")?.value || itemType;
       const patch = {
-        title:    $("#editTitle").value.trim()   || item.title,
-        authors:  $("#editAuthors").value.trim() || null,
-        year:     $("#editYear").value.trim()    || null,
-        venue:    $("#editVenue").value.trim()   || null,
-        doi:      $("#editDoi").value.trim()     || null,
+        item_type: newType,
+        extra_fields: collectExtraFields(newType),
+        title:    $("#editTitle").value.trim()    || item.title,
+        authors:  $("#editAuthors").value.trim()  || null,
+        year:     $("#editYear").value.trim()     || null,
+        venue:    $("#editVenue").value.trim()    || null,
+        doi:      $("#editDoi").value.trim()      || null,
         abstract: $("#editAbstract").value.trim() || null,
       };
       try {

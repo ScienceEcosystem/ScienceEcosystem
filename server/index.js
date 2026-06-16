@@ -463,6 +463,8 @@ async function pgInit() {
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS notes_raw TEXT`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS collection_ids_zotero TEXT[]`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS annotations JSONB`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS item_type TEXT`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS extra_fields JSONB`);
 
   // Standalone PDF annotations — independent of library membership
   await pool.query(`
@@ -870,6 +872,61 @@ function invertAbstract(idx){
   });
   return words.join(" ");
 }
+function oaItemType(work) {
+  const t = String(work.type || "").toLowerCase();
+  const srcType = String(work.primary_location?.source?.type || "").toLowerCase();
+  if (t === "article" && srcType === "conference") return "conference-paper";
+  const map = {
+    "article": "journal-article",
+    "journal-article": "journal-article",
+    "review": "review",
+    "book-chapter": "book-chapter",
+    "book": "book",
+    "monograph": "book",
+    "conference-paper": "conference-paper",
+    "proceedings-article": "conference-paper",
+    "preprint": "preprint",
+    "dataset": "dataset",
+    "dissertation": "dissertation",
+    "thesis": "dissertation",
+    "report": "report",
+    "letter": "letter",
+    "editorial": "editorial",
+  };
+  return map[t] || "other";
+}
+
+function oaExtraFields(work, itemType) {
+  const extra = {};
+  const b = work.biblio || {};
+  if (b.volume) extra.volume = b.volume;
+  if (b.issue) extra.issue = b.issue;
+  if (b.first_page) {
+    extra.pages = b.last_page && b.last_page !== b.first_page
+      ? `${b.first_page}–${b.last_page}` : b.first_page;
+  }
+  const src = work.primary_location?.source || work.host_venue || {};
+  if (src.issn_l) extra.issn = src.issn_l;
+  const pub = src.publisher || src.host_organization_name || null;
+  if (pub) extra.publisher = pub;
+  const arxivRaw = work.ids?.arxiv || "";
+  const arxivId = arxivRaw.replace(/^https?:\/\/arxiv\.org\/abs\//i, "");
+  if (arxivId) extra.arxiv_id = arxivId;
+  const isbn = Array.isArray(work.ids?.isbn) ? work.ids.isbn[0] : (work.ids?.isbn || null);
+  if (isbn) extra.isbn = isbn;
+  if (itemType === "conference-paper") {
+    extra.conference = src.display_name || null;
+  }
+  if (itemType === "preprint") {
+    extra.repository = src.display_name || (arxivId ? "arXiv" : null);
+  }
+  if (itemType === "dissertation") {
+    const inst = work.authorships?.[0]?.institutions?.[0]?.display_name || src.display_name || null;
+    if (inst) extra.institution = inst;
+  }
+  return Object.keys(extra).length ? extra : null;
+}
+
 async function hydrateWorkMeta(idTail) {
   const work = await fetchJSON(`${OPENALEX}/works/${encodeURIComponent(idTail)}`);
 
@@ -890,6 +947,8 @@ async function hydrateWorkMeta(idTail) {
     .filter(Boolean).join(", ");
 
   const venue = work?.host_venue?.display_name || work?.primary_location?.source?.display_name || null;
+  const item_type = oaItemType(work);
+  const extra_fields = oaExtraFields(work, item_type);
 
   return {
     openalex_id: idTail,
@@ -902,6 +961,8 @@ async function hydrateWorkMeta(idTail) {
     cited_by: work.cited_by_count ?? 0,
     abstract: work.abstract_inverted_index ? invertAbstract(work.abstract_inverted_index) : null,
     pdf_url,
+    item_type,
+    extra_fields,
     meta_fresh: true
   };
 }
@@ -1829,22 +1890,19 @@ app.post("/api/library/add-by-doi", async (req, res) => {
 
     await pool.query(
       `INSERT INTO library_items (
-        orcid, id, title, openalex_id, openalex_url, doi, year, venue, authors, cited_by, abstract, pdf_url, meta_fresh
+        orcid, id, title, openalex_id, openalex_url, doi, year, venue, authors,
+        cited_by, abstract, pdf_url, item_type, extra_fields, meta_fresh
       )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,TRUE)
        ON CONFLICT (orcid, id) DO UPDATE SET
-         title=EXCLUDED.title,
-         openalex_id=EXCLUDED.openalex_id,
-         openalex_url=EXCLUDED.openalex_url,
-         doi=EXCLUDED.doi,
-         year=EXCLUDED.year,
-         venue=EXCLUDED.venue,
-         authors=EXCLUDED.authors,
-         cited_by=EXCLUDED.cited_by,
-         abstract=EXCLUDED.abstract,
-         pdf_url=EXCLUDED.pdf_url,
-         meta_fresh=TRUE`,
-      [sess.orcid, itemId, meta.title, itemId, meta.openalex_url, meta.doi, meta.year, meta.venue, meta.authors, meta.cited_by, meta.abstract, meta.pdf_url]
+         title=EXCLUDED.title, openalex_id=EXCLUDED.openalex_id,
+         openalex_url=EXCLUDED.openalex_url, doi=EXCLUDED.doi, year=EXCLUDED.year,
+         venue=EXCLUDED.venue, authors=EXCLUDED.authors, cited_by=EXCLUDED.cited_by,
+         abstract=EXCLUDED.abstract, pdf_url=EXCLUDED.pdf_url,
+         item_type=EXCLUDED.item_type, extra_fields=EXCLUDED.extra_fields, meta_fresh=TRUE`,
+      [sess.orcid, itemId, meta.title, itemId, meta.openalex_url, meta.doi,
+       meta.year, meta.venue, meta.authors, meta.cited_by, meta.abstract, meta.pdf_url,
+       meta.item_type, meta.extra_fields ? JSON.stringify(meta.extra_fields) : null]
     );
     res.json({ ok: true, item: { id: itemId, ...meta } });
   } catch (e) {
@@ -1869,13 +1927,18 @@ app.patch("/api/library/:id", async (req, res) => {
     vals.push(body.deleted_at || null); sets.push(`deleted_at = $${vals.length}`);
   }
   // User-editable metadata fields
-  const metaFields = ["title", "authors", "year", "venue", "doi", "abstract"];
+  const metaFields = ["title", "authors", "year", "venue", "doi", "abstract", "item_type"];
   for (const f of metaFields) {
     if (f in body) {
       const v = body[f] === null || body[f] === "" ? null : body[f];
       vals.push(f === "year" ? (v ? parseInt(v, 10) : null) : v);
       sets.push(`${f} = $${vals.length}`);
     }
+  }
+  if ("extra_fields" in body) {
+    const ef = body.extra_fields;
+    vals.push(ef && typeof ef === "object" ? JSON.stringify(ef) : null);
+    sets.push(`extra_fields = $${vals.length}`);
   }
   if (!sets.length) return res.status(400).json({ error: "Nothing to update" });
   const { rows } = await pool.query(
@@ -3497,6 +3560,8 @@ app.get("/api/library/full", async (req, res) => {
         li.notes_raw,
         li.collection_ids_zotero,
         li.deleted_at,
+        li.item_type,
+        li.extra_fields,
         COALESCE(li.meta_fresh, FALSE) AS meta_fresh,
         COALESCE(ARRAY_AGG(ci.collection_id) FILTER (WHERE ci.collection_id IS NOT NULL), '{}') AS collection_ids
       FROM library_items li
@@ -3507,7 +3572,7 @@ app.get("/api/library/full", async (req, res) => {
         li.id, li.title, li.openalex_id, li.openalex_url, li.doi, li.year,
         li.venue, li.authors, li.cited_by, li.abstract, li.pdf_url, li.local_pdf_path, li.zotero_key,
         li.zotero_version, li.last_synced_at, li.tags, li.notes_raw, li.collection_ids_zotero,
-        li.deleted_at, li.meta_fresh
+        li.deleted_at, li.item_type, li.extra_fields, li.meta_fresh
       ORDER BY li.title;
       `,
       [sess.orcid]
@@ -3534,12 +3599,15 @@ app.post("/api/items/:id/refresh", async (req, res) => {
     const upd = await pool.query(
       `UPDATE library_items SET
         title=$1, openalex_id=$2, openalex_url=$3, doi=$4, year=$5, venue=$6,
-        authors=$7, cited_by=$8, abstract=$9, pdf_url=$10, meta_fresh=TRUE
-       WHERE orcid=$11 AND id=$12
-       RETURNING id, title, openalex_id, openalex_url, doi, year, venue, authors, cited_by, abstract, pdf_url, meta_fresh`,
+        authors=$7, cited_by=$8, abstract=$9, pdf_url=$10,
+        item_type=$11, extra_fields=$12, meta_fresh=TRUE
+       WHERE orcid=$13 AND id=$14
+       RETURNING id, title, openalex_id, openalex_url, doi, year, venue, authors,
+                 cited_by, abstract, pdf_url, item_type, extra_fields, meta_fresh`,
       [
         meta.title, meta.openalex_id, meta.openalex_url, meta.doi, meta.year, meta.venue,
         meta.authors, meta.cited_by, meta.abstract, meta.pdf_url,
+        meta.item_type, meta.extra_fields ? JSON.stringify(meta.extra_fields) : null,
         sess.orcid, id
       ]
     );
