@@ -354,7 +354,8 @@ function applyCitationHighlights() {
   document.querySelectorAll('.pdf-text-layer').forEach(applyCitationHighlightsToLayer);
 }
 
-// Author-year citation regex: (Smith et al., 2020) / (Smith & Jones, 2019) / (Smith, 2018)
+// Author-year citation regex: (Smith et al., 2020) / (Smith & Jones 2019) / (Smith 2018)
+// Comma between author and year is optional — many journals omit it
 const _ayRe = /^\s*\(\s*([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s*,?\s*(\d{4}[a-z]?)\s*\)\s*$/;
 
 function applyCitationHighlightsToLayer(layerEl) {
