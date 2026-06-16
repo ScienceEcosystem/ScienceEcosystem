@@ -425,38 +425,58 @@ function onNextPage() {
   queueRenderPage(pageNum);
 }
 
+// Generation counter: each call to renderAllPages increments it.
+// Any async step that sees a stale generation aborts early.
+let _renderGen = 0;
+
 async function renderAllPages() {
   if (!pdfDoc) return;
+  const gen = ++_renderGen; // claim this render slot
   pageRendering = true;
+
   const pagesHost = document.getElementById('pdfPages');
   if (!pagesHost) return;
+
+  // 1. First pass: create ALL placeholder wraps with correct dimensions so the
+  //    scroll container has stable height from the start (no layout jumps).
   pagesHost.innerHTML = '';
   pdfLinkIndex = [];
   pageTextIndex = new Map();
 
+  const viewports = [];
   for (let i = 1; i <= pdfDoc.numPages; i++) {
+    if (_renderGen !== gen) return; // superseded
     const page = await pdfDoc.getPage(i);
-    const viewport = page.getViewport({ scale: scale });
+    const viewport = page.getViewport({ scale });
+    viewports.push(viewport);
+
     const wrap = document.createElement('div');
     wrap.className = 'pdf-page-wrap';
     wrap.setAttribute('data-page', String(i));
+    // Canvas sized immediately so layout height is correct before pixel content arrives
     wrap.innerHTML = `
-      <canvas class="pdf-page-canvas" style="box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></canvas>
+      <canvas class="pdf-page-canvas" width="${viewport.width}" height="${viewport.height}" style="box-shadow:0 4px 20px rgba(0,0,0,0.3);"></canvas>
       <div class="pdf-text-layer"></div>
       <div class="pdf-link-layer"></div>
       <div class="pdf-annotation-layer"></div>
       <div class="citation-tooltip" style="display:none;"></div>
     `;
     pagesHost.appendChild(wrap);
+  }
+
+  // 2. Second pass: paint content into each canvas in order.
+  for (let i = 1; i <= pdfDoc.numPages; i++) {
+    if (_renderGen !== gen) return; // superseded by zoom change etc.
+    const page = await pdfDoc.getPage(i);
+    const viewport = viewports[i - 1];
+    const wrap = pagesHost.querySelector(`.pdf-page-wrap[data-page="${i}"]`);
+    if (!wrap) continue;
 
     const pageCanvas = wrap.querySelector('canvas');
     const pageCtx = pageCanvas.getContext('2d');
-    pageCanvas.height = viewport.height;
-    pageCanvas.width = viewport.width;
-
-    const renderContext = { canvasContext: pageCtx, viewport: viewport };
-    const renderTask = page.render(renderContext);
+    const renderTask = page.render({ canvasContext: pageCtx, viewport });
     await renderTask.promise;
+    if (_renderGen !== gen) return;
 
     const layerEl = wrap.querySelector('.pdf-text-layer');
     const linkLayerEl = wrap.querySelector('.pdf-link-layer');
@@ -466,14 +486,15 @@ async function renderAllPages() {
     renderAnnotationsForPage(i);
   }
 
+  if (_renderGen !== gen) return;
+
   renderPage(pageNum);
   renderPdfLinksSidebar();
   pageRendering = false;
-
-  // Post-render features (non-blocking)
-  searchAllText = null; // reset search index so it rebuilds on next search
+  searchAllText = null;
   renderOutline();
   renderThumbnails();
+  startScrollPageTracker();
 }
 
 function scrollToPage(num) {
@@ -483,6 +504,28 @@ function scrollToPage(num) {
   document.querySelectorAll('.pdf-thumb').forEach(t => {
     t.classList.toggle('active', Number(t.getAttribute('data-page')) === num);
   });
+}
+
+// Track which page is visible during scroll and update counter + thumbnail highlight
+let _scrollTracker = null;
+function startScrollPageTracker() {
+  if (_scrollTracker) { _scrollTracker.disconnect(); _scrollTracker = null; }
+  const scrollEl = document.querySelector('.pdf-scroll');
+  if (!scrollEl) return;
+
+  const wraps = Array.from(document.querySelectorAll('.pdf-page-wrap[data-page]'));
+  if (!wraps.length) return;
+
+  _scrollTracker = new IntersectionObserver((entries) => {
+    let best = null, bestRatio = -1;
+    entries.forEach(e => { if (e.intersectionRatio > bestRatio) { bestRatio = e.intersectionRatio; best = e.target; } });
+    if (best) {
+      const p = Number(best.getAttribute('data-page'));
+      if (p && p !== pageNum) renderPage(p);
+    }
+  }, { root: scrollEl, threshold: [0.1, 0.3, 0.5, 0.7] });
+
+  wraps.forEach(w => _scrollTracker.observe(w));
 }
 
 // ---- Feature 1: Sidebar tab switcher ----
@@ -806,6 +849,13 @@ async function loadReferencesFromOpenAlex(paper) {
     refsDiv.innerHTML = '<p class="muted">Could not load reference details.</p>';
     return;
   }
+
+  // Sort alphabetically by first author last name
+  allWorks.sort((a, b) => {
+    const nameA = (a.authorships?.[0]?.author?.display_name || '').split(' ').pop().toLowerCase();
+    const nameB = (b.authorships?.[0]?.author?.display_name || '').split(' ').pop().toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
 
   refsDiv.innerHTML = `<p class="muted" style="font-size:.75rem;margin-bottom:.5rem;">${allWorks.length} references</p>` +
     allWorks.map((w, i) => {
@@ -1196,7 +1246,7 @@ function bindAnnotationToolbar() {
   h?.addEventListener('click', () => setMode('highlight'));
   n?.addEventListener('click', () => setMode('note'));
   e?.addEventListener('click', () => setMode('erase'));
-  c?.addEventListener('click', () => { if (confirm('Clear all annotations?')) { annotations = []; saveAnnotations(); renderAnnotationsAll(); } });
+  c?.addEventListener('click', () => { annotations = []; saveAnnotations(); renderAnnotationsAll(); });
   updateAnnotButtons();
 }
 
@@ -1385,17 +1435,22 @@ function wireAnnotationSelection(layerEl) {
     showSelToolbar(ev.clientX, ev.clientY, quote, page, normRects);
   });
 
-  // Erase mode: click annotation to remove it
-  layerEl.addEventListener('click', (ev) => {
-    if (annotMode !== 'erase') return;
-    const target = ev.target.closest('.pdf-annot');
-    if (!target) return;
-    const id = target.getAttribute('data-annot-id');
-    if (!id) return;
-    annotations = annotations.filter(a => a.id !== id);
-    saveAnnotations();
-    renderAnnotationsAll();
-  });
+  // Erase mode: click annotation to remove it.
+  // Must be on the annotation layer (sibling of text layer) — not on layerEl itself.
+  const annotLayer = layerEl.closest('.pdf-page-wrap')?.querySelector('.pdf-annotation-layer');
+  if (annotLayer) {
+    annotLayer.addEventListener('click', (ev) => {
+      if (annotMode !== 'erase') return;
+      const target = ev.target.closest('.pdf-annot');
+      if (!target) return;
+      const id = target.getAttribute('data-annot-id');
+      if (!id) return;
+      annotations = annotations.filter(a => a.id !== id);
+      saveAnnotations();
+      renderAnnotationsForPage(layerEl.closest('.pdf-page-wrap') ?
+        Number(layerEl.closest('.pdf-page-wrap').getAttribute('data-page')) : 0);
+    });
+  }
 }
 
 window.addEventListener('keydown', (e) => {

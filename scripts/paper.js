@@ -1730,6 +1730,18 @@
 
     block.innerHTML = html.join("");
 
+    // Sort cited papers alphabetically by first author last name
+    function sortAlpha(papers) {
+      return (papers || []).slice().sort(function(a, b) {
+        var nameA = ((a.authorships || [])[0] || {}).author;
+        var nameB = ((b.authorships || [])[0] || {}).author;
+        nameA = nameA ? (nameA.display_name || '').split(' ').pop().toLowerCase() : '';
+        nameB = nameB ? (nameB.display_name || '').split(' ').pop().toLowerCase() : '';
+        return nameA.localeCompare(nameB);
+      });
+    }
+    citedPapers = sortAlpha(citedPapers);
+
     // Render with shared component if available
     var hasComponent = !!(window.SE && SE.components && typeof SE.components.renderPaperCard === "function");
     var refsWrap = $("refsList");
