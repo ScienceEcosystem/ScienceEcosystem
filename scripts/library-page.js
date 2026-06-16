@@ -967,13 +967,54 @@
     if(!host) return;
     const count=selectedIds.size;
     const inTrash=currentCollectionId==="__trash__";
+    const ids=[...selectedIds];
+    // For merge: pick the item with more filled fields as keeper
+    const scoreItem=it=>["title","authors","year","venue","doi","abstract","openalex_id"].filter(f=>it[f]).length;
+    const twoItems=count===2 ? ids.map(id=>items.find(x=>String(x.id)===String(id))).filter(Boolean) : [];
+    const [keeper,discard]=twoItems.length===2
+      ? (scoreItem(twoItems[0])>=scoreItem(twoItems[1]) ? twoItems : [twoItems[1],twoItems[0]])
+      : [];
+
     host.innerHTML=`
       <div style="padding:1rem .75rem;">
         <p style="font-size:.9rem;font-weight:600;margin:0 0 .85rem;color:#374151;">${count} items selected</p>
+        ${count===2&&!inTrash?`
+          <button class="btn btn-secondary" id="bulkMergeBtn" style="width:100%;margin-bottom:.4rem;">
+            Merge into 1 item
+          </button>
+          <p style="font-size:.74rem;color:#6b7280;margin:0 0 .75rem;">
+            Keeps: <em>${esc(keeper?.title||keeper?.id||"")}</em><br>
+            Transfers PDF + collections from the other entry.
+          </p>`:``}
         ${!inTrash?`<button class="btn btn-secondary" id="bulkTrashBtn" style="width:100%;margin-bottom:.4rem;">Move to Trash</button>`:""}
         ${inTrash?`<button class="btn btn-secondary" id="bulkRestoreBtn" style="width:100%;margin-bottom:.4rem;">Restore</button>`:""}
         ${inTrash?`<button class="btn btn-secondary" id="bulkDeleteBtn" style="width:100%;margin-bottom:.4rem;color:#dc2626;border-color:#dc2626;">Delete permanently</button>`:""}
       </div>`;
+    $("#bulkTrashBtn")?.addEventListener("click", async()=>{
+      const ids=[...selectedIds];
+      for(const id of ids) await moveItemToTrash(id).catch(()=>{});
+      selectedIds=new Set(); await safeRefreshItems(); renderTable();
+      toast(`${ids.length} item${ids.length===1?"":"s"} moved to Trash`);
+    });
+    $("#bulkRestoreBtn")?.addEventListener("click", async()=>{
+      const ids=[...selectedIds];
+      for(const id of ids) await restoreItem(id).catch(()=>{});
+      selectedIds=new Set(); await safeRefreshItems(); renderTable();
+      toast(`${ids.length} item${ids.length===1?"":"s"} restored`,"success");
+    });
+    $("#bulkMergeBtn")?.addEventListener("click", async()=>{
+      if(!keeper||!discard) return;
+      const btn=$("#bulkMergeBtn"); if(btn){ btn.disabled=true; btn.textContent="Merging…"; }
+      try{
+        await api("/api/library/merge",{method:"POST",body:JSON.stringify({keep_id:keeper.id,trash_id:discard.id})});
+        selectedIds=new Set(); await safeRefreshItems(); renderTable();
+        currentSelection=String(keeper.id); await renderInspector(currentSelection);
+        toast("Merged — PDF and collections transferred","success");
+      }catch(e){
+        if(btn){ btn.disabled=false; btn.textContent="Merge into 1 item"; }
+        toast("Merge failed: "+(e.message||"unknown error"),"error");
+      }
+    });
     $("#bulkTrashBtn")?.addEventListener("click", async()=>{
       const ids=[...selectedIds];
       for(const id of ids) await moveItemToTrash(id).catch(()=>{});

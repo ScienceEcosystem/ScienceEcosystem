@@ -2000,6 +2000,26 @@ app.post("/api/library/merge", async (req, res) => {
       );
     }
 
+    // Transfer PDF: if keeper has no local PDF but loser does, move the file reference
+    const { rows: keeperPdf } = await client.query(
+      `SELECT 1 FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [sess.orcid, keep_id]
+    );
+    if (!keeperPdf.length) {
+      const { rows: loserPdf } = await client.query(
+        `SELECT * FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [sess.orcid, trash_id]
+      );
+      if (loserPdf.length) {
+        await client.query(
+          `UPDATE library_pdfs SET paper_id=$1 WHERE orcid=$2 AND paper_id=$3`,
+          [keep_id, sess.orcid, trash_id]
+        );
+        await client.query(
+          `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
+          [loser.local_pdf_path, sess.orcid, keep_id]
+        );
+      }
+    }
+
     // Transfer PDF annotations if keeper has none
     const { rows: keeperAnnot } = await client.query(
       `SELECT 1 FROM pdf_annotations WHERE orcid=$1 AND paper_id=$2`, [sess.orcid, keep_id]
@@ -2308,10 +2328,26 @@ app.post("/api/library/import-pdf", async (req, res) => {
     if (!extOk && !mimeOk) return res.status(400).json({ error: "Only PDF files allowed" });
     if (file.size > 50 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
 
-    const sniff = file.buffer.slice(0, 8192).toString("latin1");
-    const doiMatch = sniff.match(/10\.\d{4,9}\/[^\s"<>]+/);
-    const doi = doiMatch ? normalizeDoi(doiMatch[0]) : "";
-    const itemId = doi ? `doi:${doi}` : `upload:${Date.now()}`;
+    // Search both the head and tail of the PDF — DOIs appear at various offsets
+    // and PDF cross-reference tables (which often contain metadata) are at the end.
+    const headStr = file.buffer.slice(0, 65536).toString("latin1");
+    const tailStr = file.buffer.slice(Math.max(0, file.buffer.length - 32768)).toString("latin1");
+    const pdfText = headStr + "\n" + tailStr;
+
+    // Collect all DOI candidates, pick the first that survives normalization
+    const doiCandidates = [...pdfText.matchAll(/\b(10\.\d{4,9}\/[^\s"<>\][()|\\]+)/g)]
+      .map(m => normalizeDoi(m[1].replace(/[.,;:)>\]]+$/, "")))
+      .filter(Boolean);
+    const doi = doiCandidates[0] || "";
+
+    // ArXiv fallback if no DOI found
+    let arxivId = "";
+    if (!doi) {
+      const arxivMatch = pdfText.match(/arxiv[:\s\/]*(\d{4}\.\d{4,5}(?:v\d+)?)/i);
+      if (arxivMatch) arxivId = arxivMatch[1];
+    }
+
+    const itemId = doi ? `doi:${doi}` : arxivId ? `arxiv:${arxivId}` : `upload:${Date.now()}`;
 
     const { storagePath, filename: storedName, urlPath } = await storePdfFile(sess.orcid, itemId, file.buffer, file.contentType);
 
@@ -2330,26 +2366,57 @@ app.post("/api/library/import-pdf", async (req, res) => {
       meta_fresh: false
     };
 
+    // Helper: hydrate item from an OpenAlex work object
+    const hydrateFromWork = (work, baseId) => {
+      const authors = (work.authorships || []).map(a => a?.author?.display_name).filter(Boolean).join(", ");
+      const venue = work?.host_venue?.display_name || work?.primary_location?.source?.display_name || null;
+      return {
+        ...item,
+        id: baseId,
+        title: work.display_name || work.title || item.title,
+        openalex_id: normalizeOpenAlexId(work.id || ""),
+        openalex_url: work.id || null,
+        doi: work.doi ? normalizeDoi(work.doi) : (doi || null),
+        year: work.publication_year ?? null,
+        venue,
+        authors: authors || null,
+        cited_by: work.cited_by_count ?? 0,
+        abstract: work.abstract_inverted_index ? invertAbstract(work.abstract_inverted_index) : null,
+        meta_fresh: true
+      };
+    };
+
     if (doi) {
       try {
         const work = await fetchJSONTimeout(`${OPENALEX}/works/doi:${encodeURIComponent(doi)}`, {}, 10000);
-        const authors = (work.authorships || []).map(a => a?.author?.display_name).filter(Boolean).join(", ");
-        const venue = work?.host_venue?.display_name || work?.primary_location?.source?.display_name || null;
-        item = {
-          ...item,
-          id: `doi:${doi}`,
-          title: work.display_name || work.title || item.title,
-          openalex_id: normalizeOpenAlexId(work.id || ""),
-          openalex_url: work.id || null,
-          year: work.publication_year ?? null,
-          venue,
-          authors: authors || null,
-          cited_by: work.cited_by_count ?? 0,
-          abstract: work.abstract_inverted_index ? invertAbstract(work.abstract_inverted_index) : null,
-          meta_fresh: true
-        };
+        item = hydrateFromWork(work, `doi:${doi}`);
+      } catch (e) { /* keep fallback */ }
+    } else if (arxivId) {
+      try {
+        const work = await fetchJSONTimeout(`${OPENALEX}/works/arxiv:${encodeURIComponent(arxivId)}`, {}, 10000);
+        item = hydrateFromWork(work, `arxiv:${arxivId}`);
       } catch (e) {
-        // keep fallback item
+        // Try CrossRef as a secondary source for arXiv papers
+        try {
+          const cr = await fetchJSONTimeout(
+            `https://api.crossref.org/works?query=${encodeURIComponent(filename.replace(/\.pdf$/i,""))}&rows=1`,
+            {headers:{"User-Agent":"ScienceEcosystem/1.0 mailto:info@scienceecosystem.org"}}, 8000
+          );
+          const hit = cr?.message?.items?.[0];
+          if (hit?.title?.[0]) {
+            const crDoi = hit.DOI ? normalizeDoi(hit.DOI) : null;
+            item = {
+              ...item,
+              id: crDoi ? `doi:${crDoi}` : itemId,
+              title: hit.title[0],
+              doi: crDoi,
+              year: hit.published?.["date-parts"]?.[0]?.[0] ?? null,
+              authors: (hit.author||[]).map(a=>[a.given,a.family].filter(Boolean).join(" ")).join(", ") || null,
+              venue: hit["container-title"]?.[0] ?? null,
+              meta_fresh: false
+            };
+          }
+        } catch (e2) { /* keep fallback */ }
       }
     }
 
