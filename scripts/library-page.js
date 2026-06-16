@@ -305,6 +305,7 @@
     try{ if(globalThis.SE_SESSION?.syncHeader) await globalThis.SE_SESSION.syncHeader(); }catch{}
     await refreshEverything();
     bindUI();
+    initResizers();
   });
 
   async function refreshEverything(){
@@ -1518,18 +1519,39 @@
     }
   }
 
+  // ---- Column resizers ----
+  function initResizers(){
+    const grid=$(".lib-grid");
+    if(!grid) return;
+    const resizers=$$(".lib-resizer");
+    resizers.forEach((handle,idx)=>{
+      handle.addEventListener("mousedown",(startEv)=>{
+        startEv.preventDefault();
+        handle.classList.add("dragging");
+        const startX=startEv.clientX;
+        const isLeft=(idx===0);
+        const startVal=parseInt(
+          getComputedStyle(grid).getPropertyValue(isLeft?"--lib-left":"--lib-right")||
+          (isLeft?"240":"310"),10
+        );
+        const onMove=(ev)=>{
+          const delta=isLeft?(ev.clientX-startX):(startX-ev.clientX);
+          const next=Math.max(140,startVal+delta);
+          grid.style.setProperty(isLeft?"--lib-left":"--lib-right",`${next}px`);
+        };
+        const onUp=()=>{
+          handle.classList.remove("dragging");
+          document.removeEventListener("mousemove",onMove);
+          document.removeEventListener("mouseup",onUp);
+        };
+        document.addEventListener("mousemove",onMove);
+        document.addEventListener("mouseup",onUp);
+      });
+    });
+  }
+
   // ---- Bind UI & observers ----
   function bindUI(){
-    // Persist widths (optional)
-    const grid=$(".lib-grid");
-    const obs=new ResizeObserver(()=>{
-      const lw=$(".lib-left")?.getBoundingClientRect().width;
-      const rw=$(".lib-right")?.getBoundingClientRect().width;
-      if(lw) grid.style.setProperty("--left-col",`${Math.round(lw)}px`);
-      if(rw) grid.style.setProperty("--right-col",`${Math.round(rw)}px`);
-    });
-    if($(".lib-left")) obs.observe($(".lib-left"));
-    if($(".lib-right")) obs.observe($(".lib-right"));
 
     bindNewCollectionButtons();
 
