@@ -79,18 +79,56 @@ function setupCanvas() {
   bindAnnotationToolbar();
 }
 
+async function ensurePdfJs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import('/pdfjs/build/pdf.mjs');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/build/pdf.worker.mjs';
+  }
+  return pdfjsLib;
+}
+
+// Looks up an open-access PDF URL for the current paper via OpenAlex,
+// caching the result (including misses) so we only fetch once.
+let _oaPdfUrlCache;
+async function getOaPdfUrl() {
+  if (_oaPdfUrlCache !== undefined) return _oaPdfUrlCache;
+  if (!paperId) return (_oaPdfUrlCache = null);
+  try {
+    const cleanId = paperId.replace('https://openalex.org/', '');
+    const res = await fetch(`https://api.openalex.org/works/${cleanId}?mailto=scienceecosystem@icloud.com`);
+    if (!res.ok) return (_oaPdfUrlCache = null);
+    const work = await res.json();
+    return (_oaPdfUrlCache = work.best_oa_location?.pdf_url || work.open_access?.oa_url || null);
+  } catch (_e) {
+    return (_oaPdfUrlCache = null);
+  }
+}
+
+// If a stored library PDF can't be loaded, fall back to the paper's
+// open-access copy (if OpenAlex/Unpaywall knows about one) so the reader
+// shows *something* instead of just an error.
+async function tryLoadOaFallback(url) {
+  const oaUrl = await getOaPdfUrl();
+  if (!oaUrl || oaUrl === url) return false;
+  await loadPDF(oaUrl);
+  return true;
+}
+
 async function loadPDF(url) {
   setupCanvas();
+  await ensurePdfJs();
 
   const isExternal = !url.startsWith('/') && !url.startsWith(window.location.origin);
   const finalUrl = isExternal ? `/api/pdf/proxy?url=${encodeURIComponent(url)}` : url;
+  const isLibraryPdf = url.includes('/api/library/pdf');
 
   // If it's a library PDF, fetch the signed R2 URL from the server first
-  if (url.includes('/api/library/pdf')) {
+  if (isLibraryPdf) {
     try {
       const check = await fetch(url, { credentials: 'include' });
       if (!check.ok) {
         const data = await check.json().catch(() => ({}));
+        if (await tryLoadOaFallback(url)) return;
         showPdfError(data.error || 'PDF not available.', true);
         return;
       }
@@ -105,14 +143,10 @@ async function loadPDF(url) {
         return;
       }
     } catch (err) {
+      if (await tryLoadOaFallback(url)) return;
       showPdfError('Could not load PDF: ' + String(err), true);
       return;
     }
-  }
-
-  if (!pdfjsLib) {
-    pdfjsLib = await import('/pdfjs/build/pdf.mjs');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/build/pdf.worker.mjs';
   }
 
   try {
@@ -128,6 +162,7 @@ async function loadPDF(url) {
     renderAllPages();
   } catch (error) {
     console.error('Error loading PDF:', error);
+    if (isLibraryPdf && await tryLoadOaFallback(url)) return;
     showPdfError(null, false);
   }
 }

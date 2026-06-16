@@ -2166,7 +2166,16 @@ app.delete("/api/library/pdf", async (req, res) => {
     `SELECT id, storage_path FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
     [sess.orcid, paperId]
   );
-  if (!rows.length) return res.status(404).json({ error: "PDF not found" });
+  if (!rows.length) {
+    // No library_pdfs row (e.g. the stored file was already lost on a
+    // server restart and cleaned up) — just clear the dangling reference
+    // on library_items so the UI stops showing a broken "attached PDF".
+    await pool.query(
+      `UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`,
+      [sess.orcid, paperId]
+    );
+    return res.json({ ok: true });
+  }
   try {
     const stored = rows[0].storage_path;
     if (stored && stored.startsWith("r2:")) {
