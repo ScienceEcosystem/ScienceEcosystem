@@ -780,7 +780,8 @@ body[data-page="user-profile"] h3 {
   z-index: 4;
   pointer-events: none;
 }
-body.annot-erase .pdf-annotation-layer { pointer-events: auto; }
+/* Erase mode: only individual annotation elements are clickable; text selection still works */
+body.annot-erase .pdf-annot { cursor: crosshair; }
 
 .pdf-annot {
   position: absolute;

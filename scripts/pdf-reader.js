@@ -1377,9 +1377,39 @@ function showSelToolbar(x, y, quote, page, normRects) {
   }));
 
   tb.appendChild(btn('📝 Note', () => {
-    // Use a small inline prompt inside the toolbar area
-    const note = window.prompt('Add a note:', '') || '';
-    createAnnotation(page, normRects, quote, 'note', note);
+    // Replace toolbar contents with an inline note input
+    tb.innerHTML = '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Type your note…';
+    Object.assign(input.style, {
+      background: '#1e293b', color: '#f8fafc', border: '1px solid #475569',
+      borderRadius: '6px', padding: '4px 8px', fontSize: '.82rem',
+      width: '200px', outline: 'none', fontFamily: 'inherit'
+    });
+    const save = document.createElement('button');
+    save.textContent = 'Save';
+    Object.assign(save.style, { color: '#7dd3fc', fontWeight: '600' });
+    const cancel = document.createElement('button');
+    cancel.textContent = '✕';
+    const doSave = () => {
+      const note = input.value.trim();
+      createAnnotation(page, normRects, quote, 'note', note);
+      removeSelToolbar();
+      window.getSelection()?.removeAllRanges();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); doSave(); }
+      if (e.key === 'Escape') { removeSelToolbar(); }
+    });
+    save.addEventListener('mousedown', (e) => e.preventDefault());
+    save.addEventListener('click', doSave);
+    cancel.addEventListener('mousedown', (e) => e.preventDefault());
+    cancel.addEventListener('click', () => removeSelToolbar());
+    tb.appendChild(input);
+    tb.appendChild(save);
+    tb.appendChild(cancel);
+    setTimeout(() => input.focus(), 0);
   }));
 
   tb.appendChild(btn('✕', () => {}));
@@ -1438,7 +1468,6 @@ function mergeLineRects(rects) {
 
 function wireAnnotationSelection(layerEl) {
   layerEl.addEventListener('mouseup', (ev) => {
-    if (annotMode === 'erase') return;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) return;
     if (!layerEl.contains(sel.anchorNode) && !layerEl.contains(sel.focusNode)) return;
