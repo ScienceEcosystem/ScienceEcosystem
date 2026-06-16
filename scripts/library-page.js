@@ -195,6 +195,81 @@
       item.doi?"DO  - "+item.doi:"",
       "ER  - "].filter(Boolean).join("\n");
   }
+  function fmtChicago(item){
+    const ef=getExtraFields(item);
+    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const names=rawAuthors.map((a,i)=>{ const p=splitName(a); return i===0?(p.given?`${p.family}, ${p.given}`:p.family):(p.given?`${p.given} ${p.family}`:p.family); });
+    let authorStr="";
+    if(names.length===1) authorStr=names[0];
+    else if(names.length<=3) authorStr=names.slice(0,-1).join(", ")+" and "+names[names.length-1];
+    else authorStr=names[0]+" et al.";
+    const year=item.year?`${item.year}`:"n.d.";
+    const title=item.title?`"${item.title}."`: "";
+    const venue=item.venue?` *${item.venue}*`:"";
+    const vol=ef.volume?(ef.issue?` ${ef.volume}, no. ${ef.issue}`:" "+ef.volume):"";
+    const pages=ef.pages?`: ${ef.pages}`:"";
+    const doi=item.doi?` https://doi.org/${item.doi}`:"";
+    return `${authorStr?authorStr+". ":""}${year}. ${title}${venue}${vol}${pages}.${doi}`.trim();
+  }
+  function fmtVancouver(item){
+    const ef=getExtraFields(item);
+    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const names=rawAuthors.map(a=>{ const p=splitName(a); const initials=(p.given||"").split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()).join(""); return p.family+(initials?" "+initials:""); });
+    const authorStr=names.length>6?names.slice(0,6).join(", ")+" et al.":names.join(", ");
+    const vol=ef.volume?`${ef.volume}`:"";
+    const iss=ef.issue?`(${ef.issue})`:"";
+    const pages=ef.pages?`:${ef.pages}`:"";
+    const year=item.year?` ${item.year}`:""
+    const venue=item.venue?` ${item.venue}.`:"";
+    const doi=item.doi?` doi:${item.doi}`:"";
+    return `${authorStr?authorStr+". ":""}${item.title||""}. ${venue}${year}${vol?";"+vol:""}${iss}${pages}.${doi}`.replace(/\s{2,}/g," ").trim();
+  }
+  function fmtIEEE(item){
+    const ef=getExtraFields(item);
+    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const names=rawAuthors.map(a=>{ const p=splitName(a); const initials=(p.given||"").split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()+".").join(" "); return initials?`${initials} ${p.family}`:p.family; });
+    let authorStr="";
+    if(names.length===1) authorStr=names[0];
+    else if(names.length===2) authorStr=`${names[0]} and ${names[1]}`;
+    else authorStr=names.slice(0,-1).join(", ")+", and "+names[names.length-1];
+    const title=item.title?`"${item.title},"`: "";
+    const venue=item.venue?` *${item.venue}*,`:"";
+    const vol=ef.volume?` vol. ${ef.volume},`:"";
+    const iss=ef.issue?` no. ${ef.issue},`:"";
+    const pages=ef.pages?` pp. ${ef.pages},`:"";
+    const year=item.year?` ${item.year}.`:"";
+    const doi=item.doi?` doi: ${item.doi}.`:"";
+    return `${authorStr?authorStr+", ":""}${title}${venue}${vol}${iss}${pages}${year}${doi}`.trim();
+  }
+  function fmtHarvard(item){
+    const ef=getExtraFields(item);
+    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const names=rawAuthors.map(a=>{ const p=splitName(a); return p.given?`${p.family}, ${p.given.split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()+".").join(" ")}`:p.family; });
+    let authorStr="";
+    if(names.length===1) authorStr=names[0];
+    else if(names.length===2) authorStr=`${names[0]} and ${names[1]}`;
+    else authorStr=names.slice(0,-1).join(", ")+" and "+names[names.length-1];
+    const year=item.year?`(${item.year}) `:"";
+    const title=item.title?`'${item.title}',`:"";
+    const venue=item.venue?` *${item.venue}*,`:"";
+    const volIss=ef.volume?(ef.issue?` ${ef.volume}(${ef.issue}),`:` ${ef.volume},`):"";
+    const pages=ef.pages?` pp. ${ef.pages}.`:" ";
+    const doi=item.doi?` doi: ${item.doi}.`:"";
+    return `${authorStr?authorStr+" ":""}${year}${title}${venue}${volIss}${pages}${doi}`.trim();
+  }
+  function fmtNature(item){
+    const ef=getExtraFields(item);
+    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const names=rawAuthors.map(a=>{ const p=splitName(a); const initials=(p.given||"").split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()+".").join(""); return p.family+(initials?", "+initials:""); });
+    const authorStr=names.length>5?names.slice(0,5).join(", ")+" et al.":names.join(", ");
+    const title=item.title||"";
+    const venue=item.venue?` *${item.venue}*`:"";
+    const vol=ef.volume?` **${ef.volume}**,`:",";
+    const pages=ef.pages?` ${ef.pages}`:"";
+    const year=item.year?` (${item.year})`:""
+    const doi=item.doi?` https://doi.org/${item.doi}`:"";
+    return `${authorStr?authorStr+". ":""}${title}.${venue}${vol}${pages}${year}.${doi}`.trim();
+  }
   function downloadText(filename, content, mime="text/plain"){
     const a=document.createElement("a");
     a.href=URL.createObjectURL(new Blob([content],{type:mime}));
@@ -221,6 +296,7 @@
   let currentSelection=null;
   let openMenu=null;
   let tagFilterTerms=[];
+  let _renderTagPanel=null; // set after init, called by renderTable
   let zoteroStatus=null;
   let zoteroUserId=null;
 
@@ -729,14 +805,16 @@
 
     if(!view.length){ tbody.innerHTML=`<tr><td colspan="5" class="muted" style="padding:.5rem .75rem;">No items</td></tr>`; return; }
 
+    const READ_DOT={'to-read':'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b82f6;margin:auto;"></span>','reading':'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#f59e0b;margin:auto;"></span>','read':'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;margin:auto;"></span>'};
     tbody.innerHTML=view.map(it=>{
       const authorsDisplay = firstAuthorLastName(it.authors);
       const authors = cols.has("authors")?`<td class="col-authors">${esc(authorsDisplay)}</td>`:"";
       const year    = cols.has("year")   ?`<td class="col-year">${esc(it.year??"-")}</td>`:"";
       const zoteroBadge = it.zotero_key ? `<span class="badge badge-zotero" title="Synced from Zotero" style="font-size:.65rem;padding:.05rem .3rem;margin-right:3px;">Z</span>` : "";
       const isSel = currentSelection && String(it.id)===String(currentSelection);
+      const readDot = it.read_status ? `<span title="${it.read_status}">${READ_DOT[it.read_status]||''}</span>` : "";
       return `<tr data-id="${esc(it.id)}" draggable="true"${isSel?' class="selected"':''}>
-        <td class="col-icon" title="${esc(ITEM_TYPES[getItemType(it)]?.label||'Article')}">${typeIcon(getItemType(it))}</td>
+        <td class="col-icon" title="${esc(ITEM_TYPES[getItemType(it)]?.label||'Article')}" style="position:relative;">${typeIcon(getItemType(it))}${it.read_status?`<span style="position:absolute;top:1px;right:1px;">${READ_DOT[it.read_status]||''}</span>`:""}</td>
         <td class="col-title" title="${esc(it.title||"-")}">${zoteroBadge}${titleHtml(it.title||"-")}</td>
         ${authors}${year}
         <td class="col-pdf" title="${it.local_pdf_path?'PDF stored in library':''}">${it.local_pdf_path?PDF_BADGE:''}</td>
@@ -750,8 +828,6 @@
         tr.classList.add("selected");
         currentSelection = tr.getAttribute("data-id");
         await renderInspector(currentSelection);
-        const item = items.find(x=>String(x.id)===String(currentSelection));
-        if(item) buildMenuForItem(item, ev);
       });
       tr.addEventListener("contextmenu", async(ev)=>{
         ev.preventDefault();
@@ -772,6 +848,23 @@
         tr.classList.remove("dragging");
       });
     });
+
+    // Column header click-to-sort + sort indicator
+    const sortByEl=$("#sortBy"), sortDirEl=$("#sortDir");
+    $$("#itemsTable thead th[data-k]").forEach(th=>{
+      th.style.cursor="pointer"; th.style.userSelect="none";
+      const k=th.dataset.k;
+      const curSort=sortByEl?.value||"title";
+      const curDir=sortDirEl?.value||"asc";
+      if(k===curSort) th.innerHTML=th.textContent.trim()+(curDir==="asc"?" ↑":" ↓");
+      th.addEventListener("click",()=>{
+        const wasSort=sortByEl?.value;
+        if(sortByEl) sortByEl.value=k;
+        if(sortDirEl) sortDirEl.value=(wasSort===k && sortDirEl.value==="asc") ? "desc" : "asc";
+        renderTable();
+      });
+    });
+    _renderTagPanel?.();
   }
 
   function wireCollectionDropTargets(){
@@ -840,10 +933,11 @@
       ? `<a href="${doiUrl}" target="_blank" rel="noopener">${esc(item.doi)}</a>` : "";
 
     host.innerHTML = `
-      <!-- Inspector header: title + type badge -->
+      <!-- Inspector header: title + type badge + reading status -->
       <div class="insp-hdr">
-        <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem;">
+        <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem;flex-wrap:wrap;">
           <span class="type-badge">${esc(typeInfo.label)}</span>
+          ${item.read_status?`<span id="readStatusBadge" class="read-status-badge read-status-${esc(item.read_status)}">${item.read_status==='to-read'?'To Read':item.read_status==='reading'?'Reading':'Read'}</span>`:`<span id="readStatusBadge" class="read-status-badge read-status-none" style="color:#9ca3af;">+ Status</span>`}
           <span style="flex:1"></span>
           <button class="btn btn-secondary" id="editMetaBtn" style="font-size:.75rem;padding:.15rem .45rem;">Edit</button>
         </div>
@@ -910,8 +1004,13 @@
             <button class="btn btn-secondary" id="exportBibBtn" style="font-size:.77rem;padding:.2rem .45rem;">↓ BibTeX</button>
             <button class="btn btn-secondary" id="exportRisBtn" style="font-size:.77rem;padding:.2rem .45rem;">↓ RIS</button>
             <select id="citeFormatSelect" class="input" style="padding:.15rem .3rem;font-size:.77rem;">
-              <option value="apa">APA</option>
-              <option value="mla">MLA</option>
+              <option value="apa">APA 7th</option>
+              <option value="mla">MLA 9th</option>
+              <option value="chicago">Chicago</option>
+              <option value="harvard">Harvard</option>
+              <option value="vancouver">Vancouver</option>
+              <option value="ieee">IEEE</option>
+              <option value="nature">Nature</option>
             </select>
             <button class="btn btn-secondary" id="copyCiteBtn" style="font-size:.77rem;padding:.2rem .45rem;">Copy citation</button>
           </div>
@@ -1019,6 +1118,28 @@
       return Object.keys(ef).length ? ef : null;
     }
 
+    // Reading status quick-toggle
+    const READ_STATUS_CYCLE=[null,"to-read","reading","read"];
+    $("#readStatusBadge")?.addEventListener("click", async()=>{
+      const cur=item.read_status||null;
+      const next=READ_STATUS_CYCLE[(READ_STATUS_CYCLE.indexOf(cur)+1)%READ_STATUS_CYCLE.length];
+      try{
+        await api(`/api/library/${encodeURIComponent(id)}`,{method:"PATCH",body:JSON.stringify({read_status:next})});
+        item.read_status=next;
+        const it=items.find(x=>String(x.id)===String(id));
+        if(it) it.read_status=next;
+        renderTable();
+        // Update badge in place without full re-render
+        const badge=$("#readStatusBadge");
+        if(badge){
+          const labels={null:"+ Status","to-read":"To Read","reading":"Reading","read":"Read"};
+          badge.textContent=labels[next]||"+ Status";
+          badge.className=`read-status-badge read-status-${next||"none"}`;
+          if(!next) badge.style.color="#9ca3af"; else badge.style.color="";
+        }
+      }catch(e){ toast("Could not update status","error"); }
+    });
+
     $("#editMetaBtn")?.addEventListener("click", () => {
       $("#metaView").style.display = "none";
       $("#metaEdit").style.display = "";
@@ -1072,7 +1193,8 @@
     });
     $("#copyCiteBtn")?.addEventListener("click", async ()=>{
       const fmt = $("#citeFormatSelect")?.value || "apa";
-      const text = fmt==="mla" ? fmtMLA(item) : fmtAPA(item);
+      const fmtMap={apa:fmtAPA,mla:fmtMLA,chicago:fmtChicago,harvard:fmtHarvard,vancouver:fmtVancouver,ieee:fmtIEEE,nature:fmtNature};
+      const text = (fmtMap[fmt]||fmtAPA)(item);
       try{
         await navigator.clipboard.writeText(text);
         toast(`${fmt.toUpperCase()} citation copied`,"success");
@@ -1146,12 +1268,19 @@
       finally{ ev.target.value=""; }
     });
     $("#deletePdfBtn")?.addEventListener("click", async()=>{
-      if(!confirm("Remove stored PDF?")) return;
+      const btn=$("#deletePdfBtn"); if(!btn) return;
+      const prev=btn.textContent; btn.disabled=true; btn.textContent="Removing…";
       try{
         await api(`/api/library/pdf?paper_id=${encodeURIComponent(id)}`,{method:"DELETE"});
-        await safeRefreshItems(); renderTable(); await renderInspector(id);
-        toast("PDF removed");
-      }catch(e){ toast("Failed to remove PDF: "+e.message,"error"); }
+        // Patch local item immediately so re-render shows the right state
+        const it=items.find(x=>String(x.id)===String(id));
+        if(it){ it.local_pdf_path=null; it.meta_fresh=true; }
+        renderTable(); await renderInspector(id);
+        toast("PDF removed","success");
+      }catch(e){
+        btn.disabled=false; btn.textContent=prev;
+        toast("Failed to remove PDF: "+(e.message||"unknown error"),"error");
+      }
     });
 
     // Related section
@@ -1417,5 +1546,103 @@
       downloadText(`scienceecosystem-${name}.bib`, entries.join("\n\n")+"\n");
       toast(`Exported ${list.length} item${list.length===1?"":"s"} as .bib`,"success");
     });
+
+    // ---- Keyboard shortcuts ----
+    document.addEventListener("keydown", async(ev)=>{
+      // Don't fire when typing in inputs / textareas / contenteditable
+      const tag=(ev.target?.tagName||"").toLowerCase();
+      if(tag==="input"||tag==="textarea"||tag==="select"||ev.target?.isContentEditable) return;
+
+      const rows=[...$$("#itemsTbody tr[data-id]")];
+      const curIdx=rows.findIndex(r=>r.getAttribute("data-id")===currentSelection);
+
+      if(ev.key==="ArrowDown"||ev.key==="ArrowUp"){
+        ev.preventDefault();
+        const next=ev.key==="ArrowDown"
+          ? (curIdx<0 ? 0 : Math.min(curIdx+1,rows.length-1))
+          : (curIdx<0 ? rows.length-1 : Math.max(curIdx-1,0));
+        const tr=rows[next]; if(!tr) return;
+        $$("#itemsTbody tr.selected").forEach(r=>r.classList.remove("selected"));
+        tr.classList.add("selected");
+        tr.scrollIntoView({block:"nearest"});
+        currentSelection=tr.getAttribute("data-id");
+        await renderInspector(currentSelection);
+        return;
+      }
+
+      if(ev.key==="Delete"||ev.key==="Backspace"){
+        if(!currentSelection) return;
+        ev.preventDefault();
+        const item=items.find(x=>String(x.id)===String(currentSelection));
+        if(!item||item.deleted_at) return;
+        try{
+          await api("/api/trash/items",{method:"POST",body:JSON.stringify({id:currentSelection})});
+        }catch{
+          try{ await api(`/api/library/${encodeURIComponent(currentSelection)}`,{method:"PATCH",body:JSON.stringify({deleted_at:new Date().toISOString()})}); }catch{}
+        }
+        await safeRefreshItems(); renderTable(); await renderInspector(currentSelection);
+        toast("Moved to Trash");
+        return;
+      }
+
+      if(ev.key==="Enter"){
+        if(!currentSelection) return;
+        ev.preventDefault();
+        const item=items.find(x=>String(x.id)===String(currentSelection));
+        if(!item) return;
+        const openAlexId=item.openalex_id||item.id||"";
+        const localPdf=item.local_pdf_path?`/api/library/pdf?paper_id=${encodeURIComponent(item.id)}`:null;
+        const pdfUrl=localPdf||item.pdf_url||null;
+        if(pdfUrl&&openAlexId){
+          window.location.href=`pdf-viewer.html?id=${encodeURIComponent(openAlexId)}&pdf=${encodeURIComponent(pdfUrl)}`;
+        } else if(pdfUrl){
+          window.location.href=`pdf-viewer.html?pdf=${encodeURIComponent(pdfUrl)}`;
+        }
+        return;
+      }
+    });
+
+    // ---- Tag panel in sidebar ----
+    function renderTagPanel(){
+      let panel=$("#tagSidePanel");
+      if(!panel){
+        const host=$(".lib-left");
+        if(!host) return;
+        panel=document.createElement("div");
+        panel.id="tagSidePanel";
+        panel.style.cssText="border-top:1px solid #d4d8df;padding:.35rem 0;";
+        host.appendChild(panel);
+      }
+      // Collect all tags from non-deleted items in current view
+      const viewItems=applyFilters(currentViewItems());
+      const tagCounts={};
+      viewItems.forEach(it=>{ (it.tags||[]).forEach(t=>{ tagCounts[t]=(tagCounts[t]||0)+1; }); });
+      const tags=Object.keys(tagCounts).sort();
+      if(!tags.length){ panel.innerHTML=""; return; }
+
+      panel.innerHTML=`
+        <p style="font-size:.68rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;padding:.35rem .65rem .1rem;margin:0;">Tags</p>
+        <div style="padding:0 .5rem .35rem;display:flex;flex-wrap:wrap;gap:.25rem;">
+          ${tags.map(t=>{
+            const active=tagFilterTerms.includes(t.toLowerCase());
+            return `<span class="tag-side-chip${active?" active":""}" data-tag="${esc(t)}" style="font-size:.72rem;padding:.1rem .4rem;border-radius:999px;cursor:pointer;border:1px solid ${active?"#3b82f6":"#d1d5db"};background:${active?"#dbeafe":"#f3f4f6"};color:${active?"#1e40af":"#374151"};">${esc(t)} <span style="color:#9ca3af;">${tagCounts[t]}</span></span>`;
+          }).join("")}
+        </div>`;
+
+      panel.querySelectorAll(".tag-side-chip").forEach(chip=>{
+        chip.addEventListener("click",()=>{
+          const t=chip.getAttribute("data-tag").toLowerCase();
+          if(tagFilterTerms.includes(t)){
+            tagFilterTerms=tagFilterTerms.filter(x=>x!==t);
+          } else {
+            tagFilterTerms=[...tagFilterTerms,t];
+          }
+          renderTagPanel();
+          renderTable();
+        });
+      });
+    }
+    _renderTagPanel=renderTagPanel;
+    renderTagPanel();
   }
 })();

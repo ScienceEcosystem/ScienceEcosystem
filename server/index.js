@@ -465,6 +465,7 @@ async function pgInit() {
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS annotations JSONB`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS item_type TEXT`);
   await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS extra_fields JSONB`);
+  await pool.query(`ALTER TABLE library_items ADD COLUMN IF NOT EXISTS read_status TEXT`);
 
   // Standalone PDF annotations — independent of library membership
   await pool.query(`
@@ -1927,7 +1928,7 @@ app.patch("/api/library/:id", async (req, res) => {
     vals.push(body.deleted_at || null); sets.push(`deleted_at = $${vals.length}`);
   }
   // User-editable metadata fields
-  const metaFields = ["title", "authors", "year", "venue", "doi", "abstract", "item_type"];
+  const metaFields = ["title", "authors", "year", "venue", "doi", "abstract", "item_type", "read_status"];
   for (const f of metaFields) {
     if (f in body) {
       const v = body[f] === null || body[f] === "" ? null : body[f];
@@ -3562,6 +3563,7 @@ app.get("/api/library/full", async (req, res) => {
         li.deleted_at,
         li.item_type,
         li.extra_fields,
+        li.read_status,
         COALESCE(li.meta_fresh, FALSE) AS meta_fresh,
         COALESCE(ARRAY_AGG(ci.collection_id) FILTER (WHERE ci.collection_id IS NOT NULL), '{}') AS collection_ids
       FROM library_items li
@@ -3572,7 +3574,7 @@ app.get("/api/library/full", async (req, res) => {
         li.id, li.title, li.openalex_id, li.openalex_url, li.doi, li.year,
         li.venue, li.authors, li.cited_by, li.abstract, li.pdf_url, li.local_pdf_path, li.zotero_key,
         li.zotero_version, li.last_synced_at, li.tags, li.notes_raw, li.collection_ids_zotero,
-        li.deleted_at, li.item_type, li.extra_fields, li.meta_fresh
+        li.deleted_at, li.item_type, li.extra_fields, li.read_status, li.meta_fresh
       ORDER BY li.title;
       `,
       [sess.orcid]
@@ -3603,7 +3605,7 @@ app.post("/api/items/:id/refresh", async (req, res) => {
         item_type=$11, extra_fields=$12, meta_fresh=TRUE
        WHERE orcid=$13 AND id=$14
        RETURNING id, title, openalex_id, openalex_url, doi, year, venue, authors,
-                 cited_by, abstract, pdf_url, item_type, extra_fields, meta_fresh`,
+                 cited_by, abstract, pdf_url, local_pdf_path, item_type, extra_fields, read_status, meta_fresh`,
       [
         meta.title, meta.openalex_id, meta.openalex_url, meta.doi, meta.year, meta.venue,
         meta.authors, meta.cited_by, meta.abstract, meta.pdf_url,
