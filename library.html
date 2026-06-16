@@ -75,9 +75,7 @@
     #itemsTbody tr.dragging{ opacity:.5; }
 
     /* Toolbar */
-    .lib-toolbar{ display:flex; flex-wrap:wrap; gap:.5rem .75rem; align-items:center; justify-content:space-between; padding:.5rem .75rem; border-bottom:1px solid #e5e7eb; background:#fafbfc; }
-    .cols-menu label{ margin-right:.6rem; font-size:.82rem; }
-    .inline-filters{ display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; }
+    .lib-toolbar{ display:flex; flex-wrap:wrap; gap:.4rem .5rem; align-items:center; padding:.35rem .6rem; border-bottom:1px solid #e8eaed; background:#fff; }
     .badge{ display:inline-block; padding:.1rem .4rem; border:1px solid #e5e7eb; border-radius:999px; font-size:.77rem; }
     .badge-oa{ border-color:#d0e3ff; background:#f5faff; }
     .badge-zotero{ border-color:#f6d8a8; background:#fff3e0; color:#8a5200; margin-right:.3rem; }
@@ -208,31 +206,24 @@
 
         <!-- Center: Table -->
         <section class="lib-center">
+          <!-- hidden state holders for column-click sorting -->
+          <select id="sortBy" style="display:none;" aria-hidden="true">
+            <option value="title">Title</option>
+            <option value="year">Year</option>
+            <option value="authors">Authors</option>
+          </select>
+          <select id="sortDir" style="display:none;" aria-hidden="true">
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+          </select>
+          <input id="importPdfInput" type="file" accept="application/pdf" style="display:none;">
+
           <div class="lib-toolbar">
-            <div class="cols-menu">
-              <label><input type="checkbox" data-col="authors" checked/> Authors</label>
-              <label><input type="checkbox" data-col="year" checked/> Year</label>
-            </div>
-            <div class="inline-filters">
-              <input id="libFilter" class="input input-pill" placeholder="Filter…"/>
-              <select id="sortBy" aria-label="Sort by">
-                <option value="title">Title</option>
-                <option value="year">Year</option>
-                <option value="authors">Authors</option>
-              </select>
-              <select id="sortDir" aria-label="Sort direction">
-                <option value="asc">Asc</option>
-                <option value="desc">Desc</option>
-              </select>
-            </div>
-            <!-- PDF import controls -->
-            <div class="lib-import">
-              <input id="addByDoiInput" class="input input-pill" placeholder="Add by DOI / URL…" title="Paste a DOI, doi.org link, or arXiv ID and press Enter to add it to your library" style="width:13rem;"/>
-              <button id="addByDoiBtn" class="btn btn-secondary">Add</button>
-              <button id="importPdfBtn" class="btn btn-secondary">Add PDF</button>
-              <input id="importPdfInput" type="file" accept="application/pdf" style="display:none;">
-              <button id="exportLibBibBtn" class="btn btn-secondary" title="Export the items shown here as a .bib file, for use with Zotero, Pandoc, Quarto, BibDesk, etc.">↓ Export .bib</button>
-            </div>
+            <input id="libFilter" class="input input-pill" placeholder="Filter…" style="flex:1;min-width:6rem;max-width:18rem;"/>
+            <input id="addByDoiInput" class="input input-pill" placeholder="Add by DOI / URL…" title="Paste a DOI, doi.org link, or arXiv ID and press Enter to add it to your library" style="flex:1;min-width:8rem;max-width:16rem;"/>
+            <button id="addByDoiBtn" class="btn btn-secondary">Add</button>
+            <button id="importPdfBtn" class="btn btn-secondary">Add PDF</button>
+            <button id="exportLibBibBtn" class="btn btn-secondary" title="Export the items shown here as a .bib file">↓ .bib</button>
           </div>
 
           <div class="lib-table-wrap">

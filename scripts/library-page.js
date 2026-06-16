@@ -655,9 +655,7 @@
   }
 
   function visibleColumns(){
-    const cols=new Set(["title"]);
-    $$(".cols-menu input[type=checkbox]").forEach(cb=>{ if(cb.checked) cols.add(cb.dataset.col); });
-    return cols;
+    return new Set(["title","authors","year"]);
   }
 
   function normTitle(s){ return (s||"").toLowerCase().replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim(); }
@@ -922,7 +920,6 @@
   $("#libFilter")?.addEventListener("input", renderTable);
   $("#sortBy")?.addEventListener("change", renderTable);
   $("#sortDir")?.addEventListener("change", renderTable);
-  $$(".cols-menu input[type=checkbox]").forEach(cb=>cb.addEventListener("change", renderTable));
   $("#tagFilter")?.addEventListener("input", ()=>{
     tagFilterTerms = ($("#tagFilter").value||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
     renderTable();
