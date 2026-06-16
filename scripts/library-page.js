@@ -70,11 +70,11 @@
     };
 
     $("#colPickerNew").onclick=async()=>{
-      const nm=search.value.trim()||prompt("New collection name:");
-      if(!nm) return;
+      const nm=search.value.trim()||"New collection";
       close();
       const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:nm,parent_id:null})});
       await safeRefreshCollections(); renderTree();
+      startInlineRename({id:col.id,name:col.name});
       onPick(col.id);
     };
   }
@@ -440,20 +440,46 @@
     buildContextMenuAt(defs, ev.clientX, ev.clientY);
   }
 
-  function buildMenuForCollection(c, anchorEl){
-    const defs=[
-      {act:"new",label:"New subcollection",onClick: async()=>{
-        const nm=prompt("New subcollection name:"); if(!nm) return;
-        await api("/api/collections",{method:"POST",body:JSON.stringify({name:nm,parent_id:c.id})});
-        await safeRefreshCollections(); renderTree();
-        toast("Collection created","success");
-      }},
-      {act:"ren",label:"Rename",onClick: async()=>{
-        const nm=prompt("Rename collection:",c.name); if(!nm) return;
+  function startInlineRename(c){
+    // Find the .name span inside the row for this collection
+    const row=$(`#collectionsTree .row[data-id="${CSS.escape(String(c.id))}"]`);
+    if(!row) return;
+    const nameSpan=row.querySelector(".name");
+    if(!nameSpan) return;
+    const prev=nameSpan.textContent;
+    const inp=document.createElement("input");
+    inp.value=prev;
+    inp.className="input";
+    inp.style.cssText="font-size:.83rem;padding:.1rem .3rem;width:100%;min-width:0;";
+    nameSpan.replaceWith(inp);
+    inp.focus(); inp.select();
+    let committed=false;
+    const commit=async()=>{
+      if(committed) return; committed=true;
+      const nm=inp.value.trim();
+      if(!nm||nm===prev){ await safeRefreshCollections(); renderTree(); return; }
+      try{
         await api(`/api/collections/${c.id}`,{method:"PATCH",body:JSON.stringify({name:nm})});
         await safeRefreshCollections(); renderTree();
         toast("Renamed","success");
+      }catch(e){ committed=false; toast("Rename failed: "+e.message,"error"); await safeRefreshCollections(); renderTree(); }
+    };
+    inp.addEventListener("keydown",async(ev)=>{
+      if(ev.key==="Enter"){ ev.preventDefault(); await commit(); }
+      if(ev.key==="Escape"){ committed=true; await safeRefreshCollections(); renderTree(); }
+    });
+    inp.addEventListener("blur",commit);
+  }
+
+  function buildMenuForCollection(c, anchorEl){
+    const defs=[
+      {act:"new",label:"New subcollection",onClick: async()=>{
+        // Create a placeholder collection and immediately rename it inline
+        const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:"New collection",parent_id:c.id})});
+        await safeRefreshCollections(); renderTree();
+        startInlineRename({id:col.id,name:col.name});
       }},
+      {act:"ren",label:"Rename",onClick: ()=>{ startInlineRename(c); }},
       {act:"move",label:"Move to…",onClick: async()=>{
         showCollectionPicker(async(parent_id)=>{
           if(parent_id===c.id){ toast("Cannot move under itself","error"); return; }
@@ -481,12 +507,11 @@
       ev.stopPropagation();
       buildContextMenu([
         {act:"new-root",label:"New collection",onClick: async()=>{
-          const nm=prompt("New collection name:"); if(!nm) return;
-          await api("/api/collections",{method:"POST",body:JSON.stringify({name:nm,parent_id:null})});
-          await safeRefreshCollections(); renderTree(); toast("Collection created","success");
+          const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:"New collection",parent_id:null})});
+          await safeRefreshCollections(); renderTree();
+          startInlineRename({id:col.id,name:col.name});
         }},
         {act:"empty-trash",label:"Empty Trash",onClick: async()=>{
-          if(!confirm("Permanently delete all items & collections in Trash?")) return;
           try{ await api("/api/trash/empty",{method:"POST"}); }catch{}
           await refreshEverything();
         }},
@@ -554,9 +579,9 @@
       ev.stopPropagation();
       buildContextMenu([
         {act:"new-root",label:"New collection",onClick: async()=>{
-          const nm=prompt("New collection name:"); if(!nm) return;
-          await api("/api/collections",{method:"POST",body:JSON.stringify({name:nm,parent_id:null})});
-          await safeRefreshCollections(); renderTree(); toast("Collection created","success");
+          const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:"New collection",parent_id:null})});
+          await safeRefreshCollections(); renderTree();
+          startInlineRename({id:col.id,name:col.name});
         }},
       ], ev.currentTarget);
     });
@@ -577,6 +602,7 @@
         const row=li.querySelector(".row");
         const keb=li.querySelector(".kebab");
         row.addEventListener("click",(ev)=>{ if(ev.target.closest(".kebab")) return; currentCollectionId=c.id; renderTree(); renderTable(); });
+        row.addEventListener("dblclick",(ev)=>{ if(ev.target.closest(".kebab")) return; ev.stopPropagation(); startInlineRename(c); });
         keb.addEventListener("click",(ev)=>{ ev.stopPropagation(); buildMenuForCollection(c,keb); });
         ul.appendChild(li);
         renderBranch(String(c.id), depth+1);
@@ -597,9 +623,10 @@
   // new buttons (header + sidebar)
   function bindNewCollectionButtons(){
     const act=async()=>{
-      const nm=prompt("New collection name:"); if(!nm) return;
-      await api("/api/collections",{method:"POST",body:JSON.stringify({name:nm,parent_id:currentCollectionId && currentCollectionId!=="__trash__" && currentCollectionId!=="__duplicates__" ? currentCollectionId : null})});
+      const parent_id = currentCollectionId && currentCollectionId!=="__trash__" && currentCollectionId!=="__duplicates__" ? currentCollectionId : null;
+      const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:"New collection",parent_id})});
       await safeRefreshCollections(); renderTree();
+      startInlineRename({id:col.id,name:col.name});
     };
     $("#newCollectionBtn")?.addEventListener("click",act);
     $("#newCollectionBtnLeft")?.addEventListener("click",act);
@@ -1379,8 +1406,7 @@
   // ---- Related items: show collection siblings ----
   async function renderRelated(itemId){
     const ul=$("#relatedList");
-    const addBtn=$("#addRelatedBtn");
-    if(addBtn) addBtn.style.display="none"; // not applicable for collection-based related
+    if(!ul) return;
 
     const item=items.find(x=>String(x.id)===String(itemId));
     const colIds=(item?.collection_ids||[]);
@@ -1402,9 +1428,10 @@
     };
   }
 
-  // ---- Notes (unchanged with small guards) ----
+  // ---- Notes ----
   async function renderNotes(paperId){
     const list=$("#notesList");
+    if(!list) return;
     list.innerHTML=`<li class="muted" style="padding:.75rem;">Loading…</li>`;
     try{
       const notes=await api(`/api/notes?paper_id=${encodeURIComponent(paperId)}`);
@@ -1424,10 +1451,13 @@
       await api(`/api/notes/${encodeURIComponent(nid)}`,{method:"DELETE"});
       await renderNotes(paperId);
     };
-    $("#addNoteBtn").onclick=async()=>{
-      const txt=$("#noteText").value.trim(); if(!txt) return;
+    const addBtn=$("#addNoteBtn");
+    if(addBtn) addBtn.onclick=async()=>{
+      const noteText=$("#noteText");
+      const txt=noteText?.value.trim(); if(!txt) return;
       await api("/api/notes",{method:"POST",body:JSON.stringify({paper_id:paperId,text:txt})});
-      $("#noteText").value=""; await renderNotes(paperId);
+      if(noteText) noteText.value="";
+      await renderNotes(paperId);
     };
   }
 
@@ -1532,12 +1562,12 @@
       const usedKeys = new Set();
       const entries = list.map(item=>{
         let entry = fmtBibTeX(item);
-        const m = entry.match(/^@article\{([^,]*),/);
+        const m = entry.match(/^@\w+\{([^,]*),/);
         if(m){
-          let key = m[1], n = 2;
-          while(usedKeys.has(key)){ key = m[1] + n; n++; }
+          let key = m[1], n = 2, base = m[1];
+          while(usedKeys.has(key)){ key = base + n; n++; }
           usedKeys.add(key);
-          if(key !== m[1]) entry = entry.replace(/^@article\{[^,]*,/, "@article{"+key+",");
+          if(key !== base) entry = entry.replace(/^(@\w+\{)[^,]*,/, `$1${key},`);
         }
         return entry;
       });

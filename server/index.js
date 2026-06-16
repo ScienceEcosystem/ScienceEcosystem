@@ -1991,12 +1991,12 @@ app.post("/api/library/merge", async (req, res) => {
 
     // Transfer collection memberships from loser to keeper (avoid duplicates)
     const { rows: loserColls } = await client.query(
-      `SELECT collection_id FROM collection_items WHERE item_id=$1`, [trash_id]
+      `SELECT collection_id FROM collection_items WHERE orcid=$1 AND paper_id=$2`, [sess.orcid, trash_id]
     );
     for (const { collection_id } of loserColls) {
       await client.query(
-        `INSERT INTO collection_items (collection_id, item_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-        [collection_id, keep_id]
+        `INSERT INTO collection_items (orcid, collection_id, paper_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+        [sess.orcid, collection_id, keep_id]
       );
     }
 
@@ -3484,12 +3484,23 @@ app.post("/api/collections", async (req, res) => {
 
 app.patch("/api/collections/:id", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
-  const { name } = req.body || {};
-  if (!name) return res.status(400).json({ error: "name required" });
+  const body = req.body || {};
+  const sets = [], vals = [sess.orcid, Number(req.params.id)];
+  if (typeof body.name === "string" && body.name.trim()) {
+    vals.push(body.name.trim()); sets.push(`name=$${vals.length}`);
+  }
+  if ("parent_id" in body) {
+    vals.push(body.parent_id != null ? Number(body.parent_id) : null);
+    sets.push(`parent_id=$${vals.length}`);
+  }
+  if ("deleted_at" in body) {
+    vals.push(body.deleted_at || null); sets.push(`deleted_at=$${vals.length}`);
+  }
+  if (!sets.length) return res.status(400).json({ error: "Nothing to update" });
   const out = await pool.query(
-    `UPDATE collections SET name=$1 WHERE orcid=$2 AND id=$3
-     RETURNING id, name, parent_id`,
-    [String(name), sess.orcid, Number(req.params.id)]
+    `UPDATE collections SET ${sets.join(",")} WHERE orcid=$1 AND id=$2
+     RETURNING id, name, parent_id, deleted_at`,
+    vals
   );
   if (!out.rowCount) return res.status(404).json({ error: "not found" });
   res.json(out.rows[0]);
