@@ -11,6 +11,7 @@ let canvas = null;
 let ctx = null;
 let pdfjsLib = null;
 let extractedReferences = [];
+let openAlexRefsList = []; // sorted alphabetically, mirrors the Refs sidebar cards
 let currentTextLayer = null;
 let refMatchCache = null;
 let annotMode = 'highlight';
@@ -341,18 +342,22 @@ function applyCitationHighlights() {
 }
 
 function applyCitationHighlightsToLayer(layerEl) {
-  if (!layerEl || !extractedReferences.length) return;
-  const refSet = new Set(extractedReferences.map(r => String(r.number)));
+  if (!layerEl || !openAlexRefsList.length) return;
+  const maxRef = openAlexRefsList.length;
   const spans = layerEl.querySelectorAll('span');
   spans.forEach(span => {
+    // Skip if already processed
+    if (span.hasAttribute('data-ref-number')) return;
     const text = span.textContent || '';
-    if (!text || (!text.includes('[') && !text.includes('('))) return;
-    const nums = text.match(/\d{1,3}/g);
-    if (!nums) return;
-    const hit = nums.find(n => refSet.has(String(n)));
-    if (!hit) return;
+    if (!text || !text.includes('[')) return;
+    // Match patterns like [1], [2,3], [4-6], [1, 2]
+    const m = text.match(/^\s*\[(\d[\d,\s\-–]*)\]\s*$/);
+    if (!m) return;
+    // Extract the first number in the bracket
+    const firstNum = parseInt(m[1].match(/\d+/)[0], 10);
+    if (firstNum < 1 || firstNum > maxRef) return;
     span.classList.add('citation-highlight');
-    span.setAttribute('data-ref-number', String(hit));
+    span.setAttribute('data-ref-number', String(firstNum));
   });
 }
 
@@ -375,33 +380,81 @@ function jumpToCitation(refNumber) {
 }
 
 function getRefByNumber(n) {
-  return extractedReferences.find(r => String(r.number) === String(n));
+  const idx = parseInt(n, 10) - 1;
+  return (idx >= 0 && idx < openAlexRefsList.length) ? openAlexRefsList[idx] : null;
 }
 
 function wireCitationHover(layerEl, tooltipEl) {
   if (!layerEl || !tooltipEl) return;
-  layerEl.onmousemove = function (e) {
-    const target = e.target.closest('.citation-highlight');
-    if (!target) {
-      tooltipEl.style.display = 'none';
-      return;
-    }
-    const refNum = target.getAttribute('data-ref-number');
-    const ref = getRefByNumber(refNum);
-    if (!ref) return;
-    tooltipEl.innerHTML = `
-      <div style="font-weight:600; margin-bottom:0.25rem;">[${escapeHtml(ref.number)}] ${escapeHtml(ref.title || 'Untitled')}</div>
-      ${ref.authors && ref.authors.length ? `<div style="font-size:0.85rem; color:#555;">${escapeHtml(ref.authors.slice(0, 5).join(', '))}</div>` : ''}
-      ${ref.year ? `<div style="font-size:0.85rem; color:#555;">${escapeHtml(ref.year)}</div>` : ''}
-    `;
-    tooltipEl.style.display = 'block';
-    tooltipEl.style.left = (e.offsetX + 12) + 'px';
-    tooltipEl.style.top = (e.offsetY + 12) + 'px';
-  };
 
-  layerEl.onmouseleave = function () {
-    tooltipEl.style.display = 'none';
-  };
+  let hideTimer = null;
+  let shownForNum = null;
+
+  function showTooltip(target) {
+    const refNum = target.getAttribute('data-ref-number');
+    if (refNum === shownForNum) return;
+    const w = getRefByNumber(refNum);
+    if (!w) { tooltipEl.style.display = 'none'; shownForNum = null; return; }
+    shownForNum = refNum;
+    const authors = w.authorships?.slice(0, 3).map(a => a.author?.display_name).filter(Boolean).join(', ') || '';
+    const hasMore = (w.authorships?.length || 0) > 3;
+    const cleanId = w.id?.replace('https://openalex.org/', '') || '';
+    tooltipEl.innerHTML = `
+      <div style="font-weight:600;margin-bottom:.3rem;font-size:.85rem;line-height:1.3;">[${escapeHtml(refNum)}] ${escapeHtml(w.title || 'Untitled')}</div>
+      ${authors ? `<div style="font-size:.78rem;color:#475569;margin-bottom:.15rem;">${escapeHtml(authors)}${hasMore ? ' et al.' : ''}</div>` : ''}
+      ${w.publication_year ? `<div style="font-size:.75rem;color:#64748b;margin-bottom:.4rem;">${w.publication_year}</div>` : ''}
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;">
+        <button onclick="handleReferenceClick(${parseInt(refNum, 10)})" style="font-size:.73rem;padding:.15rem .5rem;background:#0284c7;color:#fff;border:none;border-radius:4px;cursor:pointer;">View in Refs ↗</button>
+        ${cleanId ? `<a href="/paper.html?id=${escapeHtml(cleanId)}" target="_blank" style="font-size:.73rem;color:#0284c7;text-decoration:none;">Paper page →</a>` : ''}
+      </div>`;
+    tooltipEl.style.visibility = 'hidden';
+    tooltipEl.style.display = 'block';
+
+    // Position relative to page wrap
+    const pageWrap = layerEl.closest('.pdf-page-wrap');
+    const wrapRect = pageWrap ? pageWrap.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+    const spanRect = target.getBoundingClientRect();
+    const ttW = tooltipEl.offsetWidth || 280;
+    const ttH = tooltipEl.offsetHeight || 120;
+    let left = spanRect.left - wrapRect.left + 8;
+    let top = spanRect.bottom - wrapRect.top + 6;
+    if (left + ttW > wrapRect.right - wrapRect.left - 8) left = spanRect.right - wrapRect.left - ttW - 8;
+    if (left < 0) left = 4;
+    if (top + ttH > wrapRect.bottom - wrapRect.top - 8) top = spanRect.top - wrapRect.top - ttH - 6;
+    tooltipEl.style.left = left + 'px';
+    tooltipEl.style.top = top + 'px';
+    tooltipEl.style.visibility = 'visible';
+  }
+
+  function scheduleHide() {
+    hideTimer = setTimeout(() => {
+      tooltipEl.style.display = 'none';
+      shownForNum = null;
+    }, 120);
+  }
+
+  layerEl.addEventListener('mouseover', function (e) {
+    const target = e.target.closest('.citation-highlight');
+    if (!target) return;
+    clearTimeout(hideTimer);
+    showTooltip(target);
+  });
+
+  layerEl.addEventListener('mouseout', function (e) {
+    const target = e.target.closest('.citation-highlight');
+    if (!target) return;
+    // Only hide if not moving to the tooltip
+    if (e.relatedTarget && tooltipEl.contains(e.relatedTarget)) return;
+    scheduleHide();
+  });
+
+  tooltipEl.addEventListener('mouseenter', function () {
+    clearTimeout(hideTimer);
+  });
+
+  tooltipEl.addEventListener('mouseleave', function () {
+    scheduleHide();
+  });
 }
 
 function queueRenderPage(num) {
@@ -857,13 +910,16 @@ async function loadReferencesFromOpenAlex(paper) {
     return nameA.localeCompare(nameB);
   });
 
+  // Store globally so citation hover + click can look up details by index
+  openAlexRefsList = allWorks;
+
   refsDiv.innerHTML = `<p class="muted" style="font-size:.75rem;margin-bottom:.5rem;">${allWorks.length} references</p>` +
     allWorks.map((w, i) => {
       const firstAuthors = w.authorships?.slice(0, 2).map(a => a.author?.display_name).filter(Boolean).join(', ') || '';
       const hasMore = (w.authorships?.length || 0) > 2;
       const cleanId = w.id?.replace('https://openalex.org/', '') || '';
       const doi = w.doi ? w.doi.replace(/^https?:\/\/doi\.org\//i, '') : null;
-      return `<div class="reference-item" style="cursor:pointer;" onclick="window.location.href='/paper.html?id=${escapeHtml(cleanId)}'">
+      return `<div class="reference-item" id="oa-ref-${i + 1}" style="cursor:pointer;" onclick="window.location.href='/paper.html?id=${escapeHtml(cleanId)}'">
         <span class="reference-number">[${i + 1}]</span>
         <div>
           <strong style="font-size:.82rem;">${escapeHtml(w.title || 'Untitled')}</strong>
@@ -875,6 +931,9 @@ async function loadReferencesFromOpenAlex(paper) {
         </div>
       </div>`;
     }).join('');
+
+  // Re-apply citation highlights now that we have the list
+  applyCitationHighlights();
 }
 
 async function loadResearchObjects(paper) {
@@ -1133,18 +1192,19 @@ function wireReferenceButtons() {
   });
 }
 
-async function handleReferenceClick(refNumber) {
-  const ref = extractedReferences.find(r => r.number === refNumber);
-  if (!ref) return;
+function handleReferenceClick(refNumber) {
+  // Switch to Refs tab
+  const refsTabBtn = document.querySelector('.pdf-tab-btn[data-tab="refs"]');
+  if (refsTabBtn) refsTabBtn.click();
 
-  let seUrl = null;
-  try {
-    seUrl = await findScienceEcosystemLink(ref);
-  } catch (e) {
-    console.error('Failed to resolve ScienceEcosystem link:', e);
-  }
-
-  showReferencePopup(ref, seUrl);
+  // Scroll to and highlight the ref card
+  const refNum = parseInt(refNumber, 10);
+  const card = document.getElementById(`oa-ref-${refNum}`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.style.outline = '2px solid #0284c7';
+  card.style.outlineOffset = '2px';
+  setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 2000);
 }
 
 function showReferencePopup(ref, seUrl) {
