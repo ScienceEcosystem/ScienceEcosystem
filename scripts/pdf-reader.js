@@ -1255,7 +1255,43 @@ function bindAnnotationToolbar() {
   h?.addEventListener('click', () => setMode('highlight'));
   n?.addEventListener('click', () => setMode('note'));
   e?.addEventListener('click', () => setMode('erase'));
-  c?.addEventListener('click', () => { annotations = []; saveAnnotations(); renderAnnotationsAll(); });
+  if (c) {
+    let clearPending = false;
+    let clearTimer = null;
+    c.addEventListener('click', () => {
+      if (!clearPending) {
+        clearPending = true;
+        c.textContent = 'Clear all? Click again';
+        c.style.color = '#dc2626';
+        c.style.borderColor = '#dc2626';
+        clearTimer = setTimeout(() => {
+          clearPending = false;
+          c.textContent = 'Clear All';
+          c.style.color = '';
+          c.style.borderColor = '';
+        }, 3000);
+      } else {
+        clearTimeout(clearTimer);
+        clearPending = false;
+        c.textContent = 'Clear All';
+        c.style.color = '';
+        c.style.borderColor = '';
+        annotations = [];
+        saveAnnotations();
+        renderAnnotationsAll();
+      }
+    });
+    // Cancel if user clicks anywhere else
+    document.addEventListener('click', (ev) => {
+      if (clearPending && ev.target !== c) {
+        clearTimeout(clearTimer);
+        clearPending = false;
+        c.textContent = 'Clear All';
+        c.style.color = '';
+        c.style.borderColor = '';
+      }
+    }, true);
+  }
   updateAnnotButtons();
 }
 
