@@ -887,19 +887,28 @@ async function loadResearchObjects(paper) {
   }
   el.innerHTML = '<p class="muted" style="font-size:.8rem;">Searching Zenodo…</p>';
   try {
-    const q = encodeURIComponent(`related.identifier:"${doi}"`);
-    const r = await fetch(`https://zenodo.org/api/records?q=${q}&size=10`);
-    const data = r.ok ? await r.json() : null;
-    const hits = data?.hits?.hits || [];
+    // Use same two-query approach as paper.js fetchZenodoBacklinks
+    const doiEsc = doi.replace(/"/g, '\\"');
+    let hits = [];
+    const q1 = encodeURIComponent(`related.identifiers.identifier:"${doiEsc}"`);
+    const r1 = await fetch(`https://zenodo.org/api/records/?q=${q1}&size=20`);
+    if (r1.ok) { const d1 = await r1.json(); hits = d1?.hits?.hits || []; }
+    if (!hits.length) {
+      const q2 = encodeURIComponent(`metadata.related_identifiers.identifier:"${doiEsc}"`);
+      const r2 = await fetch(`https://zenodo.org/api/records/?q=${q2}&size=20`);
+      if (r2.ok) { const d2 = await r2.json(); hits = d2?.hits?.hits || []; }
+    }
     if (!hits.length) {
       el.innerHTML = '<p class="muted" style="font-size:.8rem;">No research objects found on Zenodo.</p>';
       return;
     }
     el.innerHTML = hits.map(h => {
-      const title = h.metadata?.title || 'Untitled';
-      const type = h.metadata?.resource_type?.type || 'record';
-      const url = `https://zenodo.org/records/${h.id}`;
-      const recDoi = h.metadata?.doi || `10.5281/zenodo.${h.id}`;
+      const md = h.metadata || {};
+      const title = md.title || 'Untitled';
+      const typeRaw = (md.resource_type?.type || '').toLowerCase();
+      const type = typeRaw.includes('software') ? 'Software' : typeRaw.includes('dataset') ? 'Dataset' : (md.resource_type?.type || 'Record');
+      const url = (h.links?.html) || `https://zenodo.org/records/${h.id}`;
+      const recDoi = md.doi || `10.5281/zenodo.${h.id}`;
       return `<div class="reference-item">
         <div>
           <strong style="font-size:.82rem;"><a href="${url}" target="_blank" onclick="event.stopPropagation()">${escapeHtml(title)}</a></strong>

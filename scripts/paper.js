@@ -100,11 +100,21 @@
     return m ? m[0].toUpperCase() : null;
   }
   function getOpenAccessPdf(p){
-    return get(p,"best_oa_location.pdf_url",null)
+    var direct = get(p,"best_oa_location.pdf_url",null)
       || get(p,"best_oa_location.url_for_pdf",null)
       || get(p,"primary_location.pdf_url",null)
-      || get(p,"primary_location.url_for_pdf",null)
-      || null;
+      || get(p,"primary_location.url_for_pdf",null);
+    if (direct) return direct;
+    // Search all locations for a pdf_url
+    var locs = Array.isArray(p.locations) ? p.locations : [];
+    for (var i = 0; i < locs.length; i++) {
+      var u = locs[i].pdf_url || locs[i].url_for_pdf || null;
+      if (u) return u;
+    }
+    // oa_url might be a direct PDF link for some publishers
+    var oaUrl = get(p,"open_access.oa_url",null);
+    if (oaUrl && /\.pdf(\?|$)/i.test(oaUrl)) return oaUrl;
+    return null;
   }
   function setSupplementaryLinks(list){
     __SUPP_LINKS__ = Array.isArray(list) ? list : [];
@@ -2419,15 +2429,24 @@
       var scrollY = window.scrollY || document.documentElement.scrollTop;
       var scrollX = window.scrollX || document.documentElement.scrollLeft;
       c.style.display = "block";
-      // Default: below the anchor
-      var top = rect.bottom + scrollY + 8;
-      var left = rect.left + scrollX;
-      // Clamp right edge
+      c.style.visibility = "hidden"; // measure first, then show
       var cardW = 280;
+      var cardH = c.offsetHeight || 140;
+      // Prefer below anchor; flip above if not enough space below
+      var spaceBelow = window.innerHeight - rect.bottom;
+      var top, left;
+      if (spaceBelow >= cardH + 16 || spaceBelow >= rect.top) {
+        top = rect.bottom + scrollY + 8;
+      } else {
+        top = rect.top + scrollY - cardH - 8;
+      }
+      left = rect.left + scrollX;
       if (left + cardW > window.innerWidth - 16) left = window.innerWidth - cardW - 16;
       if (left < 8) left = 8;
+      if (top < scrollY + 8) top = scrollY + 8;
       c.style.top = top + "px";
       c.style.left = left + "px";
+      c.style.visibility = "";
     }
 
     function fmt(n){ return n != null ? Number(n).toLocaleString() : null; }
@@ -2484,14 +2503,15 @@
       var key = type+":"+id;
       if (fetchCache[key]) return fetchCache[key];
       var url;
+      var mailto = "mailto=scienceecosystem@icloud.com";
       if (type === "author")      url = API + "/authors/" + encodeURIComponent(id)
-        + "?fields=display_name,last_known_institution,works_count,cited_by_count,orcid";
+        + "?"+mailto+"&select=display_name,last_known_institution,works_count,cited_by_count,orcid";
       else if (type === "institution") url = API + "/institutions/" + encodeURIComponent(id)
-        + "?fields=display_name,country_code,type,works_count,cited_by_count,homepage_url";
+        + "?"+mailto+"&select=display_name,country_code,type,works_count,cited_by_count,homepage_url";
       else if (type === "journal") url = API + "/sources/" + encodeURIComponent(id)
-        + "?fields=display_name,host_organization_name,issn_l,issn,works_count,cited_by_count,is_oa";
+        + "?"+mailto+"&select=display_name,host_organization_name,issn_l,issn,works_count,cited_by_count,is_oa";
       else return null;
-      var r = await fetch(url, { headers:{"User-Agent":"ScienceEcosystem/1.0"} });
+      var r = await fetch(url);
       if (!r.ok) return null;
       var data = await r.json();
       fetchCache[key] = data;
