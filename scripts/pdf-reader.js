@@ -43,37 +43,32 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+function updateZoomLabel() {
+  const el = document.getElementById('zoomLabel');
+  if (el) el.textContent = Math.round(scale * 100) + '%';
+}
+
 function setupCanvas() {
   const pdfMain = document.querySelector('.pdf-main');
   if (!pdfMain) return;
 
   const body = pdfMain.querySelector('.pdf-main-body') || pdfMain;
   body.innerHTML = `
-    <div class="pdf-scroll" style="text-align: center; padding: 2rem; overflow: auto; height: 100%;">
-      <div>
-        <button id="prevPage" class="btn btn-small">Previous</button>
-        <span style="margin: 0 1rem;">
-          Page: <span id="pageNum"></span> / <span id="pageCount"></span>
-        </span>
-        <button id="nextPage" class="btn btn-small">Next</button>
-        <button id="zoomIn" class="btn btn-small">Zoom In</button>
-        <button id="zoomOut" class="btn btn-small">Zoom Out</button>
-      </div>
+    <div class="pdf-scroll" style="text-align:center;padding:1.5rem;overflow:auto;height:100%;box-sizing:border-box;">
       <div id="pdfPages" class="pdf-pages"></div>
     </div>
   `;
 
-  document.getElementById('prevPage').addEventListener('click', onPrevPage);
-  document.getElementById('nextPage').addEventListener('click', onNextPage);
-  document.getElementById('zoomIn').addEventListener('click', () => {
-    scale += 0.25;
+  // Wire zoom buttons from the static toolbar
+  document.getElementById('zoomIn')?.addEventListener('click', () => {
+    scale = Math.min(scale + 0.25, 4);
+    updateZoomLabel();
     renderAllPages();
   });
-  document.getElementById('zoomOut').addEventListener('click', () => {
-    if (scale > 0.5) {
-      scale -= 0.25;
-      renderAllPages();
-    }
+  document.getElementById('zoomOut')?.addEventListener('click', () => {
+    scale = Math.max(scale - 0.25, 0.5);
+    updateZoomLabel();
+    renderAllPages();
   });
 
   bindAnnotationToolbar();
@@ -986,39 +981,78 @@ function renderPdfLinksSidebar() {
     return;
   }
 
-  const max = 80;
-  const items = pdfLinkIndex.slice(0, max).map((item, idx) => {
-    const label = item.url ? item.label : `Internal link (p.${item.page})`;
-    const safe = escapeHtml(label);
-    if (item.url) {
-      return `
-        <div class="reference-item">
-          <span class="reference-number">Link</span>
-          <div>
-            <strong>${safe}</strong>
-            <div style="display:flex; gap:0.5rem; margin-top:0.25rem; flex-wrap:wrap;">
-              <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener" class="badge badge-ok">Open</a>
-              <span class="badge">p.${item.page}</span>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    return `
-      <div class="reference-item" data-link-index="${idx}" onclick="jumpToInternalLink(${idx})">
-        <span class="reference-number">Link</span>
-        <div>
-          <strong>${safe}</strong>
-          <div style="display:flex; gap:0.5rem; margin-top:0.25rem; flex-wrap:wrap;">
-            <button class="badge badge-warn" onclick="event.stopPropagation(); jumpToInternalLink(${idx});">Jump</button>
-            <span class="badge">p.${item.page}</span>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
+  // Split and deduplicate
+  const seenUrls = new Set();
+  const external = [];
+  pdfLinkIndex.forEach((item, idx) => {
+    if (!item.url) return;
+    // Strip trailing punctuation that PDF parsers sometimes include in the annotation URL
+    const cleanUrl = item.url.replace(/[.,;)\s]+$/, '');
+    if (!cleanUrl.startsWith('http') || seenUrls.has(cleanUrl)) return;
+    seenUrls.add(cleanUrl);
+    external.push({ ...item, url: cleanUrl, _idx: idx });
+  });
 
-  linksDiv.innerHTML = items;
+  const internal = pdfLinkIndex
+    .map((item, idx) => ({ ...item, _idx: idx }))
+    .filter(item => !item.url && item.dest);
+
+  // Deduplicate internal links by target page (keep first occurrence per page)
+  const seenDestPages = new Set();
+  const uniqueInternal = internal.filter(item => {
+    const key = item.page; // group by source page is fine; dest unknown until async resolve
+    if (seenDestPages.has(JSON.stringify(item.dest))) return false;
+    seenDestPages.add(JSON.stringify(item.dest));
+    return true;
+  });
+
+  // Classify external link type
+  function linkType(url) {
+    if (/doi\.org/i.test(url)) return { label: 'DOI', cls: 'badge-ok' };
+    if (/arxiv\.org/i.test(url)) return { label: 'arXiv', cls: 'badge-ok' };
+    if (/zenodo\.org/i.test(url)) return { label: 'Zenodo', cls: '' };
+    if (/github\.com/i.test(url)) return { label: 'GitHub', cls: '' };
+    if (/hdl\.handle\.net/i.test(url)) return { label: 'Handle', cls: '' };
+    return { label: 'Web', cls: '' };
+  }
+
+  function displayUrl(url) {
+    try {
+      const u = new URL(url);
+      const path = u.pathname.length > 1 ? u.pathname : '';
+      const display = u.hostname.replace(/^www\./, '') + path;
+      return display.length > 55 ? display.slice(0, 52) + '…' : display;
+    } catch (_) { return url.slice(0, 55); }
+  }
+
+  let html = '';
+
+  if (external.length) {
+    html += `<p class="muted" style="font-size:.75rem;margin-bottom:.5rem;">${external.length} external link${external.length !== 1 ? 's' : ''}</p>`;
+    html += external.map(item => {
+      const { label, cls } = linkType(item.url);
+      return `<div class="reference-item">
+        <div>
+          <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener" style="font-size:.82rem;word-break:break-all;">${escapeHtml(displayUrl(item.url))}</a>
+          <div style="display:flex;gap:.4rem;margin-top:.2rem;align-items:center;flex-wrap:wrap;">
+            <span class="badge ${cls}" style="font-size:.7rem;">${label}</span>
+            <span class="muted" style="font-size:.7rem;">p.${item.page}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  if (uniqueInternal.length) {
+    html += `<p class="muted" style="font-size:.75rem;margin:1rem 0 .4rem;">${internal.length} internal cross-reference${internal.length !== 1 ? 's' : ''}</p>`;
+    html += `<div style="display:flex;flex-wrap:wrap;gap:.3rem;">`;
+    html += uniqueInternal.map(item =>
+      `<button class="badge" onclick="jumpToInternalLink(${item._idx})" style="cursor:pointer;font-size:.75rem;">p.${item.page}</button>`
+    ).join('');
+    html += `</div>`;
+  }
+
+  linksDiv.innerHTML = html || '<p class="muted">No links detected.</p>';
 }
 
 async function jumpToInternalLink(index) {
@@ -1285,6 +1319,28 @@ function createAnnotation(page, normRects, quote, type, note, color) {
   renderAnnotationsForPage(page);
 }
 
+// Merge selection rects that overlap on the same text line into single wider rects
+function mergeLineRects(rects) {
+  if (!rects.length) return rects;
+  const sorted = [...rects].sort((a, b) => a.y - b.y || a.x - b.x);
+  const lines = [];
+  for (const r of sorted) {
+    const last = lines[lines.length - 1];
+    // Same line if vertical overlap is > 50% of the rect height
+    if (last && r.y < last.y + last.h * 0.6) {
+      const right = Math.max(last.x + last.w, r.x + r.w);
+      const bottom = Math.max(last.y + last.h, r.y + r.h);
+      last.x = Math.min(last.x, r.x);
+      last.y = Math.min(last.y, r.y);
+      last.w = right - last.x;
+      last.h = bottom - last.y;
+    } else {
+      lines.push({ ...r });
+    }
+  }
+  return lines;
+}
+
 function wireAnnotationSelection(layerEl) {
   layerEl.addEventListener('mouseup', (ev) => {
     if (annotMode === 'erase') return;
@@ -1300,11 +1356,26 @@ function wireAnnotationSelection(layerEl) {
     if (!wrap) return;
     const page = Number(wrap.getAttribute('data-page') || '0');
     const wrapRect = wrap.getBoundingClientRect();
-    const normRects = rects.map(r => ({
-      x: r.left - wrapRect.left,
-      y: r.top - wrapRect.top,
-      w: r.width,
-      h: r.height
+    if (!wrapRect.width || !wrapRect.height) return;
+
+    // Merge rects that are on the same line (same vertical band) to avoid gaps between spans
+    const raw = rects
+      .filter(r => r.width > 0 && r.height > 0)
+      .map(r => ({
+        x: r.left - wrapRect.left,
+        y: r.top - wrapRect.top,
+        w: r.width,
+        h: r.height
+      }));
+    const merged = mergeLineRects(raw);
+
+    // Store as fractions of page size so annotations survive zoom changes
+    const normRects = merged.map(r => ({
+      x: r.x / wrapRect.width,
+      y: r.y / wrapRect.height,
+      w: r.w / wrapRect.width,
+      h: r.h / wrapRect.height,
+      _norm: true
     }));
 
     const quote = sel.toString().trim();
@@ -1344,22 +1415,34 @@ function renderAnnotationsForPage(page) {
   const layer = wrap.querySelector('.pdf-annotation-layer');
   if (!layer) return;
   layer.innerHTML = '';
+
+  // Page canvas gives us current pixel dimensions for normalizing stored coords
+  const canvas = wrap.querySelector('.pdf-page-canvas');
+  const cw = canvas ? canvas.offsetWidth || canvas.width : wrap.offsetWidth;
+  const ch = canvas ? canvas.offsetHeight || canvas.height : wrap.offsetHeight;
+
   const pageAnnots = annotations.filter(a => a.page === page);
   pageAnnots.forEach(a => {
     a.rects.forEach(r => {
+      // r._norm means coords are 0-1 fractions; legacy rects are absolute px
+      const px = r._norm ? r.x * cw : r.x;
+      const py = r._norm ? r.y * ch : r.y;
+      const pw = r._norm ? r.w * cw : r.w;
+      const ph = r._norm ? r.h * ch : r.h;
+
       const d = document.createElement('div');
       d.className = 'pdf-annot';
       d.setAttribute('data-annot-id', a.id);
-      d.style.left = `${r.x}px`;
+      d.style.left = `${px}px`;
       if (a.type === 'underline') {
-        d.style.top = `${r.y + r.h - 2}px`;
-        d.style.width = `${r.w}px`;
+        d.style.top = `${py + ph - 2}px`;
+        d.style.width = `${pw}px`;
         d.style.height = '2px';
         d.style.background = a.color || UNDERLINE_COLOR;
       } else {
-        d.style.top = `${r.y}px`;
-        d.style.width = `${r.w}px`;
-        d.style.height = `${r.h}px`;
+        d.style.top = `${py}px`;
+        d.style.width = `${pw}px`;
+        d.style.height = `${ph}px`;
         d.style.background = a.color || (a.type === 'note' ? 'rgba(46,127,159,0.25)' : 'rgba(255,235,59,0.55)');
       }
       if (a.note) d.setAttribute('title', a.note);

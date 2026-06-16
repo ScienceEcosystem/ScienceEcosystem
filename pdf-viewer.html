@@ -46,6 +46,8 @@
       flex: 1;
       background: #525252;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     /* Thumbnail strip */
@@ -370,13 +372,18 @@
     </aside>
 
     <main class="pdf-main">
-      <!-- Toolbar -->
-      <div class="pdf-annot-toolbar" style="display:flex;gap:.4rem;align-items:center;padding:.5rem .75rem;background:#f8f9fa;border-bottom:1px solid #dee2e6;flex-wrap:wrap;">
+      <!-- Toolbar (always visible) -->
+      <div class="pdf-annot-toolbar" style="display:flex;gap:.4rem;align-items:center;padding:.5rem .75rem;background:#f8f9fa;border-bottom:1px solid #dee2e6;flex-wrap:wrap;flex-shrink:0;">
         <span class="muted" style="font-size:.85rem;">Annotate:</span>
         <button id="annotHighlightBtn" class="btn btn-secondary btn-xs">Highlight</button>
         <button id="annotNoteBtn" class="btn btn-secondary btn-xs">Note</button>
         <button id="annotEraseBtn" class="btn btn-secondary btn-xs">Erase</button>
         <button id="annotClearBtn" class="btn btn-secondary btn-xs">Clear All</button>
+        <div style="width:1px;height:18px;background:#dee2e6;margin:0 .2rem;"></div>
+        <!-- Zoom controls -->
+        <button id="zoomOut" class="btn btn-secondary btn-xs" title="Zoom out" style="font-size:1rem;line-height:1;padding:.15rem .5rem;">−</button>
+        <span id="zoomLabel" class="muted" style="font-size:.8rem;min-width:36px;text-align:center;">150%</span>
+        <button id="zoomIn" class="btn btn-secondary btn-xs" title="Zoom in" style="font-size:1rem;line-height:1;padding:.15rem .5rem;">+</button>
         <div style="flex:1;"></div>
         <!-- Full-text search -->
         <div style="display:flex;align-items:center;gap:.3rem;">
@@ -386,7 +393,7 @@
           <span id="pdfSearchCount" class="muted" style="font-size:.8rem;min-width:40px;"></span>
         </div>
       </div>
-      <div class="pdf-main-body" style="height:calc(100% - 50px);overflow:auto;"></div>
+      <div class="pdf-main-body" style="flex:1;min-height:0;overflow:auto;"></div>
     </main>
   </div>
 
