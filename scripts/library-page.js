@@ -294,6 +294,9 @@
   let items=[];          // {id,title,authors,year,venue,cited_by,tags?,doi?,deleted_at?,collection_ids?}
   let currentCollectionId=null; // null = All Items; special: "__duplicates__", "__trash__"
   let currentSelection=null;
+  let selectedIds=new Set();   // multi-select set
+  let lastClickId=null;        // anchor for shift-click range
+  let lastRenderedView=[];     // ordered view array for range selection
   let openMenu=null;
   let tagFilterTerms=[];
   let _renderTagPanel=null; // set after init, called by renderTable
@@ -413,7 +416,6 @@
   }
 
   async function deleteItemForever(id){
-    if(!confirm("Permanently delete this item?")) return;
     try{ await api(`/api/library/${encodeURIComponent(id)}`,{method:"DELETE"}); }
     catch{ try{ await api(`/api/trash/items`,{method:"DELETE",body:JSON.stringify({id})}); }catch{} }
     items = items.filter(x=>String(x.id)!==String(id));
@@ -538,7 +540,7 @@
       <span class="name">Duplicates</span>
       <button class="kebab" title="Options" aria-haspopup="menu">···</button>
     </div>`;
-    dupLi.querySelector(".row").addEventListener("click",()=>{ currentCollectionId="__duplicates__"; renderTree(); renderTable(); });
+    dupLi.querySelector(".row").addEventListener("click",()=>{ currentCollectionId="__duplicates__"; selectedIds=new Set(); renderTree(); renderTable(); });
     ul.appendChild(dupLi);
 
     const trashLi=document.createElement("li");
@@ -548,7 +550,7 @@
       <span class="name">Trash</span>
       <button class="kebab" title="Trash options" aria-haspopup="menu">···</button>
     </div>`;
-    trashLi.querySelector(".row").addEventListener("click",()=>{ currentCollectionId="__trash__"; renderTree(); renderTable(); });
+    trashLi.querySelector(".row").addEventListener("click",()=>{ currentCollectionId="__trash__"; selectedIds=new Set(); renderTree(); renderTable(); });
     trashLi.querySelector(".kebab").addEventListener("click",(ev)=>{
       ev.stopPropagation();
       buildContextMenu([
@@ -557,7 +559,6 @@
           await refreshEverything();
         }},
         {act:"empty",label:"Empty Trash",onClick: async()=>{
-          if(!confirm("Permanently delete everything in Trash?")) return;
           try{ await api("/api/trash/empty",{method:"POST"}); }catch{}
           await refreshEverything();
         }},
@@ -575,7 +576,7 @@
       <span class="tree-count">${allCount}</span>
       <button class="kebab" title="Options" aria-haspopup="menu">···</button>
     </div>`;
-    allLi.querySelector(".row").addEventListener("click",()=>{ currentCollectionId=null; renderTree(); renderTable(); });
+    allLi.querySelector(".row").addEventListener("click",()=>{ currentCollectionId=null; selectedIds=new Set(); renderTree(); renderTable(); });
     allLi.querySelector(".kebab").addEventListener("click",(ev)=>{
       ev.stopPropagation();
       buildContextMenu([
@@ -602,7 +603,7 @@
         </div>`;
         const row=li.querySelector(".row");
         const keb=li.querySelector(".kebab");
-        row.addEventListener("click",(ev)=>{ if(ev.target.closest(".kebab")) return; currentCollectionId=c.id; renderTree(); renderTable(); });
+        row.addEventListener("click",(ev)=>{ if(ev.target.closest(".kebab")) return; currentCollectionId=c.id; selectedIds=new Set(); renderTree(); renderTable(); });
         row.addEventListener("dblclick",(ev)=>{ if(ev.target.closest(".kebab")) return; ev.stopPropagation(); startInlineRename(c); });
         keb.addEventListener("click",(ev)=>{ ev.stopPropagation(); buildMenuForCollection(c,keb); });
         ul.appendChild(li);
@@ -837,7 +838,7 @@
       const authors = cols.has("authors")?`<td class="col-authors">${esc(authorsDisplay)}</td>`:"";
       const year    = cols.has("year")   ?`<td class="col-year">${esc(it.year??"-")}</td>`:"";
       const zoteroBadge = it.zotero_key ? `<span class="badge badge-zotero" title="Synced from Zotero" style="font-size:.65rem;padding:.05rem .3rem;margin-right:3px;">Z</span>` : "";
-      const isSel = currentSelection && String(it.id)===String(currentSelection);
+      const isSel = selectedIds.has(String(it.id));
       const readDot = it.read_status ? `<span title="${it.read_status}">${READ_DOT[it.read_status]||''}</span>` : "";
       return `<tr data-id="${esc(it.id)}" draggable="true"${isSel?' class="selected"':''}>
         <td class="col-icon" title="${esc(ITEM_TYPES[getItemType(it)]?.label||'Article')}" style="position:relative;">${typeIcon(getItemType(it))}${it.read_status?`<span style="position:absolute;top:1px;right:1px;">${READ_DOT[it.read_status]||''}</span>`:""}</td>
@@ -847,18 +848,40 @@
       </tr>`;
     }).join("");
 
-    // row click -> select
+    lastRenderedView = view;
+
+    // row click -> select (shift=range, ctrl/cmd=toggle, plain=single)
     $$("#itemsTbody tr").forEach(tr=>{
       tr.addEventListener("click", async(ev)=>{
-        $$("#itemsTbody tr.selected").forEach(r=>r.classList.remove("selected"));
-        tr.classList.add("selected");
-        currentSelection = tr.getAttribute("data-id");
-        await renderInspector(currentSelection);
+        const id = tr.getAttribute("data-id");
+        if(ev.shiftKey && lastClickId){
+          const ids = lastRenderedView.map(x=>String(x.id));
+          const a = ids.indexOf(String(lastClickId));
+          const b = ids.indexOf(String(id));
+          if(a!==-1 && b!==-1){
+            const [lo,hi]=[Math.min(a,b),Math.max(a,b)];
+            selectedIds = new Set(ids.slice(lo,hi+1));
+          }
+        } else if(ev.ctrlKey || ev.metaKey){
+          if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+          lastClickId = id;
+        } else {
+          selectedIds = new Set([id]);
+          lastClickId = id;
+        }
+        currentSelection = id;
+        $$("#itemsTbody tr").forEach(r=>r.classList.toggle("selected", selectedIds.has(r.getAttribute("data-id"))));
+        if(selectedIds.size===1){ await renderInspector(currentSelection); }
+        else if(selectedIds.size>1){ renderMultiSelectPanel(); }
+        else { const host=$("#inspectorBody"); if(host) host.innerHTML=`<p class="muted" style="padding:.75rem;">Select an item…</p>`; }
       });
       tr.addEventListener("contextmenu", async(ev)=>{
         ev.preventDefault();
-        currentSelection = tr.getAttribute("data-id");
-        await renderInspector(currentSelection);
+        const id = tr.getAttribute("data-id");
+        if(!selectedIds.has(id)){ selectedIds=new Set([id]); lastClickId=id; }
+        currentSelection = id;
+        $$("#itemsTbody tr").forEach(r=>r.classList.toggle("selected", selectedIds.has(r.getAttribute("data-id"))));
+        if(selectedIds.size===1) await renderInspector(currentSelection);
         const item = items.find(x=>String(x.id)===String(currentSelection));
         if(item) buildMenuForItem(item, ev);
       });
@@ -893,6 +916,18 @@
         renderTable();
       };
     });
+    // Empty Trash button — only visible in trash view
+    const emptyTrashBtn=$("#emptyTrashBtn");
+    if(emptyTrashBtn){
+      emptyTrashBtn.style.display=currentCollectionId==="__trash__"?"":"none";
+      emptyTrashBtn.onclick=async()=>{
+        emptyTrashBtn.disabled=true; emptyTrashBtn.textContent="Emptying…";
+        try{ await api("/api/trash/empty",{method:"POST"}); }catch{}
+        selectedIds=new Set(); await safeRefreshItems(); renderTable();
+        toast("Trash emptied");
+      };
+    }
+
     _renderTagPanel?.();
   }
 
@@ -927,6 +962,43 @@
   });
 
   // ---- Inspector (& Related) ----
+  function renderMultiSelectPanel(){
+    const host=$("#inspectorBody");
+    if(!host) return;
+    const count=selectedIds.size;
+    const inTrash=currentCollectionId==="__trash__";
+    host.innerHTML=`
+      <div style="padding:1rem .75rem;">
+        <p style="font-size:.9rem;font-weight:600;margin:0 0 .85rem;color:#374151;">${count} items selected</p>
+        ${!inTrash?`<button class="btn btn-secondary" id="bulkTrashBtn" style="width:100%;margin-bottom:.4rem;">Move to Trash</button>`:""}
+        ${inTrash?`<button class="btn btn-secondary" id="bulkRestoreBtn" style="width:100%;margin-bottom:.4rem;">Restore</button>`:""}
+        ${inTrash?`<button class="btn btn-secondary" id="bulkDeleteBtn" style="width:100%;margin-bottom:.4rem;color:#dc2626;border-color:#dc2626;">Delete permanently</button>`:""}
+      </div>`;
+    $("#bulkTrashBtn")?.addEventListener("click", async()=>{
+      const ids=[...selectedIds];
+      for(const id of ids) await moveItemToTrash(id).catch(()=>{});
+      selectedIds=new Set(); await safeRefreshItems(); renderTable();
+      toast(`${ids.length} item${ids.length===1?"":"s"} moved to Trash`);
+    });
+    $("#bulkRestoreBtn")?.addEventListener("click", async()=>{
+      const ids=[...selectedIds];
+      for(const id of ids) await restoreItem(id).catch(()=>{});
+      selectedIds=new Set(); await safeRefreshItems(); renderTable();
+      toast(`${ids.length} item${ids.length===1?"":"s"} restored`,"success");
+    });
+    $("#bulkDeleteBtn")?.addEventListener("click", async()=>{
+      const ids=[...selectedIds];
+      for(const id of ids){
+        try{ await api(`/api/library/${encodeURIComponent(id)}`,{method:"DELETE"}); }
+        catch{ try{ await api(`/api/trash/items`,{method:"DELETE",body:JSON.stringify({id})}); }catch{} }
+      }
+      items=items.filter(x=>!ids.includes(String(x.id)));
+      selectedIds=new Set(); renderTable();
+      host.innerHTML=`<p class="muted" style="padding:.75rem;">Select an item…</p>`;
+      toast(`${ids.length} item${ids.length===1?"":"s"} deleted permanently`);
+    });
+  }
+
   async function renderInspector(id){
     const host=$("#inspectorBody");
     const item=items.find(x=>String(x.id)===String(id));
@@ -1271,10 +1343,11 @@
       toast("Restored","success");
     });
     $("#deleteForeverBtn")?.addEventListener("click", async()=>{
-      if(!confirm("Permanently delete this item?")) return;
+      const btn=$("#deleteForeverBtn"); if(btn){ btn.disabled=true; btn.textContent="Deleting…"; }
       try{ await api(`/api/library/${encodeURIComponent(id)}`,{method:"DELETE"}); }
       catch{ try{ await api(`/api/trash/items`,{method:"DELETE",body:JSON.stringify({id})}); }catch{} }
-      items = items.filter(x=>String(x.id)!==String(id));
+      items=items.filter(x=>String(x.id)!==String(id));
+      selectedIds.delete(String(id));
       renderTable(); $("#inspectorBody").innerHTML=`<p class="muted" style="padding:.75rem;">Select an item…</p>`;
       toast("Deleted permanently");
     });
@@ -1615,26 +1688,24 @@
           ? (curIdx<0 ? 0 : Math.min(curIdx+1,rows.length-1))
           : (curIdx<0 ? rows.length-1 : Math.max(curIdx-1,0));
         const tr=rows[next]; if(!tr) return;
-        $$("#itemsTbody tr.selected").forEach(r=>r.classList.remove("selected"));
-        tr.classList.add("selected");
+        const id=tr.getAttribute("data-id");
+        selectedIds=new Set([id]); lastClickId=id; currentSelection=id;
+        $$("#itemsTbody tr").forEach(r=>r.classList.toggle("selected", selectedIds.has(r.getAttribute("data-id"))));
         tr.scrollIntoView({block:"nearest"});
-        currentSelection=tr.getAttribute("data-id");
         await renderInspector(currentSelection);
         return;
       }
 
       if(ev.key==="Delete"||ev.key==="Backspace"){
-        if(!currentSelection) return;
         ev.preventDefault();
-        const item=items.find(x=>String(x.id)===String(currentSelection));
-        if(!item||item.deleted_at) return;
-        try{
-          await api("/api/trash/items",{method:"POST",body:JSON.stringify({id:currentSelection})});
-        }catch{
-          try{ await api(`/api/library/${encodeURIComponent(currentSelection)}`,{method:"PATCH",body:JSON.stringify({deleted_at:new Date().toISOString()})}); }catch{}
+        const toTrash=[...selectedIds].filter(id=>{ const it=items.find(x=>String(x.id)===String(id)); return it&&!it.deleted_at; });
+        if(!toTrash.length) return;
+        for(const id of toTrash){
+          try{ await api("/api/trash/items",{method:"POST",body:JSON.stringify({id})}); }
+          catch{ try{ await api(`/api/library/${encodeURIComponent(id)}`,{method:"PATCH",body:JSON.stringify({deleted_at:new Date().toISOString()})}); }catch{} }
         }
-        await safeRefreshItems(); renderTable(); await renderInspector(currentSelection);
-        toast("Moved to Trash");
+        selectedIds=new Set(); await safeRefreshItems(); renderTable();
+        toast(`${toTrash.length} item${toTrash.length===1?"":"s"} moved to Trash`);
         return;
       }
 
