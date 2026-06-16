@@ -354,9 +354,14 @@ function applyCitationHighlights() {
   document.querySelectorAll('.pdf-text-layer').forEach(applyCitationHighlightsToLayer);
 }
 
-// Author-year citation regex: (Smith et al., 2020) / (Smith & Jones 2019) / (Smith 2018)
-// Comma between author and year is optional — many journals omit it
+// (Smith, 2020) / (Smith et al. 2020) / (Smith & Jones 2019) — author+year in parens
 const _ayRe = /^\s*\(\s*([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s*,?\s*(\d{4}[a-z]?)\s*\)\s*$/;
+// Smith et al. (2020) — author inline, only year in parens, same span
+const _narSameRe = /([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s+\((\d{4}[a-z]?)\)\s*$/;
+// (2020) — standalone year span; author is in the previous sibling span
+const _yearOnlyRe = /^\s*\((\d{4}[a-z]?)\)\s*$/;
+// Author tail at end of previous span: "...Smith et al." / "...Smith and Jones"
+const _authorTailRe = /([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s*$/;
 
 function applyCitationHighlightsToLayer(layerEl) {
   if (!layerEl || !openAlexRefsList.length) return;
@@ -381,17 +386,49 @@ function applyCitationHighlightsToLayer(layerEl) {
       }
     }
 
-    // --- Author-year: (Smith et al., 2020) ---
     if (hasAuthorYear && text.includes('(')) {
-      const m = _ayRe.exec(text);
+      // --- (Smith et al., 2020) — full citation in parens ---
+      let m = _ayRe.exec(text);
       if (m) {
         const lastName = m[1].toLowerCase().replace(/[^a-z]/g, '');
-        const year = m[2].slice(0, 4); // strip trailing letter for lookup
+        const year = m[2].slice(0, 4);
         const refNum = authorYearMap.get(`${lastName}_${year}`) ||
                        authorYearMap.get(`${lastName}_${m[2]}`);
         if (refNum) {
           span.classList.add('citation-highlight');
           span.setAttribute('data-ref-number', String(refNum));
+          return;
+        }
+      }
+
+      // --- Smith et al. (2020) — author inline, year in parens, same span ---
+      m = _narSameRe.exec(text);
+      if (m) {
+        const lastName = m[1].toLowerCase().replace(/[^a-z]/g, '');
+        const year = m[2].slice(0, 4);
+        const refNum = authorYearMap.get(`${lastName}_${year}`) ||
+                       authorYearMap.get(`${lastName}_${m[2]}`);
+        if (refNum) {
+          span.classList.add('citation-highlight');
+          span.setAttribute('data-ref-number', String(refNum));
+          return;
+        }
+      }
+
+      // --- (2020) alone — look at previous sibling for author name ---
+      m = _yearOnlyRe.exec(text);
+      if (m) {
+        const prevText = span.previousElementSibling?.textContent || '';
+        const am = _authorTailRe.exec(prevText);
+        if (am) {
+          const lastName = am[1].toLowerCase().replace(/[^a-z]/g, '');
+          const year = m[1].slice(0, 4);
+          const refNum = authorYearMap.get(`${lastName}_${year}`) ||
+                         authorYearMap.get(`${lastName}_${m[1]}`);
+          if (refNum) {
+            span.classList.add('citation-highlight');
+            span.setAttribute('data-ref-number', String(refNum));
+          }
         }
       }
     }
