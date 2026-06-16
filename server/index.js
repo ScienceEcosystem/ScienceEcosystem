@@ -2000,24 +2000,30 @@ app.post("/api/library/merge", async (req, res) => {
       );
     }
 
-    // Transfer PDF: if keeper has no local PDF but loser does, move the file reference
-    const { rows: keeperPdf } = await client.query(
-      `SELECT 1 FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [sess.orcid, keep_id]
-    );
-    if (!keeperPdf.length) {
+    // Transfer PDF: if keeper has no local_pdf_path but loser does, move the file reference.
+    // Use keeper.local_pdf_path (not a library_pdfs row check) so a stale empty row
+    // doesn't silently block the transfer.
+    if (!keeper.local_pdf_path && loser.local_pdf_path) {
+      // Remove any conflicting stale library_pdfs row on the keeper side first
+      // to avoid hitting the UNIQUE(orcid, paper_id) constraint on the UPDATE below.
+      await client.query(
+        `DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
+        [sess.orcid, keep_id]
+      );
       const { rows: loserPdf } = await client.query(
-        `SELECT * FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [sess.orcid, trash_id]
+        `SELECT 1 FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [sess.orcid, trash_id]
       );
       if (loserPdf.length) {
         await client.query(
           `UPDATE library_pdfs SET paper_id=$1 WHERE orcid=$2 AND paper_id=$3`,
           [keep_id, sess.orcid, trash_id]
         );
-        await client.query(
-          `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
-          [loser.local_pdf_path, sess.orcid, keep_id]
-        );
       }
+      // Always copy the path itself regardless of whether library_pdfs had a row
+      await client.query(
+        `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
+        [loser.local_pdf_path, sess.orcid, keep_id]
+      );
     }
 
     // Transfer PDF annotations if keeper has none

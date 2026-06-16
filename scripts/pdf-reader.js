@@ -775,10 +775,96 @@ async function loadPaperMetadata(paperId) {
       if (linksEl) renderDoiLink(linksEl, _paperDoiHref, paper.open_access?.oa_url || null);
     }
 
+    // Chain into references and research objects (non-blocking)
+    loadReferencesFromOpenAlex(paper);
+    loadResearchObjects(paper);
+
     return paper;
   } catch (e) {
     console.error('Failed to load metadata:', e);
     metadataDiv.innerHTML = '<p class="muted">Could not load paper information</p>';
+  }
+}
+
+async function loadReferencesFromOpenAlex(paper) {
+  const refsDiv = document.getElementById('pdfReferences');
+  if (!refsDiv) return;
+  const refs = paper.referenced_works || [];
+  if (!refs.length) {
+    refsDiv.innerHTML = '<p class="muted">No references listed in OpenAlex.</p>';
+    return;
+  }
+  refsDiv.innerHTML = `<p class="muted" style="font-size:.8rem;">Loading ${refs.length} references…</p>`;
+
+  const ids = refs.map(u => u.replace('https://openalex.org/', ''));
+  const BATCH = 50;
+  const allWorks = [];
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH).join('|');
+    try {
+      const r = await fetch(`https://api.openalex.org/works?filter=ids.openalex:${batch}&per-page=50&select=id,title,authorships,publication_year,doi,open_access&mailto=scienceecosystem@icloud.com`);
+      if (r.ok) { const d = await r.json(); allWorks.push(...(d.results || [])); }
+    } catch(_) {}
+  }
+
+  if (!allWorks.length) {
+    refsDiv.innerHTML = '<p class="muted">Could not load reference details.</p>';
+    return;
+  }
+
+  refsDiv.innerHTML = `<p class="muted" style="font-size:.75rem;margin-bottom:.5rem;">${allWorks.length} references</p>` +
+    allWorks.map((w, i) => {
+      const firstAuthors = w.authorships?.slice(0, 2).map(a => a.author?.display_name).filter(Boolean).join(', ') || '';
+      const hasMore = (w.authorships?.length || 0) > 2;
+      const cleanId = w.id?.replace('https://openalex.org/', '') || '';
+      const doi = w.doi ? w.doi.replace(/^https?:\/\/doi\.org\//i, '') : null;
+      return `<div class="reference-item" style="cursor:pointer;" onclick="window.location.href='/paper.html?id=${escapeHtml(cleanId)}'">
+        <span class="reference-number">[${i + 1}]</span>
+        <div>
+          <strong style="font-size:.82rem;">${escapeHtml(w.title || 'Untitled')}</strong>
+          ${firstAuthors ? `<p class="muted small">${escapeHtml(firstAuthors)}${hasMore ? ' et al.' : ''} · ${w.publication_year || ''}</p>` : ''}
+          <div style="display:flex;gap:.4rem;margin-top:.2rem;flex-wrap:wrap;">
+            ${doi ? `<a href="https://doi.org/${encodeURIComponent(doi)}" target="_blank" class="badge badge-ok" onclick="event.stopPropagation()">DOI</a>` : ''}
+            ${w.open_access?.is_oa ? '<span class="badge" style="background:#16a34a;color:#fff;font-size:.7rem;">OA</span>' : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+async function loadResearchObjects(paper) {
+  const el = document.getElementById('pdfResearchObjects');
+  if (!el) return;
+  const doi = paper.doi ? paper.doi.replace(/^https?:\/\/doi\.org\//i, '') : null;
+  if (!doi) {
+    el.innerHTML = '<p class="muted" style="font-size:.8rem;">No DOI — cannot search for research objects.</p>';
+    return;
+  }
+  el.innerHTML = '<p class="muted" style="font-size:.8rem;">Searching Zenodo…</p>';
+  try {
+    const q = encodeURIComponent(`related.identifier:"${doi}"`);
+    const r = await fetch(`https://zenodo.org/api/records?q=${q}&size=10`);
+    const data = r.ok ? await r.json() : null;
+    const hits = data?.hits?.hits || [];
+    if (!hits.length) {
+      el.innerHTML = '<p class="muted" style="font-size:.8rem;">No research objects found on Zenodo.</p>';
+      return;
+    }
+    el.innerHTML = hits.map(h => {
+      const title = h.metadata?.title || 'Untitled';
+      const type = h.metadata?.resource_type?.type || 'record';
+      const url = `https://zenodo.org/records/${h.id}`;
+      const recDoi = h.metadata?.doi || `10.5281/zenodo.${h.id}`;
+      return `<div class="reference-item">
+        <div>
+          <strong style="font-size:.82rem;"><a href="${url}" target="_blank" onclick="event.stopPropagation()">${escapeHtml(title)}</a></strong>
+          <p class="muted small">${escapeHtml(type)}</p>
+          <a href="https://doi.org/${escapeHtml(recDoi)}" target="_blank" class="badge badge-ok" style="margin-top:.2rem;font-size:.7rem;">DOI</a>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<p class="muted" style="font-size:.8rem;">Could not load research objects.</p>';
   }
 }
 
@@ -1047,9 +1133,24 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (!serverLoaded) loadAnnotations();
 
   loadPDF(pdfUrl);
-  extractPDFReferences(pdfUrl);
 
-  if (paperId) loadPaperMetadata(paperId);
+  if (paperId) {
+    // OpenAlex-based: metadata chains into refs + research objects
+    loadPaperMetadata(paperId);
+    // Figures/tables require server extraction which isn't available
+    const figs = document.getElementById('pdfFigures');
+    const tabs = document.getElementById('pdfTables');
+    if (figs) figs.innerHTML = '<p class="muted" style="font-size:.8rem;">Not available.</p>';
+    if (tabs) tabs.innerHTML = '<p class="muted" style="font-size:.8rem;">Not available.</p>';
+  } else {
+    extractPDFReferences(pdfUrl);
+    // Hide research objects section — only available when we have an OpenAlex ID
+    const roEl = document.getElementById('pdfResearchObjects');
+    if (roEl) {
+      roEl.previousElementSibling?.remove(); // remove the <h3> label
+      roEl.remove();
+    }
+  }
 });
 
 function bindAnnotationToolbar() {
