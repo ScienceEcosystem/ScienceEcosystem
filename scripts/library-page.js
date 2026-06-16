@@ -6,6 +6,28 @@
   const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
   const esc=(s)=>String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 
+  // Render title HTML safely — allows only inline formatting tags (<i>,<em>,<b>,<strong>,<sub>,<sup>)
+  const titleHtml=(raw)=>{
+    if(!raw) return '';
+    const s=String(raw).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return s
+      .replace(/&lt;\/(i|em|b|strong|sub|sup)&gt;/gi,'</$1>')
+      .replace(/&lt;(i|em|b|strong|sub|sup)\s*&gt;/gi,'<$1>');
+  };
+
+  // Small SVG type icons for the item table
+  const _T_DOC=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><rect x=".5" y=".5" width="10" height="12" rx="1" stroke="#7b8ea0"/><line x1="2" y1="4" x2="9" y2="4" stroke="#7b8ea0"/><line x1="2" y1="6.5" x2="9" y2="6.5" stroke="#7b8ea0"/><line x1="2" y1="9" x2="6.5" y2="9" stroke="#7b8ea0"/></svg>`;
+  const _T_BOOK=`<svg width="12" height="13" viewBox="0 0 12 13" fill="none" style="display:block;margin:auto"><rect x=".5" y=".5" width="11" height="12" rx="1" stroke="#7b8ea0"/><line x1="3.5" y1=".5" x2="3.5" y2="12.5" stroke="#7b8ea0"/></svg>`;
+  const _T_CONF=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><rect x=".5" y=".5" width="10" height="12" rx="1" stroke="#2e7f9f"/><line x1="2" y1="4" x2="9" y2="4" stroke="#2e7f9f"/><line x1="2" y1="6.5" x2="9" y2="6.5" stroke="#2e7f9f"/></svg>`;
+  const _T_PRE=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><rect x=".5" y=".5" width="10" height="12" rx="1" stroke="#7c3aed"/><line x1="2" y1="4" x2="9" y2="4" stroke="#7c3aed"/><line x1="2" y1="6.5" x2="9" y2="6.5" stroke="#7c3aed"/><line x1="2" y1="9" x2="6.5" y2="9" stroke="#7c3aed"/></svg>`;
+  const _T_DISS=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><rect x=".5" y=".5" width="10" height="12" rx="1" stroke="#b45309"/><circle cx="5.5" cy="7" r="2" stroke="#b45309"/></svg>`;
+  const _T_DATA=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><ellipse cx="5.5" cy="3" rx="4.5" ry="2" stroke="#6b7280"/><path d="M1 3v7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V3" stroke="#6b7280"/><path d="M1 7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2" stroke="#6b7280"/></svg>`;
+  const TYPE_ICON_MAP={'journal-article':_T_DOC,'review':_T_DOC,'letter':_T_DOC,'editorial':_T_DOC,'other':_T_DOC,'book':_T_BOOK,'book-chapter':_T_BOOK,'conference-paper':_T_CONF,'preprint':_T_PRE,'dissertation':_T_DISS,'dataset':_T_DATA,'report':_T_DOC};
+  function typeIcon(t){ return TYPE_ICON_MAP[t]||_T_DOC; }
+
+  // Small PDF badge SVG
+  const PDF_BADGE=`<svg width="13" height="15" viewBox="0 0 13 15" fill="none" style="display:block;margin:auto"><rect width="13" height="15" rx="2" fill="#dc2626"/><text x="6.5" y="10.5" text-anchor="middle" font-size="5.5" font-family="Inter,sans-serif" font-weight="700" fill="white">PDF</text></svg>`;
+
   // ---- Toast notifications (replaces alert()) ----
   function toast(msg, type="info", ms=3000){
     const c=$("#toastContainer"); if(!c) return;
@@ -410,7 +432,7 @@
     const dupLi=document.createElement("li");
     if(currentCollectionId==="__duplicates__") dupLi.classList.add("active");
     dupLi.innerHTML=`<div class="row" data-virt="dup">
-      <span style="width:.6rem;height:.6rem;border:1px solid #e5e7eb;border-radius:50%;background:#fff"></span>
+      <svg class="tree-icon" viewBox="0 0 16 16" fill="none"><rect x="5" y="1" width="9" height="11" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="4" width="9" height="11" rx="1" stroke="currentColor" stroke-width="1.2" fill="white"/></svg>
       <span class="name">Duplicates</span>
       <button class="kebab" title="Options" aria-haspopup="menu">···</button>
     </div>`;
@@ -420,7 +442,7 @@
     const trashLi=document.createElement("li");
     if(currentCollectionId==="__trash__") trashLi.classList.add("active");
     trashLi.innerHTML=`<div class="row" data-virt="trash">
-      <span style="width:.6rem;height:.6rem;border:1px solid #e5e7eb;border-radius:50%;background:#fff"></span>
+      <svg class="tree-icon" viewBox="0 0 16 16" fill="none"><polyline points="3,5 3,14 13,14 13,5" stroke="currentColor" stroke-width="1.2"/><line x1="1" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="6" y1="8" x2="6" y2="12" stroke="currentColor" stroke-width="1"/><line x1="10" y1="8" x2="10" y2="12" stroke="currentColor" stroke-width="1"/><path d="M6 5V3h4v2" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
       <span class="name">Trash</span>
       <button class="kebab" title="Trash options" aria-haspopup="menu">···</button>
     </div>`;
@@ -444,9 +466,11 @@
     // Root: All Items
     const allLi=document.createElement("li");
     if(currentCollectionId==null) allLi.classList.add("active");
+    const allCount=items.filter(it=>!it.deleted_at).length;
     allLi.innerHTML=`<div class="row" data-root="1">
-      <span style="width:.75rem;height:.75rem;border:1px solid #e5e7eb;border-radius:3px;background:#f8fafc"></span>
-      <span class="name">All Items</span>
+      <svg class="tree-icon" viewBox="0 0 16 16" fill="none"><path d="M2 4h4l2 2h6v7H2z" stroke="currentColor" stroke-width="1.2"/></svg>
+      <span class="name">My Library</span>
+      <span class="tree-count">${allCount}</span>
       <button class="kebab" title="Options" aria-haspopup="menu">···</button>
     </div>`;
     allLi.querySelector(".row").addEventListener("click",()=>{ currentCollectionId=null; renderTree(); renderTable(); });
@@ -467,9 +491,11 @@
       for(const c of (m.get(parentKey)||[])){
         const li=document.createElement("li");
         if(currentCollectionId===c.id) li.classList.add("active");
-        li.innerHTML=`<div class="row" data-id="${String(c.id)}" style="padding-left:${Math.max(0,depth)*12+8}px;">
-          <span style="width:.5rem;height:.5rem;border:1px solid #e5e7eb;border-radius:50%;background:#f8fafc"></span>
+        const cnt=items.filter(it=>!it.deleted_at&&(it.collection_ids||[]).includes(c.id)).length;
+        li.innerHTML=`<div class="row" data-id="${String(c.id)}" style="padding-left:${Math.max(0,depth)*14+8}px;">
+          <svg class="tree-icon" viewBox="0 0 16 16" fill="none"><path d="M1 4h5l2 2h7v7H1z" stroke="currentColor" stroke-width="1.2"/></svg>
           <span class="name" title="${esc(c.name)}">${esc(c.name)}</span>
+          ${cnt?`<span class="tree-count">${cnt}</span>`:''}
           <button class="kebab" title="Collection options" aria-haspopup="menu">···</button>
         </div>`;
         const row=li.querySelector(".row");
@@ -701,32 +727,27 @@
       return 0;
     });
 
-    if(!view.length){ tbody.innerHTML=`<tr><td colspan="5" class="muted">No items</td></tr>`; return; }
+    if(!view.length){ tbody.innerHTML=`<tr><td colspan="5" class="muted" style="padding:.5rem .75rem;">No items</td></tr>`; return; }
 
     tbody.innerHTML=view.map(it=>{
-      const tagsHtml = Array.isArray(it.tags)&&it.tags.length
-        ? `<div>${it.tags.map(t=>`<span class="tag-chip">${esc(t)}</span>`).join("")}</div>` : "";
       const authorsDisplay = firstAuthorLastName(it.authors);
-      const authors = cols.has("authors")?`<td>${esc(authorsDisplay)}${tagsHtml}</td>`:"";
-      const year    = cols.has("year")   ?`<td>${esc(it.year??"-")}</td>`:"";
-      const zoteroBadge = it.zotero_key ? `<span class="badge badge-zotero" title="Synced from Zotero">Z</span>` : "";
-      const pdfBadge = it.local_pdf_path
-        ? `<span title="PDF stored in your library" style="display:inline-flex;align-items:center;margin-right:4px;vertical-align:middle;flex-shrink:0;">
-            <svg width="13" height="15" viewBox="0 0 13 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <rect width="13" height="15" rx="2" fill="#dc2626"/>
-              <text x="6.5" y="10.5" text-anchor="middle" font-size="5.5" font-family="Inter,sans-serif" font-weight="700" fill="white">PDF</text>
-            </svg>
-           </span>`
-        : "";
-      return `<tr data-id="${esc(it.id)}" draggable="true">
-        <td title="${esc(it.title||"-")}">${zoteroBadge}${pdfBadge}${esc(it.title||"-")}</td>
+      const authors = cols.has("authors")?`<td class="col-authors">${esc(authorsDisplay)}</td>`:"";
+      const year    = cols.has("year")   ?`<td class="col-year">${esc(it.year??"-")}</td>`:"";
+      const zoteroBadge = it.zotero_key ? `<span class="badge badge-zotero" title="Synced from Zotero" style="font-size:.65rem;padding:.05rem .3rem;margin-right:3px;">Z</span>` : "";
+      const isSel = currentSelection && String(it.id)===String(currentSelection);
+      return `<tr data-id="${esc(it.id)}" draggable="true"${isSel?' class="selected"':''}>
+        <td class="col-icon" title="${esc(ITEM_TYPES[getItemType(it)]?.label||'Article')}">${typeIcon(getItemType(it))}</td>
+        <td class="col-title" title="${esc(it.title||"-")}">${zoteroBadge}${titleHtml(it.title||"-")}</td>
         ${authors}${year}
+        <td class="col-pdf" title="${it.local_pdf_path?'PDF stored in library':''}">${it.local_pdf_path?PDF_BADGE:''}</td>
       </tr>`;
     }).join("");
 
     // row click -> select
     $$("#itemsTbody tr").forEach(tr=>{
       tr.addEventListener("click", async(ev)=>{
+        $$("#itemsTbody tr.selected").forEach(r=>r.classList.remove("selected"));
+        tr.classList.add("selected");
         currentSelection = tr.getAttribute("data-id");
         await renderInspector(currentSelection);
         const item = items.find(x=>String(x.id)===String(currentSelection));
@@ -811,120 +832,163 @@
 
     const currentTags = Array.isArray(item.tags) ? [...item.tags] : [];
 
+    // Build field-grid view rows (skips empty values)
+    const fgRow=(label,value,html=false)=>value
+      ? `<span class="fg-label">${label}</span><span class="fg-value">${html?value:esc(String(value))}</span>`
+      : "";
+    const doiDisplay = item.doi
+      ? `<a href="${doiUrl}" target="_blank" rel="noopener">${esc(item.doi)}</a>` : "";
+
     host.innerHTML = `
-      <div style="padding:.75rem 1rem;">
-        <!-- Metadata (view mode) -->
+      <!-- Inspector header: title + type badge -->
+      <div class="insp-hdr">
+        <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem;">
+          <span class="type-badge">${esc(typeInfo.label)}</span>
+          <span style="flex:1"></span>
+          <button class="btn btn-secondary" id="editMetaBtn" style="font-size:.75rem;padding:.15rem .45rem;">Edit</button>
+        </div>
+        <h4 class="insp-title">${titleHtml(item.title||"Untitled")}</h4>
+      </div>
+
+      <!-- Tab bar -->
+      <div class="insp-tabs">
+        <button class="insp-tab active" data-tab="info">Info</button>
+        <button class="insp-tab" data-tab="notes">Notes</button>
+        <button class="insp-tab" data-tab="abstract">Abstract</button>
+        <button class="insp-tab" data-tab="tags">Tags</button>
+      </div>
+
+      <!-- ========== INFO TAB ========== -->
+      <div id="inspTabInfo" class="insp-tab-content">
+
+        <!-- View mode: field grid -->
         <div id="metaView">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;">
-            <div style="flex:1;">
-              <span style="display:inline-block;background:#e0f2fe;color:#0369a1;font-size:.72rem;font-weight:600;padding:.1rem .4rem;border-radius:4px;margin-bottom:.3rem;letter-spacing:.02em;">${esc(typeInfo.label)}</span>
-              <h4 style="margin:0 0 .25rem 0;">${esc(item.title)}</h4>
-            </div>
-            <button class="btn btn-secondary" id="editMetaBtn" style="flex-shrink:0;font-size:.78rem;padding:.2rem .55rem;" title="Edit details">✏ Edit</button>
+          <div class="field-grid">
+            ${fgRow("Item Type", typeInfo.label)}
+            ${fgRow("Author", item.authors||"—")}
+            ${fgRow("Year", item.year??"")}
+            ${fgRow("Journal", item.venue||"")}
+            ${fgRow("Volume", extraFields.volume||"")}
+            ${fgRow("Issue", extraFields.issue||"")}
+            ${fgRow("Pages", extraFields.pages||"")}
+            ${fgRow("Publisher", extraFields.publisher||"")}
+            ${fgRow("Conference", extraFields.conference||"")}
+            ${fgRow("Institution", extraFields.institution||"")}
+            ${fgRow("arXiv", extraFields.arxiv_id||"")}
+            ${fgRow("DOI", doiDisplay, true)}
           </div>
-          <p class="muted" style="margin:.25rem 0;">${esc(item.authors||"-")}</p>
-          <p class="meta"><strong>${esc(item.year??"-")}</strong> · ${esc(item.venue||"-")}</p>
-          ${(extraFields.volume||extraFields.issue||extraFields.pages)?`<p class="meta" style="font-size:.8rem;">${[extraFields.volume?`Vol. ${esc(extraFields.volume)}`:"", extraFields.issue?`No. ${esc(extraFields.issue)}`:"", extraFields.pages?`pp. ${esc(extraFields.pages)}`:""].filter(Boolean).join(" · ")}</p>`:""}
-          ${extraFields.publisher?`<p class="meta" style="font-size:.8rem;">Publisher: ${esc(extraFields.publisher)}</p>`:""}
-          ${extraFields.conference?`<p class="meta" style="font-size:.8rem;">Conference: ${esc(extraFields.conference)}</p>`:""}
-          ${extraFields.institution?`<p class="meta" style="font-size:.8rem;">Institution: ${esc(extraFields.institution)}</p>`:""}
-          ${extraFields.arxiv_id?`<p class="meta" style="font-size:.8rem;">arXiv: ${esc(extraFields.arxiv_id)}</p>`:""}
-          ${item.doi?`<p class="meta" style="font-size:.8rem;">DOI: ${esc(item.doi)}</p>`:""}
-        </div>
 
-        <!-- Metadata (edit mode, hidden initially) -->
-        <div id="metaEdit" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:.75rem;margin-bottom:.5rem;">
-          <p style="font-size:.8rem;font-weight:600;margin:0 0 .5rem 0;color:#374151;">Edit details</p>
-          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">Item type
-            <select id="editItemType" class="input" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
-              ${Object.entries(ITEM_TYPES).map(([k,v])=>`<option value="${k}"${k===itemType?" selected":""}>${v.label}</option>`).join("")}
+          <!-- Links -->
+          <div style="display:flex;flex-wrap:wrap;gap:.3rem;padding:.4rem 0;border-bottom:1px solid #f0f0f0;">
+            ${chip(doiUrl,"Publisher")}
+            ${chip(item.openalex_url,"OpenAlex")}
+            ${zoteroLink?`<a class="badge badge-zotero" href="${zoteroLink}" target="_blank" rel="noopener">Zotero</a>`:(item.zotero_key?`<span class="badge badge-zotero">Zotero</span>`:"")}
+          </div>
+
+          <!-- Actions -->
+          <div style="display:flex;flex-wrap:wrap;gap:.3rem;padding:.4rem 0;border-bottom:1px solid #f0f0f0;">
+            <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(openAlexId)}" style="font-size:.79rem;padding:.22rem .5rem;">Details</a>
+            ${pdfViewerUrl?`<a class="btn btn-secondary" href="${esc(pdfViewerUrl)}" style="font-size:.79rem;padding:.22rem .5rem;">Read PDF</a>`:""}
+            <button class="btn btn-secondary" id="addToCollectionBtn" style="font-size:.79rem;padding:.22rem .5rem;">+ Collection</button>
+            ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn" style="font-size:.79rem;padding:.22rem .5rem;">Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn" style="font-size:.79rem;padding:.22rem .5rem;">Restore</button>`}
+            ${item.deleted_at?`<button class="btn btn-secondary" id="deleteForeverBtn" style="font-size:.79rem;padding:.22rem .5rem;">Delete forever</button>`:""}
+          </div>
+
+          <!-- PDF -->
+          <div style="display:flex;flex-wrap:wrap;gap:.3rem;padding:.4rem 0;border-bottom:1px solid #f0f0f0;">
+            ${localPdf
+              ?`<button class="btn btn-secondary" id="deletePdfBtn" style="font-size:.79rem;padding:.22rem .5rem;">Remove PDF</button>`
+              :`<button class="btn btn-secondary" id="uploadPdfBtn" style="font-size:.79rem;padding:.22rem .5rem;">Attach PDF</button><input id="uploadPdfInput" type="file" accept="application/pdf" style="display:none;">`
+            }
+          </div>
+
+          <!-- Annotations -->
+          <div id="annotPanel" style="padding:.3rem 0;"></div>
+
+          <!-- Citation export -->
+          <div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;padding:.4rem 0;border-top:1px solid #f0f0f0;">
+            <button class="btn btn-secondary" id="exportBibBtn" style="font-size:.77rem;padding:.2rem .45rem;">↓ BibTeX</button>
+            <button class="btn btn-secondary" id="exportRisBtn" style="font-size:.77rem;padding:.2rem .45rem;">↓ RIS</button>
+            <select id="citeFormatSelect" class="input" style="padding:.15rem .3rem;font-size:.77rem;">
+              <option value="apa">APA</option>
+              <option value="mla">MLA</option>
             </select>
-          </label>
-          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">Title
-            <input id="editTitle" class="input" value="${esc(item.title||"")}" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
-          </label>
-          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">Authors <span style="font-weight:400;color:#6b7280;">(Last, First; Last, First)</span>
-            <input id="editAuthors" class="input" value="${esc(item.authors||"")}" placeholder="Last, First; Last, First" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
-          </label>
-          <div style="display:flex;gap:.5rem;margin-bottom:.35rem;">
-            <label style="font-size:.8rem;flex:1;">Year
-              <input id="editYear" class="input" type="number" value="${esc(String(item.year||""))}" min="1000" max="2099" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
-            </label>
-            <label style="font-size:.8rem;flex:2;">Journal / Venue
-              <input id="editVenue" class="input" value="${esc(item.venue||"")}" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
-            </label>
-          </div>
-          <!-- Type-specific extra fields (shown/hidden by type select) -->
-          <div id="extraFieldsWrap" style="margin-bottom:.35rem;"></div>
-          <label style="font-size:.8rem;display:block;margin-bottom:.35rem;">DOI
-            <input id="editDoi" class="input" value="${esc(item.doi||"")}" placeholder="10.xxxx/xxxxx" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;">
-          </label>
-          <label style="font-size:.8rem;display:block;margin-bottom:.5rem;">Abstract
-            <textarea id="editAbstract" class="input" rows="4" style="display:block;width:100%;margin-top:.15rem;font-size:.85rem;resize:vertical;">${esc(item.abstract||"")}</textarea>
-          </label>
-          <div style="display:flex;gap:.4rem;">
-            <button class="btn btn-primary" id="saveMetaBtn" style="font-size:.82rem;">Save</button>
-            <button class="btn btn-secondary" id="cancelMetaBtn" style="font-size:.82rem;">Cancel</button>
-          </div>
-          <p id="metaSaveStatus" style="font-size:.8rem;margin:.35rem 0 0 0;"></p>
-        </div>
-
-        <!-- Secondary reference links -->
-        <p style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.25rem 0;">
-          ${chip(doiUrl,"Publisher page")}
-          ${chip(item.openalex_url,"OpenAlex")}
-          ${zoteroLink?`<a class="badge badge-zotero" href="${zoteroLink}" target="_blank" rel="noopener">Zotero</a>`:(item.zotero_key?`<span class="badge badge-zotero">Zotero</span>`:"")}
-        </p>
-
-        <!-- Primary actions -->
-        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0;">
-          <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(openAlexId)}">Paper details</a>
-          ${pdfViewerUrl?`<a class="btn btn-secondary" href="${esc(pdfViewerUrl)}">Read PDF</a>`:""}
-          <button class="btn btn-secondary" id="addToCollectionBtn">+ Collection</button>
-          ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn">Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn">Restore</button>`}
-          ${item.deleted_at?`<button class="btn btn-secondary" id="deleteForeverBtn">Delete forever</button>`:""}
-        </div>
-
-        <!-- PDF attach/remove -->
-        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.25rem 0;">
-          ${localPdf?`
-            <button class="btn btn-secondary" id="deletePdfBtn">Remove attached PDF</button>
-          `:`
-            <button class="btn btn-secondary" id="uploadPdfBtn">Attach PDF</button>
-            <input id="uploadPdfInput" type="file" accept="application/pdf" style="display:none;">
-          `}
-        </div>
-
-        <!-- Annotations panel (loaded async below) -->
-        <div id="annotPanel" style="margin:.5rem 0;"></div>
-
-        <!-- Citation export -->
-        <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:.5rem 0;">
-          <button class="btn btn-secondary" id="exportBibBtn">↓ BibTeX</button>
-          <button class="btn btn-secondary" id="exportRisBtn">↓ RIS</button>
-          <select id="citeFormatSelect" class="input" style="padding:.3rem .4rem;font-size:.85rem;">
-            <option value="apa">APA</option>
-            <option value="mla">MLA</option>
-          </select>
-          <button class="btn btn-secondary" id="copyCiteBtn">📋 Copy citation</button>
-        </div>
-
-        <!-- Tags editor -->
-        <div style="margin:.5rem 0;">
-          <strong style="font-size:.85rem;">Tags</strong>
-          <div id="tagEditorWrap" style="margin:.35rem 0;display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;">
-            ${currentTags.map(t=>`<span class="tag-chip" data-tag="${esc(t)}">${esc(t)} <button class="tag-del" data-tag="${esc(t)}" title="Remove tag" style="background:none;border:none;cursor:pointer;font-size:.8rem;padding:0 0 0 3px;color:inherit;">×</button></span>`).join("")}
-            <input id="tagInput" class="input" placeholder="Add tag…" style="width:90px;padding:.25rem .4rem;font-size:.85rem;"/>
+            <button class="btn btn-secondary" id="copyCiteBtn" style="font-size:.77rem;padding:.2rem .45rem;">Copy citation</button>
           </div>
         </div>
 
-        <!-- Abstract -->
-        <details style="margin-top:.5rem;">
-          <summary style="cursor:pointer;font-size:.85rem;font-weight:600;color:#374151;">Abstract</summary>
-          <p style="margin:.35rem 0;font-size:.85rem;">${esc(item.abstract||"No abstract available.")}</p>
-        </details>
+        <!-- Edit mode: field grid form (hidden) -->
+        <div id="metaEdit" style="display:none;">
+          <div class="field-grid">
+            <span class="fg-label">Item Type</span>
+            <span class="fg-value">
+              <select id="editItemType" class="input">
+                ${Object.entries(ITEM_TYPES).map(([k,v])=>`<option value="${k}"${k===itemType?" selected":""}>${v.label}</option>`).join("")}
+              </select>
+            </span>
+            <span class="fg-label">Title</span>
+            <span class="fg-value"><input id="editTitle" class="input" value="${esc(item.title||"")}"></span>
+            <span class="fg-label">Authors</span>
+            <span class="fg-value"><input id="editAuthors" class="input" value="${esc(item.authors||"")}" placeholder="Last, First; Last, First"></span>
+            <span class="fg-label">Year</span>
+            <span class="fg-value"><input id="editYear" class="input" type="number" value="${esc(String(item.year||""))}" min="1000" max="2099" style="width:80px;"></span>
+            <span class="fg-label">Journal</span>
+            <span class="fg-value"><input id="editVenue" class="input" value="${esc(item.venue||"")}"></span>
+            <div id="extraFieldsWrap" style="display:contents;"></div>
+            <span class="fg-label">DOI</span>
+            <span class="fg-value"><input id="editDoi" class="input" value="${esc(item.doi||"")}" placeholder="10.xxxx/xxxxx"></span>
+          </div>
+          <div style="margin-top:.5rem;">
+            <p style="font-size:.74rem;color:#6b7280;margin:0 0 .2rem 0;">Abstract</p>
+            <textarea id="editAbstract" class="input" rows="3" style="width:100%;font-size:.8rem;resize:vertical;">${esc(item.abstract||"")}</textarea>
+          </div>
+          <div style="display:flex;gap:.4rem;margin-top:.45rem;">
+            <button class="btn btn-primary" id="saveMetaBtn" style="font-size:.81rem;">Save</button>
+            <button class="btn btn-secondary" id="cancelMetaBtn" style="font-size:.81rem;">Cancel</button>
+          </div>
+          <p id="metaSaveStatus" style="font-size:.78rem;margin:.3rem 0 0 0;"></p>
+        </div>
+      </div>
+
+      <!-- ========== NOTES TAB ========== -->
+      <div id="inspTabNotes" class="insp-tab-content" style="display:none;">
+        <p class="insp-sub-hdr">In Same Collection</p>
+        <ul id="relatedList"></ul>
+        <p class="insp-sub-hdr" style="margin-top:.6rem;">Notes</p>
+        <ul id="notesList" class="notes"></ul>
+        <div class="note-editor" style="margin-top:.4rem;">
+          <textarea id="noteText" class="input" placeholder="Add a note…" rows="3"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:.3rem;">
+            <button id="addNoteBtn" class="btn btn-secondary" style="font-size:.81rem;">Add Note</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== ABSTRACT TAB ========== -->
+      <div id="inspTabAbstract" class="insp-tab-content" style="display:none;">
+        <p style="font-size:.84rem;line-height:1.6;color:#374151;">${esc(item.abstract||"No abstract available.")}</p>
+      </div>
+
+      <!-- ========== TAGS TAB ========== -->
+      <div id="inspTabTags" class="insp-tab-content" style="display:none;">
+        <div id="tagEditorWrap" style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;">
+          ${currentTags.map(t=>`<span class="tag-chip" data-tag="${esc(t)}">${esc(t)} <button class="tag-del" data-tag="${esc(t)}" title="Remove tag" style="background:none;border:none;cursor:pointer;font-size:.8rem;padding:0 0 0 3px;color:inherit;">×</button></span>`).join("")}
+          <input id="tagInput" class="input" placeholder="Add tag…" style="width:90px;padding:.2rem .35rem;font-size:.82rem;"/>
+        </div>
       </div>
     `;
+
+    // Tab switching
+    $$(".insp-tab").forEach(tab=>{
+      tab.addEventListener("click",()=>{
+        const name=tab.dataset.tab;
+        $$(".insp-tab").forEach(t=>t.classList.remove("active"));
+        $$(".insp-tab-content").forEach(c=>{ c.style.display="none"; });
+        tab.classList.add("active");
+        const tId={info:"inspTabInfo",notes:"inspTabNotes",abstract:"inspTabAbstract",tags:"inspTabTags"}[name];
+        if(tId) $("#"+tId).style.display="";
+      });
+    });
 
     // Load PDF annotations from server and render in the panel
     renderAnnotationPanel(id, pdfViewerUrl);
@@ -935,17 +999,11 @@
       if (!wrap) return;
       const fields = (ITEM_TYPES[type] || ITEM_TYPES["journal-article"]).fields;
       if (!fields.length) { wrap.innerHTML = ""; return; }
-      // Render a compact grid (max 2 columns) for the type-specific fields
-      const rows = [];
-      for (let i = 0; i < fields.length; i += 2) {
-        const pair = fields.slice(i, i+2);
-        rows.push(`<div style="display:flex;gap:.5rem;margin-bottom:.3rem;">${
-          pair.map(f=>`<label style="font-size:.8rem;flex:1;">${EXTRA_LABELS[f]||f}
-            <input id="ef_${f}" class="input" value="${esc(String(extraFields[f]||""))}" placeholder="${EXTRA_LABELS[f]||f}" style="display:block;width:100%;margin-top:.1rem;font-size:.82rem;">
-          </label>`).join("")
-        }</div>`);
-      }
-      wrap.innerHTML = rows.join("");
+      // Output fg-label/fg-value pairs inside display:contents so they join the field-grid
+      wrap.innerHTML = fields.map(f=>`
+        <span class="fg-label">${EXTRA_LABELS[f]||f}</span>
+        <span class="fg-value"><input id="ef_${f}" class="input" value="${esc(String(extraFields[f]||""))}" placeholder="${EXTRA_LABELS[f]||f}"></span>
+      `).join("");
     }
     renderExtraFieldInputs(itemType);
     $("#editItemType")?.addEventListener("change", function() { renderExtraFieldInputs(this.value); });
