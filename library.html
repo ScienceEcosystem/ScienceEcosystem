@@ -9,23 +9,40 @@
   <link rel="stylesheet" href="style.css" />
 
   <style>
-    /* Full-bleed working layout on Library page */
-    body[data-page="library"] main.container { max-width:none!important; width:100%!important; padding:0!important; margin:0!important; }
-    body[data-page="library"] .panel { padding:0!important; }
+    /* Full-bleed, full-height app layout */
+    body[data-page="library"] { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+    body[data-page="library"] .app-nav { flex-shrink:0; }
+    body[data-page="library"] main.container { flex:1; min-height:0; max-width:none!important; width:100%!important; padding:0!important; margin:0!important; overflow:hidden; display:flex; flex-direction:column; }
+    body[data-page="library"] .panel { flex:1; min-height:0; padding:0!important; overflow:hidden; display:flex; flex-direction:column; }
+    body[data-page="library"] .site-footer { display:none; }
 
     /* 3-pane grid */
     .lib-grid{
       display:grid;
       grid-template-columns: var(--lib-left,240px) 5px var(--lib-center,1fr) 5px var(--lib-right,310px);
-      gap:0; width:100%;
-      min-height:calc(100vh - 120px);
+      gap:0; width:100%; height:100%;
       border:1px solid var(--border-color,#e6e6e6);
       overflow:hidden;
     }
-    .lib-left,.lib-center,.lib-right{ min-width:140px; overflow:auto; }
+    /* Each panel is a flex column: heading pinned, content scrolls */
+    .lib-left,.lib-center,.lib-right{ min-width:140px; overflow:hidden; display:flex; flex-direction:column; }
     .lib-left{ background:#f0f2f5; border-right:1px solid #d4d8df; }
     .lib-center{ background:#fff; }
     .lib-right{ background:#fff; border-left:1px solid #d4d8df; }
+
+    /* Left: heading pinned, tree + tag panel scroll together */
+    .lib-left>.lib-heading{ flex-shrink:0; }
+    #collectionsTree{ flex:1; overflow-y:auto; min-height:0; }
+    #tagSidePanel{ flex-shrink:0; }
+
+    /* Center: toolbar pinned, table wrapper scrolls */
+    .lib-toolbar{ flex-shrink:0; }
+    .lib-table-wrap{ flex:1; overflow-y:auto; min-height:0; }
+
+    /* Right: inspector fills panel; heading pinned, body scrolls */
+    #inspector{ display:flex; flex-direction:column; height:100%; overflow:hidden; }
+    #inspector>.lib-heading{ flex-shrink:0; }
+    #inspectorBody{ flex:1; overflow-y:auto; min-height:0; }
 
     .lib-resizer{ width:5px; cursor:col-resize; position:relative; background:#d4d8df; }
     .lib-resizer:hover,.lib-resizer.dragging{ background:#b0b8c4; }
@@ -81,13 +98,12 @@
     .tag-chip{ display:inline-block; padding:.1rem .35rem; border-radius:999px; border:1px solid #e5e7eb; font-size:.72rem; margin-right:.2rem; }
 
     /* Inspector */
-    #inspectorBody{ overflow-y:auto; }
     .insp-hdr{ padding:.55rem .75rem; border-bottom:1px solid #e5e7eb; }
     .insp-title{ margin:.2rem 0 0 0; font-size:.9rem; font-weight:600; line-height:1.35; }
     .type-badge{ display:inline-block; background:#e0f2fe; color:#0369a1; font-size:.68rem; font-weight:700; padding:.08rem .35rem; border-radius:4px; letter-spacing:.03em; }
 
-    /* Inspector tabs */
-    .insp-tabs{ display:flex; border-bottom:1px solid #e5e7eb; background:#fafbfc; }
+    /* Inspector tabs — sticky within the scrolling #inspectorBody */
+    .insp-tabs{ display:flex; border-bottom:1px solid #e5e7eb; background:#fafbfc; position:sticky; top:0; z-index:2; }
     .insp-tab{ padding:.35rem .65rem; font-size:.78rem; font-weight:500; color:#6b7280; border:none; border-bottom:2px solid transparent; background:none; cursor:pointer; white-space:nowrap; flex-shrink:0; }
     .insp-tab.active{ color:#1d4ed8; border-bottom-color:#3b82f6; }
     .insp-tab-content{ padding:.35rem .75rem; }
@@ -219,20 +235,22 @@
             </div>
           </div>
 
-          <table class="lib-table" id="itemsTable" aria-label="Library items">
-            <thead>
-              <tr>
-                <th class="col-icon" title="Item type"></th>
-                <th data-k="title">Title</th>
-                <th data-k="authors">Authors</th>
-                <th data-k="year">Year</th>
-                <th class="col-pdf" title="PDF attached"></th>
-              </tr>
-            </thead>
-            <tbody id="itemsTbody">
-              <tr><td colspan="5" class="muted">Loading…</td></tr>
-            </tbody>
-          </table>
+          <div class="lib-table-wrap">
+            <table class="lib-table" id="itemsTable" aria-label="Library items">
+              <thead>
+                <tr>
+                  <th class="col-icon" title="Item type"></th>
+                  <th data-k="title">Title</th>
+                  <th data-k="authors">Authors</th>
+                  <th data-k="year">Year</th>
+                  <th class="col-pdf" title="PDF attached"></th>
+                </tr>
+              </thead>
+              <tbody id="itemsTbody">
+                <tr><td colspan="5" class="muted">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <!-- Resizer -->

@@ -881,15 +881,18 @@
     $$("#itemsTable thead th[data-k]").forEach(th=>{
       th.style.cursor="pointer"; th.style.userSelect="none";
       const k=th.dataset.k;
+      // Store the bare label once so repeated renders don't stack arrows
+      if(!th.dataset.label) th.dataset.label=th.textContent.trim();
       const curSort=sortByEl?.value||"title";
       const curDir=sortDirEl?.value||"asc";
-      if(k===curSort) th.innerHTML=th.textContent.trim()+(curDir==="asc"?" ↑":" ↓");
-      th.addEventListener("click",()=>{
+      th.textContent=th.dataset.label+(k===curSort?(curDir==="asc"?" ↑":" ↓"):"");
+      // Use onclick so re-renders replace rather than accumulate the handler
+      th.onclick=()=>{
         const wasSort=sortByEl?.value;
         if(sortByEl) sortByEl.value=k;
         if(sortDirEl) sortDirEl.value=(wasSort===k && sortDirEl.value==="asc") ? "desc" : "asc";
         renderTable();
-      });
+      };
     });
     _renderTagPanel?.();
   }
@@ -1299,9 +1302,10 @@
       const prev=btn.textContent; btn.disabled=true; btn.textContent="Removing…";
       try{
         await api(`/api/library/pdf?paper_id=${encodeURIComponent(id)}`,{method:"DELETE"});
-        // Patch local item immediately so re-render shows the right state
+        // Reload items from DB so client state matches actual DB state
+        await safeRefreshItems();
         const it=items.find(x=>String(x.id)===String(id));
-        if(it){ it.local_pdf_path=null; it.meta_fresh=true; }
+        if(it) it.meta_fresh=true;
         renderTable(); await renderInspector(id);
         toast("PDF removed","success");
       }catch(e){

@@ -2224,24 +2224,24 @@ app.get("/api/library/pdf/:paperId", async (req, res) => {
 
 app.delete("/api/library/pdf", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
-  const paperId = String(req.query?.paper_id || "");
+  const paperId = String(req.query?.paper_id || "").trim();
   if (!paperId) return res.status(400).json({ error: "paper_id required" });
   const { rows } = await pool.query(
-    `SELECT id, storage_path FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
+    `SELECT id, paper_id, storage_path FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`,
     [sess.orcid, paperId]
   );
   if (!rows.length) {
-    // No library_pdfs row (e.g. the stored file was already lost on a
-    // server restart and cleaned up) — just clear the dangling reference
-    // on library_items so the UI stops showing a broken "attached PDF".
-    await pool.query(
+    // No library_pdfs row — just clear the dangling local_pdf_path reference.
+    const upd = await pool.query(
       `UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`,
       [sess.orcid, paperId]
     );
+    if (!upd.rowCount) console.warn(`DELETE /api/library/pdf: no library_items row matched id=${paperId} orcid=${sess.orcid}`);
     return res.json({ ok: true });
   }
   try {
     const stored = rows[0].storage_path;
+    const storedPaperId = rows[0].paper_id;
     if (stored && stored.startsWith("r2:")) {
       await deleteFromR2(stored.slice(3));
     } else if (stored) {
@@ -2253,10 +2253,11 @@ app.delete("/api/library/pdf", async (req, res) => {
       await fsp.unlink(candidate).catch(e => { if (e.code !== "ENOENT") throw e; });
     }
     await pool.query(`DELETE FROM library_pdfs WHERE id=$1`, [rows[0].id]);
-    await pool.query(
+    const upd2 = await pool.query(
       `UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`,
-      [sess.orcid, paperId]
+      [sess.orcid, storedPaperId]
     );
+    if (!upd2.rowCount) console.warn(`DELETE /api/library/pdf: library_pdfs deleted but no library_items row matched id=${storedPaperId} orcid=${sess.orcid}`);
     res.json({ ok: true });
   } catch (e) {
     console.error("DELETE /api/library/pdf failed:", e);
