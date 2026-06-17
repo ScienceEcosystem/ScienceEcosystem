@@ -242,7 +242,17 @@
       } else {
         showPersonalDashboard(currentUser);
       }
-    } else {
+    } else if (idParam) {
+      // Check if this OpenAlex ID belongs to a known SE user → redirect to canonical ORCID profile
+      try {
+        var resolved = await fetch("/api/profile/openalex/" + encodeURIComponent(idParam))
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .catch(function() { return null; });
+        if (resolved && resolved.orcid) {
+          window.location.replace("profile.html?orcid=" + encodeURIComponent(resolved.orcid));
+          return;
+        }
+      } catch(_) {}
       showPublicProfile(idParam);
     }
   }

@@ -1651,6 +1651,38 @@ app.patch("/api/settings/profile", async (req, res) => {
 });
 
 // Public profile by ORCID — used by profile.html?orcid=…
+// Resolve an OpenAlex author ID to the canonical SE user's ORCID
+// Checks primary openalex_author_id AND all merged_claims rows
+app.get("/api/profile/openalex/:authorId", async (req, res) => {
+  const authorId = String(req.params.authorId || "").trim().toUpperCase()
+    .replace(/^HTTPS?:\/\/OPENALEX\.ORG\//i, "");
+  if (!authorId) return res.status(400).json({ error: "authorId required" });
+  try {
+    // Check primary claimed ID
+    const primary = await pool.query(
+      `SELECT orcid FROM users WHERE UPPER(openalex_author_id) = $1 AND visibility != 'private' LIMIT 1`,
+      [authorId]
+    );
+    if (primary.rowCount) return res.json({ orcid: primary.rows[0].orcid });
+
+    // Check merged/claimed additional IDs
+    const merged = await pool.query(
+      `SELECT mc.orcid FROM merged_claims mc
+       JOIN users u ON u.orcid = mc.orcid
+       WHERE (UPPER(mc.primary_author_id) = $1 OR UPPER(mc.merged_author_id) = $1)
+         AND u.visibility != 'private'
+       LIMIT 1`,
+      [authorId]
+    );
+    if (merged.rowCount) return res.json({ orcid: merged.rows[0].orcid });
+
+    res.json({ orcid: null });
+  } catch (e) {
+    console.error("GET /api/profile/openalex failed:", e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.get("/api/profile/orcid/:orcid", async (req, res) => {
   const orcid = req.params.orcid.replace(/^ORCID:/i, "");
   try {
