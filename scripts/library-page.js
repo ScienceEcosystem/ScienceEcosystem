@@ -711,7 +711,8 @@
         <button id="zSyncBtn" class="z-sync-btn">↻ Sync now</button>
         <button id="zDisconnectBtn" class="z-dis">Disconnect</button>
       </div>
-      <div id="zSyncMsg" style="font-size:.72rem;color:#6b7280;margin-top:.3rem;"></div>`;
+      <div id="zSyncMsg" style="font-size:.72rem;color:#6b7280;margin-top:.3rem;"></div>
+      <div style="font-size:.7rem;margin-top:.2rem;"><a href="#" id="zSyncLogLink" style="color:#6b7280;">View last sync log</a></div>`;
 
     $("#zSyncBtn")?.addEventListener("click", async () => {
       const btn = $("#zSyncBtn");
@@ -720,16 +721,24 @@
       if (msg) msg.textContent = "";
       try {
         const result = await api("/api/integrations/zotero/sync", { method: "POST" });
-        const added = result?.added ?? 0;
-        const updated = result?.updated ?? 0;
-        toast(`Sync complete — ${added} added, ${updated} updated`, "success");
-        if (msg) msg.textContent = `Done: ${added} added, ${updated} updated`;
+        const synced = result?.synced ?? 0;
+        const errs = Array.isArray(result?.errors) ? result.errors : [];
+        if (errs.length) {
+          toast(`Sync done — ${synced} imported, ${errs.length} error(s)`, "error");
+          if (msg) {
+            msg.style.color = "#b91c1c";
+            msg.textContent = `${synced} imported. Errors: ${errs.slice(0,3).join(" | ")}${errs.length > 3 ? ` (+${errs.length-3} more)` : ""}`;
+          }
+        } else {
+          toast(`Sync complete — ${synced} items imported`, "success");
+          if (msg) { msg.style.color = "#6b7280"; msg.textContent = `Done: ${synced} items imported`; }
+        }
         await Promise.all([safeRefreshItems(), safeRefreshCollections()]);
         renderTable(); renderTree();
         await safeRefreshZoteroStatus();
       } catch(e) {
         toast("Sync failed: " + e.message, "error");
-        if (msg) msg.textContent = "Sync failed.";
+        if (msg) { msg.style.color = "#b91c1c"; msg.textContent = "Sync failed: " + e.message; }
         btn.disabled = false; btn.textContent = "↻ Sync now";
       }
     });
@@ -742,6 +751,22 @@
         await safeRefreshZoteroStatus();
       } catch(e) {
         toast("Failed to disconnect: " + e.message, "error");
+      }
+    });
+
+    $("#zSyncLogLink")?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const msg = $("#zSyncMsg");
+      if (!msg) return;
+      try {
+        const log = await api("/api/integrations/zotero/sync/status");
+        if (!log) { msg.textContent = "No sync log found."; return; }
+        const errs = Array.isArray(log.errors) ? log.errors : [];
+        const when = log.finished_at ? new Date(log.finished_at).toLocaleString() : "?";
+        msg.style.color = errs.length ? "#b91c1c" : "#6b7280";
+        msg.textContent = `Last run ${when}: ${log.items_synced ?? 0} synced.${errs.length ? " Errors: " + errs.slice(0,5).join(" | ") : " No errors."}`;
+      } catch(e) {
+        if (msg) msg.textContent = "Could not load sync log.";
       }
     });
   }
