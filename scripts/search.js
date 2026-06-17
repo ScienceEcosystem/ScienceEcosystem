@@ -372,24 +372,53 @@ function serverSortParam(){
   return ""; // relevance = default
 }
 
+// Citation-style query parser: "BACI Underwood 1994" → { year: 1994, search: "BACI Underwood" }
+function parseCitationQuery(q) {
+  const yearMatch = q.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
+  const year = yearMatch ? parseInt(yearMatch[1], 10) : null;
+  const search = year ? q.replace(yearMatch[0], '').replace(/\s+/g, ' ').trim() : q;
+  return { year, search };
+}
+
 /* ---------- Papers (authors + general query) ---------- */
 async function fetchPapers(query, authorIds = [], page = 1, signal) {
   let works = [];
   try {
+    // Parse citation-style queries: extract year so it becomes a filter not a search term
+    const { year: queryYear, search: querySearch } = parseCitationQuery(query);
+    const yearFilter = queryYear ? `,publication_year:${queryYear}` : '';
+    const baseFilter = buildFilter();
+    // Combine extracted year with any facet filters already active
+    const combinedFilter = baseFilter
+      ? baseFilter + encodeURIComponent(yearFilter)
+      : (yearFilter ? `&filter=${encodeURIComponent(yearFilter.slice(1))}` : '');
+
     for (const authorId of authorIds) {
-      const urlA = `${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
+      const urlA = `${API_BASE}/works?filter=author.id:${encodeURIComponent(authorId)}${baseFilter}&per_page=100&page=${page}${serverSortParam()}`;
       const dataA = await fetchJSON(urlA, signal);
       works = works.concat(dataA.results || []);
     }
 
-    const urlG = `${API_BASE}/works?search=${encodeURIComponent(query)}${buildFilter()}&per_page=100&page=${page}${serverSortParam()}`;
+    // Primary: relevance search with year filter applied
+    const urlG = `${API_BASE}/works?search=${encodeURIComponent(querySearch)}${combinedFilter}&per_page=100&page=${page}${serverSortParam()}`;
     const dataG = await fetchJSON(urlG, signal);
     const generalWorks = dataG.results || [];
 
+    // Secondary: title-specific search — catches papers where keywords only appear in the title
+    let titleWorks = [];
+    if (queryYear && querySearch) {
+      try {
+        const urlT = `${API_BASE}/works?filter=display_name.search:${encodeURIComponent(querySearch)},publication_year:${queryYear}&per_page=25&select=id,display_name,authorships,publication_year,doi,open_access,cited_by_count,primary_location,host_venue,type`;
+        const dataT = await fetchJSON(urlT, signal);
+        titleWorks = dataT.results || [];
+      } catch(_) {}
+    }
+
     if (page === 1) totalResults = dataG.meta?.count || generalWorks.length || 0;
 
+    // Title matches bubble to front, then general results
     const seen = new Set();
-    let merged = [...works, ...generalWorks].filter(w => {
+    let merged = [...titleWorks, ...works, ...generalWorks].filter(w => {
       const id = w.id || w.doi || w.display_name;
       if (seen.has(id)) return false;
       seen.add(id);
