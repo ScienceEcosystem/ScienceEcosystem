@@ -19,6 +19,7 @@
     { key: "github_url",            label: "GitHub" },
     { key: "linkedin_url",          label: "LinkedIn" },
     { key: "twitter_url",           label: "Twitter / X" },
+    { key: "wos_url",               label: "Web of Science" },
   ];
 
   // ── Render external profile badges ───────────────────────────────────────────

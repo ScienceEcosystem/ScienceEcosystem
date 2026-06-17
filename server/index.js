@@ -278,6 +278,7 @@ async function pgInit() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS github_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS twitter_url TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS wos_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS website_url TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS affiliations TEXT[] DEFAULT '{}'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
@@ -593,7 +594,7 @@ function requireAuth(req, res) {
 -------------*/
 const USER_COLS = `orcid, name, affiliation, affiliations, bio, keywords, languages, links, visibility,
   openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
-  github_url, linkedin_url, twitter_url, website_url, avatar_url`;
+  github_url, linkedin_url, twitter_url, wos_url, website_url, avatar_url`;
 
 async function upsertUser({ orcid, name, affiliation, bio = null, keywords = null, languages = null, links = null, visibility = null }) {
   await pool.query(
@@ -620,18 +621,18 @@ async function updateProfile(orcid, payload) {
   const {
     name, affiliation, affiliations, bio, keywords, languages, links, visibility,
     openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
-    github_url, linkedin_url, twitter_url, website_url
+    github_url, linkedin_url, twitter_url, wos_url, website_url
   } = payload;
   const { rowCount, rows } = await pool.query(
     `UPDATE users SET
       name=$2, affiliation=$3, affiliations=$4, bio=$5, keywords=$6, languages=$7, links=$8, visibility=$9,
       openalex_author_id=$10, google_scholar_url=$11, researchgate_url=$12,
-      semantic_scholar_url=$13, github_url=$14, linkedin_url=$15, twitter_url=$16, website_url=$17
+      semantic_scholar_url=$13, github_url=$14, linkedin_url=$15, twitter_url=$16, wos_url=$17, website_url=$18
      WHERE orcid=$1
      RETURNING ${USER_COLS}`,
     [orcid, name, affiliation, affiliations, bio, keywords, languages, links, visibility,
      openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
-     github_url, linkedin_url, twitter_url, website_url]
+     github_url, linkedin_url, twitter_url, wos_url, website_url]
   );
   if (rowCount) return rows[0];
   await upsertUser({ orcid, name, affiliation, bio, keywords, languages, links, visibility });
@@ -1639,6 +1640,7 @@ app.patch("/api/settings/profile", async (req, res) => {
     github_url:            sanitiseUrl(body.github_url),
     linkedin_url:          sanitiseUrl(body.linkedin_url),
     twitter_url:           sanitiseUrl(body.twitter_url),
+    wos_url:               sanitiseUrl(body.wos_url),
     website_url:           sanitiseUrl(body.website_url),
   };
   try {

@@ -198,6 +198,10 @@
           <span class="platform-label">𝕏 Twitter / X</span>
           <input class="input" id="twitter_url" type="url" placeholder="https://twitter.com/yourhandle"/>
         </div>
+        <div class="external-link-row">
+          <span class="platform-label">Web of Science</span>
+          <input class="input" id="wos_url" type="url" placeholder="https://www.webofscience.com/wos/author/record/…"/>
+        </div>
       </section>
 
       <div style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
@@ -319,6 +323,7 @@
       setVal("github_url", me.github_url);
       setVal("linkedin_url", me.linkedin_url);
       setVal("twitter_url", me.twitter_url);
+      setVal("wos_url", me.wos_url);
       setVal("website_url", me.website_url);
 
       // Affiliations: use new affiliations[] array, fall back to legacy affiliation field
@@ -364,6 +369,7 @@
         github_url:           val("github_url") || null,
         linkedin_url:         val("linkedin_url") || null,
         twitter_url:          val("twitter_url") || null,
+        wos_url:              val("wos_url") || null,
         website_url:          val("website_url") || null,
       };
       try {
