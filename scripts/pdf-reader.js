@@ -129,16 +129,31 @@ async function loadPDF(url) {
         showPdfError(data.error || 'PDF not available.', true);
         return;
       }
-      const data = await check.json().catch(() => null);
-      if (data && data.signedUrl) {
-        // Use the signed R2 URL directly — no auth needed, no CORS issues
-        const signedTask = pdfjsLib.getDocument({ url: data.signedUrl });
-        pdfDoc = await signedTask.promise;
-        const countEl = document.getElementById('pageCount');
-        if (countEl) countEl.textContent = String(pdfDoc.numPages);
-        renderAllPages();
+      const contentType = check.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await check.json().catch(() => null);
+        if (data && data.signedUrl) {
+          // R2 signed URL — load directly, no auth needed
+          const signedTask = pdfjsLib.getDocument({ url: data.signedUrl });
+          pdfDoc = await signedTask.promise;
+          const countEl = document.getElementById('pageCount');
+          if (countEl) countEl.textContent = String(pdfDoc.numPages);
+          renderAllPages();
+          return;
+        }
+        // JSON response but no signedUrl — error
+        if (await tryLoadOaFallback(url)) return;
+        showPdfError(data?.error || 'PDF not available.', true);
         return;
       }
+      // Binary PDF streamed directly — pass the response body to pdf.js
+      const pdfBytes = await check.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+      pdfDoc = await loadingTask.promise;
+      const countEl = document.getElementById('pageCount');
+      if (countEl) countEl.textContent = String(pdfDoc.numPages);
+      renderAllPages();
+      return;
     } catch (err) {
       if (await tryLoadOaFallback(url)) return;
       showPdfError('Could not load PDF: ' + String(err), true);
