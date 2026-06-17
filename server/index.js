@@ -1255,6 +1255,14 @@ async function syncZoteroForUser(orcid) {
 ----------------------------*/
 app.get("/health", (_req, res) => res.type("text").send("ok"));
 
+// ── Public API rate limiting — protects external proxy endpoints from bot abuse ─
+// These run before route handlers so limits apply to all matching paths.
+app.use("/api/paper/",      rateLimiter(60_000, 60));   // 60 req/min per IP
+app.use("/api/profile/",    rateLimiter(60_000, 60));
+app.use("/api/topic/",      rateLimiter(60_000, 20));
+app.use("/api/journal/",    rateLimiter(60_000, 20));
+app.use("/api/field-data/", rateLimiter(60_000, 30));   // proxies GBIF/iNat/WoC — slower APIs
+
 app.use(paperRoutes);
 
 app.get("/api/journal/integrity/clear-cache", (_req, res) => {
