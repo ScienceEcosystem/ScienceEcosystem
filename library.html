@@ -130,6 +130,22 @@
     .read-status-reading{ background:#fef3c7; color:#92400e; border-color:#fde68a; }
     .read-status-read{ background:#d1fae5; color:#065f46; border-color:#a7f3d0; }
     .read-status-none{ background:none; border-color:transparent; }
+
+    /* Zotero panel */
+    #zoteroPanel{ flex-shrink:0; border-top:1px solid #d4d8df; padding:.55rem .65rem; font-size:.78rem; }
+    #zoteroPanel .z-heading{ font-size:.68rem; font-weight:700; color:#8a5200; text-transform:uppercase; letter-spacing:.06em; display:flex; align-items:center; gap:.35rem; margin-bottom:.45rem; }
+    #zoteroPanel .z-logo{ width:13px; height:13px; }
+    #zoteroPanel input.input{ font-size:.78rem; padding:.2rem .4rem; width:100%; margin-bottom:.3rem; }
+    #zoteroPanel .z-row{ display:flex; gap:.3rem; align-items:center; margin-top:.3rem; }
+    #zoteroPanel .z-status{ font-size:.74rem; color:#6b7280; margin-bottom:.35rem; line-height:1.4; }
+    #zoteroPanel .z-status strong{ color:#111; }
+    #zoteroPanel .z-hint{ font-size:.7rem; color:#9ca3af; margin-bottom:.4rem; }
+    #zoteroPanel .z-hint a{ color:#2e7f9f; }
+    #zoteroPanel .z-sync-btn{ background:#fff3e0; border:1px solid #f6d8a8; color:#8a5200; font-size:.75rem; padding:.22rem .55rem; border-radius:5px; cursor:pointer; font-weight:600; }
+    #zoteroPanel .z-sync-btn:hover{ background:#fde9be; }
+    #zoteroPanel .z-sync-btn:disabled{ opacity:.5; cursor:default; }
+    #zoteroPanel .z-dis{ background:none; border:none; color:#9ca3af; font-size:.7rem; cursor:pointer; padding:0; text-decoration:underline; }
+    #zoteroPanel .z-dis:hover{ color:#dc2626; }
   </style>
 <link rel="manifest" href="/manifest.json"/>
 <meta name="theme-color" content="#0f172a"/>
@@ -198,6 +214,7 @@
             </span>
           </h3>
           <div id="collectionsTree" class="tree"></div>
+          <div id="zoteroPanel"></div>
         </aside>
 
         <!-- Resizer -->

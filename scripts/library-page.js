@@ -654,6 +654,96 @@
       zoteroStatus = null;
       zoteroUserId = null;
     }
+    renderZoteroPanel();
+  }
+
+  function renderZoteroPanel(){
+    const el = $("#zoteroPanel");
+    if (!el) return;
+
+    const heading = `<div class="z-heading">
+      <svg class="z-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="4" fill="#CC2936"/><path d="M6 9h20v3L12 23h14v3H6v-3l14-11H6V9z" fill="#fff"/></svg>
+      Zotero
+    </div>`;
+
+    if (!zoteroStatus?.connected) {
+      el.innerHTML = `${heading}
+        <div class="z-hint">Paste your <a href="https://www.zotero.org/settings/keys" target="_blank" rel="noopener">API key</a> to import your library.</div>
+        <input id="zUserIdInput" class="input" placeholder="Zotero user ID (e.g. 12345678)" autocomplete="off"/>
+        <input id="zApiKeyInput" class="input" placeholder="API key" type="password" autocomplete="off"/>
+        <div class="z-row">
+          <button id="zConnectBtn" class="z-sync-btn">Connect</button>
+        </div>`;
+      $("#zConnectBtn")?.addEventListener("click", async () => {
+        const uid = $("#zUserIdInput")?.value.trim();
+        const key = $("#zApiKeyInput")?.value.trim();
+        if (!uid || !key) { toast("Enter both User ID and API key", "error"); return; }
+        const btn = $("#zConnectBtn");
+        btn.disabled = true; btn.textContent = "Connecting…";
+        try {
+          await api("/api/integrations/zotero/connect", {
+            method: "POST",
+            body: JSON.stringify({ zotero_user_id: uid, api_key: key })
+          });
+          toast("Zotero connected!", "success");
+          await safeRefreshZoteroStatus();
+        } catch(e) {
+          toast("Connection failed: " + e.message, "error");
+          btn.disabled = false; btn.textContent = "Connect";
+        }
+      });
+      return;
+    }
+
+    // Connected state
+    const s = zoteroStatus;
+    const lastSync = s.last_synced_at
+      ? new Date(s.last_synced_at).toLocaleString(undefined, { dateStyle:"short", timeStyle:"short" })
+      : "Never";
+    const itemCount = s.item_count ?? 0;
+
+    el.innerHTML = `${heading}
+      <div class="z-status">
+        <strong>${itemCount} items</strong> synced from Zotero<br>
+        Last sync: ${lastSync}
+      </div>
+      <div class="z-row">
+        <button id="zSyncBtn" class="z-sync-btn">↻ Sync now</button>
+        <button id="zDisconnectBtn" class="z-dis">Disconnect</button>
+      </div>
+      <div id="zSyncMsg" style="font-size:.72rem;color:#6b7280;margin-top:.3rem;"></div>`;
+
+    $("#zSyncBtn")?.addEventListener("click", async () => {
+      const btn = $("#zSyncBtn");
+      const msg = $("#zSyncMsg");
+      btn.disabled = true; btn.textContent = "Syncing…";
+      if (msg) msg.textContent = "";
+      try {
+        const result = await api("/api/integrations/zotero/sync", { method: "POST" });
+        const added = result?.added ?? 0;
+        const updated = result?.updated ?? 0;
+        toast(`Sync complete — ${added} added, ${updated} updated`, "success");
+        if (msg) msg.textContent = `Done: ${added} added, ${updated} updated`;
+        await Promise.all([safeRefreshItems(), safeRefreshCollections()]);
+        renderTable(); renderTree();
+        await safeRefreshZoteroStatus();
+      } catch(e) {
+        toast("Sync failed: " + e.message, "error");
+        if (msg) msg.textContent = "Sync failed.";
+        btn.disabled = false; btn.textContent = "↻ Sync now";
+      }
+    });
+
+    $("#zDisconnectBtn")?.addEventListener("click", async () => {
+      if (!confirm("Disconnect Zotero? Your synced items will stay in your library.")) return;
+      try {
+        await api("/api/integrations/zotero/disconnect", { method: "DELETE" });
+        toast("Zotero disconnected", "success");
+        await safeRefreshZoteroStatus();
+      } catch(e) {
+        toast("Failed to disconnect: " + e.message, "error");
+      }
+    });
   }
 
   function visibleColumns(){
