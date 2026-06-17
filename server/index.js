@@ -1081,13 +1081,26 @@ async function syncZoteroForUser(orcid) {
   if (!sync_enabled) return { synced: 0, errors: ["Sync disabled"] };
 
   try {
-    const versionsRes = await zoteroFetch(
-      `${ZOTERO_BASE}/users/${zid}/items?since=${Number(lastVersion || 0)}&format=versions`,
-      apiKey
-    );
-    const versions = await versionsRes.json();
-    const changedKeys = Object.keys(versions || {});
-    const newVersion = Number(versionsRes.headers.get("Last-Modified-Version")) || Number(lastVersion || 0);
+    // Paginate through all changed item keys — Zotero returns max 100 per page
+    const allVersions = {};
+    let newVersion = Number(lastVersion || 0);
+    let start = 0;
+    const pageSize = 100;
+    while (true) {
+      const versionsRes = await zoteroFetch(
+        `${ZOTERO_BASE}/users/${zid}/items?since=${Number(lastVersion || 0)}&format=versions&limit=${pageSize}&start=${start}`,
+        apiKey
+      );
+      const page = await versionsRes.json();
+      const pageKeys = Object.keys(page || {});
+      Object.assign(allVersions, page);
+      const lastModified = Number(versionsRes.headers.get("Last-Modified-Version"));
+      if (lastModified) newVersion = lastModified;
+      const total = Number(versionsRes.headers.get("Total-Results") || 0);
+      start += pageSize;
+      if (pageKeys.length < pageSize || start >= total) break;
+    }
+    const changedKeys = Object.keys(allVersions);
 
     const collectionMap = await ensureZoteroCollections(orcid, zid, apiKey);
     const zoteroCollectionIds = Array.from(collectionMap.values());
