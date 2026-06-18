@@ -1043,7 +1043,7 @@ async function ensureZoteroCollections(orcid, zoteroUserId, apiKey) {
     await pool.query(
       `INSERT INTO collections (orcid, name, parent_id, zotero_key)
        VALUES ($1, $2, NULL, $3)
-       ON CONFLICT (orcid, zotero_key) DO UPDATE SET name = EXCLUDED.name`,
+       ON CONFLICT (orcid, zotero_key) WHERE zotero_key IS NOT NULL DO UPDATE SET name = EXCLUDED.name`,
       [orcid, name, key]
     );
   }
