@@ -369,85 +369,81 @@ function applyCitationHighlights() {
   document.querySelectorAll('.pdf-text-layer').forEach(applyCitationHighlightsToLayer);
 }
 
-// (Smith, 2020) / (Smith et al. 2020) / (Smith & Jones 2019) — author+year in parens
-const _ayRe = /^\s*\(\s*([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s*,?\s*(\d{4}[a-z]?)\s*\)\s*$/;
-// Smith et al. (2020) — author inline, only year in parens, same span
-const _narSameRe = /([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s+\((\d{4}[a-z]?)\)\s*$/;
-// (2020) — standalone year span; author is in the previous sibling span
-const _yearOnlyRe = /^\s*\((\d{4}[a-z]?)\)\s*$/;
-// Author tail at end of previous span: "...Smith et al." / "...Smith and Jones"
-const _authorTailRe = /([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s+[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s*$/;
+// Citations are frequently split across multiple PDF.js text-layer spans
+// (kerning/font runs break "[1]" or "(Smith, 2020)" into several spans), so
+// matching against each span's text in isolation misses most real citations.
+// Instead we concatenate all span text on the layer in DOM order (which
+// mirrors PDF.js's reading order) and match against that merged string,
+// then map each match back to every span it touches.
+const _bracketRe = /\[(\d[\d,\s\-–]*)\]/g;
+// (Smith, 2020) / (Smith et al. 2020) / (Smith & Jones 2019) — author+year fully in parens
+const _ayRe = /\(\s*([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s*[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s*,?\s*(\d{4}[a-z]?)\s*\)/g;
+// Smith et al. (2020) / Smith (2020) — author name precedes a "(year)"
+const _narRe = /([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s*[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s+\((\d{4}[a-z]?)\)/g;
 
 function applyCitationHighlightsToLayer(layerEl) {
   if (!layerEl || !openAlexRefsList.length) return;
   const maxRef = openAlexRefsList.length;
   const hasAuthorYear = authorYearMap.size > 0;
-  const spans = layerEl.querySelectorAll('span');
+
+  const spans = Array.from(layerEl.querySelectorAll('span')).filter(s => !s.hasAttribute('data-ref-number'));
+  if (!spans.length) return;
+
+  let merged = '';
+  const offsets = [];
   spans.forEach(span => {
-    if (span.hasAttribute('data-ref-number')) return;
-    const text = span.textContent || '';
-    if (!text) return;
-
-    // --- Numbered bracket: [1], [2,3], [4-6] ---
-    if (text.includes('[')) {
-      const m = text.match(/^\s*\[(\d[\d,\s\-–]*)\]\s*$/);
-      if (m) {
-        const firstNum = parseInt(m[1].match(/\d+/)[0], 10);
-        if (firstNum >= 1 && firstNum <= maxRef) {
-          span.classList.add('citation-highlight');
-          span.setAttribute('data-ref-number', String(firstNum));
-          return;
-        }
-      }
-    }
-
-    if (hasAuthorYear && text.includes('(')) {
-      // --- (Smith et al., 2020) — full citation in parens ---
-      let m = _ayRe.exec(text);
-      if (m) {
-        const lastName = m[1].toLowerCase().replace(/[^a-z]/g, '');
-        const year = m[2].slice(0, 4);
-        const refNum = authorYearMap.get(`${lastName}_${year}`) ||
-                       authorYearMap.get(`${lastName}_${m[2]}`);
-        if (refNum) {
-          span.classList.add('citation-highlight');
-          span.setAttribute('data-ref-number', String(refNum));
-          return;
-        }
-      }
-
-      // --- Smith et al. (2020) — author inline, year in parens, same span ---
-      m = _narSameRe.exec(text);
-      if (m) {
-        const lastName = m[1].toLowerCase().replace(/[^a-z]/g, '');
-        const year = m[2].slice(0, 4);
-        const refNum = authorYearMap.get(`${lastName}_${year}`) ||
-                       authorYearMap.get(`${lastName}_${m[2]}`);
-        if (refNum) {
-          span.classList.add('citation-highlight');
-          span.setAttribute('data-ref-number', String(refNum));
-          return;
-        }
-      }
-
-      // --- (2020) alone — look at previous sibling for author name ---
-      m = _yearOnlyRe.exec(text);
-      if (m) {
-        const prevText = span.previousElementSibling?.textContent || '';
-        const am = _authorTailRe.exec(prevText);
-        if (am) {
-          const lastName = am[1].toLowerCase().replace(/[^a-z]/g, '');
-          const year = m[1].slice(0, 4);
-          const refNum = authorYearMap.get(`${lastName}_${year}`) ||
-                         authorYearMap.get(`${lastName}_${m[1]}`);
-          if (refNum) {
-            span.classList.add('citation-highlight');
-            span.setAttribute('data-ref-number', String(refNum));
-          }
-        }
-      }
-    }
+    const t = span.textContent || '';
+    offsets.push({ span, start: merged.length, end: merged.length + t.length });
+    merged += t;
   });
+
+  const candidates = [];
+  let m;
+
+  _bracketRe.lastIndex = 0;
+  while ((m = _bracketRe.exec(merged))) {
+    const firstNum = parseInt(m[1].match(/\d+/)[0], 10);
+    if (firstNum >= 1 && firstNum <= maxRef) {
+      candidates.push({ start: m.index, end: m.index + m[0].length, refNum: firstNum, priority: 0 });
+    }
+  }
+
+  if (hasAuthorYear) {
+    _ayRe.lastIndex = 0;
+    while ((m = _ayRe.exec(merged))) {
+      const lastName = m[1].toLowerCase().replace(/[^a-z]/g, '');
+      const year = m[2].slice(0, 4);
+      const refNum = authorYearMap.get(`${lastName}_${year}`) || authorYearMap.get(`${lastName}_${m[2]}`);
+      if (refNum) candidates.push({ start: m.index, end: m.index + m[0].length, refNum, priority: 1 });
+    }
+
+    _narRe.lastIndex = 0;
+    while ((m = _narRe.exec(merged))) {
+      const lastName = m[1].toLowerCase().replace(/[^a-z]/g, '');
+      const year = m[2].slice(0, 4);
+      const refNum = authorYearMap.get(`${lastName}_${year}`) || authorYearMap.get(`${lastName}_${m[2]}`);
+      if (refNum) candidates.push({ start: m.index, end: m.index + m[0].length, refNum, priority: 2 });
+    }
+  }
+
+  // Resolve overlaps: earliest match wins; ties broken by priority (more specific pattern first)
+  candidates.sort((a, b) => a.start - b.start || a.priority - b.priority);
+  const accepted = [];
+  let lastEnd = -1;
+  for (const c of candidates) {
+    if (c.start < lastEnd) continue;
+    accepted.push(c);
+    lastEnd = c.end;
+  }
+
+  for (const c of accepted) {
+    for (const o of offsets) {
+      if (o.end <= c.start || o.start >= c.end) continue;
+      if (o.span.hasAttribute('data-ref-number')) continue;
+      o.span.classList.add('citation-highlight');
+      o.span.setAttribute('data-ref-number', String(c.refNum));
+    }
+  }
 }
 
 function clearCitationActive() {
@@ -531,6 +527,15 @@ function wireCitationHover(layerEl, tooltipEl) {
     if (!target) return;
     clearTimeout(hideTimer);
     showTooltip(target);
+  });
+
+  // Clicking the citation itself scrolls the Refs sidebar to that entry —
+  // it never jumps to a bibliography location inside the PDF page.
+  layerEl.addEventListener('click', function (e) {
+    const target = e.target.closest('.citation-highlight');
+    if (!target) return;
+    const refNum = target.getAttribute('data-ref-number');
+    if (refNum) handleReferenceClick(parseInt(refNum, 10));
   });
 
   layerEl.addEventListener('mouseout', function (e) {
