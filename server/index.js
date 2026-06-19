@@ -1126,92 +1126,100 @@ async function syncZoteroForUser(orcid) {
         if (item?.data?.itemType === "attachment" || item?.data?.itemType === "note") {
           continue;
         }
-        const mapped = zoteroItemToLibrary(item);
-        await pool.query(
-          `INSERT INTO library_items (
-            orcid, id, title, openalex_url, doi, year, venue, authors, abstract, pdf_url,
-            zotero_key, zotero_version, last_synced_at, tags, notes_raw, collection_ids_zotero, meta_fresh, deleted_at
-          )
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13,$14,$15,TRUE,NULL)
-           ON CONFLICT (orcid, id) DO UPDATE SET
-             title=EXCLUDED.title,
-             openalex_url=EXCLUDED.openalex_url,
-             doi=EXCLUDED.doi,
-             year=EXCLUDED.year,
-             venue=EXCLUDED.venue,
-             authors=EXCLUDED.authors,
-             abstract=EXCLUDED.abstract,
-             pdf_url=EXCLUDED.pdf_url,
-             zotero_key=EXCLUDED.zotero_key,
-             zotero_version=EXCLUDED.zotero_version,
-             last_synced_at=now(),
-             tags=EXCLUDED.tags,
-             notes_raw=EXCLUDED.notes_raw,
-             collection_ids_zotero=EXCLUDED.collection_ids_zotero,
-             meta_fresh=TRUE`,
-          [
-            orcid, mapped.id, mapped.title, mapped.openalex_url, mapped.doi, mapped.year, mapped.venue,
-            mapped.authors, mapped.abstract, mapped.pdf_url,
-            mapped.zotero_key, mapped.zotero_version, mapped.tags, null, mapped.collection_ids_zotero
-          ]
-        );
-        itemsSynced += 1;
-
-        if (zoteroCollectionIds.length) {
+        // Each item is isolated in its own try/catch so one bad record
+        // (bad data, transient DB/network error) can't abort the rest of
+        // the sync — without this, a single failure mid-batch silently
+        // stopped everything after it.
+        try {
+          const mapped = zoteroItemToLibrary(item);
           await pool.query(
-            `DELETE FROM collection_items
-             WHERE orcid=$1 AND paper_id=$2 AND collection_id = ANY($3::int[])`,
-            [orcid, mapped.id, zoteroCollectionIds]
+            `INSERT INTO library_items (
+              orcid, id, title, openalex_url, doi, year, venue, authors, abstract, pdf_url,
+              zotero_key, zotero_version, last_synced_at, tags, notes_raw, collection_ids_zotero, meta_fresh, deleted_at
+            )
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),$13,$14,$15,TRUE,NULL)
+             ON CONFLICT (orcid, id) DO UPDATE SET
+               title=EXCLUDED.title,
+               openalex_url=EXCLUDED.openalex_url,
+               doi=EXCLUDED.doi,
+               year=EXCLUDED.year,
+               venue=EXCLUDED.venue,
+               authors=EXCLUDED.authors,
+               abstract=EXCLUDED.abstract,
+               pdf_url=EXCLUDED.pdf_url,
+               zotero_key=EXCLUDED.zotero_key,
+               zotero_version=EXCLUDED.zotero_version,
+               last_synced_at=now(),
+               tags=EXCLUDED.tags,
+               notes_raw=EXCLUDED.notes_raw,
+               collection_ids_zotero=EXCLUDED.collection_ids_zotero,
+               meta_fresh=TRUE`,
+            [
+              orcid, mapped.id, mapped.title, mapped.openalex_url, mapped.doi, mapped.year, mapped.venue,
+              mapped.authors, mapped.abstract, mapped.pdf_url,
+              mapped.zotero_key, mapped.zotero_version, mapped.tags, null, mapped.collection_ids_zotero
+            ]
           );
-        }
-        for (const zk of mapped.collection_ids_zotero || []) {
-          const cid = collectionMap.get(zk);
-          if (!cid) continue;
-          await pool.query(
-            `INSERT INTO collection_items (orcid, collection_id, paper_id)
-             VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-            [orcid, cid, mapped.id]
-          );
-        }
+          itemsSynced += 1;
 
-        if (sync_pdfs) {
-          try {
-            const childrenRes = await zoteroFetch(
-              `${ZOTERO_BASE}/users/${zid}/items/${item.key}/children?itemType=attachment`,
-              apiKey
+          if (zoteroCollectionIds.length) {
+            await pool.query(
+              `DELETE FROM collection_items
+               WHERE orcid=$1 AND paper_id=$2 AND collection_id = ANY($3::int[])`,
+              [orcid, mapped.id, zoteroCollectionIds]
             );
-            const children = await childrenRes.json();
-            const pdfChild = Array.isArray(children)
-              ? children.find(c => (c?.data?.contentType === "application/pdf") || String(c?.data?.filename || "").toLowerCase().endsWith(".pdf"))
-              : null;
-            if (pdfChild?.key) {
-              const fileRes = await zoteroFetch(`${ZOTERO_BASE}/users/${zid}/items/${pdfChild.key}/file`, apiKey);
-              const buf = Buffer.from(await fileRes.arrayBuffer());
-              const safeKey = String(item.key).replace(/[^\w.\-]/g, "_");
-              const safeAttach = String(pdfChild.key).replace(/[^\w.\-]/g, "_");
-              const fname = `zotero_${safeKey}_${safeAttach}.pdf`;
-              const r2ZotKey = `pdfs/${orcid}/${fname}`;
-              await uploadToR2(r2ZotKey, buf, "application/pdf");
-              const urlPath = `r2:${r2ZotKey}`;
-              await pool.query(
-                `INSERT INTO library_pdfs (orcid, paper_id, filename, storage_path, file_size, mime_type, source)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7)
-                 ON CONFLICT (orcid, paper_id) DO UPDATE SET
-                   filename=EXCLUDED.filename,
-                   storage_path=EXCLUDED.storage_path,
-                   file_size=EXCLUDED.file_size,
-                   mime_type=EXCLUDED.mime_type,
-                   source=EXCLUDED.source`,
-                [orcid, mapped.id, fname, urlPath, buf.length, "application/pdf", "zotero"]
-              );
-              await pool.query(
-                `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
-                [urlPath, orcid, mapped.id]
-              );
-            }
-          } catch (e) {
-            errors.push(`PDF ${item.key}: ${e.message}`);
           }
+          for (const zk of mapped.collection_ids_zotero || []) {
+            const cid = collectionMap.get(zk);
+            if (!cid) continue;
+            await pool.query(
+              `INSERT INTO collection_items (orcid, collection_id, paper_id)
+               VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+              [orcid, cid, mapped.id]
+            );
+          }
+
+          if (sync_pdfs) {
+            try {
+              const childrenRes = await zoteroFetch(
+                `${ZOTERO_BASE}/users/${zid}/items/${item.key}/children?itemType=attachment`,
+                apiKey
+              );
+              const children = await childrenRes.json();
+              const pdfChild = Array.isArray(children)
+                ? children.find(c => (c?.data?.contentType === "application/pdf") || String(c?.data?.filename || "").toLowerCase().endsWith(".pdf"))
+                : null;
+              if (pdfChild?.key) {
+                const fileRes = await zoteroFetch(`${ZOTERO_BASE}/users/${zid}/items/${pdfChild.key}/file`, apiKey);
+                const buf = Buffer.from(await fileRes.arrayBuffer());
+                const safeKey = String(item.key).replace(/[^\w.\-]/g, "_");
+                const safeAttach = String(pdfChild.key).replace(/[^\w.\-]/g, "_");
+                const fname = `zotero_${safeKey}_${safeAttach}.pdf`;
+                const r2ZotKey = `pdfs/${orcid}/${fname}`;
+                await uploadToR2(r2ZotKey, buf, "application/pdf");
+                const urlPath = `r2:${r2ZotKey}`;
+                await pool.query(
+                  `INSERT INTO library_pdfs (orcid, paper_id, filename, storage_path, file_size, mime_type, source)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7)
+                   ON CONFLICT (orcid, paper_id) DO UPDATE SET
+                     filename=EXCLUDED.filename,
+                     storage_path=EXCLUDED.storage_path,
+                     file_size=EXCLUDED.file_size,
+                     mime_type=EXCLUDED.mime_type,
+                     source=EXCLUDED.source`,
+                  [orcid, mapped.id, fname, urlPath, buf.length, "application/pdf", "zotero"]
+                );
+                await pool.query(
+                  `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
+                  [urlPath, orcid, mapped.id]
+                );
+              }
+            } catch (e) {
+              errors.push(`PDF ${item.key}: ${e.message}`);
+            }
+          }
+        } catch (e) {
+          errors.push(`Item ${item.key}: ${e.message}`);
         }
       }
     }
