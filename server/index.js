@@ -1031,9 +1031,21 @@ function zoteroItemToLibrary(item) {
 }
 
 async function ensureZoteroCollections(orcid, zoteroUserId, apiKey) {
-  const res = await zoteroFetch(`${ZOTERO_BASE}/users/${zoteroUserId}/collections`, apiKey);
-  const collections = await res.json();
-  if (!Array.isArray(collections) || !collections.length) return new Map();
+  // Paginate — Zotero caps /collections at 100 per page. Without this, deep
+  // trees lose collections past the first page, and any child whose parent
+  // fell outside that page gets flattened to top-level (parent_id=null).
+  const collections = [];
+  let start = 0;
+  const pageSize = 100;
+  while (true) {
+    const res = await zoteroFetch(`${ZOTERO_BASE}/users/${zoteroUserId}/collections?limit=${pageSize}&start=${start}`, apiKey);
+    const page = await res.json();
+    if (!Array.isArray(page) || !page.length) break;
+    collections.push(...page);
+    if (page.length < pageSize) break;
+    start += pageSize;
+  }
+  if (!collections.length) return new Map();
 
   // First pass: ensure each collection row exists
   for (const c of collections) {
