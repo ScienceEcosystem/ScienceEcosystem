@@ -516,7 +516,7 @@
   function selectAllInCollection(collectionId){
     const list = collectionId==null
       ? items.filter(it=>!it.deleted_at)
-      : items.filter(it=>!it.deleted_at&&(it.collection_ids||[]).includes(collectionId));
+      : (()=>{ const idSet=descendantCollectionIds(collectionId); return items.filter(it=>!it.deleted_at&&(it.collection_ids||[]).some(cid=>idSet.has(cid))); })();
     if(!list.length){ toast("No items in this collection","error"); return; }
     currentCollectionId=collectionId; selectedIds=new Set(list.map(it=>String(it.id)));
     renderTree(); renderTable();
@@ -645,7 +645,8 @@
       for(const c of (m.get(parentKey)||[])){
         const li=document.createElement("li");
         if(currentCollectionId===c.id) li.classList.add("active");
-        const cnt=items.filter(it=>!it.deleted_at&&(it.collection_ids||[]).includes(c.id)).length;
+        const descIds=descendantCollectionIds(c.id);
+        const cnt=items.filter(it=>!it.deleted_at&&(it.collection_ids||[]).some(cid=>descIds.has(cid))).length;
         const hasChildren=(m.get(String(c.id))||[]).length>0;
         const isCollapsed=collapsedCollectionIds.has(String(c.id));
         const arrow=hasChildren
@@ -891,6 +892,24 @@
     return { trashedItems };
   }
 
+  // Zotero collapses a parent collection to show only items directly
+  // assigned to it; subcollection items are hidden unless you opt in.
+  // Here a parent folder includes everything filed under any of its
+  // descendants too, so opening "PhD" or "Crayfish" isn't just an empty shell.
+  function descendantCollectionIds(rootId){
+    const ids=new Set([rootId]);
+    let added=true;
+    while(added){
+      added=false;
+      for(const c of collections){
+        if(c.parent_id!=null && ids.has(c.parent_id) && !ids.has(c.id)){
+          ids.add(c.id); added=true;
+        }
+      }
+    }
+    return ids;
+  }
+
   function currentViewItems(){
     if(currentCollectionId==="__duplicates__"){
       const {dupIds}=computeDuplicates(items.filter(it=>!it.deleted_at));
@@ -900,12 +919,12 @@
       const {trashedItems}=getTrashViews();
       return trashedItems;
     }
-    // normal: filter by collection + not deleted
+    // normal: filter by collection (including its subcollections) + not deleted
+    if(currentCollectionId==null) return items.filter(it=>!it.deleted_at);
+    const idSet=descendantCollectionIds(currentCollectionId);
     return items.filter(it=>{
-      const notDeleted=!it.deleted_at;
-      if(!notDeleted) return false;
-      if(currentCollectionId==null) return true;
-      return (it.collection_ids||[]).includes(currentCollectionId);
+      if(it.deleted_at) return false;
+      return (it.collection_ids||[]).some(cid=>idSet.has(cid));
     });
   }
 
