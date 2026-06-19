@@ -118,10 +118,23 @@
     if(s.includes(",")){ const [f,...r]=s.split(","); return {family:f.trim(),given:r.join(",").trim()}; }
     const parts=s.split(/\s+/); const family=parts.pop()||""; return {family,given:parts.join(" ")};
   }
+  // item.authors is stored as a single string. Every automated import path
+  // (Zotero sync, OpenAlex add, add-by-DOI) joins full names with ", " —
+  // e.g. "Carsten F. Dormann, Stanislaus J. Schymanski, …". The manual edit
+  // field instead asks for "Last, First; Last, First". Splitting on comma
+  // unconditionally (the old behavior here) swallowed an entire multi-author
+  // string into one "name" and produced garbage initials for every paper
+  // with 3+ authors. Semicolon presence disambiguates which convention is in use.
+  function splitAuthors(str){
+    const s=String(str||"").trim();
+    if(!s) return [];
+    if(s.includes(";")) return s.split(";").map(x=>x.trim()).filter(Boolean);
+    return s.split(",").map(x=>x.trim()).filter(Boolean);
+  }
   function fmtBibTeX(item){
     const ef = getExtraFields(item);
     const typ = ITEM_TYPES[getItemType(item)] || ITEM_TYPES["journal-article"];
-    const authors=(item.authors||"").split(/;| and /i).map(a=>{ const p=splitName(a.trim()); return p.family+(p.given?", "+p.given:""); });
+    const authors=splitAuthors(item.authors).map(a=>{ const p=splitName(a.trim()); return p.family+(p.given?", "+p.given:""); });
     const key=((authors[0]||"").split(",")[0]||"key").replace(/\s+/g,"")+(item.year||"")+(item.title||"").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,10);
     const venueKey = typ.bibtex==="book"||typ.bibtex==="phdthesis" ? "  publisher" : (typ.bibtex==="inproceedings" ? "  booktitle" : "  journal");
     return [`@${typ.bibtex}{${key},`,
@@ -145,7 +158,7 @@
   }
   function fmtAPA(item){
     const ef = getExtraFields(item);
-    const authors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const authors=splitAuthors(item.authors).map(a=>a.trim()).filter(Boolean);
     const names=authors.map(a=>{ const p=splitName(a); return p.given?`${p.family}, ${authorInitials(p.given)}`:p.family; });
     let authorStr="";
     if(names.length===1) authorStr=names[0];
@@ -171,7 +184,7 @@
   }
   function fmtMLA(item){
     const ef = getExtraFields(item);
-    const authors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const authors=splitAuthors(item.authors).map(a=>a.trim()).filter(Boolean);
     const names=authors.map(a=>{ const p=splitName(a); return p.given?`${p.family}, ${p.given}`:p.family; });
     let authorStr="";
     if(names.length===1) authorStr=names[0];
@@ -186,7 +199,7 @@
     return `${authorStr?authorStr+". ":""}${title}${venue}${vol}${pages}${year}${doi}`.trim();
   }
   function fmtRIS(item){
-    const authors=(item.authors||"").split(/;| and /i);
+    const authors=splitAuthors(item.authors);
     return ["TY  - JOUR",
       ...authors.map(a=>{ const p=splitName(a.trim()); return "AU  - "+p.family+(p.given?", "+p.given:""); }),
       "TI  - "+(item.title||""),
@@ -197,7 +210,7 @@
   }
   function fmtChicago(item){
     const ef=getExtraFields(item);
-    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const rawAuthors=splitAuthors(item.authors).map(a=>a.trim()).filter(Boolean);
     const names=rawAuthors.map((a,i)=>{ const p=splitName(a); return i===0?(p.given?`${p.family}, ${p.given}`:p.family):(p.given?`${p.given} ${p.family}`:p.family); });
     let authorStr="";
     if(names.length===1) authorStr=names[0];
@@ -213,7 +226,7 @@
   }
   function fmtVancouver(item){
     const ef=getExtraFields(item);
-    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const rawAuthors=splitAuthors(item.authors).map(a=>a.trim()).filter(Boolean);
     const names=rawAuthors.map(a=>{ const p=splitName(a); const initials=(p.given||"").split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()).join(""); return p.family+(initials?" "+initials:""); });
     const authorStr=names.length>6?names.slice(0,6).join(", ")+" et al.":names.join(", ");
     const vol=ef.volume?`${ef.volume}`:"";
@@ -226,7 +239,7 @@
   }
   function fmtIEEE(item){
     const ef=getExtraFields(item);
-    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const rawAuthors=splitAuthors(item.authors).map(a=>a.trim()).filter(Boolean);
     const names=rawAuthors.map(a=>{ const p=splitName(a); const initials=(p.given||"").split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()+".").join(" "); return initials?`${initials} ${p.family}`:p.family; });
     let authorStr="";
     if(names.length===1) authorStr=names[0];
@@ -243,7 +256,7 @@
   }
   function fmtHarvard(item){
     const ef=getExtraFields(item);
-    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const rawAuthors=splitAuthors(item.authors).map(a=>a.trim()).filter(Boolean);
     const names=rawAuthors.map(a=>{ const p=splitName(a); return p.given?`${p.family}, ${p.given.split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()+".").join(" ")}`:p.family; });
     let authorStr="";
     if(names.length===1) authorStr=names[0];
@@ -259,7 +272,7 @@
   }
   function fmtNature(item){
     const ef=getExtraFields(item);
-    const rawAuthors=(item.authors||"").split(/;| and /i).map(a=>a.trim()).filter(Boolean);
+    const rawAuthors=splitAuthors(item.authors).map(a=>a.trim()).filter(Boolean);
     const names=rawAuthors.map(a=>{ const p=splitName(a); const initials=(p.given||"").split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()+".").join(""); return p.family+(initials?", "+initials:""); });
     const authorStr=names.length>5?names.slice(0,5).join(", ")+" et al.":names.join(", ");
     const title=item.title||"";
