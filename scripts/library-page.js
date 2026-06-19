@@ -309,7 +309,25 @@
     await refreshEverything();
     bindUI();
     initResizers();
+    initCollapsibleSections();
   });
+
+  // Tags/Zotero sidebar sections start closed (just a header + arrow) so they
+  // don't crowd out Collections, which stays open. State persists per-browser.
+  function initCollapsibleSections(){
+    $$(".lib-collapse").forEach(section=>{
+      const key=section.getAttribute("data-collapse-key");
+      const storeKey=`se_lib_collapse_${key}`;
+      const isOpen=localStorage.getItem(storeKey)==="1";
+      section.classList.toggle("open", isOpen);
+      const header=section.querySelector(".lib-collapse-header");
+      header?.addEventListener("click",()=>{
+        const nowOpen=!section.classList.contains("open");
+        section.classList.toggle("open", nowOpen);
+        localStorage.setItem(storeKey, nowOpen?"1":"0");
+      });
+    });
+  }
 
   async function refreshEverything(){
     await Promise.all([safeRefreshCollections(), safeRefreshItems(), safeRefreshZoteroStatus()]);
@@ -1884,25 +1902,17 @@
 
     // ---- Tag panel in sidebar ----
     function renderTagPanel(){
-      let panel=$("#tagSidePanel");
-      if(!panel){
-        const host=$(".lib-left");
-        if(!host) return;
-        panel=document.createElement("div");
-        panel.id="tagSidePanel";
-        panel.style.cssText="border-top:1px solid #d4d8df;padding:.35rem 0;";
-        host.appendChild(panel);
-      }
+      const panel=$("#tagSidePanel");
+      if(!panel) return;
       // Collect all tags from non-deleted items in current view
       const viewItems=applyFilters(currentViewItems());
       const tagCounts={};
       viewItems.forEach(it=>{ (it.tags||[]).forEach(t=>{ tagCounts[t]=(tagCounts[t]||0)+1; }); });
       const tags=Object.keys(tagCounts).sort();
-      if(!tags.length){ panel.innerHTML=""; return; }
+      if(!tags.length){ panel.innerHTML="<p style=\"font-size:.75rem;color:#9ca3af;padding:.4rem .65rem;margin:0;\">No tags yet.</p>"; return; }
 
       panel.innerHTML=`
-        <p style="font-size:.68rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;padding:.35rem .65rem .1rem;margin:0;">Tags</p>
-        <div style="padding:0 .5rem .35rem;display:flex;flex-wrap:wrap;gap:.25rem;">
+        <div style="padding:.35rem .5rem;display:flex;flex-wrap:wrap;gap:.25rem;">
           ${tags.map(t=>{
             const active=tagFilterTerms.includes(t.toLowerCase());
             return `<span class="tag-side-chip${active?" active":""}" data-tag="${esc(t)}" style="font-size:.72rem;padding:.1rem .4rem;border-radius:999px;cursor:pointer;border:1px solid ${active?"#3b82f6":"#d1d5db"};background:${active?"#dbeafe":"#f3f4f6"};color:${active?"#1e40af":"#374151"};">${esc(t)} <span style="color:#9ca3af;">${tagCounts[t]}</span></span>`;

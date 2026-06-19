@@ -29,9 +29,23 @@
     .lib-center{ background:#fff; }
     .lib-right{ background:#fff; border-left:1px solid #d4d8df; }
 
-    /* Left: heading pinned, tree + tag panel scroll together */
+    /* Left: heading pinned, Collections fills remaining space, collapsible
+       sections (Tags, Zotero) stack at the bottom and start closed */
     .lib-left>.lib-heading{ flex-shrink:0; }
     #collectionsTree{ flex:1; overflow-y:auto; min-height:0; }
+
+    .lib-collapse{ flex-shrink:0; border-top:1px solid #d4d8df; }
+    .lib-collapse-header{
+      width:100%; display:flex; align-items:center; gap:.4rem;
+      padding:.5rem .65rem; background:none; border:none; cursor:pointer;
+      font-size:.7rem; font-weight:700; color:#5a6478; text-transform:uppercase;
+      letter-spacing:.06em; text-align:left;
+    }
+    .lib-collapse-header:hover{ background:#e4e7ec; }
+    .lib-collapse-arrow{ display:inline-block; font-size:.65rem; transition:transform .15s; }
+    .lib-collapse.open .lib-collapse-arrow{ transform:rotate(90deg); }
+    .lib-collapse-body{ display:none; max-height:260px; overflow-y:auto; }
+    .lib-collapse.open .lib-collapse-body{ display:block; }
     #tagSidePanel{ flex-shrink:0; }
 
     /* Center: toolbar pinned, table wrapper scrolls */
@@ -132,8 +146,8 @@
     .read-status-none{ background:none; border-color:transparent; }
 
     /* Zotero panel */
-    #zoteroPanel{ flex-shrink:0; border-top:1px solid #d4d8df; padding:.55rem .65rem; font-size:.78rem; }
-    #zoteroPanel .z-heading{ font-size:.68rem; font-weight:700; color:#8a5200; text-transform:uppercase; letter-spacing:.06em; display:flex; align-items:center; gap:.35rem; margin-bottom:.45rem; }
+    #zoteroPanel{ padding:.55rem .65rem; font-size:.78rem; }
+    #zoteroPanel .z-heading{ display:none; } /* collapsible header already shows "Zotero" */
     #zoteroPanel .z-logo{ width:13px; height:13px; }
     #zoteroPanel input.input{ font-size:.78rem; padding:.2rem .4rem; width:100%; margin-bottom:.3rem; }
     #zoteroPanel .z-row{ display:flex; gap:.3rem; align-items:center; margin-top:.3rem; }
@@ -214,7 +228,24 @@
             </span>
           </h3>
           <div id="collectionsTree" class="tree"></div>
-          <div id="zoteroPanel"></div>
+
+          <div class="lib-collapse" id="tagsCollapse" data-collapse-key="tags">
+            <button type="button" class="lib-collapse-header">
+              <span class="lib-collapse-arrow">▸</span><span>Tags</span>
+            </button>
+            <div class="lib-collapse-body">
+              <div id="tagSidePanel"></div>
+            </div>
+          </div>
+
+          <div class="lib-collapse" id="zoteroCollapse" data-collapse-key="zotero">
+            <button type="button" class="lib-collapse-header">
+              <span class="lib-collapse-arrow">▸</span><span>Zotero</span>
+            </button>
+            <div class="lib-collapse-body">
+              <div id="zoteroPanel"></div>
+            </div>
+          </div>
         </aside>
 
         <!-- Resizer -->
