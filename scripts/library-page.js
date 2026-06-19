@@ -283,6 +283,11 @@
     const doi=item.doi?` https://doi.org/${item.doi}`:"";
     return `${authorStr?authorStr+". ":""}${title}.${venue}${vol}${pages}${year}.${doi}`.trim();
   }
+  const CITE_FMT_MAP={apa:fmtAPA,mla:fmtMLA,chicago:fmtChicago,harvard:fmtHarvard,vancouver:fmtVancouver,ieee:fmtIEEE,nature:fmtNature};
+  function buildBibliography(list, fmt){
+    const f=CITE_FMT_MAP[fmt]||fmtAPA;
+    return list.map(it=>f(it)).join("\n\n");
+  }
   function downloadText(filename, content, mime="text/plain"){
     const a=document.createElement("a");
     a.href=URL.createObjectURL(new Blob([content],{type:mime}));
@@ -505,8 +510,19 @@
     inp.addEventListener("blur",commit);
   }
 
+  function selectAllInCollection(collectionId){
+    const list = collectionId==null
+      ? items.filter(it=>!it.deleted_at)
+      : items.filter(it=>!it.deleted_at&&(it.collection_ids||[]).includes(collectionId));
+    if(!list.length){ toast("No items in this collection","error"); return; }
+    currentCollectionId=collectionId; selectedIds=new Set(list.map(it=>String(it.id)));
+    renderTree(); renderTable();
+    renderMultiSelectPanel();
+  }
+
   function buildMenuForCollection(c, anchorEl){
     const defs=[
+      {act:"select-all",label:"Select all (for bibliography)",onClick: ()=>{ selectAllInCollection(c.id); }},
       {act:"new",label:"New subcollection",onClick: async()=>{
         // Create a placeholder collection and immediately rename it inline
         const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:"New collection",parent_id:c.id})});
@@ -611,6 +627,7 @@
     allLi.querySelector(".kebab").addEventListener("click",(ev)=>{
       ev.stopPropagation();
       buildContextMenu([
+        {act:"select-all",label:"Select all (for bibliography)",onClick: ()=>{ selectAllInCollection(null); }},
         {act:"new-root",label:"New collection",onClick: async()=>{
           const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:"New collection",parent_id:null})});
           await safeRefreshCollections(); renderTree();
@@ -1135,6 +1152,24 @@
         ${!inTrash?`<button class="btn btn-secondary" id="bulkTrashBtn" style="width:100%;margin-bottom:.4rem;">Move to Trash</button>`:""}
         ${inTrash?`<button class="btn btn-secondary" id="bulkRestoreBtn" style="width:100%;margin-bottom:.4rem;">Restore</button>`:""}
         ${inTrash?`<button class="btn btn-secondary" id="bulkDeleteBtn" style="width:100%;margin-bottom:.4rem;color:#dc2626;border-color:#dc2626;">Delete permanently</button>`:""}
+
+        <div style="margin-top:.85rem;padding-top:.75rem;border-top:1px solid #e5e7eb;">
+          <p style="font-size:.74rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin:0 0 .4rem;">Bibliography (${count} items)</p>
+          <div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;">
+            <select id="bulkCiteFormatSelect" class="input" style="padding:.15rem .3rem;font-size:.77rem;">
+              <option value="apa">APA 7th</option>
+              <option value="mla">MLA 9th</option>
+              <option value="chicago">Chicago</option>
+              <option value="harvard">Harvard</option>
+              <option value="vancouver">Vancouver</option>
+              <option value="ieee">IEEE</option>
+              <option value="nature">Nature</option>
+            </select>
+            <button class="btn btn-secondary" id="bulkCopyCiteBtn" style="font-size:.77rem;padding:.2rem .45rem;">Copy citations</button>
+            <button class="btn btn-secondary" id="bulkExportBibBtn" style="font-size:.77rem;padding:.2rem .45rem;">↓ BibTeX</button>
+            <button class="btn btn-secondary" id="bulkExportRisBtn" style="font-size:.77rem;padding:.2rem .45rem;">↓ RIS</button>
+          </div>
+        </div>
       </div>`;
     $("#bulkTrashBtn")?.addEventListener("click", async()=>{
       const ids=[...selectedIds];
@@ -1183,6 +1218,26 @@
       selectedIds=new Set(); renderTable();
       host.innerHTML=`<p class="muted" style="padding:.75rem;">Select an item…</p>`;
       toast(`${ids.length} item${ids.length===1?"":"s"} deleted permanently`);
+    });
+
+    const selectedItems=()=>ids.map(i=>items.find(x=>String(x.id)===String(i))).filter(Boolean);
+    $("#bulkCopyCiteBtn")?.addEventListener("click", async()=>{
+      const fmt=$("#bulkCiteFormatSelect")?.value||"apa";
+      const text=buildBibliography(selectedItems(), fmt);
+      try{
+        await navigator.clipboard.writeText(text);
+        toast(`${fmt.toUpperCase()} bibliography copied (${ids.length} items)`,"success");
+      }catch(_e){ toast("Could not copy citations","error"); }
+    });
+    $("#bulkExportBibBtn")?.addEventListener("click",()=>{
+      const text=selectedItems().map(it=>fmtBibTeX(it)).join("\n\n");
+      downloadText("bibliography.bib", text);
+      toast("BibTeX downloaded","success");
+    });
+    $("#bulkExportRisBtn")?.addEventListener("click",()=>{
+      const text=selectedItems().map(it=>fmtRIS(it)).join("\n");
+      downloadText("bibliography.ris", text, "application/x-research-info-systems");
+      toast("RIS downloaded","success");
     });
   }
 
@@ -1480,8 +1535,7 @@
     });
     $("#copyCiteBtn")?.addEventListener("click", async ()=>{
       const fmt = $("#citeFormatSelect")?.value || "apa";
-      const fmtMap={apa:fmtAPA,mla:fmtMLA,chicago:fmtChicago,harvard:fmtHarvard,vancouver:fmtVancouver,ieee:fmtIEEE,nature:fmtNature};
-      const text = (fmtMap[fmt]||fmtAPA)(item);
+      const text = buildBibliography([item], fmt);
       try{
         await navigator.clipboard.writeText(text);
         toast(`${fmt.toUpperCase()} citation copied`,"success");
