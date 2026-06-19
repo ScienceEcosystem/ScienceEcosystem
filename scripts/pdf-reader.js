@@ -1664,6 +1664,30 @@ function showCopiedToast() {
   setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 150); }, 1800);
 }
 
+function showNotePopup(x, y, text) {
+  const existing = document.getElementById('pdfNotePopup');
+  if (existing) existing.remove();
+
+  const popup = document.createElement('div');
+  popup.id = 'pdfNotePopup';
+  Object.assign(popup.style, {
+    position: 'fixed', zIndex: '10020', background: '#1e293b', color: '#f8fafc',
+    border: '1px solid #475569', borderRadius: '8px', padding: '.6rem .8rem',
+    fontSize: '.85rem', maxWidth: '280px', boxShadow: '0 4px 12px rgba(0,0,0,.3)',
+    left: Math.min(x, window.innerWidth - 300) + 'px',
+    top: Math.min(y + 8, window.innerHeight - 100) + 'px'
+  });
+  popup.textContent = text;
+  document.body.appendChild(popup);
+
+  setTimeout(() => {
+    const onDown = (e) => {
+      if (!popup.contains(e.target)) { popup.remove(); document.removeEventListener('mousedown', onDown); }
+    };
+    document.addEventListener('mousedown', onDown);
+  }, 0);
+}
+
 function createAnnotation(page, normRects, quote, type, note, color) {
   annotations.push({
     id: String(Date.now()) + '_' + Math.random().toString(16).slice(2),
@@ -1673,15 +1697,18 @@ function createAnnotation(page, normRects, quote, type, note, color) {
   renderAnnotationsForPage(page);
 }
 
-// Merge selection rects that overlap on the same text line into single wider rects
+// Merge selection rects that overlap on the same text line into single wider rects.
+// Each line's "band" is anchored to the FIRST rect placed on it (firstY/firstH) rather
+// than the cumulative merged box — otherwise the merged box's height grows with every
+// rect absorbed, and that growing band starts swallowing the *next* line too, producing
+// one giant highlight/underline spanning several lines instead of one per line.
 function mergeLineRects(rects) {
   if (!rects.length) return rects;
   const sorted = [...rects].sort((a, b) => a.y - b.y || a.x - b.x);
   const lines = [];
   for (const r of sorted) {
     const last = lines[lines.length - 1];
-    // Same line if vertical overlap is > 50% of the rect height
-    if (last && r.y < last.y + last.h * 0.6) {
+    if (last && r.y < last.firstY + last.firstH * 0.6) {
       const right = Math.max(last.x + last.w, r.x + r.w);
       const bottom = Math.max(last.y + last.h, r.y + r.h);
       last.x = Math.min(last.x, r.x);
@@ -1689,10 +1716,10 @@ function mergeLineRects(rects) {
       last.w = right - last.x;
       last.h = bottom - last.y;
     } else {
-      lines.push({ ...r });
+      lines.push({ ...r, firstY: r.y, firstH: r.h });
     }
   }
-  return lines;
+  return lines.map(({ firstY, firstH, ...rest }) => rest);
 }
 
 function wireAnnotationSelection(layerEl) {
@@ -1738,20 +1765,30 @@ function wireAnnotationSelection(layerEl) {
     showSelToolbar(ev.clientX, ev.clientY, quote, page, normRects);
   });
 
-  // Erase mode: click annotation to remove it.
+  // Erase mode: click annotation to remove it. Otherwise, clicking a note
+  // annotation shows its text (relying on the native title-attribute tooltip
+  // alone made notes effectively invisible — you had to hover and wait).
   // Must be on the annotation layer (sibling of text layer) — not on layerEl itself.
   const annotLayer = layerEl.closest('.pdf-page-wrap')?.querySelector('.pdf-annotation-layer');
   if (annotLayer) {
     annotLayer.addEventListener('click', (ev) => {
-      if (annotMode !== 'erase') return;
       const target = ev.target.closest('.pdf-annot');
       if (!target) return;
       const id = target.getAttribute('data-annot-id');
       if (!id) return;
-      annotations = annotations.filter(a => a.id !== id);
-      saveAnnotations();
-      renderAnnotationsForPage(layerEl.closest('.pdf-page-wrap') ?
-        Number(layerEl.closest('.pdf-page-wrap').getAttribute('data-page')) : 0);
+
+      if (annotMode === 'erase') {
+        annotations = annotations.filter(a => a.id !== id);
+        saveAnnotations();
+        renderAnnotationsForPage(layerEl.closest('.pdf-page-wrap') ?
+          Number(layerEl.closest('.pdf-page-wrap').getAttribute('data-page')) : 0);
+        return;
+      }
+
+      const annot = annotations.find(a => a.id === id);
+      if (annot?.type === 'note' && annot.note) {
+        showNotePopup(ev.clientX, ev.clientY, annot.note);
+      }
     });
   }
 }
@@ -1781,7 +1818,7 @@ function renderAnnotationsForPage(page) {
 
   const pageAnnots = annotations.filter(a => a.page === page);
   pageAnnots.forEach(a => {
-    a.rects.forEach(r => {
+    a.rects.forEach((r, ri) => {
       // r._norm means coords are 0-1 fractions; legacy rects are absolute px
       const px = r._norm ? r.x * cw : r.x;
       const py = r._norm ? r.y * ch : r.y;
@@ -1801,9 +1838,20 @@ function renderAnnotationsForPage(page) {
         d.style.top = `${py}px`;
         d.style.width = `${pw}px`;
         d.style.height = `${ph}px`;
-        d.style.background = a.color || (a.type === 'note' ? 'rgba(46,127,159,0.25)' : 'rgba(255,235,59,0.55)');
+        d.style.background = a.color || (a.type === 'note' ? 'rgba(255,193,7,0.35)' : 'rgba(255,235,59,0.55)');
       }
       if (a.note) d.setAttribute('title', a.note);
+
+      // Notes get a small visible marker on their first rect — a faint tinted
+      // box alone (or a hover-only title tooltip) is too easy to miss/ignore.
+      if (a.type === 'note' && ri === 0) {
+        d.classList.add('pdf-annot-note');
+        const marker = document.createElement('span');
+        marker.className = 'pdf-annot-note-marker';
+        marker.textContent = '📝';
+        d.appendChild(marker);
+      }
+
       layer.appendChild(d);
     });
   });

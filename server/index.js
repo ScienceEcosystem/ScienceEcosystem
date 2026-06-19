@@ -1192,6 +1192,13 @@ async function syncZoteroForUser(orcid) {
               if (pdfChild?.key) {
                 const fileRes = await zoteroFetch(`${ZOTERO_BASE}/users/${zid}/items/${pdfChild.key}/file`, apiKey);
                 const buf = Buffer.from(await fileRes.arrayBuffer());
+                // Zotero's /file endpoint can return an HTML error/login page instead
+                // of the actual PDF (e.g. for linked-not-stored attachments). Storing
+                // that silently would show a PDF badge that fails to open. Verify the
+                // PDF magic bytes before uploading.
+                if (buf.length < 5 || buf.toString("ascii", 0, 5) !== "%PDF-") {
+                  throw new Error(`attachment ${pdfChild.key} is not a valid PDF (got ${buf.length} bytes)`);
+                }
                 const safeKey = String(item.key).replace(/[^\w.\-]/g, "_");
                 const safeAttach = String(pdfChild.key).replace(/[^\w.\-]/g, "_");
                 const fname = `zotero_${safeKey}_${safeAttach}.pdf`;
