@@ -10,7 +10,7 @@ import crypto from "crypto";
 import pkg from "pg";
 import { resolveArtifacts } from "./artifacts-resolver.js";
 import { checkJournalIntegrity, clearJournalIntegrityCache } from "./journal-integrity.js";
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const { Pool } = pkg;
 const fsp = fs.promises;
@@ -39,8 +39,29 @@ async function uploadToR2(key, buffer, contentType) {
   }));
 }
 
+// Zotero's /file endpoint (and some publisher links) can return an HTML
+// login/error page with a 200 status instead of the actual PDF — catch that
+// before it ever gets stored, so the library badge never points at junk.
+function isValidPdfBuffer(buf) {
+  return Buffer.isBuffer(buf) && buf.length >= 5 && buf.toString("ascii", 0, 5) === "%PDF-";
+}
+
+async function clearBrokenPdf(orcid, paperId) {
+  await pool.query(`DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [orcid, paperId]).catch(() => {});
+  await pool.query(`UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`, [orcid, paperId]).catch(() => {});
+}
+
 async function streamFromR2(res, orcid, paperId, key) {
   try {
+    // Some PDFs were stored before the %PDF- validation existed (e.g. Zotero
+    // returning an HTML login page). Catch those here too so the badge clears
+    // even for files that already made it into R2.
+    const head = await r2Client.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key }));
+    if (String(head.ContentType || "").toLowerCase().includes("html")) {
+      await clearBrokenPdf(orcid, paperId);
+      return res.status(404).json({ error: "PDF is corrupted (not a real PDF file). Please re-save using the browser extension." });
+    }
+
     // Return the pre-signed URL as JSON — pdf-reader.js fetches it directly from R2.
     // Redirect approach fails because pdf.js withCredentials blocks cross-origin redirects.
     const signedUrl = await getSignedUrl(
@@ -51,8 +72,7 @@ async function streamFromR2(res, orcid, paperId, key) {
     res.json({ signedUrl });
   } catch (e) {
     if (e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404) {
-      await pool.query(`DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [orcid, paperId]).catch(() => {});
-      await pool.query(`UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`, [orcid, paperId]).catch(() => {});
+      await clearBrokenPdf(orcid, paperId);
       res.status(404).json({ error: "PDF no longer available. Please re-save using the browser extension." });
     } else {
       console.error("R2 GetObject error:", e);
@@ -2258,6 +2278,7 @@ app.post("/api/library/pdf", async (req, res) => {
     const mimeOk = String(file.contentType || "").toLowerCase() === "application/pdf";
     if (!extOk && !mimeOk) return res.status(400).json({ error: "Only PDF files allowed" });
     if (file.size > 50 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
+    if (!isValidPdfBuffer(file.buffer)) return res.status(400).json({ error: "File is not a valid PDF" });
 
     const { storagePath, filename: fname, urlPath } = await storePdfFile(sess.orcid, paperId, file.buffer, file.contentType);
 
@@ -2355,8 +2376,7 @@ async function sendLibraryPdf(res, orcid, paperId) {
     return res.sendFile(safePath, async err => {
       if (err) {
         if (err.code === "ENOENT") {
-          await pool.query(`DELETE FROM library_pdfs WHERE orcid=$1 AND paper_id=$2`, [orcid, paperId]).catch(() => {});
-          await pool.query(`UPDATE library_items SET local_pdf_path=NULL WHERE orcid=$1 AND id=$2`, [orcid, paperId]).catch(() => {});
+          await clearBrokenPdf(orcid, paperId);
           return res.status(404).json({ error: "PDF no longer available — the file was lost on server restart. Please re-save using the browser extension." });
         }
         console.error("sendFile error:", err);
@@ -2466,6 +2486,7 @@ app.post("/api/library/import-pdf", async (req, res) => {
     const mimeOk = String(file.contentType || "").toLowerCase() === "application/pdf";
     if (!extOk && !mimeOk) return res.status(400).json({ error: "Only PDF files allowed" });
     if (file.size > 50 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
+    if (!isValidPdfBuffer(file.buffer)) return res.status(400).json({ error: "File is not a valid PDF" });
 
     // Search both the head and tail of the PDF — DOIs appear at various offsets
     // and PDF cross-reference tables (which often contain metadata) are at the end.
