@@ -46,9 +46,34 @@ ANALYTICS (private, no cookies, no privacy impact)
       Recommendation: start with a simple DB counter table, upgrade to Umami later
 
 SECURITY & SESSION MANAGEMENT
-- [ ] Shared link safety: make sure a session token in a URL can't log in a different user
-- [ ] CSRF protection on all POST endpoints
-- [ ] Rate limiting on /api/library and search endpoints
+- [X] Shared link safety (2026-06-20) — audited: sessions are cookie-only
+      (signed, httpOnly "sid"), getSession() never reads a token from
+      query/body, and there is no shareable-link feature anywhere in the
+      codebase that embeds a session token in a URL. ORCID OAuth callback
+      already validates `state` against an httpOnly cookie. Already
+      documented in privacy.html ("Sharing a link... your session cannot
+      be transferred through a link"). No code change needed — verified,
+      not built.
+- [X] CSRF protection on all POST endpoints (2026-06-20) — double-submit
+      cookie pattern. server/index.js sets a non-httpOnly `csrf_token`
+      cookie on every visit; all state-changing requests to /api/* or
+      /auth/* must echo it back as an X-CSRF-Token header or get a 403.
+      scripts/session.js patches window.fetch globally so every existing
+      fetch() call across the site gets the header automatically — no
+      per-call-site changes needed. The browser extension (uses the same
+      "sid" cookie via credentials:"include" but can't read cookies from
+      its background service worker) is exempted by matching its Origin
+      header (chrome-extension://… / moz-extension://…, unforgeable by a
+      malicious webpage) against an EXTENSION_ORIGINS env var.
+      ACTION NEEDED: set EXTENSION_ORIGINS on Render to the real published
+      Chrome/Firefox extension IDs, or the extension's save/upload
+      features will start failing CSRF checks once this deploys.
+- [X] Rate limiting on /api/library and search endpoints (2026-06-20) —
+      added to /api/library and /api/collections (120 req/min/IP — auth-
+      gated already, this is defense-in-depth against a compromised/buggy
+      client). Note: there is no server-side search endpoint to rate-limit
+      — scripts/search.js queries OpenAlex directly from the browser, so
+      that part of the item doesn't apply to our infrastructure.
 
 BROWSER EXTENSION
 - [X] Firefox extension port: submitted to addons.mozilla.org (2026-05-22), awaiting review
@@ -268,13 +293,22 @@ What we have:
   [X] Admin stats dashboard
 
 Still needed in Stage 1 (before moving to Stage 2):
-  [ ] CSRF protection on all POST endpoints (security, should be done first)
-  [ ] Rate limiting on /api/library and search
-  [ ] Terms of Service (currently only Privacy Policy)
-  [ ] CONTRIBUTING.md so others can contribute
+  [X] CSRF protection on all POST endpoints (2026-06-20, see Security section above)
+  [X] Rate limiting on /api/library and search (2026-06-20, see Security section above)
+  [X] Terms of Service (2026-06-20) — terms.html added, linked from every
+      page's footer next to Privacy policy. Covers acceptable use, content
+      ownership, third-party data accuracy disclaimer, warranty disclaimer,
+      liability limitation, termination, governing law. DRAFT — written
+      in good faith matching the site's tone, but not reviewed by a lawyer;
+      recommend professional review before leaning on it in a real dispute.
+  [X] CONTRIBUTING.md so others can contribute (2026-06-20) — added at repo
+      root. FLAGS A GAP: there is no LICENSE file in the repo yet, which
+      needs to be decided (MIT/Apache-2.0/AGPL/etc.) before outside PRs can
+      be accepted on a legally clean footing.
   [ ] Public roadmap page on the site
 
 DECISION: Do not start Stage 2 features until CSRF and rate limiting are done.
+STATUS: Done as of 2026-06-20 — Stage 2 is now unblocked.
 These are baseline security requirements for a platform that stores user data.
 
 
@@ -1236,11 +1270,11 @@ INFRASTRUCTURE / PLATFORM HEALTH
       data from papers with citations. Link verified 200. Rebuilt
       research-tools.html via build-research-tools.js — 250 cards,
       screenshot-verified rendering.
-- [ ] Add CONTRIBUTING.md so outside developers can contribute
+- [X] Add CONTRIBUTING.md so outside developers can contribute (2026-06-20)
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
 - [ ] Cloudflare R2: monitor storage usage, set lifecycle rules if needed
-- [ ] Legal: write a proper Terms of Service (currently only have Privacy Policy)
+- [X] Legal: write a proper Terms of Service (2026-06-20) — terms.html, draft pending lawyer review
 
 
 =======================================================

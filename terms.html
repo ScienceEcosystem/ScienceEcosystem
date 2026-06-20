@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Terms of Service | ScienceEcosystem</title>
+  <meta name="description" content="ScienceEcosystem terms of service — what you can expect from us, and what we expect from you."/>
+  <link rel="stylesheet" href="assets/fonts/fonts.css" />
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <style>
+    .privacy-body { max-width: 720px; margin: 0 auto; line-height: 1.7; }
+    .privacy-body h2 { margin-top: 2rem; font-size: 1.1rem; border-bottom: 1px solid #e5e7eb; padding-bottom: .4rem; }
+    .privacy-body h3 { margin-top: 1.25rem; font-size: .95rem; color: #374151; }
+    .privacy-body p, .privacy-body li { font-size: .925rem; color: #374151; }
+    .privacy-body ul, .privacy-body ol { padding-left: 1.25rem; }
+    .privacy-body li { margin-bottom: .3rem; }
+    .toc { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+    .toc ol { padding-left: 1.25rem; margin: .5rem 0 0; }
+    .toc li { margin-bottom: .25rem; font-size: .875rem; }
+    .highlight-box { background: #f0f9ff; border-left: 4px solid #0284c7; padding: .75rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; font-size: .9rem; }
+  </style>
+</head>
+<body data-page="terms">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem"/>
+        </a>
+      </div>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <span>Login with</span>
+          <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID"/>
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" class="container" style="padding: 2rem 1rem 4rem;">
+    <div class="privacy-body">
+
+      <h1>Terms of Service</h1>
+      <p class="muted" style="font-size:.85rem;">Last updated: June 2026 &nbsp;·&nbsp; <a href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+
+      <div class="highlight-box">
+        <strong>Short version:</strong> ScienceEcosystem is free, non-commercial, public-interest infrastructure. Use it in good faith, don't abuse it, and understand that the data we aggregate comes from third-party sources we can't fully guarantee. You own what you write here; we just host it.
+      </div>
+
+      <div class="toc">
+        <strong>Contents</strong>
+        <ol>
+          <li><a href="#acceptance">Acceptance of these terms</a></li>
+          <li><a href="#service">What ScienceEcosystem is</a></li>
+          <li><a href="#accounts">Accounts</a></li>
+          <li><a href="#acceptable-use">Acceptable use</a></li>
+          <li><a href="#content">Your content</a></li>
+          <li><a href="#data-accuracy">Third-party data and accuracy</a></li>
+          <li><a href="#availability">Availability and changes to the service</a></li>
+          <li><a href="#disclaimer">Disclaimer of warranty</a></li>
+          <li><a href="#liability">Limitation of liability</a></li>
+          <li><a href="#termination">Termination</a></li>
+          <li><a href="#changes">Changes to these terms</a></li>
+          <li><a href="#law">Governing law</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ol>
+      </div>
+
+      <!-- 1 -->
+      <h2 id="acceptance">1. Acceptance of these terms</h2>
+      <p>By using ScienceEcosystem (the "Service"), you agree to these Terms of Service. If you don't agree, please don't use the Service. We may update these terms from time to time — see <a href="#changes">section 11</a>.</p>
+
+      <!-- 2 -->
+      <h2 id="service">2. What ScienceEcosystem is</h2>
+      <p>ScienceEcosystem is an independent, non-commercial open-science infrastructure project operated by Olivier V. Raven. We aggregate publicly available scholarly metadata (from sources including OpenAlex, Crossref, Semantic Scholar, ORCID, and others) and provide tools for researchers to discover, save, organize, and annotate papers. We are not a publisher, not a journal, and we do not host copyrighted full-text content we don't have rights to.</p>
+      <p>The Service is provided free of charge. We do not sell data, run advertising, or operate a paid subscription tier at this time.</p>
+
+      <!-- 3 -->
+      <h2 id="accounts">3. Accounts</h2>
+      <p>You may sign in using ORCID. You are responsible for keeping your ORCID credentials secure — we never see or store your ORCID password. You are responsible for the activity that happens under your account.</p>
+      <p>You may delete your account at any time from <a href="settings-profile.html">Profile settings</a>. This permanently removes your account data as described in our <a href="privacy.html">Privacy Policy</a>.</p>
+      <p>We reserve the right to suspend or terminate accounts that violate these terms (see <a href="#termination">section 10</a>).</p>
+
+      <!-- 4 -->
+      <h2 id="acceptable-use">4. Acceptable use</h2>
+      <p>You agree not to:</p>
+      <ul>
+        <li>Use automated tools to scrape, crawl, or bulk-extract data from the Service in a way that degrades it for other users (reasonable personal use of your own library/exports is fine)</li>
+        <li>Attempt to bypass rate limits, authentication, or other security controls</li>
+        <li>Upload content you don't have the right to upload (e.g., copyrighted full-text PDFs you're not authorized to redistribute)</li>
+        <li>Use the Service to harass, impersonate, or misrepresent your identity or research</li>
+        <li>Interfere with the Service's infrastructure (e.g., excessive automated requests, attempting to compromise the server or database)</li>
+        <li>Use the Service for any unlawful purpose</li>
+      </ul>
+
+      <!-- 5 -->
+      <h2 id="content">5. Your content</h2>
+      <p>Content you add — notes, tags, annotations, collections, profile bio, author responses — remains yours. By posting content that is visible to others (e.g., a public profile bio or an author's note on a paper page), you grant us a limited license to display it on the Service for that purpose. You can edit or delete most of your own content at any time; deleting your account removes it permanently.</p>
+      <p>You're responsible for what you post. Don't post anything defamatory, infringing, or that you don't have the right to share.</p>
+
+      <!-- 6 -->
+      <h2 id="data-accuracy">6. Third-party data and accuracy</h2>
+      <p>Most of the bibliographic data shown on ScienceEcosystem (titles, authors, citation counts, abstracts, journal metadata) comes from third-party sources we don't control — OpenAlex, Crossref, ORCID, Semantic Scholar, Unpaywall, and others. We make a good-faith effort to display this data accurately, but:</p>
+      <ul>
+        <li>We cannot guarantee the completeness or accuracy of third-party data</li>
+        <li>Citation counts, author identities (including OpenAlex author ID matching), and journal quality scores are computed/aggregated and may contain errors</li>
+        <li>If you find an error, especially about your own publication record, please contact us or use the in-app tools to correct it (e.g., profile merging, claiming authorship)</li>
+      </ul>
+
+      <!-- 7 -->
+      <h2 id="availability">7. Availability and changes to the service</h2>
+      <p>We aim to keep the Service running reliably, but as free infrastructure without guaranteed funding, we cannot promise 100% uptime. We may modify, suspend, or discontinue features (or the Service as a whole) at any time. If we ever discontinue the Service entirely, we will make reasonable efforts to give advance notice and let you export your library data first.</p>
+
+      <!-- 8 -->
+      <h2 id="disclaimer">8. Disclaimer of warranty</h2>
+      <p>The Service is provided "as is" and "as available," without warranties of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, accuracy, or non-infringement. We do not warrant that the Service will be uninterrupted, error-free, or secure.</p>
+
+      <!-- 9 -->
+      <h2 id="liability">9. Limitation of liability</h2>
+      <p>To the maximum extent permitted by law, ScienceEcosystem and its operator shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of data, arising from your use of (or inability to use) the Service — including reliance on third-party data displayed through it. Use the Service's data and tools as an aid to your research, not as a sole source of truth for decisions with real consequences (e.g., career, funding, or publication decisions).</p>
+
+      <!-- 10 -->
+      <h2 id="termination">10. Termination</h2>
+      <p>You may stop using the Service and delete your account at any time. We may suspend or terminate access for accounts that violate <a href="#acceptable-use">section 4</a>, with notice where practical. Sections of these terms that by their nature should survive termination (e.g., limitation of liability) will continue to apply.</p>
+
+      <!-- 11 -->
+      <h2 id="changes">11. Changes to these terms</h2>
+      <p>We may update these terms as the Service evolves. Material changes will be reflected by updating the "Last updated" date above. Continued use of the Service after changes take effect constitutes acceptance of the revised terms.</p>
+
+      <!-- 12 -->
+      <h2 id="law">12. Governing law</h2>
+      <p>These terms are governed by the laws of the Netherlands, without regard to conflict-of-law principles, except where local consumer-protection law gives you mandatory rights that cannot be waived.</p>
+
+      <!-- 13 -->
+      <h2 id="contact">13. Contact</h2>
+      <p>Questions about these terms: <a href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+      <p>See also our <a href="privacy.html">Privacy Policy</a> for how we handle your data.</p>
+
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span class="js-year">2026</span> ScienceEcosystem. All rights reserved.</p>
+      <p>
+        <a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a>
+        &nbsp;·&nbsp;
+        <a class="footer-link" href="privacy.html">Privacy policy</a>
+        &nbsp;·&nbsp;
+        <a class="footer-link" href="terms.html">Terms of service</a>
+      </p>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+</body>
+</html>

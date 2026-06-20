@@ -1,4 +1,39 @@
 // scripts/session.js
+
+// ── CSRF token auto-attach ───────────────────────────────────────────────────
+// Reads the non-httpOnly "csrf_token" cookie (set by server/index.js on every
+// visit) and attaches it as X-CSRF-Token on every same-origin state-changing
+// fetch. Patching window.fetch here means every script that already calls
+// fetch(...) gets this for free — no call-site changes needed anywhere else.
+// Runs first/synchronously so it's in place before any user-triggered request.
+(function patchFetchForCsrf(){
+  if (typeof window === "undefined" || !window.fetch || window.fetch.__csrfPatched) return;
+  function getCookie(name){
+    const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  const originalFetch = window.fetch.bind(window);
+  const patched = function(input, init){
+    init = init || {};
+    const method = String(init.method || (input && input.method) || "GET").toUpperCase();
+    if (method !== "GET" && method !== "HEAD") {
+      let url = null;
+      try { url = new URL(typeof input === "string" ? input : input.url, location.origin); } catch (_e) {}
+      if (url && url.origin === location.origin) {
+        const token = getCookie("csrf_token");
+        if (token) {
+          const headers = new Headers(init.headers || (input && input.headers) || {});
+          headers.set("X-CSRF-Token", token);
+          init = Object.assign({}, init, { headers });
+        }
+      }
+    }
+    return originalFetch(input, init);
+  };
+  patched.__csrfPatched = true;
+  window.fetch = patched;
+})();
+
 (function ensureCanonical(){
   try {
     var path = location.pathname || "/";

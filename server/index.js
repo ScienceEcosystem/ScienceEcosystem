@@ -121,6 +121,48 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── CSRF protection (double-submit cookie) ───────────────────────────────────
+// Every visit gets a "csrf_token" cookie — unlike "sid", it's NOT httpOnly, so
+// page JS can read it (scripts/session.js does, on every fetch). State-changing
+// requests must echo it back in an X-CSRF-Token header. A cross-site attacker's
+// page can make the browser *send* our cookies, but can't *read* csrf_token
+// (different origin), so it can never produce a matching header.
+const CSRF_COOKIE = "csrf_token";
+app.use((req, res, next) => {
+  if (!req.cookies?.[CSRF_COOKIE]) {
+    res.cookie(CSRF_COOKIE, crypto.randomBytes(24).toString("hex"), {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: NODE_ENV === "production",
+      path: "/",
+      maxAge: SESSION_MAX_AGE_MS
+    });
+  }
+  next();
+});
+
+// The browser extension authenticates with the same "sid" cookie but its
+// background service worker can't read document.cookie to produce a matching
+// header. Its Origin header (chrome-extension://… / moz-extension://…) is set
+// by the browser itself and cannot be forged by a malicious webpage, so an
+// origin allowlist is a legitimate substitute proof for that one client.
+// Set EXTENSION_ORIGINS (comma-separated) in the environment once published.
+const EXTENSION_ORIGINS = new Set(
+  (process.env.EXTENSION_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean)
+);
+const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+app.use((req, res, next) => {
+  if (CSRF_SAFE_METHODS.has(req.method)) return next();
+  if (!req.path.startsWith("/api/") && !req.path.startsWith("/auth/")) return next();
+  if (req.headers.origin && EXTENSION_ORIGINS.has(req.headers.origin)) return next();
+  const header = req.headers["x-csrf-token"];
+  const cookie = req.cookies?.[CSRF_COOKIE];
+  if (!header || !cookie || header !== cookie) {
+    return res.status(403).json({ error: "Security check failed — please refresh the page and try again." });
+  }
+  next();
+});
+
 // ── Privacy-safe page hit counter ────────────────────────────────────────────
 // Counts GET requests to real pages. Skips bots, assets, and API routes.
 // Stores only (page_slug, date, count) — no IP, no user ID, no personal data.
@@ -1289,6 +1331,15 @@ app.use("/api/profile/",    rateLimiter(60_000, 60));
 app.use("/api/topic/",      rateLimiter(60_000, 20));
 app.use("/api/journal/",    rateLimiter(60_000, 20));
 app.use("/api/field-data/", rateLimiter(60_000, 30));   // proxies GBIF/iNat/WoC — slower APIs
+
+// ── Write-surface rate limiting — these are auth-gated already, but a
+// compromised/buggy client (or XSS in a logged-in tab) shouldn't be able to
+// hammer the DB unbounded. Limits are generous enough for legitimate bulk
+// use (importing/syncing many papers) while still capping runaway abuse.
+// (There is no server-side search endpoint — search.js queries OpenAlex
+// directly from the browser, so there's nothing of ours to rate-limit there.)
+app.use("/api/library",     rateLimiter(60_000, 120));
+app.use("/api/collections", rateLimiter(60_000, 120));
 
 app.use(paperRoutes);
 
