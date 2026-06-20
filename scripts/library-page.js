@@ -650,11 +650,11 @@
         const hasChildren=(m.get(String(c.id))||[]).length>0;
         const isCollapsed=collapsedCollectionIds.has(String(c.id));
         const arrow=hasChildren
-          ?`<button class="tree-arrow" title="${isCollapsed?'Expand':'Collapse'}" style="background:none;border:none;cursor:pointer;padding:0;width:14px;height:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#6b7280;">
-              <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style="transform:rotate(${isCollapsed?'0':'90'}deg);transition:transform .12s;"><path d="M2 1l4.5 3.5L2 8" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          ?`<button class="tree-arrow" title="${isCollapsed?'Expand':'Collapse'}" style="background:none;border:none;cursor:pointer;padding:4px;margin:-4px 0 -4px -4px;width:20px;height:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#6b7280;">
+              <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style="transform:rotate(${isCollapsed?'0':'90'}deg);transition:transform .12s;pointer-events:none;"><path d="M2 1l4.5 3.5L2 8" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
             </button>`
-          :`<span style="width:14px;flex-shrink:0;"></span>`;
-        li.innerHTML=`<div class="row" data-id="${String(c.id)}" style="padding-left:${Math.max(0,depth)*14+4}px;">
+          :`<span style="width:20px;flex-shrink:0;"></span>`;
+        li.innerHTML=`<div class="row" data-id="${String(c.id)}" style="padding-left:${Math.max(0,depth)*14}px;">
           ${arrow}
           <svg class="tree-icon" viewBox="0 0 16 16" fill="none"><path d="M1 4h5l2 2h7v7H1z" stroke="currentColor" stroke-width="1.2"/></svg>
           <span class="name" title="${esc(c.name)}">${esc(c.name)}</span>
@@ -664,17 +664,20 @@
         const row=li.querySelector(".row");
         const keb=li.querySelector(".kebab");
         const arrowBtn=li.querySelector(".tree-arrow");
-        row.addEventListener("click",(ev)=>{ if(ev.target.closest(".kebab")||ev.target.closest(".tree-arrow")) return; currentCollectionId=c.id; selectedIds=new Set(); renderTree(); renderTable(); });
-        row.addEventListener("dblclick",(ev)=>{ if(ev.target.closest(".kebab")||ev.target.closest(".tree-arrow")) return; ev.stopPropagation(); startInlineRename(c); });
-        keb.addEventListener("click",(ev)=>{ ev.stopPropagation(); buildMenuForCollection(c,keb); });
-        arrowBtn?.addEventListener("click",(ev)=>{
-          ev.stopPropagation();
+        const toggleCollapse=()=>{
           const key=String(c.id);
           if(collapsedCollectionIds.has(key)) collapsedCollectionIds.delete(key);
           else collapsedCollectionIds.add(key);
           localStorage.setItem("se_lib_collapsed_cols", JSON.stringify([...collapsedCollectionIds]));
           renderTree();
+        };
+        row.addEventListener("click",(ev)=>{
+          if(ev.target.closest(".kebab")) return;
+          if(ev.target.closest(".tree-arrow")){ toggleCollapse(); return; }
+          currentCollectionId=c.id; selectedIds=new Set(); renderTree(); renderTable();
         });
+        row.addEventListener("dblclick",(ev)=>{ if(ev.target.closest(".kebab")||ev.target.closest(".tree-arrow")) return; ev.stopPropagation(); startInlineRename(c); });
+        keb.addEventListener("click",(ev)=>{ ev.stopPropagation(); buildMenuForCollection(c,keb); });
         ul.appendChild(li);
         if(!isCollapsed) renderBranch(String(c.id), depth+1);
       }
