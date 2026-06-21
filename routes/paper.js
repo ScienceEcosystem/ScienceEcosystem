@@ -12,10 +12,12 @@ router.get('/api/paper/:doi(*)', async (req, res, next) => {
   if (raw.startsWith("oa")) return next();
   if (raw.startsWith("links")) return next();
   if (raw.startsWith("citation-contexts")) return next();
+  if (raw.startsWith("abstract")) return next();
   if (raw.startsWith("artifacts?")) return next();
   if (raw.startsWith("oa?")) return next();
   if (raw.startsWith("links?")) return next();
   if (raw.startsWith("citation-contexts?")) return next();
+  if (raw.endsWith("/author-note")) return next();
   const doi = decodeURIComponent(raw);
   
   try {
@@ -324,6 +326,56 @@ async function s2FetchJson(url) {
   return { ok: res.ok, status: res.status, data, text };
 }
 
+const STANCE_LABELS = ["Supports", "Challenges", "Corrects", "Extends", "Uses method", "Background"];
+
+// One batched Claude call per request (not one per snippet) — classifies the
+// agree/disagree relationship, which is orthogonal to S2's own "intent"
+// (background/methodology/result describes WHAT the mention is, not stance).
+async function classifyCitationStances(items) {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey || !items.length) return;
+
+  const snippets = items.map(it => String(it.snippet || "").slice(0, 500));
+  const prompt = `A researcher is citing a paper. Below are ${snippets.length} numbered sentences, each from a different citing paper. For each, classify the citation stance as exactly one of: Supports, Challenges, Corrects, Extends, Uses method, Background.
+
+${snippets.map((s, i) => `${i + 1}. "${s}"`).join("\n")}
+
+Respond with ONLY a JSON array of ${snippets.length} strings, one label per sentence in order, e.g. ["Supports","Background",...]. No other text.`;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5",
+        max_tokens: 50 + snippets.length * 8,
+        messages: [{ role: "user", content: prompt }],
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return;
+    const data = await res.json();
+    const text = data?.content?.[0]?.text?.trim() || "";
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return;
+    const labels = JSON.parse(match[0]);
+    if (!Array.isArray(labels) || labels.length !== items.length) return;
+    labels.forEach((label, i) => {
+      if (STANCE_LABELS.includes(label)) items[i].stance = label;
+    });
+  } catch (e) {
+    console.error("classifyCitationStances failed:", e.message);
+    // fail open — items keep no stance field, endpoint still works
+  }
+}
+
 async function getSemanticScholarCitations(doi) {
   try {
     const paperRes = await s2FetchJson(`${S2_API_BASE}/paper/DOI:${encodeURIComponent(doi)}?fields=paperId`);
@@ -606,36 +658,11 @@ async function getLensImpact(doi, apiKey) {
   }
 }
 
-// Semantic Scholar abstract (fallback when OpenAlex abstract is missing)
-async function getSemanticScholarAbstract(doi) {
-  try {
-    const res = await fetch(
-      `https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=title,abstract`
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data?.abstract) return null;
-    return { title: data.title || null, abstract: data.abstract };
-  } catch (e) {
-    console.error('Semantic Scholar abstract error:', e);
-    return null;
-  }
-}
-
-// GET /api/paper/abstract?doi=10.xxxx
-router.get('/api/paper/abstract', async (req, res) => {
-  const doi = req.query?.doi;
-  if (!doi) return res.status(400).json({ error: 'doi required' });
-
-  try {
-    const ss = await getSemanticScholarAbstract(doi);
-    if (!ss) return res.status(404).json({ error: 'No abstract found' });
-    res.json({ source: 'semantic_scholar', title: ss.title, abstract: ss.abstract });
-  } catch (e) {
-    console.error('Abstract fallback error:', e);
-    res.status(500).json({ error: 'Failed to fetch abstract' });
-  }
-});
+// In-memory cache — this endpoint fans out to 5 external APIs plus (since stance
+// classification was added) a Claude call per request; without caching, every paper
+// page view re-triggers all of that.
+const CITATION_CONTEXTS_CACHE = new Map();
+const CITATION_CONTEXTS_TTL_MS = 6 * 60 * 60 * 1000;
 
 // GET /api/paper/citation-contexts?doi=10.xxxx
 router.get('/api/paper/citation-contexts', async (req, res) => {
@@ -644,6 +671,11 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
   const s2url = req.query?.s2url;
   const title = req.query?.title;
   if (!doi && !s2id && !s2url && !title) return res.status(400).json({ error: 'doi, s2id, s2url, or title required' });
+
+  const cacheKey = `${doi || ""}|${s2id || ""}|${s2url || ""}|${title || ""}`.toLowerCase();
+  const isDebug = req.query?.debug === "1";
+  const cached = !isDebug && CITATION_CONTEXTS_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return res.json(cached.value);
 
   try {
     let semanticScholar = null;
@@ -673,6 +705,8 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
       semanticScholar = semanticScholar.items || [];
     }
 
+    if (Array.isArray(semanticScholar)) await classifyCitationStances(semanticScholar);
+
     const result = {
       citationContexts: semanticScholar || [],
       citationLinks: openCitations || [],
@@ -687,8 +721,10 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
         lens: !!lensImpact
       }
     };
-    if (req.query?.debug === "1") {
+    if (isDebug) {
       result.debug = { semanticError, s2HasKey: !!(process.env.SEMANTIC_SCHOLAR_API_KEY) };
+    } else {
+      CITATION_CONTEXTS_CACHE.set(cacheKey, { value: result, expiresAt: Date.now() + CITATION_CONTEXTS_TTL_MS });
     }
 
     res.json(result);

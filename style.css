@@ -1743,6 +1743,16 @@ body.annot-erase .pdf-annot { cursor: crosshair; }
 .stance-methodology { color: #7c3aed; background: #f5f3ff; }
 .stance-result      { color: #0369a1; background: #e0f2fe; }
 
+/* AI-classified citation stance (Supports/Challenges/Corrects/Extends/Uses method) —
+   a different axis from the S2 intent badges above (what kind of mention vs.
+   agree/disagree). Colors reused from elsewhere on the site so they already
+   pass the WCAG contrast pass documented in notes.txt. */
+.stance-supports    { color: #15803d; background: #f0fdf4; }
+.stance-challenges  { color: #b45309; background: #fffbeb; }
+.stance-corrects    { color: #b91c1c; background: #fef2f2; }
+.stance-extends     { color: #0369a1; background: #e0f2fe; }
+.stance-uses-method { color: #475569; background: #f8fafc; }
+
 /* ---- Hover preview card ---- */
 #hoverPreviewCard {
   display: none;

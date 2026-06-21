@@ -396,6 +396,18 @@ async function pgInit() {
     );
   `);
 
+  // Author response field (Stage 2D) — paper author's public note on their own citation record
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS author_paper_notes (
+      paper_id TEXT NOT NULL,
+      orcid TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      note TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (paper_id, orcid)
+    );
+  `);
+
   // Library PDFs (user-scoped)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS library_pdfs (
@@ -743,6 +755,43 @@ async function claimAdd(orcid, author_id) {
 }
 async function claimDel(orcid, author_id) {
   await pool.query(`DELETE FROM claimed_authors WHERE orcid=$1 AND author_id=$2`, [orcid, author_id]);
+}
+
+// All OpenAlex author IDs associated with a user: primary (users.openalex_author_id),
+// extra claims (claimed_authors), and merged IDs (merged_claims) — combines the three
+// sources kept separate elsewhere in the schema.
+async function getUserAuthorIds(orcid) {
+  const ids = new Set();
+  const { rows: userRows } = await pool.query(`SELECT openalex_author_id FROM users WHERE orcid=$1`, [orcid]);
+  if (userRows[0]?.openalex_author_id) ids.add(userRows[0].openalex_author_id.trim());
+  const { rows: claimRows } = await pool.query(`SELECT author_id FROM claimed_authors WHERE orcid=$1`, [orcid]);
+  claimRows.forEach(r => ids.add(r.author_id.trim()));
+  const { rows: mergeRows } = await pool.query(`SELECT merged_author_id FROM merged_claims WHERE orcid=$1`, [orcid]);
+  mergeRows.forEach(r => ids.add(r.merged_author_id.trim()));
+  return [...ids].filter(Boolean);
+}
+
+// Verifies a user is an author of a given OpenAlex paper, by checking their claimed
+// author IDs against the paper's authorships. Always re-verified server-side — never
+// trust a client-supplied "I'm the author" flag.
+async function isAuthorOfPaper(orcid, paperId) {
+  const authorIds = await getUserAuthorIds(orcid);
+  if (!authorIds.length) return false;
+  const tail = String(paperId).replace(/^https?:\/\/openalex\.org\//i, "");
+  let work;
+  try {
+    work = await fetchJSONTimeout(
+      `https://api.openalex.org/works/${encodeURIComponent(tail)}?select=authorships`,
+      { headers: { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" } }, 8000
+    );
+  } catch {
+    return false;
+  }
+  const paperAuthorTails = (work?.authorships || [])
+    .map(a => a.author?.id ? a.author.id.replace(/^https?:\/\/openalex\.org\//i, "") : null)
+    .filter(Boolean);
+  const userTails = authorIds.map(id => id.replace(/^https?:\/\/openalex\.org\//i, ""));
+  return userTails.some(t => paperAuthorTails.includes(t));
 }
 
 // Follows
@@ -3121,61 +3170,46 @@ app.get("/api/paper/oa", async (req, res) => {
 });
 
 /* ---------------------------
-   Citation contexts (Semantic Scholar)
+   Author response field (Stage 2D)
 ----------------------------*/
-app.get("/api/paper/citation-contexts", async (req, res) => {
-  const doi = normalizeDoi(req.query?.doi || "");
-  if (!doi) return res.status(400).json({ error: "doi required" });
+app.get("/api/paper/:id/author-note", async (req, res) => {
+  const paperId = req.params.id;
+  const { rows } = await pool.query(
+    `SELECT orcid, note, updated_at FROM author_paper_notes WHERE paper_id=$1 ORDER BY updated_at DESC LIMIT 1`,
+    [paperId]
+  );
+  if (!rows[0]) return res.json({ note: null });
+  res.json({ note: rows[0].note, orcid: rows[0].orcid, updated_at: rows[0].updated_at });
+});
 
-  const cacheKey = `s2ctx:${doi.toLowerCase()}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) return res.json(cached);
+app.post("/api/paper/:id/author-note", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const paperId = req.params.id;
+  const note = String(req.body?.note || "").trim();
+  if (!note) return res.status(400).json({ error: "note required" });
+  if (note.length > 1000) return res.status(400).json({ error: "Note must be 1000 characters or fewer" });
 
-  const headers = { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" };
-  const s2Key = process.env.SEMANTIC_SCHOLAR_KEY;
-  if (s2Key) headers["x-api-key"] = s2Key;
+  const isAuthor = await isAuthorOfPaper(sess.orcid, paperId);
+  if (!isAuthor) return res.status(403).json({ error: "Only a verified author of this paper can add a note" });
 
-  try {
-    // 1. Resolve DOI → S2 paper ID and citation count
-    const meta = await fetchJSONTimeout(
-      `https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}?fields=paperId,citationCount,title`,
-      { headers }, 8000
-    );
-    if (!meta?.paperId) return res.status(404).json({ error: "Paper not found on Semantic Scholar" });
+  await pool.query(
+    `INSERT INTO author_paper_notes (paper_id, orcid, note)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (paper_id, orcid) DO UPDATE SET note=EXCLUDED.note, updated_at=now()`,
+    [paperId, sess.orcid, note]
+  );
+  res.json({ ok: true });
+});
 
-    // 2. Fetch up to 50 citing papers with context sentences
-    const citing = await fetchJSONTimeout(
-      `https://api.semanticscholar.org/graph/v1/paper/${meta.paperId}/citations`
-      + `?fields=contexts,intents,citingPaper.title,citingPaper.authors,citingPaper.year,citingPaper.externalIds,citingPaper.paperId&limit=50`,
-      { headers }, 10000
-    );
+app.delete("/api/paper/:id/author-note", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const paperId = req.params.id;
 
-    const results = (citing?.data || [])
-      .filter(c => c.contexts && c.contexts.length > 0)
-      .map(c => ({
-        paper: {
-          title: c.citingPaper?.title || null,
-          year: c.citingPaper?.year || null,
-          authors: (c.citingPaper?.authors || []).map(a => a.name),
-          doi: c.citingPaper?.externalIds?.DOI || null,
-          s2id: c.citingPaper?.paperId || null,
-        },
-        contexts: c.contexts,
-        intents: c.intents || [],
-      }));
+  const isAuthor = await isAuthorOfPaper(sess.orcid, paperId);
+  if (!isAuthor) return res.status(403).json({ error: "Only a verified author of this paper can remove this note" });
 
-    const payload = {
-      total_citations: meta.citationCount || 0,
-      contexts_available: results.length,
-      results,
-    };
-    // Cache for 6 hours — citation contexts don't change minute-to-minute
-    OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
-    res.json(payload);
-  } catch (err) {
-    console.error("GET /api/paper/citation-contexts failed:", err.message);
-    res.status(502).json({ error: "Semantic Scholar unavailable" });
-  }
+  await pool.query(`DELETE FROM author_paper_notes WHERE paper_id=$1 AND orcid=$2`, [paperId, sess.orcid]);
+  res.json({ ok: true });
 });
 
 /* ---------------------------

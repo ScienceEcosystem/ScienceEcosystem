@@ -1973,6 +1973,7 @@
       var hasOpenAccess = !!(get(p,"open_access.is_oa",false) || get(p,"best_oa_location.is_oa",false) || oaPdf);
       loadCitationContexts(doi);
     }
+    loadAuthorNote(p);
 
     await renderJournalIntegrityBlock(p, source);
   }
@@ -2210,6 +2211,7 @@
 
       if (contexts.length > 0) {
         renderCitationContexts(contexts, "all");
+        renderStanceSummary(contexts);
       } else if (list) {
         list.innerHTML = "<p class='muted'>No open-access citation snippets available yet.</p>";
       }
@@ -2266,12 +2268,134 @@
           ${c.year ? ` (${escapeHtml(c.year)})` : ""}
           <div class="citation-tags">
             ${c.intent ? `<span class="badge">${escapeHtml(c.intent)}</span>` : ""}
+            ${c.stance ? `<span class="stance-badge stance-${escapeHtml(c.stance.toLowerCase().replace(/\s+/g, "-"))}">${escapeHtml(c.stance)}</span>` : ""}
             ${c.isInfluential ? '<span class="badge badge-warn">Influential</span>' : ""}
             ${c.openAccessPdf ? `<a href="/pdf-viewer.html?pdf=${encodeURIComponent(c.openAccessPdf)}" target="_blank" class="badge badge-ok">Read PDF</a>` : ""}
           </div>
         </cite>
       </article>
     `).join("");
+  }
+
+  function renderStanceSummary(contexts) {
+    const el = document.getElementById("stanceSummary");
+    if (!el) return;
+    const withStance = contexts.filter(c => c.stance);
+    if (!withStance.length) { el.style.display = "none"; return; }
+    const counts = {};
+    withStance.forEach(c => { counts[c.stance] = (counts[c.stance] || 0) + 1; });
+    const order = ["Supports", "Challenges", "Corrects", "Extends", "Uses method", "Background"];
+    const parts = order.filter(label => counts[label]).map(label => `${counts[label]} ${label.toLowerCase()}`);
+    el.style.display = "";
+    el.textContent = `${withStance.length} citation${withStance.length !== 1 ? "s" : ""} with AI-classified stance: ${parts.join(", ")}. Stance classified by AI from citation context — may be inaccurate.`;
+  }
+
+  // ---- Author response (Stage 2D) ----
+  async function loadAuthorNote(work) {
+    var section = document.getElementById("authorNoteSection");
+    if (!section) return;
+    var workId = idTailFrom(work.id);
+    if (!workId) return;
+
+    var note = null;
+    try {
+      var resp = await fetch("/api/paper/" + encodeURIComponent(workId) + "/author-note");
+      if (resp.ok) {
+        var data = await resp.json();
+        note = data.note || null;
+      }
+    } catch(_) {}
+
+    var sess = null;
+    try { sess = await globalThis.SE_SESSION_PROMISE; } catch(_) {}
+
+    // Client-side hint only — not authoritative. The server re-verifies
+    // ownership on POST/DELETE via OpenAlex authorships, so a false positive
+    // here just shows an edit UI that the server would reject anyway.
+    var isLikelyAuthor = false;
+    if (sess) {
+      var myIds = [];
+      if (sess.openalex_author_id) myIds.push(String(sess.openalex_author_id).trim());
+      try {
+        var claims = await fetch("/api/claims", { credentials: "include" }).then(function(r){ return r.ok ? r.json() : {}; });
+        (claims.claims || []).forEach(function(c){ if (c.author_id) myIds.push(String(c.author_id).trim()); });
+        (claims.merges || []).forEach(function(m){ if (m.merged_author_id) myIds.push(String(m.merged_author_id).trim()); });
+      } catch(_) {}
+      var paperAuthorTails = (work.authorships || [])
+        .map(function(a){ return a.author && a.author.id ? idTailFrom(a.author.id) : null; })
+        .filter(Boolean);
+      isLikelyAuthor = myIds.some(function(id){ return paperAuthorTails.indexOf(idTailFrom(id)) !== -1; });
+    }
+
+    if (!note && !isLikelyAuthor) { section.style.display = "none"; return; }
+    section.style.display = "";
+    renderAuthorNoteView(workId, note, isLikelyAuthor);
+  }
+
+  function renderAuthorNoteView(workId, note, canEdit) {
+    var section = document.getElementById("authorNoteSection");
+    var html = '<h3 style="font-size:1rem; margin-bottom:.5rem;">Author’s note</h3>';
+    if (note) {
+      html += '<blockquote class="author-note-text" style="border-left:3px solid var(--primary,#0284c7); padding:.5rem .75rem; margin:0 0 .5rem; font-size:.9rem;">'
+            + escapeHtml(note) + '</blockquote>';
+    } else if (!canEdit) {
+      return;
+    } else {
+      html += '<p class="muted" style="font-size:.85rem;">Add a note about how this paper has been cited — visible to all readers.</p>';
+    }
+    if (canEdit) {
+      html += '<button type="button" id="authorNoteEditBtn" class="btn btn-secondary" style="font-size:.85rem;">'
+            + (note ? "Edit note" : "Add note") + '</button>';
+    }
+    section.innerHTML = html;
+    var editBtn = document.getElementById("authorNoteEditBtn");
+    if (editBtn) editBtn.addEventListener("click", function(){ renderAuthorNoteEditor(workId, note); });
+  }
+
+  function renderAuthorNoteEditor(workId, existingNote) {
+    var section = document.getElementById("authorNoteSection");
+    section.innerHTML =
+      '<h3 style="font-size:1rem; margin-bottom:.5rem;">Author’s note</h3>'
+      + '<textarea id="authorNoteInput" maxlength="1000" rows="4" style="width:100%; font-size:.9rem; padding:.5rem;">' + escapeHtml(existingNote || "") + '</textarea>'
+      + '<div style="display:flex; gap:.5rem; align-items:center; margin-top:.5rem;">'
+      + '<button type="button" id="authorNoteSaveBtn" class="btn btn-primary" style="font-size:.85rem;">Save</button>'
+      + '<button type="button" id="authorNoteCancelBtn" class="btn" style="font-size:.85rem;">Cancel</button>'
+      + (existingNote ? '<button type="button" id="authorNoteDeleteBtn" class="btn" style="font-size:.85rem; color:#b91c1c;">Delete</button>' : '')
+      + '<span class="muted" id="authorNoteCount" style="font-size:.78rem; margin-left:auto;"></span>'
+      + '</div>';
+
+    var input = document.getElementById("authorNoteInput");
+    var countEl = document.getElementById("authorNoteCount");
+    function updateCount(){ countEl.textContent = input.value.length + " / 1000"; }
+    input.addEventListener("input", updateCount);
+    updateCount();
+
+    document.getElementById("authorNoteCancelBtn").addEventListener("click", function(){
+      renderAuthorNoteView(workId, existingNote, true);
+    });
+    document.getElementById("authorNoteSaveBtn").addEventListener("click", async function(){
+      var text = input.value.trim();
+      if (!text) return;
+      try {
+        var resp = await fetch("/api/paper/" + encodeURIComponent(workId) + "/author-note", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ note: text }),
+        });
+        if (!resp.ok) { var err = await resp.json().catch(function(){ return {}; }); alert(err.error || "Failed to save note"); return; }
+        renderAuthorNoteView(workId, text, true);
+      } catch(_) { alert("Failed to save note"); }
+    });
+    var deleteBtn = document.getElementById("authorNoteDeleteBtn");
+    if (deleteBtn) deleteBtn.addEventListener("click", async function(){
+      if (!confirm("Remove this note?")) return;
+      try {
+        var resp = await fetch("/api/paper/" + encodeURIComponent(workId) + "/author-note", { method: "DELETE", credentials: "include" });
+        if (!resp.ok) { alert("Failed to delete note"); return; }
+        renderAuthorNoteView(workId, null, true);
+      } catch(_) { alert("Failed to delete note"); }
+    });
   }
 
   function renderPeerReviews(reviews) {

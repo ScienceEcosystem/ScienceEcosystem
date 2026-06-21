@@ -908,9 +908,10 @@
         var resp = await fetch("/api/paper/citation-contexts?doi=" + encodeURIComponent(dois[d]), { credentials: "include" });
         if (!resp.ok) continue;
         var data = await resp.json();
-        if (data.results && data.results.length > 0) {
-          allGroups.push({ doi: dois[d], total: data.total_citations, results: data.results });
-        }
+        // The endpoint returns a flat citationContexts[] (one entry per context
+        // sentence, not grouped by citing paper) — see routes/paper.js.
+        var items = data.citationContexts || [];
+        if (items.length > 0) allGroups.push({ doi: dois[d], items: items });
       } catch(_) {}
     }
 
@@ -919,6 +920,7 @@
       return;
     }
 
+    var anyStance = false;
     var html = "";
     for (var g = 0; g < allGroups.length; g++) {
       var group = allGroups[g];
@@ -933,47 +935,47 @@
       html += '<h3 style="font-size:1rem; margin-bottom:.5rem;">'
             + '<a href="' + paperHref + '">' + escapeHtml(workTitle) + '</a>'
             + ' <span class="muted" style="font-size:.85rem; font-weight:normal;">'
-            + group.total.toLocaleString() + ' citation' + (group.total !== 1 ? 's' : '')
+            + group.items.length.toLocaleString() + ' citation context' + (group.items.length !== 1 ? 's' : '')
             + '</span></h3>';
 
-      for (var r = 0; r < group.results.length && r < 5; r++) {
-        var c = group.results[r];
-        var citingDoi = c.paper.doi;
-        var citingHref = citingDoi
-          ? "paper.html?id=" + encodeURIComponent("https://doi.org/" + citingDoi)
-          : null;
-        var authorsStr = c.paper.authors.slice(0, 3).join(", ")
-          + (c.paper.authors.length > 3 ? " et al." : "");
-        var intentBadges = (c.intents || []).map(function(it) {
-          var label = it === "background" ? "Background"
-                    : it === "methodology" ? "Methodology"
-                    : it === "result" ? "Result"
-                    : it;
-          return '<span class="stance-badge stance-' + escapeHtml(it) + '">' + escapeHtml(label) + '</span>';
-        }).join(" ");
+      for (var r = 0; r < group.items.length && r < 5; r++) {
+        var c = group.items[r];
+        var badges = "";
+        if (c.intent) {
+          var intentLabel = c.intent === "background" ? "Background"
+                    : c.intent === "methodology" ? "Methodology"
+                    : c.intent === "result" ? "Result"
+                    : c.intent;
+          badges += '<span class="stance-badge stance-' + escapeHtml(c.intent) + '">' + escapeHtml(intentLabel) + '</span> ';
+        }
+        if (c.stance) {
+          anyStance = true;
+          badges += '<span class="stance-badge stance-' + escapeHtml(c.stance.toLowerCase().replace(/\s+/g, "-")) + '">' + escapeHtml(c.stance) + '</span> ';
+        }
 
         html += '<div class="cited-me-item" style="border-left:3px solid #e2e8f0; padding:.5rem .75rem; margin-bottom:.75rem;">';
         html += '<div style="font-size:.85rem; margin-bottom:.3rem;">';
-        if (citingHref) {
-          html += '<a href="' + citingHref + '" style="font-weight:500;">' + escapeHtml(c.paper.title || "Untitled") + '</a>';
+        if (c.url) {
+          html += '<a href="' + escapeHtml(c.url) + '" target="_blank" rel="noopener" style="font-weight:500;">' + escapeHtml(c.title || "Untitled") + '</a>';
         } else {
-          html += '<span style="font-weight:500;">' + escapeHtml(c.paper.title || "Untitled") + '</span>';
+          html += '<span style="font-weight:500;">' + escapeHtml(c.title || "Untitled") + '</span>';
         }
-        html += ' <span class="muted">(' + (c.paper.year || "?") + ')</span>';
-        if (authorsStr) html += ' · <span class="muted">' + escapeHtml(authorsStr) + '</span>';
+        html += ' <span class="muted">(' + (c.year || "?") + ')</span>';
+        if (c.authors) html += ' · <span class="muted">' + escapeHtml(c.authors) + '</span>';
         html += '</div>';
-        if (intentBadges) html += '<div style="margin-bottom:.35rem;">' + intentBadges + '</div>';
-        for (var ctx = 0; ctx < c.contexts.length && ctx < 2; ctx++) {
-          html += '<p style="font-size:.85rem; font-style:italic; color:#4b5563; margin:.2rem 0;">"' + escapeHtml(c.contexts[ctx]) + '"</p>';
-        }
+        if (badges) html += '<div style="margin-bottom:.35rem;">' + badges + '</div>';
+        if (c.snippet) html += '<p style="font-size:.85rem; font-style:italic; color:#4b5563; margin:.2rem 0;">"' + escapeHtml(c.snippet) + '"</p>';
         html += '</div>';
       }
 
-      if (group.results.length > 5) {
+      if (group.items.length > 5) {
         html += '<p class="muted" style="font-size:.82rem;">+'
-              + (group.results.length - 5) + ' more citing papers with context available</p>';
+              + (group.items.length - 5) + ' more citing papers with context available</p>';
       }
       html += '</div>';
+    }
+    if (anyStance) {
+      html += '<p class="muted" style="font-size:.78rem;">Stance labels (Supports/Challenges/etc.) are AI-classified from citation context — may be inaccurate.</p>';
     }
     list.innerHTML = html;
   }

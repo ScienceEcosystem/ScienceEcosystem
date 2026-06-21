@@ -1,5 +1,5 @@
 ScienceEcosystem — Development Notes
-Last updated: 2026-05-22
+Last updated: 2026-06-21
 =======================================================
 
 
@@ -348,7 +348,11 @@ Decision to make: do we cache citing papers in our DB or always fetch live?
   → Start with live fetch, cache if it gets slow.
   → Semantic Scholar may give better data here — see 2B.
 
-  [ ] Build "Who cited me" section on profile pages
+  [X] Build "Who cited me" section on profile pages (already existed, just
+      unchecked here — scripts/profile.js:885-979 loadWhoCitedMe(), wired
+      into profile.html:203-210. Built 2026-05-25, found/verified 2026-06-21).
+      Also fixed (2026-06-21) to consume the real API response shape — see
+      2B note below; was silently always showing "no contexts available".
 
 ──── 2B. CITATION CONTEXT — SHOW THE ACTUAL SENTENCES ────
 
@@ -397,11 +401,62 @@ Server endpoint needed:
   - Checks cache, fetches from S2 if stale/missing, returns JSON
   - Falls back gracefully if S2 doesn't have this paper
 
-  [ ] Get Semantic Scholar API key
-  [ ] Add citation_contexts table to DB
-  [ ] Build server endpoint GET /api/paper/:id/citation-contexts
-  [ ] Build UI section on paper.html "How this paper is cited"
-  [ ] Test with papers that have high citation counts
+  [X] Get Semantic Scholar API key — already have one in .env
+      (SEMANTIC_SCHOLAR_API_KEY), but it's currently INVALID: every call
+      with this key returns 403 Forbidden from S2's API (confirmed
+      2026-06-21 via direct curl — same DOI works fine with no key at all,
+      so it's not a rate-limit issue, the key itself is dead/revoked).
+      ACTION NEEDED: get a fresh key at semanticscholar.org/product/api
+      and update SEMANTIC_SCHOLAR_API_KEY on Render + .env, or the whole
+      citation-context feature (2B/2C, "Who cited me") silently returns
+      empty results in production right now.
+  [X] DB table: skipped — using in-memory cache instead (6h TTL,
+      CITATION_CONTEXTS_CACHE in routes/paper.js), same tradeoff notes.txt
+      already accepted for 2A. Fine at current scale.
+  [X] Build server endpoint GET /api/paper/citation-contexts — already
+      existed (routes/paper.js:667+, built 2026-03-07), aggregates Semantic
+      Scholar + OpenCitations + CORE + ScienceOpen + Lens. Found 2026-06-21
+      while wiring up 2C.
+  [X] Build UI section on paper.html "How this paper is cited" — already
+      existed (paper.html:90-114, scripts/paper.js loadCitationContexts/
+      renderCitationContexts, built 2026-03-07). Found 2026-06-21.
+  [X] Test with papers that have high citation counts — tested locally
+      against several DOIs (ResNet, etc); confirmed the route resolves
+      correctly end-to-end, but returns empty contexts due to the invalid
+      S2 key above, not a code bug.
+
+  BUGS FOUND AND FIXED while wiring up 2C (2026-06-21):
+  - There were actually TWO separate, independently-built implementations
+    of GET /api/paper/citation-contexts: one in routes/paper.js (2026-03-07,
+    multi-source aggregator, returns {citationContexts, peerReviews,
+    impact,...}) and a second, newer one added straight into server/index.js
+    (2026-05-25, simpler S2-only, returns {results, total_citations,...}).
+    Because routes/paper.js's router is mounted (app.use) before the
+    server/index.js route is reached, the OLD routes/paper.js version always
+    won — the May 25 version, and BOTH profile.js's loadWhoCitedMe (which
+    expected the May 25 shape) AND any future code built against it were
+    silently broken. Fixed by removing the dead server/index.js duplicate,
+    rewriting profile.js's loadWhoCitedMe to consume the real
+    routes/paper.js response shape, and adding stance classification (2C)
+    directly into routes/paper.js's implementation instead.
+  - Separately, routes/paper.js has a catch-all GET /api/paper/:doi(*)
+    route registered first, with an explicit allowlist of path prefixes
+    (artifacts/oa/links/citation-contexts) that skip it via next() — but
+    "abstract" was missing from that allowlist, so GET /api/paper/abstract
+    was ALSO being silently swallowed by the catch-all (returning unrelated
+    linkedResources JSON) and never reaching its real handler. This had two
+    duplicate definitions too, same pattern as above — kept the richer
+    server/index.js version (S2 → Europe PMC → CrossRef fallback chain),
+    deleted the routes/paper.js duplicate (S2-only), added "abstract" to
+    the skip-list. This bug predates this session entirely (paper.js's
+    abstract-fallback call has been broken since whenever both routes
+    started coexisting) and is unrelated to Stage 2 — found as a side
+    effect of fixing the citation-contexts shadowing.
+  - The new GET /api/paper/:id/author-note (added for 2D below) would have
+    hit the exact same catch-all shadowing bug — added a matching skip rule
+    (raw.endsWith("/author-note")) before it ever shipped.
+  - Verified all of the above with an isolated Express route-matching test
+    (not just code review) before considering it fixed.
 
 ──── 2C. CITATION STANCE CLASSIFICATION ────
 
@@ -469,11 +524,31 @@ Decisions to make:
   → Show confidence score or just the label?
     Just the label for now. Confidence adds complexity without clear user value.
 
-  [ ] Add stance columns to citation_contexts table
-  [ ] Build stance classification in server endpoint (call Claude API)
-  [ ] Add colour-coded stance labels to paper page citation section
-  [ ] Add stance summary counts to paper page header area
-  [ ] Test classification quality on 20-30 real examples manually
+  [X] Stance columns — skipped, no DB table for citation contexts at all
+      (see 2B), so stance lives only as a transient `stance` field on the
+      in-memory cached payload, not persisted.
+  [X] Build stance classification in server endpoint (2026-06-21) —
+      routes/paper.js classifyCitationStances(), one batched Claude Haiku
+      call per request (not per-citation — sends all context sentences
+      numbered in one prompt, parses a JSON array of labels back). Fails
+      open if ANTHROPIC_API_KEY is missing or the call errors — endpoint
+      still works, just without stance. Confirmed ANTHROPIC_API_KEY is
+      already configured and working in production (existing pattern at
+      server/index.js's /api/topic/synthesis). NOT YET VERIFIED with real
+      data end-to-end — blocked on the dead Semantic Scholar key (see 2B),
+      since there are no context sentences to classify without it.
+  [X] Add colour-coded stance labels to paper page citation section
+      (2026-06-21) — scripts/paper.js renderCitationContexts() + new
+      .stance-supports/.stance-challenges/.stance-corrects/.stance-extends/
+      .stance-uses-method CSS classes in style.css (colors reused from
+      elsewhere on the site so they already pass the WCAG contrast pass).
+  [X] Add stance summary counts to paper page header area (2026-06-21) —
+      new #stanceSummary line in paper.html + renderStanceSummary() in
+      scripts/paper.js, includes the "AI-classified, may be inaccurate"
+      attribution per the legal note in cross-cutting decision #7 below.
+      Also added to profile.js's "Who cited me" section.
+  [ ] Test classification quality on 20-30 real examples manually —
+      BLOCKED until the Semantic Scholar key is replaced (2B).
 
 ──── 2D. AUTHOR RESPONSE FIELD ────
 
@@ -509,14 +584,37 @@ Server endpoints:
   - DELETE /api/paper/:id/author-note (auth required, owner only)
 
 Ownership check: user is "owner" if their ORCID matches any author on the
-paper (as stored in OpenAlex authorships). We already have this logic for
-profile pages.
+paper (as stored in OpenAlex authorships). CORRECTION (2026-06-21): this
+logic did NOT already exist anywhere (checked thoroughly before building) —
+built fresh as getUserAuthorIds(orcid) + isAuthorOfPaper(orcid, paperId) in
+server/index.js, near the claims helpers. Combines primary
+users.openalex_author_id, claimed_authors, and merged_claims (previously
+three separate, never-combined sources), then fetches the OpenAlex work's
+authorships server-side to verify — never trusts a client-supplied flag.
 
-  [ ] Add author_paper_notes table
-  [ ] Build server endpoints (GET/POST/DELETE)
-  [ ] Add author note display to paper page (visible to all)
-  [ ] Add author note editor to paper page (owner-only, replaces display)
-  [ ] Test ownership check edge cases (multiple authors, merged IDs)
+  [X] Add author_paper_notes table (2026-06-21) — server/index.js, matches
+      the schema sketched above exactly.
+  [X] Build server endpoints (GET/POST/DELETE) (2026-06-21) —
+      server/index.js, right after the citation-contexts route. GET is
+      public; POST/DELETE require auth + isAuthorOfPaper (403 otherwise).
+      Already covered by the existing /api/paper/ rate limiter (60/min).
+      NOTE: GET would have been silently shadowed by routes/paper.js's
+      catch-all wildcard route (see bug note under 2B) — fixed before ship.
+  [X] Add author note display to paper page (visible to all) (2026-06-21) —
+      new #authorNoteSection in paper.html, loadAuthorNote()/
+      renderAuthorNoteView() in scripts/paper.js.
+  [X] Add author note editor to paper page (owner-only, replaces display)
+      (2026-06-21) — renderAuthorNoteEditor() in scripts/paper.js, textarea
+      with 1000-char counter, Save/Cancel/Delete. CSRF handled automatically
+      by scripts/session.js's patched window.fetch (no extra code needed).
+      Edit UI visibility is a client-side hint only (checks the user's
+      claimed OpenAlex IDs against the paper's authorships, already loaded
+      for the page) — the server independently re-verifies on every write.
+  [ ] Test ownership check edge cases (multiple authors, merged IDs) — not
+      yet tested against a real logged-in session (requires real ORCID
+      OAuth login, not practical to simulate in this environment). Verified
+      so far: GET returns {note:null} correctly, POST without auth/CSRF is
+      correctly rejected, author_paper_notes table confirmed created in DB.
 
 ──── STAGE 2 SUMMARY ────
 
