@@ -1993,6 +1993,12 @@ app.get("/api/profile/orcid/:orcid", async (req, res) => {
     if (row.visibility === "private") return res.status(403).json({ error: "Profile is private" });
     // Strip any sensitive fields before returning
     const { links: _links, languages: _lang, ...pub } = row;
+    // Additional claimed author IDs are public — the whole point is that
+    // visitors (not just the owner) see the merged publication list.
+    const { rows: claimRows } = await pool.query(
+      `SELECT author_id FROM claimed_authors WHERE orcid=$1`, [orcid]
+    );
+    pub.claimed_author_ids = claimRows.map(r => r.author_id);
     res.json(pub);
   } catch (e) {
     console.error("GET /api/profile/orcid failed:", e);

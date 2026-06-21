@@ -97,6 +97,31 @@ USER PROFILE PAGE (currently very empty)
       endpoint confirmed live and correctly CSRF/auth-gated. NOT yet tested
       through a real browser OAuth login end-to-end (would need a real
       ORCID login round-trip, not practical to simulate here).
+- [X] Fix merged-ID publication count not showing for logged-out visitors
+      (2026-06-21) — found via screenshot: Olivier's own profile showed
+      "Publications: 3" when logged in viewing his own profile, but only
+      "Publications: 1" when logged out viewing the same public profile URL.
+      Cause: scripts/profile.js's loadProfileByOrcid() only fetched
+      additional claimed author IDs (claimed_authors table — the "Additional
+      IDs to merge" chips in settings) via the auth-gated /api/claims
+      endpoint, and ONLY when isOwner was true. A logged-out or different
+      visitor never got the merge list at all. Fixed by adding
+      claimed_author_ids to the existing public GET /api/profile/orcid/:orcid
+      response (server/index.js) — this data is meant to be public anyway,
+      the whole point of the feature is that VISITORS see the merged list —
+      and changed profile.js to read it from there unconditionally instead
+      of the owner-only /api/claims call. Verified against Olivier's real
+      profile: endpoint now returns claimed_author_ids: ["A5117810853",
+      "A5133781948"] with no auth required.
+- [X] Fix "Login with ORCID" button contrast (2026-06-21) — the official
+      ORCID logo (grey wordmark + lime-green "iD" icon, assets/logos/orcid.png)
+      is designed for light backgrounds per ORCID's own brand guidelines;
+      placed on our green --success button it was green-icon-on-green-button,
+      nearly invisible (flagged via screenshot). Changed .btn-orcid
+      (style.css, used identically across every page via one shared class)
+      to a white background with a green border/text instead of solid green
+      fill — matches how ORCID's own button generator does it. No new image
+      assets needed.
 
 PAPER PAGE
 - [X] Include graphical abstracts and figures where available — Europe PMC figures API,

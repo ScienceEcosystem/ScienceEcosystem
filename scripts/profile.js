@@ -270,18 +270,15 @@
         ? seProfile.openalex_author_id.trim()
         : null;
 
-      // Fetch all claimed additional IDs (only available to owner)
+      // Additional claimed author IDs are public on /api/profile/orcid/:orcid
+      // (claimed_author_ids) — every visitor sees the merged publication
+      // list, not just the profile owner.
       var allIds = primaryId ? [primaryId] : [];
       var isOwner = !!(currentUser && currentUser.orcid === orcid);
-      if (isOwner && primaryId) {
-        try {
-          var claims = await fetch("/api/claims", { credentials: "include" }).then(function(r){ return r.ok ? r.json() : {}; });
-          var extras = (claims.claims || [])
-            .map(function(c){ return c.author_id.trim(); })
-            .filter(function(id){ return id && id !== primaryId; });
-          allIds = allIds.concat(extras);
-        } catch(_) {}
-      }
+      var extras = (seProfile && seProfile.claimed_author_ids || [])
+        .map(function(id){ return String(id).trim(); })
+        .filter(function(id){ return id && id !== primaryId; });
+      allIds = allIds.concat(extras);
 
       var opts = { enhanced: isOwner, user: currentUser, seUser: seProfile, allAuthorIds: allIds };
 
