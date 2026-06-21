@@ -55,6 +55,7 @@
         <p class="muted" style="margin:.4rem 0 0;">What you fill in here appears on your public researcher profile.</p>
       </div>
       <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+        <button id="importOrcidBtn" type="button" class="btn btn-secondary" title="Fills in empty fields from your ORCID profile — won't overwrite anything you've already entered">Import from ORCID</button>
         <a id="viewPublicProfile" class="btn btn-secondary" href="#" target="_blank">View public profile →</a>
         <a class="btn btn-secondary" href="user-profile.html">Dashboard</a>
       </div>
@@ -425,6 +426,24 @@
       });
       document.getElementById("newClaimId").addEventListener("keydown", e => {
         if (e.key === "Enter") { e.preventDefault(); document.getElementById("addClaimBtn").click(); }
+      });
+
+      // Import from ORCID — fills blanks only, never overwrites existing values
+      document.getElementById("importOrcidBtn").addEventListener("click", async function() {
+        const btn = this;
+        const msg = document.getElementById("msg");
+        btn.disabled = true;
+        btn.textContent = "Importing…";
+        try {
+          await api("/api/settings/import-orcid", { method: "POST" });
+          await load();
+          if (msg) { msg.style.color = "#16a34a"; msg.textContent = "Imported from ORCID — review and save below."; }
+        } catch (e) {
+          if (msg) { msg.style.color = "#dc2626"; msg.textContent = "Could not import from ORCID. Please try again."; }
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Import from ORCID";
+        }
       });
 
       // Avatar upload

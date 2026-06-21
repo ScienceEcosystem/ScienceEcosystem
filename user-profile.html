@@ -100,6 +100,14 @@
         </div>
       </div>
 
+      <!-- Complete your profile nudge -->
+      <div id="completeProfileNudge" class="panel" style="display:none; margin-bottom:1rem; background:#eff6ff; border:1px solid #bfdbfe;">
+        <p style="margin:0; font-size:.88rem; color:#1e40af;">
+          <strong>Your profile is missing:</strong> <span id="missingFieldsList"></span> —
+          <a href="settings-profile.html" style="color:#1e40af; font-weight:600;">complete it →</a>
+        </p>
+      </div>
+
       <!-- KPIs -->
       <div class="dash-grid">
         <div class="kpi">
@@ -208,6 +216,23 @@
       var pp = document.getElementById("linkPublicProfile");
       if (me.orcid) pp.href = "profile.html?orcid=" + encodeURIComponent(me.orcid);
       else pp.style.display = "none";
+
+      renderCompleteProfileNudge(me);
+    }
+
+    function renderCompleteProfileNudge(me) {
+      var nudge = document.getElementById("completeProfileNudge");
+      if (!nudge) return;
+      var missing = [];
+      if (!me.bio) missing.push("a bio");
+      if (!me.affiliation && !(me.affiliations && me.affiliations.length)) missing.push("an affiliation");
+      var hasExternalLink = ["website_url","google_scholar_url","researchgate_url","semantic_scholar_url",
+        "github_url","linkedin_url","twitter_url","wos_url"].some(function(k){ return !!me[k]; });
+      if (!hasExternalLink) missing.push("an external profile link");
+
+      if (!missing.length) { nudge.style.display = "none"; return; }
+      nudge.style.display = "";
+      document.getElementById("missingFieldsList").textContent = missing.join(", ");
     }
 
     function renderRecentPapers(items) {

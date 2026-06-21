@@ -679,19 +679,87 @@ const USER_COLS = `orcid, name, affiliation, affiliations, bio, keywords, langua
   openalex_author_id, google_scholar_url, researchgate_url, semantic_scholar_url,
   github_url, linkedin_url, twitter_url, wos_url, website_url, avatar_url`;
 
-async function upsertUser({ orcid, name, affiliation, bio = null, keywords = null, languages = null, links = null, visibility = null }) {
+// Parses ORCID's public v3.0 /record response into the subset of fields we
+// can prefill. Shared by the OAuth login callback (free — same fetch it
+// already makes) and the explicit "Import from ORCID" settings button.
+// Field paths verified 2026-06-21 against a real record (pub.orcid.org).
+const ORCID_URL_NAME_MAP = [
+  [/github/i, "github_url"],
+  [/linkedin/i, "linkedin_url"],
+  [/google scholar|^scholar$|scholar\.google/i, "google_scholar_url"],
+  [/researchgate/i, "researchgate_url"],
+  [/semantic ?scholar/i, "semantic_scholar_url"],
+  [/web of science|^wos$|clarivate/i, "wos_url"],
+  [/twitter|^x$/i, "twitter_url"],
+];
+const ORCID_URL_HOST_MAP = [
+  [/github\.com/i, "github_url"],
+  [/linkedin\.com/i, "linkedin_url"],
+  [/scholar\.google/i, "google_scholar_url"],
+  [/researchgate\.net/i, "researchgate_url"],
+  [/semanticscholar\.org/i, "semantic_scholar_url"],
+  [/webofscience\.com|clarivate\.com/i, "wos_url"],
+  [/twitter\.com|x\.com/i, "twitter_url"],
+];
+
+function parseOrcidRecord(rec) {
+  const person = rec?.person;
+  const given  = person?.name?.["given-names"]?.value || "";
+  const family = person?.name?.["family-name"]?.value || "";
+  const credit = person?.name?.["credit-name"]?.value || "";
+  const name = (credit || `${given} ${family}`).trim() || null;
+
+  const bio = person?.biography?.content?.trim() || null;
+
+  const keywords = (person?.keywords?.keyword || [])
+    .map(k => k?.content?.trim()).filter(Boolean);
+
+  const urls = {};
+  for (const ru of (person?.["researcher-urls"]?.["researcher-url"] || [])) {
+    const value = ru?.url?.value;
+    if (!value) continue;
+    const urlName = ru?.["url-name"] || "";
+    let field = ORCID_URL_NAME_MAP.find(([re]) => re.test(urlName))?.[1];
+    if (!field) field = ORCID_URL_HOST_MAP.find(([re]) => re.test(value))?.[1];
+    if (!field) field = "website_url"; // catch-all
+    if (!urls[field]) urls[field] = value; // first match per field wins
+  }
+
+  const empGroups = rec?.["activities-summary"]?.employments?.["affiliation-group"] || [];
+  const affiliations = empGroups
+    .map(g => g?.summaries?.[0]?.["employment-summary"]?.organization?.name)
+    .filter(Boolean);
+  const affiliation = affiliations[0] || null;
+
+  return { name, bio, keywords, affiliation, affiliations, ...urls };
+}
+
+async function upsertUser({ orcid, name, affiliation, affiliations = null, bio = null, keywords = null, languages = null, links = null, visibility = null,
+  google_scholar_url = null, researchgate_url = null, semantic_scholar_url = null,
+  github_url = null, linkedin_url = null, twitter_url = null, wos_url = null, website_url = null }) {
   await pool.query(
-    `INSERT INTO users (orcid, name, affiliation, bio, keywords, languages, links, visibility)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO users (orcid, name, affiliation, affiliations, bio, keywords, languages, links, visibility,
+       google_scholar_url, researchgate_url, semantic_scholar_url, github_url, linkedin_url, twitter_url, wos_url, website_url)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      ON CONFLICT (orcid) DO UPDATE SET
        name = COALESCE(users.name, EXCLUDED.name),
        affiliation = COALESCE(users.affiliation, EXCLUDED.affiliation),
+       affiliations = COALESCE(users.affiliations, EXCLUDED.affiliations),
        bio = COALESCE(users.bio, EXCLUDED.bio),
        keywords = COALESCE(users.keywords, EXCLUDED.keywords),
        languages = COALESCE(users.languages, EXCLUDED.languages),
        links = COALESCE(users.links, EXCLUDED.links),
-       visibility = COALESCE(users.visibility, EXCLUDED.visibility)`,
-    [orcid, name, affiliation, bio, keywords, languages, links, visibility]
+       visibility = COALESCE(users.visibility, EXCLUDED.visibility),
+       google_scholar_url = COALESCE(users.google_scholar_url, EXCLUDED.google_scholar_url),
+       researchgate_url = COALESCE(users.researchgate_url, EXCLUDED.researchgate_url),
+       semantic_scholar_url = COALESCE(users.semantic_scholar_url, EXCLUDED.semantic_scholar_url),
+       github_url = COALESCE(users.github_url, EXCLUDED.github_url),
+       linkedin_url = COALESCE(users.linkedin_url, EXCLUDED.linkedin_url),
+       twitter_url = COALESCE(users.twitter_url, EXCLUDED.twitter_url),
+       wos_url = COALESCE(users.wos_url, EXCLUDED.wos_url),
+       website_url = COALESCE(users.website_url, EXCLUDED.website_url)`,
+    [orcid, name, affiliation, affiliations, bio, keywords, languages, links, visibility,
+     google_scholar_url, researchgate_url, semantic_scholar_url, github_url, linkedin_url, twitter_url, wos_url, website_url]
   );
 }
 async function getUser(orcid) {
@@ -1620,29 +1688,36 @@ app.get("/auth/orcid/callback", async (req, res) => {
 
     // Name comes directly from the ORCID token response (always present)
     let name = (token.name || "").trim() || null;
-    let affiliation = null;
-    // Fetch public record for employment data (pub.orcid.org = public API, no auth needed)
+    let prefill = {};
+    // Fetch public record for profile prefill (pub.orcid.org = public API, no auth needed).
+    // Every field below is filled only if currently blank — see upsertUser()'s
+    // COALESCE pattern — so re-logging-in never overwrites anything the
+    // researcher has since edited by hand in settings.
     try {
       const recRes = await fetch(`https://pub.orcid.org/v3.0/${orcid}/record`, {
         headers: { "Accept": "application/json" }
       });
       if (recRes.ok) {
         const rec = await recRes.json();
-        // Use credit-name or given+family if token didn't supply a name
-        if (!name) {
-          const person = rec?.person;
-          const given  = person?.name?.["given-names"]?.value || "";
-          const family = person?.name?.["family-name"]?.value || "";
-          const credit = person?.name?.["credit-name"]?.value || "";
-          name = (credit || `${given} ${family}`).trim() || null;
-        }
-        const empList = rec?.["activities-summary"]?.employments?.["affiliation-group"];
-        const emp = Array.isArray(empList) && empList[0]?.["summaries"]?.[0]?.["employment-summary"];
-        affiliation = emp?.organization?.name || null;
+        prefill = parseOrcidRecord(rec);
+        if (!name) name = prefill.name;
       }
     } catch {}
 
-    await upsertUser({ orcid, name, affiliation });
+    await upsertUser({
+      orcid, name, affiliation: prefill.affiliation || null,
+      affiliations: prefill.affiliations?.length ? prefill.affiliations : null,
+      bio: prefill.bio || null,
+      keywords: prefill.keywords?.length ? prefill.keywords : null,
+      google_scholar_url: prefill.google_scholar_url || null,
+      researchgate_url: prefill.researchgate_url || null,
+      semantic_scholar_url: prefill.semantic_scholar_url || null,
+      github_url: prefill.github_url || null,
+      linkedin_url: prefill.linkedin_url || null,
+      twitter_url: prefill.twitter_url || null,
+      wos_url: prefill.wos_url || null,
+      website_url: prefill.website_url || null,
+    });
     await setSession(res, {
       orcid,
       orcid_access_token: token.access_token || null,
@@ -1779,6 +1854,42 @@ app.get("/api/orcid/record", async (req, res) => {
   }
 });
 
+// Explicit re-sync — for users who signed up before ORCID prefill existed,
+// or who've updated their ORCID profile since. Fills blanks only, via the
+// same upsertUser() COALESCE pattern the login callback uses — never
+// overwrites a field the researcher has already set in settings.
+app.post("/api/settings/import-orcid", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  try {
+    const recRes = await fetch(`https://pub.orcid.org/v3.0/${sess.orcid}/record`, {
+      headers: { "Accept": "application/json" }
+    });
+    if (!recRes.ok) return res.status(502).json({ error: "Could not reach ORCID" });
+    const rec = await recRes.json();
+    const prefill = parseOrcidRecord(rec);
+    await upsertUser({
+      orcid: sess.orcid, name: null, affiliation: prefill.affiliation || null,
+      affiliations: prefill.affiliations?.length ? prefill.affiliations : null,
+      bio: prefill.bio || null,
+      keywords: prefill.keywords?.length ? prefill.keywords : null,
+      google_scholar_url: prefill.google_scholar_url || null,
+      researchgate_url: prefill.researchgate_url || null,
+      semantic_scholar_url: prefill.semantic_scholar_url || null,
+      github_url: prefill.github_url || null,
+      linkedin_url: prefill.linkedin_url || null,
+      twitter_url: prefill.twitter_url || null,
+      wos_url: prefill.wos_url || null,
+      website_url: prefill.website_url || null,
+    });
+    const updated = await getUser(sess.orcid);
+    res.json({ ok: true, user: updated });
+  } catch (e) {
+    console.error("POST /api/settings/import-orcid failed:", e);
+    res.status(500).json({ error: "Failed to import from ORCID" });
+  }
+});
+
 app.patch("/api/settings/profile", async (req, res) => {
   const sess = await getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
@@ -1807,6 +1918,31 @@ app.patch("/api/settings/profile", async (req, res) => {
     wos_url:               sanitiseUrl(body.wos_url),
     website_url:           sanitiseUrl(body.website_url),
   };
+
+  // OpenAlex fallback — piggybacks on the user setting their author ID
+  // (an action they're already taking), filling keywords/affiliations only
+  // if they're still blank in this same save. No extra UI needed.
+  if (payload.openalex_author_id && (!payload.keywords.length || !payload.affiliations.length)) {
+    try {
+      const author = await fetchJSONTimeout(
+        `https://api.openalex.org/authors/${encodeURIComponent(payload.openalex_author_id)}`,
+        { headers: { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" } }, 8000
+      );
+      if (!payload.keywords.length) {
+        const concepts = (author?.x_concepts || []).slice(0, 8).map(c => c.display_name).filter(Boolean);
+        if (concepts.length) payload.keywords = concepts;
+      }
+      if (!payload.affiliations.length) {
+        const lkis = Array.isArray(author?.last_known_institutions) ? author.last_known_institutions : [];
+        const names = lkis.map(i => i?.display_name).filter(Boolean);
+        if (names.length) {
+          payload.affiliations = names;
+          if (!payload.affiliation) payload.affiliation = names[0];
+        }
+      }
+    } catch (_) {} // fail open — save proceeds without the fallback fill
+  }
+
   try {
     const updated = await updateProfile(sess.orcid, payload);
     res.json(updated || payload);

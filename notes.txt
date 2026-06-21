@@ -56,6 +56,47 @@ USER PROFILE PAGE (currently very empty)
       Verified end-to-end against the live dev server (all new element IDs/
       CSS confirmed present in served output) — not yet visually verified in
       a real browser session with real library data.
+- [X] ORCID/OpenAlex prefill across settings/dashboard/public profile
+      (2026-06-21) — goal: minimal manual typing for a researcher who
+      already has an ORCID. Confirmed Google Scholar and ResearchGate have
+      no public APIs and block scraping — not usable. ORCID's public API
+      (pub.orcid.org, no auth) and OpenAlex are the two real sources.
+      1. The ORCID OAuth login callback already fetched the public ORCID
+         record every login but only used name + first employment. Added
+         parseOrcidRecord() (server/index.js, shared helper) extracting
+         biography→bio, keywords, researcher-urls (matched by ORCID's own
+         human-assigned url-name label first — "Github"/"LinkedIn" etc. —
+         falling back to hostname matching, then a website_url catch-all),
+         and ALL employments→affiliations (not just the first). Verified
+         the exact ORCID v3.0 field paths against a real fetch (Olivier's
+         own record) before relying on them.
+      2. Extended upsertUser()'s COALESCE-fills-blanks-only pattern (already
+         used for name/affiliation/bio) to also cover affiliations + the 8
+         external URL columns, so this stays free and non-destructive —
+         happens silently on next login, never overwrites a field the
+         researcher already edited in settings.
+      3. Added explicit "Import from ORCID" button on settings-profile.html
+         (POST /api/settings/import-orcid) for re-syncing after the fact —
+         same parser, same fill-blanks-only behavior, for users who signed
+         up before this existed or updated their ORCID since.
+      4. OpenAlex fallback: when a researcher saves their openalex_author_id
+         in settings, if keywords/affiliations are still blank, opportunistically
+         fills keywords from x_concepts and affiliations from
+         last_known_institutions (same fields scripts/profile.js already
+         uses elsewhere) — piggybacks on an action they're already taking,
+         no extra UI. Verified field names against a real OpenAlex author.
+      5. Added a "Complete your profile" nudge card to user-profile.html
+         (dashboard), shown only when bio/affiliation/any external link is
+         still missing after the above, linking to settings.
+      Public profile page (profile.html) needed no changes — its external-
+      link rendering already expects exactly these field names, so it
+      automatically shows more once settings is better-filled.
+      Verified: parseOrcidRecord() tested against the real saved ORCID
+      record (correct name/github_url/linkedin_url/website_url extraction);
+      OpenAlex fallback tested against a real author record; import-orcid
+      endpoint confirmed live and correctly CSRF/auth-gated. NOT yet tested
+      through a real browser OAuth login end-to-end (would need a real
+      ORCID login round-trip, not practical to simulate here).
 
 PAPER PAGE
 - [X] Include graphical abstracts and figures where available — Europe PMC figures API,
