@@ -697,11 +697,15 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
       }
     }
 
-    const [openCitations, core, scienceOpen, lensImpact] = await Promise.all([
+    const [openCitations, core, scienceOpen, lensImpact, openAlexSnippets] = await Promise.all([
       doi ? getOpenCitations(doi) : null,
       doi ? getCORECitations(doi, process.env.CORE_API_KEY) : null,
       doi ? getScienceOpenReviews(doi) : null,
-      doi ? getLensImpact(doi, process.env.LENS_API_KEY) : null
+      doi ? getLensImpact(doi, process.env.LENS_API_KEY) : null,
+      // OpenAlex-only fallback/supplement — same reliable cites: filter the
+      // "Recently cited you" feed on user-profile.html already depends on,
+      // so this works even when Semantic Scholar is rate-limited or down.
+      doi ? getOpenAlexCitingAbstractSnippets(doi) : []
     ]);
 
     if (semanticScholar && !Array.isArray(semanticScholar) && typeof semanticScholar === "object" && "items" in semanticScholar) {
@@ -709,16 +713,21 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
       semanticScholar = semanticScholar.items || [];
     }
 
-    if (Array.isArray(semanticScholar)) await classifyCitationStances(semanticScholar);
+    const combinedContexts = [
+      ...(Array.isArray(semanticScholar) ? semanticScholar : []),
+      ...(openAlexSnippets || [])
+    ];
+    await classifyCitationStances(combinedContexts);
 
     const result = {
-      citationContexts: semanticScholar || [],
+      citationContexts: combinedContexts,
       citationLinks: openCitations || [],
       coreResults: core || [],
       peerReviews: scienceOpen || [],
       impact: lensImpact || null,
       sources: {
         semanticScholar: Array.isArray(semanticScholar) && semanticScholar.length > 0,
+        openAlexAbstracts: Array.isArray(openAlexSnippets) && openAlexSnippets.length > 0,
         openCitations: Array.isArray(openCitations) && openCitations.length > 0,
         core: Array.isArray(core) && core.length > 0,
         scienceOpen: Array.isArray(scienceOpen) && scienceOpen.length > 0,

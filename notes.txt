@@ -401,15 +401,28 @@ Server endpoint needed:
   - Checks cache, fetches from S2 if stale/missing, returns JSON
   - Falls back gracefully if S2 doesn't have this paper
 
-  [X] Get Semantic Scholar API key — already have one in .env
-      (SEMANTIC_SCHOLAR_API_KEY), but it's currently INVALID: every call
-      with this key returns 403 Forbidden from S2's API (confirmed
-      2026-06-21 via direct curl — same DOI works fine with no key at all,
-      so it's not a rate-limit issue, the key itself is dead/revoked).
-      ACTION NEEDED: get a fresh key at semanticscholar.org/product/api
-      and update SEMANTIC_SCHOLAR_API_KEY on Render + .env, or the whole
-      citation-context feature (2B/2C, "Who cited me") silently returns
-      empty results in production right now.
+  [X] Get Semantic Scholar API key (2026-06-21) — turned out the original
+      key was missing its "s2k-" prefix (only part of it got pasted into
+      .env originally, going back to 2026-05-25), which is why it always
+      403'd. Olivier re-applied, got a correctly-formatted s2k- key,
+      updated .env + Render. Basic paper lookups now return 200, but the
+      /paper/{id}/citations endpoint specifically keeps returning 429 even
+      after waiting — looks like a separate/stricter quota on that
+      endpoint, or it needs longer to fully activate than basic lookups.
+      Not fully resolved — revisit by retesting just the citations
+      endpoint after a longer wait (hours, not seconds).
+  [X] OpenAlex fallback wired in (2026-06-21) — rather than wait on S2,
+      wired the existing-but-unused getOpenAlexCitingAbstractSnippets()
+      (routes/paper.js, was dead code) into the citation-contexts endpoint
+      as a parallel source alongside Semantic Scholar. Uses the exact same
+      reliable OpenAlex cites: filter that "Recently cited you" on
+      user-profile.html already depends on — extracts the first 1-2
+      sentences of each citing paper's open-access abstract as a
+      context-like snippet. Verified end-to-end: even with S2 still 429ing,
+      this fallback alone now populates real citation contexts (tested
+      against the ResNet paper, got a real AlphaFold citing-snippet back).
+      citationContexts is now S2 results + OpenAlex results combined, not
+      S2-only. New sources.openAlexAbstracts flag in the response.
   [X] DB table: skipped — using in-memory cache instead (6h TTL,
       CITATION_CONTEXTS_CACHE in routes/paper.js), same tradeoff notes.txt
       already accepted for 2A. Fine at current scale.
@@ -1071,6 +1084,117 @@ CROSS-CUTTING DECISIONS (need answers before or during Stage 2)
      citation context. This may be inaccurate. Report an error."
    → We are showing what citing authors wrote, not making our own judgements.
      This is closer to indexing than editorialising.
+
+
+───────────────────────────────────────────────────────
+AI USAGE POLICY — COST, ACCURACY, AND NECESSITY GUARDRAILS
+Written 2026-06-21, after disabling AI features over cost/abuse concerns.
+───────────────────────────────────────────────────────
+
+THE PRINCIPLE
+
+Science and Wikipedia content must work completely without AI. AI is an
+optional enrichment layer on top of structured data (OpenAlex, Wikipedia,
+Semantic Scholar, GBIF, etc.), never a dependency. Every page on this site
+must remain fully correct and fully functional with AI_FEATURES_ENABLED
+unset. If a feature can't satisfy that, it's not built as a hard
+dependency — it degrades gracefully instead (this is already how
+/api/topic/synthesis and citation-stance classification work: missing key
+or disabled flag → feature just doesn't render, nothing else breaks).
+
+THE BAR FOR ADDING A NEW AI FEATURE
+
+Before building anything that calls an LLM, answer these in order:
+
+1. Can this be done from existing structured data with no inference at
+   all (OpenAlex fields, Wikipedia text, Semantic Scholar metadata)?
+   → If yes, do that instead. Don't reach for AI by default.
+
+2. Is the underlying input inherently unstructured free text that only
+   an LLM can extract signal from at this scale (e.g. classifying
+   citation sentences, summarising abstracts)?
+   → Only here does AI start to be justified.
+
+3. Is the call volume bounded and predictable, or can it be triggered by
+   an anonymous, unbounded, public input (e.g. one call per paper ID,
+   of which there are millions, vs. one call per topic/concept, of
+   which there are a few hundred thousand and growing slowly)?
+   → Bounded/low-cardinality + still cacheable → fine to keep as a live,
+     synchronous call behind a kill switch.
+   → Unbounded/high-cardinality + publicly triggerable → must NOT be a
+     live synchronous call. Move it to a scheduled batch job with a
+     fixed daily budget, or gate it behind authentication (which adds
+     real friction against bot abuse, unlike a per-IP rate limit).
+
+4. What's the worst-case monthly spend if this endpoint were hit by a
+   sustained botnet ignoring the rate limiter? If the honest answer is
+   "could actually hurt," it defaults OFF until a hard spend cap exists
+   in code (not just a feature flag) — e.g. a daily call counter that
+   stops calling Claude once a threshold is hit, failing open (skip AI,
+   don't error) the same way a missing key does today.
+
+ACCURACY & TRUST RULES (apply to every AI-derived field, always)
+
+- Never let an AI output be the only thing shown — always show the
+  underlying evidence right next to it (e.g. the actual citation
+  sentence next to its stance label), so a wrong label is obviously
+  checkable, not an opaque verdict.
+- Always visibly label AI output as AI-generated and fallible
+  ("AI-classified — may be inaccurate"), every time, no exceptions.
+  Already done for citation stance (see 2C above) and required before
+  any future AI field ships.
+- Never let AI output silently overwrite or hide ground-truth data.
+  Additive only. Removable. Versioned where it has any persistence.
+- For anything with reputational or legal weight (e.g. a "Refuted"
+  claim status in the Stage 4 vision), the AI's output is a starting
+  point for human/community review, never an auto-published verdict.
+  This is already the decision on file for Stage 4C — extend the same
+  rule to every earlier AI feature, not just claim status.
+- Build the "report this label" mechanism (cross-cutting decision #4)
+  before any AI-derived label is shown broadly/by default to logged-out
+  visitors — currently still a gap for citation stance.
+
+COST CONTAINMENT RULES (apply to every AI call site)
+
+- Batch, never loop: one Claude call should cover many items in a
+  single prompt (already the pattern for both /api/topic/synthesis and
+  citation-stance classification — never go back to one-call-per-item).
+- Cache aggressively and for a long time — classifications of fixed text
+  don't change. 6h-7d TTLs already used; consider permanent caching
+  (cache invalidated only by manual purge) once a feature is trusted.
+- Prefer low-cardinality keys (topic IDs, journal IDs) for synchronous
+  calls over high-cardinality ones (paper IDs, citation IDs).
+- A hard env-var kill switch (AI_FEATURES_ENABLED) must gate every AI
+  call site, independent of whether an API key is configured. Already
+  in place (2026-06-21) for both current AI features.
+
+APPLYING THIS TO WHAT EXISTS TODAY
+
+- Topic synthesis (/api/topic/synthesis) — LOW justification. The
+  Wikipedia article is already shown on every topic page; the AI
+  paragraph is largely redundant with content that's already free and
+  always accurate. Candidate for permanent removal rather than
+  re-enabling, unless it ends up doing something Wikipedia's article
+  genuinely doesn't (e.g. synthesizing across topic + trend data in a
+  way Wikipedia can't) — revisit only if there's a concrete reason.
+- Citation stance classification (2C) — MEDIUM justification. It
+  surfaces a real signal (agree/disagree) not available from any
+  existing data source — genuinely something "absolutely needed" if we
+  want it at all, can't be derived structurally. But it's currently a
+  live, synchronous, unauthenticated, paper-ID-keyed call — exactly the
+  unbounded-cardinality case flagged above. Before re-enabling:
+    1. Move to a nightly batch job over papers that actually got
+       pageviews recently (a small, real, bounded list), with a fixed
+       daily Claude budget, instead of classifying on every live
+       pageview of every paper that's ever existed.
+    2. Build the "report this label" control first.
+    3. Only then flip AI_FEATURES_ENABLED=true on Render.
+- Claim extraction / evidence status (Stage 4, years out) — eventually
+  unavoidable (reading millions of abstracts has no non-AI substitute),
+  but by the time this is reachable, traffic and funding should justify
+  the cost. Always as an offline batch process with a fixed budget,
+  never a live per-request call. Same accuracy rules apply, doubled —
+  this is the highest-stakes AI use case on the roadmap.
 
 
 ───────────────────────────────────────────────────────
