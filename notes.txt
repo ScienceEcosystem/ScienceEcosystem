@@ -342,10 +342,14 @@ existing literature and makes its evolution visible.
 CONCRETE ROADMAP TOWARD THIS VISION
 
 Near-term (buildable now):
-- [ ] Citation context display on paper pages (Semantic Scholar API)
-- [ ] Citation stance classification using Claude API
-      (short prompt on citation sentences → Supports/Challenges/Corrects/etc.)
-- [ ] Author response field on paper pages (owner-only, visible to all)
+- [X] Citation context display on paper pages (Semantic Scholar API) — see
+      Stage 2B below, done (paper.html + profile.js, 2026-03-07/2026-05-25,
+      verified working 2026-06-21)
+- [X] Citation stance classification using Claude API — see Stage 2C below,
+      built 2026-06-21 but currently disabled via AI_FEATURES_ENABLED kill
+      switch pending cost/abuse hardening (see AI USAGE POLICY section)
+- [X] Author response field on paper pages (owner-only, visible to all) —
+      see Stage 2D below, done 2026-06-21
 
 Medium-term (Phase 2 foundation):
 - [ ] Claim extraction from paper abstracts and results sections
