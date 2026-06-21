@@ -20,6 +20,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
+// ── AI features kill switch — defaults OFF. The citation-stance and topic-
+// synthesis endpoints are public and keyed by high-cardinality IDs (paper
+// IDs especially), so a bot can trivially generate unbounded distinct
+// Claude API calls past the per-IP rate limiter. Set AI_FEATURES_ENABLED=true
+// on Render to turn these back on once there's tighter abuse protection.
+function aiFeaturesEnabled() {
+  return process.env.AI_FEATURES_ENABLED === "true";
+}
+
 // ── Cloudflare R2 client (S3-compatible) ──────────────────────────────────────
 const r2Client = process.env.R2_ACCOUNT_ID ? new S3Client({
   region: "auto",
@@ -3511,7 +3520,7 @@ app.get("/api/topic/synthesis", async (req, res) => {
   const cached = cacheGet(cacheKey);
   if (cached) return res.json(cached);
 
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const anthropicKey = aiFeaturesEnabled() ? process.env.ANTHROPIC_API_KEY : null;
   if (!anthropicKey) return res.status(503).json({ error: "Synthesis not available" });
 
   try {

@@ -332,7 +332,11 @@ const STANCE_LABELS = ["Supports", "Challenges", "Corrects", "Extends", "Uses me
 // agree/disagree relationship, which is orthogonal to S2's own "intent"
 // (background/methodology/result describes WHAT the mention is, not stance).
 async function classifyCitationStances(items) {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  // Kill switch — defaults OFF. This endpoint is public and keyed by paper ID
+  // (unbounded cardinality), so a bot can trivially generate unbounded distinct
+  // Claude calls past the per-IP rate limiter. Set AI_FEATURES_ENABLED=true on
+  // Render to turn this back on once there's tighter abuse protection.
+  const anthropicKey = process.env.AI_FEATURES_ENABLED === "true" ? process.env.ANTHROPIC_API_KEY : null;
   if (!anthropicKey || !items.length) return;
 
   const snippets = items.map(it => String(it.snippet || "").slice(0, 500));

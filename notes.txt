@@ -537,6 +537,23 @@ Decisions to make:
       server/index.js's /api/topic/synthesis). NOT YET VERIFIED with real
       data end-to-end — blocked on the dead Semantic Scholar key (see 2B),
       since there are no context sentences to classify without it.
+
+      KILL SWITCH ADDED (2026-06-21): Olivier flagged a real cost/abuse
+      risk before this ever went live — both this endpoint and
+      /api/topic/synthesis are public, unauthenticated, and keyed by
+      high-cardinality IDs (paper IDs especially — millions of possible
+      values), so a botnet spread across IPs isn't meaningfully slowed by
+      the existing per-IP rate limiter, and could rack up real Claude API
+      spend by hitting many distinct never-before-seen IDs. Added
+      AI_FEATURES_ENABLED env var (checked in both server/index.js's
+      aiFeaturesEnabled() and routes/paper.js's classifyCitationStances) —
+      defaults to OFF/disabled regardless of whether ANTHROPIC_API_KEY is
+      set. Both endpoints fail open exactly as if no key were configured
+      (503 / no stance field) — verified locally. ACTION: leave unset on
+      Render for now. To re-enable later, set AI_FEATURES_ENABLED=true —
+      but first add tighter abuse protection (e.g. gate to authenticated
+      users only, or a global daily Claude spend cap, not just per-IP
+      rate limiting).
   [X] Add colour-coded stance labels to paper page citation section
       (2026-06-21) — scripts/paper.js renderCitationContexts() + new
       .stance-supports/.stance-challenges/.stance-corrects/.stance-extends/
