@@ -740,11 +740,16 @@ authorships server-side to verify — never trusts a client-supplied flag.
       Edit UI visibility is a client-side hint only (checks the user's
       claimed OpenAlex IDs against the paper's authorships, already loaded
       for the page) — the server independently re-verifies on every write.
-  [ ] Test ownership check edge cases (multiple authors, merged IDs) — not
-      yet tested against a real logged-in session (requires real ORCID
-      OAuth login, not practical to simulate in this environment). Verified
-      so far: GET returns {note:null} correctly, POST without auth/CSRF is
-      correctly rejected, author_paper_notes table confirmed created in DB.
+  [X] Test with a real logged-in session (2026-06-21) — Olivier logged into
+      production (scienceecosystem.org) and tested the full round trip on
+      a real claimed paper (W3103727569, "Does plastic waste kill
+      mangroves?"): added a note via the UI → confirmed it landed correctly
+      in author_paper_notes (right orcid/paper_id/timestamp) → confirmed
+      GET is publicly readable with no auth (the whole point — visitors see
+      it) → confirmed an unauthenticated POST is correctly rejected
+      (403, CSRF/auth gate) → deleted via the UI → confirmed the row was
+      removed and the public endpoint returns {note:null} again. Full
+      feature confirmed working end-to-end in production.
 
 ──── STAGE 2 SUMMARY ────
 
