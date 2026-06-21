@@ -935,34 +935,41 @@
             + group.items.length.toLocaleString() + ' citation context' + (group.items.length !== 1 ? 's' : '')
             + '</span></h3>';
 
+      // Each citing paper rendered as a standard paper card (same design used
+      // everywhere else), with the citation snippet shown where the abstract
+      // would normally go — instead of the bespoke "cited-me-item" markup
+      // this used to have.
       for (var r = 0; r < group.items.length && r < 5; r++) {
         var c = group.items[r];
-        var badges = "";
+        var extraChips = [];
         if (c.intent) {
           var intentLabel = c.intent === "background" ? "Background"
                     : c.intent === "methodology" ? "Methodology"
                     : c.intent === "result" ? "Result"
                     : c.intent;
-          badges += '<span class="stance-badge stance-' + escapeHtml(c.intent) + '">' + escapeHtml(intentLabel) + '</span> ';
+          extraChips.push('<span class="stance-badge stance-' + escapeHtml(c.intent) + '">' + escapeHtml(intentLabel) + '</span>');
         }
         if (c.stance) {
           anyStance = true;
-          badges += '<span class="stance-badge stance-' + escapeHtml(c.stance.toLowerCase().replace(/\s+/g, "-")) + '">' + escapeHtml(c.stance) + '</span> ';
+          extraChips.push('<span class="stance-badge stance-' + escapeHtml(c.stance.toLowerCase().replace(/\s+/g, "-")) + '">' + escapeHtml(c.stance) + '</span>');
         }
-
-        html += '<div class="cited-me-item" style="border-left:3px solid #e2e8f0; padding:.5rem .75rem; margin-bottom:.75rem;">';
-        html += '<div style="font-size:.85rem; margin-bottom:.3rem;">';
-        if (c.url) {
-          html += '<a href="' + escapeHtml(c.url) + '" target="_blank" rel="noopener" style="font-weight:500;">' + escapeHtml(c.title || "Untitled") + '</a>';
-        } else {
-          html += '<span style="font-weight:500;">' + escapeHtml(c.title || "Untitled") + '</span>';
-        }
-        html += ' <span class="muted">(' + (c.year || "?") + ')</span>';
-        if (c.authors) html += ' · <span class="muted">' + escapeHtml(c.authors) + '</span>';
-        html += '</div>';
-        if (badges) html += '<div style="margin-bottom:.35rem;">' + badges + '</div>';
-        if (c.snippet) html += '<p style="font-size:.85rem; font-style:italic; color:#4b5563; margin:.2rem 0;">"' + escapeHtml(c.snippet) + '"</p>';
-        html += '</div>';
+        var fakeWork = {
+          id: null,
+          display_name: c.title || "Untitled",
+          publication_year: c.year || null,
+          authorships: (c.authors || "").split(",").map(function(n){
+            n = n.trim();
+            return n ? { author: { display_name: n } } : null;
+          }).filter(Boolean),
+        };
+        html += SE.components.renderPaperCard(fakeWork, {
+          compact: true,
+          abstract: c.snippet || "",
+          hideActions: true,
+          minimalMeta: true,
+          titleHref: c.url || "#",
+          extraChips: extraChips,
+        });
       }
 
       if (group.items.length > 5) {
@@ -975,6 +982,7 @@
       html += '<p class="muted" style="font-size:.78rem;">Stance labels (Supports/Challenges/etc.) are AI-classified from citation context — may be inaccurate.</p>';
     }
     list.innerHTML = html;
+    SE.components.enhancePaperCards(list);
   }
 
   // ---- Bulk "Add all to library" (opt-in — library stays curated, never auto-synced on claim) ----
@@ -1032,7 +1040,10 @@
       for (var a=0;a<authorships.length;a++){
         var aid = idTail(get(authorships[a], "author.id", null));
         var name = get(authorships[a], "author.display_name", null);
-        if (!aid || aid === authorTail) continue;
+        // Exclude the profile owner's own merged/claimed name variants —
+        // otherwise "Olivier Raven" and "O.V. Raven" show up as if they
+        // were each other's co-author.
+        if (!aid || aid === authorTail || authorTails[aid]) continue;
         if (!coauthors[aid]) coauthors[aid] = { name: name || "Unknown", tail: aid, count: 0 };
         coauthors[aid].count += 1;
       }

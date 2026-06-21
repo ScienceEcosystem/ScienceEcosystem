@@ -318,7 +318,7 @@ body {
   margin: 1rem 0 2rem;
 }
 .main-col { min-width: 0; grid-column: 1; }
-.side-col { min-width: 260px; grid-column: 2; grid-row: 1 / -1; }
+.side-col { min-width: 260px; grid-column: 2; }
 
 .list-reset { list-style: none; margin: 0; padding: 0; }
 .list-item { padding: .5rem .75rem; border-radius: 8px; cursor: pointer; }

@@ -122,6 +122,46 @@ USER PROFILE PAGE (currently very empty)
       to a white background with a green border/text instead of solid green
       fill — matches how ORCID's own button generator does it. No new image
       assets needed.
+- [X] Fix three profile-page layout/design issues (2026-06-21), flagged via
+      screenshot:
+      1. Large empty gap in the main column between Publications and "Who
+         cited me". Cause: #profileMain and #whoCitedMeSection were two
+         separate .main-col grid items while the sidebar (.side-col) spanned
+         grid-row:1/-1 across both their rows — when the sidebar's own
+         content was taller than the Publications list alone, CSS Grid grew
+         the second (mostly-empty, since whoCitedMeSection loads async)
+         row to fit it, leaving a tall empty gap before "Who cited me"
+         finally rendered into it. Fixed by wrapping both sections in one
+         `<div class="main-col">` (profile.html) so there's exactly one
+         grid item per column — removed the now-unnecessary
+         `grid-row: 1/-1` from .side-col (style.css).
+      2. Co-authors sidebar showed the profile owner's own name variants
+         (e.g. "Olivier Raven" and "O.V. Raven" listed as if they were each
+         other's co-author) — a direct side effect of the public-profile
+         merge fix from earlier this session (now correctly includes all
+         claimed name variants in the works list, but the co-author loop
+         didn't exclude them). Fixed in scripts/profile.js
+         processWorksForSidebar(): co-author loop now also checks
+         `authorTails[aid]` (the same set already used elsewhere on this
+         page to recognize the owner's own merged IDs), not just the
+         primary ID.
+      3. "Who cited me" entries used bespoke custom-styled HTML, visually
+         inconsistent with the standard paper cards used everywhere else.
+         Extended SE.components.renderPaperCard() (components.js) with new
+         opts: `abstract` (override the abstract text — used to show the
+         citation snippet instead), `hideActions` (hide Save/Cite buttons,
+         since these are external citing papers we don't have full
+         metadata for), `minimalMeta` (year only, no fake "Cited by 0"),
+         `titleHref` (link externally instead of to our paper.html when we
+         don't have a real internal id), `extraChips` (lets callers append
+         badges — used for the intent/stance labels). Rewrote
+         loadWhoCitedMe() in scripts/profile.js to build a small synthetic
+         work object per citation and render it through the shared card
+         component instead of custom markup — same look as Publications,
+         search results, and topic pages everywhere else on the site.
+      Verified all three end-to-end against the live dev server (section
+      tag balance confirmed, all new opts/checks confirmed present in
+      served output) — not yet visually confirmed in a real browser.
 
 PAPER PAGE
 - [X] Include graphical abstracts and figures where available — Europe PMC figures API,

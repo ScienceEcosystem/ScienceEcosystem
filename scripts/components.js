@@ -377,8 +377,9 @@
     var cited = get(work,"cited_by_count",0) || 0;
 
     var title = opts.highlightQuery ? maybeHighlight(titleRaw, opts.highlightQuery) : escapeHtml(titleRaw);
+    var titleHref = opts.titleHref || ("paper.html?id="+encodeURIComponent(idTail));
 
-    var abs = abstractTextFrom(work);
+    var abs = opts.abstract != null ? opts.abstract : abstractTextFrom(work);
     var shortRaw = firstSentence(abs);
     var short = opts.highlightQuery ? maybeHighlight(shortRaw, opts.highlightQuery) : escapeHtml(shortRaw);
     var full = escapeHtml(abs);
@@ -396,6 +397,7 @@
     if (oaPDF) chips.push('<a class="badge badge-oa" href="'+oaPDF+'" target="_blank" rel="noopener">PDF</a>');
     if (doiHref) chips.push('<a class="badge" href="'+doiHref+'" target="_blank" rel="noopener">DOI</a>');
     if (work.id) chips.push('<a class="badge" href="'+work.id+'" target="_blank" rel="noopener">OpenAlex</a>');
+    if (Array.isArray(opts.extraChips)) chips = chips.concat(opts.extraChips);
 
     var citeData = collectCiteData(work);
     function attr(v){ return v ? escapeHtml(String(v)) : ""; }
@@ -418,16 +420,19 @@
       'data-cite-doiurl="'+attr(citeData.doi_url)+'" '+
       'data-cite-url="'+attr(citeData.url)+'" '+
       'data-cite-authors="'+attr((citeData.authors||[]).join(' | '))+'">'+
-      '<h3 class="card-title"><a href="paper.html?id='+encodeURIComponent(idTail)+'">'+title+'</a></h3>'+
-      '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+journalLinkHTML(work)+
-        ' · <span title="Times this work has been cited">Cited by '+escapeHtml(String(cited))+'</span></p>'+
+      '<h3 class="card-title"><a href="'+escapeHtml(titleHref)+'"'+(opts.titleHref?' target="_blank" rel="noopener"':'')+'>'+title+'</a></h3>'+
+      (opts.minimalMeta
+        ? '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span></p>'
+        : '<p class="meta"><span class="muted">'+escapeHtml(String(year))+'</span> · <strong>Published in:</strong> '+journalLinkHTML(work)+
+          ' · <span title="Times this work has been cited">Cited by '+escapeHtml(String(cited))+'</span></p>')+
       '<p class="authors"><strong>Authors:</strong> '+authors+'</p>'+
       '<div class="paper-actions-row">'+
         '<div class="chip-row">'+chips.join(" ")+'</div>'+
+        (opts.hideActions ? '' :
         '<div class="card-actions">'+
           '<button class="btn btn-secondary btn-save" title="Add to Library" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'+
           '<button class="btn btn-secondary btn-cite" title="Cite this paper" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'+
-        '</div>'+
+        '</div>')+
       '</div>'+
       '<p class="abstract">'+
         (short ? '<span class="abs-short">'+short+'</span>' : '<span class="muted">No summary available.</span>')+

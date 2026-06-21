@@ -179,38 +179,43 @@
 
     <!-- MAIN + SIDEBAR -->
     <div class="layout-grid">
-      <!-- Publications -->
-      <section id="profileMain" class="panel main-col">
-        <div class="pubs-header">
-          <h2>Publications</h2>
-          <div class="sort-controls">
-            <button id="bulkAddToLibraryBtn" class="btn btn-secondary" style="display:none;">Add all to library</button>
-            <label for="pubSort">Sort by:</label>
-            <select id="pubSort">
-              <option value="date" selected>Date</option>
-              <option value="citations">Citations</option>
-            </select>
-            <label for="orderSort">Order:</label>
-            <select id="orderSort">
-              <option value="desc" selected>High to low / Newest</option>
-              <option value="asc">Low to high / Oldest</option>
-            </select>
+      <!-- Main column: Publications + Who cited me, wrapped together so the
+           sidebar (which spans the same grid rows) can't stretch this
+           column's rows taller than its actual content — see notes.txt. -->
+      <div class="main-col">
+        <!-- Publications -->
+        <section id="profileMain" class="panel">
+          <div class="pubs-header">
+            <h2>Publications</h2>
+            <div class="sort-controls">
+              <button id="bulkAddToLibraryBtn" class="btn btn-secondary" style="display:none;">Add all to library</button>
+              <label for="pubSort">Sort by:</label>
+              <select id="pubSort">
+                <option value="date" selected>Date</option>
+                <option value="citations">Citations</option>
+              </select>
+              <label for="orderSort">Order:</label>
+              <select id="orderSort">
+                <option value="desc" selected>High to low / Newest</option>
+                <option value="asc">Low to high / Oldest</option>
+              </select>
+            </div>
           </div>
-        </div>
-        <div id="publicationsList" aria-live="polite">Loading publications...</div>
-        <div id="pubsPagination" style="margin-top:1rem;"></div>
-      </section>
+          <div id="publicationsList" aria-live="polite">Loading publications...</div>
+          <div id="pubsPagination" style="margin-top:1rem;"></div>
+        </section>
 
-      <!-- Who cited me -->
-      <section id="whoCitedMeSection" class="panel main-col" style="display:none; margin-top:1.5rem;">
-        <h2 style="margin-bottom:.75rem;">Who cited me</h2>
-        <p class="muted" style="font-size:.85rem; margin-bottom:1rem;">
-          Context sentences showing how your papers are cited in the literature, sourced from Semantic Scholar.
-        </p>
-        <div id="whoCitedMeList"></div>
-      </section>
+        <!-- Who cited me -->
+        <section id="whoCitedMeSection" class="panel" style="display:none; margin-top:1.5rem;">
+          <h2 style="margin-bottom:.75rem;">Who cited me</h2>
+          <p class="muted" style="font-size:.85rem; margin-bottom:1rem;">
+            Context sentences showing how your papers are cited in the literature, sourced from Semantic Scholar.
+          </p>
+          <div id="whoCitedMeList"></div>
+        </section>
+      </div>
 
-            <!-- Sidebar -->
+      <!-- Sidebar -->
       <aside id="profileSidebar" class="side-col">
 
         <!-- Open Science Portfolio -->
