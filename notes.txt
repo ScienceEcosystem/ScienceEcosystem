@@ -162,6 +162,35 @@ USER PROFILE PAGE (currently very empty)
       Verified all three end-to-end against the live dev server (section
       tag balance confirmed, all new opts/checks confirmed present in
       served output) — not yet visually confirmed in a real browser.
+- [X] Reorder paper.html sections + fix double-box nesting (2026-06-21),
+      flagged via screenshot:
+      1. Moved "How this paper is being cited" (citationContextsSection)
+         to appear right after the Similar Papers Map (graphBlock) instead
+         of much earlier in the page (it used to sit right after Figures,
+         before the author note/objects/graph sections). New order:
+         Abstract → Figures → Author's note → Objects → Similar Papers Map
+         → How this paper is being cited → Papers like this/References &
+         Citations.
+      2. "Papers like this" and the two "References & Citations"
+         subsections ("Papers this work cites"/"Papers that cite this
+         work") were each wrapped in their own `.panel.light` box
+         (border+shadow+padding, since no CSS override for `.light`
+         actually existed — it just inherited the full `.panel` look) on
+         top of each individual paper card *also* being boxed
+         (.result-card.paper-card) — nested boxes inside boxes. Removed the
+         outer `.panel.light` wrapper from all three (scripts/paper.js) —
+         confirmed via grep that this class combo is used nowhere else
+         relevant on this page (other 3 usages are unrelated controls,
+         left untouched) — so now only the individual cards are boxed,
+         consistent with how Abstract/Publications etc. already look.
+      3. Simplified the confusing italic sub-headings: "Papers this work
+         *cites*" → "References", "Papers that *cite* this work" →
+         "Cited by" (matches familiar Google Scholar-style terminology,
+         no italics, no panel title + sub-title redundancy with the
+         "References & Citations" h2 above them).
+      Verified against the live dev server: section order in served HTML
+      confirmed (graphBlock → citationContextsSection → relatedBlock), new
+      headings present, panel-light removed from the 3 relevant spots.
 
 PAPER PAGE
 - [X] Include graphical abstracts and figures where available — Europe PMC figures API,

@@ -1726,17 +1726,19 @@
     var html = [];
     html.push('<h2>References & Citations</h2>');
 
-    // Referenced
-    html.push('<section class="panel light" style="margin-bottom:12px;">');
-    html.push('<h3>Papers this work <em>cites</em></h3>');
+    // Referenced — no outer panel box here: the individual paper cards
+    // below already provide one level of boxing, wrapping them in another
+    // bordered panel just nests boxes inside boxes.
+    html.push('<div style="margin-bottom:1.5rem;">');
+    html.push('<h3>References</h3>');
     html.push('<div id="refsList" class="cards-wrap"></div>');
-    html.push('</section>');
+    html.push('</div>');
 
     // Cited-by
-    html.push('<section class="panel light">');
-    html.push('<h3>Papers that <em>cite</em> this work</h3>');
+    html.push('<div>');
+    html.push('<h3>Cited by</h3>');
     html.push('<div id="citedByList" class="cards-wrap"></div>');
-    html.push('</section>');
+    html.push('</div>');
 
     block.innerHTML = html.join("");
 
@@ -2481,8 +2483,7 @@
     });
 
     var section = document.createElement("section");
-    section.className = "panel light";
-    section.style.marginBottom = "12px";
+    section.style.marginBottom = "1.5rem";
     section.innerHTML = '<h3>Papers like this</h3><div class="cards-wrap" id="relatedPapersList">' + items.join("") + '</div>';
     block.prepend(section);
 
