@@ -980,6 +980,40 @@
     list.innerHTML = html;
   }
 
+  // ---- Bulk "Add all to library" (opt-in — library stays curated, never auto-synced on claim) ----
+  function setupBulkAddToLibrary(works) {
+    var btn = $("bulkAddToLibraryBtn");
+    if (!btn || !works || !works.length) return;
+    if (typeof globalThis.savePaper !== "function") return;
+
+    btn.style.display = "";
+    var defaultLabel = "Add all to library";
+    btn.textContent = defaultLabel;
+
+    btn.addEventListener("click", async function(){
+      if (btn.disabled) return;
+      if (!confirm("Add " + works.length + " publication" + (works.length !== 1 ? "s" : "") + " to your library?")) return;
+
+      btn.disabled = true;
+      for (var i = 0; i < works.length; i++) {
+        if (i > 0) await new Promise(function(r){ setTimeout(r, 150); }); // stay well under the /api/library rate limiter
+        var w = works[i];
+        var tail = idTail(w.id);
+        if (!tail) continue;
+        btn.textContent = "Adding " + (i + 1) + " / " + works.length + "…";
+        try {
+          await globalThis.savePaper({
+            id: tail,
+            title: w.display_name || w.title || "Untitled",
+            doi: w.doi ? String(w.doi).replace(/^https?:\/\/doi\.org\//i, "") : null,
+          });
+        } catch(_) {}
+      }
+      btn.textContent = "Done";
+      setTimeout(function(){ btn.textContent = defaultLabel; btn.disabled = false; }, 2000);
+    });
+  }
+
   function escapeHtml(str) {
     if (!str) return "";
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -1292,6 +1326,7 @@
       // Who cited me — only show on own profile, fire-and-forget
       if (opts && opts.enhanced) {
         loadWhoCitedMe(accumulatedWorks);
+        setupBulkAddToLibrary(accumulatedWorks);
       }
 
       var sortSel = $("pubSort");

@@ -385,6 +385,12 @@
     var hasMore = !!abs && abs.length > shortRaw.length + 1;
 
     var chips = [];
+    // Only badge non-article types — "article" is the overwhelming default,
+    // so tagging it on every card would be noise, not signal.
+    var typeLabel = ({ dataset:"Dataset", preprint:"Preprint", "book-chapter":"Book chapter",
+      book:"Book", dissertation:"Dissertation", report:"Report", "peer-review":"Peer review",
+      retraction:"Retraction", erratum:"Erratum" })[work.type];
+    if (typeLabel) chips.push('<span class="badge badge-type">'+escapeHtml(typeLabel)+'</span>');
     var doiHref = doiUrl(doi);
     var oaPDF = get(work,"best_oa_location.url_for_pdf",null) || get(work,"primary_location.pdf_url",null) || get(work,"open_access.oa_url",null);
     if (oaPDF) chips.push('<a class="badge badge-oa" href="'+oaPDF+'" target="_blank" rel="noopener">PDF</a>');

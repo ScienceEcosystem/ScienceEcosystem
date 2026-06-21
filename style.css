@@ -339,6 +339,7 @@ body {
   color: var(--ink);
 }
 .badge-oa { border-color: #86efac; background: #f0fdf4; }
+.badge-type { border-color: #bfdbfe; background: #eff6ff; color: #1e40af; }
 
 @media (max-width: 1024px) {
   .layout-grid { grid-template-columns: 1fr; }

@@ -974,8 +974,34 @@
     }
   }
 
+  function renderRecentlyAdded(){
+    const panel = $("#recentlyAddedPanel");
+    const list = $("#recentlyAddedList");
+    if(!panel || !list) return;
+    const visible = items.filter(it=>!it.deleted_at && it.created_at);
+    if(!visible.length){ panel.style.display="none"; return; }
+    const recent = visible.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,5);
+    panel.style.display="";
+    list.innerHTML = recent.map(it=>{
+      const titleFull = it.title || "Untitled";
+      const label = titleFull.length>40 ? titleFull.slice(0,40)+"…" : titleFull;
+      return `<span class="recent-chip" data-id="${esc(String(it.id))}" title="${esc(titleFull)}" style="font-size:.78rem;padding:.25rem .6rem;border-radius:999px;cursor:pointer;border:1px solid #d1d5db;background:#f8fafc;color:#374151;">${esc(label)}${it.year?` <span style="color:#9ca3af;">${esc(String(it.year))}</span>`:""}</span>`;
+    }).join("");
+    list.querySelectorAll(".recent-chip").forEach(chip=>{
+      chip.addEventListener("click", async()=>{
+        const id = chip.getAttribute("data-id");
+        selectedIds = new Set([id]);
+        lastClickId = id;
+        currentSelection = id;
+        $$("#itemsTbody tr").forEach(r=>r.classList.toggle("selected", selectedIds.has(r.getAttribute("data-id"))));
+        await renderInspector(id);
+      });
+    });
+  }
+
   function renderTable(){
     const tbody=$("#itemsTbody"); if(!tbody) return;
+    renderRecentlyAdded();
 
     // Duplicates merge panel
     let mergePanelEl = $("#dupMergePanel");

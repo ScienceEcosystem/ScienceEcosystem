@@ -274,6 +274,11 @@
             <button id="emptyTrashBtn" class="btn btn-secondary" style="display:none;color:#dc2626;border-color:#dc2626;" title="Permanently delete all items in Trash">Empty Trash</button>
           </div>
 
+          <div id="recentlyAddedPanel" style="display:none; margin-bottom:1rem;">
+            <h3 style="font-size:.85rem; margin-bottom:.4rem; color:var(--ink-muted,#64748b);">Recently added</h3>
+            <div id="recentlyAddedList" style="display:flex; gap:.5rem; flex-wrap:wrap;"></div>
+          </div>
+
           <div class="lib-table-wrap">
             <table class="lib-table" id="itemsTable" aria-label="Library items">
               <thead>

@@ -26,6 +26,36 @@ USER PROFILE PAGE (currently very empty)
         A5133781948 (Olivier Raven)
       OpenAlex no longer allows merge requests — we need to handle this in our DB by
       treating all 3 as one author, combining their works, and picking the canonical ID this should work for everyone
+- [X] Publication type badges + opt-in library linking + library "Recently added"
+      (2026-06-21):
+      1. Datasets/preprints/etc. were visually identical to articles in the
+         Publications list. Added a small badge (Dataset/Preprint/Book chapter/
+         Dissertation/Report/Peer review/Retraction/Erratum) to
+         scripts/components.js renderPaperCard() chips array, keyed off
+         OpenAlex's `type` field (was already present on every work, just
+         unused). Deliberately no badge for plain "article" (the default —
+         would be noise). Since renderPaperCard() is shared, this applies
+         everywhere paper cards render (search, topic pages), not just
+         profiles. New .badge-type CSS rule in style.css.
+      2. Claiming an author ID does NOT auto-populate your library (deliberate
+         — library should stay curated, not become a mirror of your full
+         publication list). Discovered per-item "Add to Library" already
+         existed on every publication card (renderPaperCard → savePaper(),
+         already wired into profile.js). Added the missing piece: a bulk
+         "Add all to library" button (profile.html .pubs-header, only shown
+         when isOwner), wired in scripts/profile.js setupBulkAddToLibrary() —
+         loops accumulatedWorks calling the existing savePaper() per item,
+         150ms-staggered to stay under the /api/library rate limiter, with
+         inline progress text on the button itself. No backend changes needed.
+      3. Added a "Recently added" panel to library.html showing your 5 most
+         recently saved items as clickable chips (sorted client-side by the
+         existing created_at column, no new endpoint). scripts/library-page.js
+         renderRecentlyAdded(), called from renderTable() so it stays in sync
+         on every refresh. Clicking a chip opens that item in the inspector
+         (reuses the existing renderInspector()).
+      Verified end-to-end against the live dev server (all new element IDs/
+      CSS confirmed present in served output) — not yet visually verified in
+      a real browser session with real library data.
 
 PAPER PAGE
 - [X] Include graphical abstracts and figures where available — Europe PMC figures API,
