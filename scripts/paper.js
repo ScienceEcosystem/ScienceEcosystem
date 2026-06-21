@@ -2259,24 +2259,50 @@
       return;
     }
 
-    list.innerHTML = filtered.map(c => `
-      <article class="citation-context">
-        <p class="citation-snippet">
-          "${escapeHtml(c.snippet)}"
-        </p>
-        <cite class="citation-meta">
-          <strong>From:</strong> <a href="${c.url || "#"}" target="_blank" rel="noopener">${escapeHtml(c.title)}</a>
-          ${c.authors ? ` by ${escapeHtml(c.authors)}` : ""}
-          ${c.year ? ` (${escapeHtml(c.year)})` : ""}
-          <div class="citation-tags">
-            ${c.intent ? `<span class="badge">${escapeHtml(c.intent)}</span>` : ""}
-            ${c.stance ? `<span class="stance-badge stance-${escapeHtml(c.stance.toLowerCase().replace(/\s+/g, "-"))}">${escapeHtml(c.stance)}</span>` : ""}
-            ${c.isInfluential ? '<span class="badge badge-warn">Influential</span>' : ""}
-            ${c.openAccessPdf ? `<a href="/pdf-viewer.html?pdf=${encodeURIComponent(c.openAccessPdf)}" target="_blank" class="badge badge-ok">Read PDF</a>` : ""}
-          </div>
-        </cite>
-      </article>
-    `).join("");
+    // Same paper-card design used everywhere else on the site — the
+    // citation snippet ("background") takes the abstract's place, with the
+    // same expand/collapse behavior, instead of the old bespoke markup.
+    const hasComponent = !!(window.SE && SE.components && typeof SE.components.renderPaperCard === "function");
+    list.innerHTML = filtered.map(c => {
+      if (!hasComponent) {
+        return `
+        <article class="citation-context">
+          <p class="citation-snippet">"${escapeHtml(c.snippet)}"</p>
+          <cite class="citation-meta">
+            <strong>From:</strong> <a href="${c.url || "#"}" target="_blank" rel="noopener">${escapeHtml(c.title)}</a>
+            ${c.authors ? ` by ${escapeHtml(c.authors)}` : ""}
+            ${c.year ? ` (${escapeHtml(c.year)})` : ""}
+          </cite>
+        </article>`;
+      }
+      const extraChips = [];
+      if (c.intent) extraChips.push(`<span class="badge">${escapeHtml(c.intent)}</span>`);
+      if (c.stance) extraChips.push(`<span class="stance-badge stance-${escapeHtml(c.stance.toLowerCase().replace(/\s+/g, "-"))}">${escapeHtml(c.stance)}</span>`);
+      if (c.isInfluential) extraChips.push('<span class="badge badge-warn">Influential</span>');
+      if (c.openAccessPdf) extraChips.push(`<a href="/pdf-viewer.html?pdf=${encodeURIComponent(c.openAccessPdf)}" target="_blank" class="badge badge-ok">Read PDF</a>`);
+
+      const fakeWork = {
+        id: null,
+        display_name: c.title || "Untitled",
+        publication_year: c.year || null,
+        authorships: (c.authors || "").split(",").map(n => {
+          n = n.trim();
+          return n ? { author: { display_name: n } } : null;
+        }).filter(Boolean),
+      };
+      return SE.components.renderPaperCard(fakeWork, {
+        compact: true,
+        abstract: c.snippet || "",
+        hideActions: true,
+        minimalMeta: true,
+        titleHref: c.url || "#",
+        extraChips,
+      });
+    }).join("");
+
+    if (hasComponent && typeof SE.components.enhancePaperCards === "function") {
+      SE.components.enhancePaperCards(list);
+    }
   }
 
   function renderStanceSummary(contexts) {

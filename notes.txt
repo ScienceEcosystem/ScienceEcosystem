@@ -191,6 +191,18 @@ USER PROFILE PAGE (currently very empty)
       Verified against the live dev server: section order in served HTML
       confirmed (graphBlock → citationContextsSection → relatedBlock), new
       headings present, panel-light removed from the 3 relevant spots.
+- [X] Paper page's own "How this paper is being cited" entries also moved
+      to the shared paper-card design (2026-06-21) — same fix as Who-cited-
+      me on profile.html, just applied to paper.js's own
+      renderCitationContexts() (this is a separate, parallel renderer —
+      the paper page shows citations TO this paper; profile.js's version
+      shows citations to the logged-in user's papers from their profile).
+      Reuses the same renderPaperCard() opts added earlier (abstract/
+      hideActions/minimalMeta/titleHref/extraChips) — citation snippet
+      shown where the abstract would go, intent/stance/influential/PDF
+      badges as extraChips. Falls back to the old bespoke markup only if
+      SE.components isn't loaded for some reason. Verified live: confirmed
+      present in served scripts/paper.js.
 
 PAPER PAGE
 - [X] Include graphical abstracts and figures where available — Europe PMC figures API,
