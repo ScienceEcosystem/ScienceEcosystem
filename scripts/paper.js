@@ -2510,7 +2510,7 @@
 
     var section = document.createElement("section");
     section.style.marginBottom = "1.5rem";
-    section.innerHTML = '<h3>Papers like this</h3><div class="cards-wrap" id="relatedPapersList">' + items.join("") + '</div>';
+    section.innerHTML = '<h2>Papers like this</h2><div class="cards-wrap" id="relatedPapersList">' + items.join("") + '</div>';
     block.prepend(section);
 
     if (hasComponent && typeof SE.components.enhancePaperCards === "function") {
