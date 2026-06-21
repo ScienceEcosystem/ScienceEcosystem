@@ -203,6 +203,29 @@ USER PROFILE PAGE (currently very empty)
       badges as extraChips. Falls back to the old bespoke markup only if
       SE.components isn't loaded for some reason. Verified live: confirmed
       present in served scripts/paper.js.
+- [X] "Papers like this" heading size fix + References/Cited-by redesign
+      (2026-06-21), flagged via screenshot:
+      1. "Papers like this" was `<h3>` while its sibling sections ("How
+         this paper is being cited", "References & Citations") were both
+         `<h2>` — made it look smaller than its peers. Fixed to `<h2>`.
+      2. Removed the "References & Citations" umbrella heading — "References"
+         and "Cited by" are now each their own top-level `<h2>` section,
+         not subsections of something else.
+      3. Added a real filter/sort system to both lists (previously just a
+         flat list — these can hold up to 200 items each per the existing
+         fetchCitedPapers/fetchCitingPapers per_page=200 cap). New
+         renderFilterableList() helper (scripts/paper.js) gives each list
+         independently: a live text search (title/author substring), a
+         sort dropdown (Author A–Z / Newest / Oldest / Most cited —
+         References defaults to Author A–Z matching its old behavior,
+         Cited-by defaults to Most cited matching its old behavior), and
+         type filter tabs (Article/Dataset/Preprint/etc., reusing the same
+         tab-btn visual pattern as the existing Influential/Methodology/
+         Result tabs) — tabs only appear when a list actually contains more
+         than one type, so a references list that's 100% articles shows no
+         tabs at all rather than a useless single "Article" filter.
+      Verified live: renderFilterableList/filterBarHtml/refsTypeTabs/
+      citedByTypeTabs all confirmed present in served scripts/paper.js.
 
 PAPER PAGE
 - [X] Include graphical abstracts and figures where available — Europe PMC figures API,

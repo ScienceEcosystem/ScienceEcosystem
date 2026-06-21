@@ -1718,78 +1718,135 @@
       + '</article>';
   }
 
+  var LIST_TYPE_LABELS = { dataset:"Dataset", preprint:"Preprint", "book-chapter":"Book chapter",
+    book:"Book", dissertation:"Dissertation", report:"Report", "peer-review":"Peer review",
+    retraction:"Retraction", erratum:"Erratum", article:"Article" };
+
+  // Generic filter/sort/search for a list of works rendered as paper cards —
+  // used for both References and Cited-by, each with independent state.
+  // Type tabs are built from whatever types actually appear in that
+  // particular list (e.g. no point showing a "Dataset" tab if there are none).
+  function renderFilterableList(allPapers, opts){
+    var wrap = $(opts.wrapId);
+    var tabsEl = $(opts.tabsId);
+    var searchEl = $(opts.searchId);
+    var sortEl = $(opts.sortId);
+    if (!wrap) return;
+
+    var state = { type: "all" };
+
+    function typeCounts(){
+      var counts = {};
+      (allPapers || []).forEach(function(w){
+        var t = w.type || "article";
+        counts[t] = (counts[t] || 0) + 1;
+      });
+      return counts;
+    }
+
+    function renderTabs(){
+      if (!tabsEl) return;
+      var counts = typeCounts();
+      var types = Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a]; });
+      if (types.length <= 1) { tabsEl.innerHTML = ""; return; } // nothing to filter by
+      var html = '<button class="tab-btn' + (state.type === "all" ? " active" : "") + '" data-type="all">All (' + (allPapers || []).length + ')</button>';
+      types.forEach(function(t){
+        var label = LIST_TYPE_LABELS[t] || t;
+        html += '<button class="tab-btn' + (state.type === t ? " active" : "") + '" data-type="' + escapeHtml(t) + '">' + escapeHtml(label) + ' (' + counts[t] + ')</button>';
+      });
+      tabsEl.innerHTML = html;
+      tabsEl.querySelectorAll(".tab-btn").forEach(function(btn){
+        btn.addEventListener("click", function(){
+          state.type = btn.getAttribute("data-type");
+          renderTabs();
+          apply();
+        });
+      });
+    }
+
+    function apply(){
+      var q = (searchEl ? searchEl.value : "").trim().toLowerCase();
+      var sortVal = sortEl ? sortEl.value : opts.defaultSort;
+
+      var filtered = (allPapers || []).filter(function(w){
+        if (state.type !== "all" && (w.type || "article") !== state.type) return false;
+        if (!q) return true;
+        var title = (w.display_name || w.title || "").toLowerCase();
+        var authors = (w.authorships || []).map(function(a){ return (a.author && a.author.display_name || "").toLowerCase(); }).join(" ");
+        return title.indexOf(q) !== -1 || authors.indexOf(q) !== -1;
+      }).slice();
+
+      if (sortVal === "year-desc") filtered.sort(function(a,b){ return (b.publication_year||0) - (a.publication_year||0); });
+      else if (sortVal === "year-asc") filtered.sort(function(a,b){ return (a.publication_year||0) - (b.publication_year||0); });
+      else if (sortVal === "cited-desc") filtered.sort(function(a,b){ return (b.cited_by_count||0) - (a.cited_by_count||0); });
+      else if (sortVal === "author") filtered.sort(function(a,b){
+        var nameA = ((a.authorships||[])[0]||{}).author;
+        var nameB = ((b.authorships||[])[0]||{}).author;
+        nameA = nameA ? (nameA.display_name||"").split(" ").pop().toLowerCase() : "";
+        nameB = nameB ? (nameB.display_name||"").split(" ").pop().toLowerCase() : "";
+        return nameA.localeCompare(nameB);
+      });
+
+      if (!filtered.length) {
+        wrap.innerHTML = '<p class="muted">' + (opts.emptyMessage || "No results.") + '</p>';
+        return;
+      }
+      var hasComponent = !!(window.SE && SE.components && typeof SE.components.renderPaperCard === "function");
+      wrap.innerHTML = filtered.map(function(w){
+        return hasComponent ? SE.components.renderPaperCard(w, { compact: true }) : paperCardCompact(w, opts.legacyLabel || "");
+      }).join("");
+      if (hasComponent && typeof SE.components.enhancePaperCards === "function") SE.components.enhancePaperCards(wrap);
+    }
+
+    if (searchEl) searchEl.addEventListener("input", apply);
+    if (sortEl) sortEl.addEventListener("change", apply);
+    renderTabs();
+    apply();
+  }
+
   function renderBelowGraphLists(citedPapers, citingPapers){
     var block = $("relatedBlock");
     if (!block) return;
 
-    // Containers
-    var html = [];
-    html.push('<h2>References & Citations</h2>');
+    function filterBarHtml(prefix){
+      return ''
+        + '<div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-bottom:.5rem;">'
+        +   '<input type="text" id="' + prefix + 'Search" class="input input-pill" placeholder="Filter by title or author…" style="flex:1; min-width:10rem; max-width:18rem;">'
+        +   '<select id="' + prefix + 'Sort" class="input input-pill">'
+        +     (prefix === "refs"
+                ? '<option value="author">Author A–Z</option><option value="year-desc">Newest first</option><option value="year-asc">Oldest first</option><option value="cited-desc">Most cited</option>'
+                : '<option value="cited-desc">Most cited</option><option value="year-desc">Newest first</option><option value="year-asc">Oldest first</option><option value="author">Author A–Z</option>')
+        +   '</select>'
+        + '</div>'
+        + '<div id="' + prefix + 'TypeTabs" style="display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem;"></div>';
+    }
 
-    // Referenced — no outer panel box here: the individual paper cards
-    // below already provide one level of boxing, wrapping them in another
-    // bordered panel just nests boxes inside boxes.
-    html.push('<div style="margin-bottom:1.5rem;">');
-    html.push('<h3>References</h3>');
+    // No outer "References & Citations" umbrella heading — "References" and
+    // "Cited by" are each their own top-level section, not subsections of
+    // something else.
+    var html = [];
+    html.push('<div style="margin-bottom:2rem;">');
+    html.push('<h2>References</h2>');
+    html.push(filterBarHtml("refs"));
     html.push('<div id="refsList" class="cards-wrap"></div>');
     html.push('</div>');
 
-    // Cited-by
     html.push('<div>');
-    html.push('<h3>Cited by</h3>');
+    html.push('<h2>Cited by</h2>');
+    html.push(filterBarHtml("citedBy"));
     html.push('<div id="citedByList" class="cards-wrap"></div>');
     html.push('</div>');
 
     block.innerHTML = html.join("");
 
-    // Sort cited papers alphabetically by first author last name
-    function sortAlpha(papers) {
-      return (papers || []).slice().sort(function(a, b) {
-        var nameA = ((a.authorships || [])[0] || {}).author;
-        var nameB = ((b.authorships || [])[0] || {}).author;
-        nameA = nameA ? (nameA.display_name || '').split(' ').pop().toLowerCase() : '';
-        nameB = nameB ? (nameB.display_name || '').split(' ').pop().toLowerCase() : '';
-        return nameA.localeCompare(nameB);
-      });
-    }
-    citedPapers = sortAlpha(citedPapers);
-
-    // Render with shared component if available
-    var hasComponent = !!(window.SE && SE.components && typeof SE.components.renderPaperCard === "function");
-    var refsWrap = $("refsList");
-    var citedByWrap = $("citedByList");
-
-    if (hasComponent){
-      if (Array.isArray(citedPapers) && citedPapers.length){
-        for (var i=0;i<citedPapers.length;i++){
-          refsWrap.insertAdjacentHTML("beforeend", SE.components.renderPaperCard(citedPapers[i], { compact: true }));
-        }
-        if (typeof SE.components.enhancePaperCards === "function") SE.components.enhancePaperCards(refsWrap);
-      } else {
-        refsWrap.innerHTML = '<p class="muted">No referenced papers found.</p>';
-      }
-
-      if (Array.isArray(citingPapers) && citingPapers.length){
-        for (var j=0;j<citingPapers.length;j++){
-          citedByWrap.insertAdjacentHTML("beforeend", SE.components.renderPaperCard(citingPapers[j], { compact: true }));
-        }
-        if (typeof SE.components.enhancePaperCards === "function") SE.components.enhancePaperCards(citedByWrap);
-      } else {
-        citedByWrap.innerHTML = '<p class="muted">No citing papers found.</p>';
-      }
-    } else {
-      // Fallback to legacy compact card
-      if (Array.isArray(citedPapers) && citedPapers.length){
-        for (var i2=0;i2<citedPapers.length;i2++){ refsWrap.insertAdjacentHTML("beforeend", paperCardCompact(citedPapers[i2], "Referenced")); }
-      } else {
-        refsWrap.innerHTML = '<p class="muted">No referenced papers found.</p>';
-      }
-      if (Array.isArray(citingPapers) && citingPapers.length){
-        for (var j2=0;j2<citingPapers.length;j2++){ citedByWrap.insertAdjacentHTML("beforeend", paperCardCompact(citingPapers[j2], "Cited-by")); }
-      } else {
-        citedByWrap.innerHTML = '<p class="muted">No citing papers found.</p>';
-      }
-    }
+    renderFilterableList(citedPapers, {
+      wrapId: "refsList", tabsId: "refsTypeTabs", searchId: "refsSearch", sortId: "refsSort",
+      defaultSort: "author", emptyMessage: "No referenced papers found.", legacyLabel: "Referenced",
+    });
+    renderFilterableList(citingPapers, {
+      wrapId: "citedByList", tabsId: "citedByTypeTabs", searchId: "citedBySearch", sortId: "citedBySort",
+      defaultSort: "cited-desc", emptyMessage: "No citing papers found.", legacyLabel: "Cited-by",
+    });
   }
 
   // ---------- Header guards ----------
