@@ -200,8 +200,24 @@
 
   // ---- Works list (reusing components.js) ----
   var currentPage = 1, totalWorksCount = 0, accumulatedWorks = [], currentSort = "date", currentOrder = "desc", worksApiBaseUrl = null, abortCtrl = null;
+  var currentQuery = "", currentYearMin = "", currentYearMax = "";
 
   function sortParam(){ var dir = currentOrder === "asc" ? "asc" : "desc"; return currentSort==="citations" ? "cited_by_count:"+dir : "publication_year:"+dir; }
+
+  // Adds the text-search and year-range filters on top of whatever entity
+  // filter (institutions.id:X etc.) is already baked into the base URL —
+  // must read the existing filter= value out and rejoin rather than
+  // overwrite it, or this would show ALL works on OpenAlex instead of just
+  // this institution's.
+  function applyWorksFilters(u){
+    var baseFilter = u.searchParams.get("filter") || "";
+    var filterParts = baseFilter ? [baseFilter] : [];
+    if (currentYearMin) filterParts.push("from_publication_date:" + currentYearMin + "-01-01");
+    if (currentYearMax) filterParts.push("to_publication_date:" + currentYearMax + "-12-31");
+    if (filterParts.length) u.searchParams.set("filter", filterParts.join(","));
+    if (currentQuery) u.searchParams.set("search", currentQuery);
+    else u.searchParams.delete("search");
+  }
 
   async function fetchWorksPage(page, replace){
     if (!worksApiBaseUrl) return;
@@ -209,6 +225,7 @@
     abortCtrl = new AbortController();
 
     var u = new URL(worksApiBaseUrl);
+    applyWorksFilters(u);
     u.searchParams.set("page", String(page));
     u.searchParams.set("per_page", String(PAGE_SIZE));
     u.searchParams.set("sort", sortParam());
@@ -220,10 +237,14 @@
     if (replace){ accumulatedWorks = results.slice(); $("instWorksList").innerHTML=""; }
     else { accumulatedWorks = accumulatedWorks.concat(results); }
 
-    for (var i=0;i<results.length;i++){
-      $("instWorksList").insertAdjacentHTML("beforeend", SE.components.renderPaperCard(results[i], { compact:true }));
+    if (replace && results.length === 0) {
+      $("instWorksList").innerHTML = '<p class="muted">No works match this filter.</p>';
+    } else {
+      for (var i=0;i<results.length;i++){
+        $("instWorksList").insertAdjacentHTML("beforeend", SE.components.renderPaperCard(results[i], { compact:true }));
+      }
+      SE.components.enhancePaperCards($("instWorksList"));
     }
-    SE.components.enhancePaperCards($("instWorksList"));
 
     var pag = $("instWorksPagination");
     if (!pag) return;
@@ -283,6 +304,36 @@
         orderSel.value = currentOrder;
         orderSel.addEventListener("change", async function(){
           currentOrder = (this.value==="asc" ? "asc" : "desc");
+          currentPage = 1; accumulatedWorks = [];
+          await fetchWorksPage(currentPage, true);
+        });
+      }
+
+      var queryInput = $("worksFilterQuery");
+      var yearMinInput = $("worksFilterYearMin");
+      var yearMaxInput = $("worksFilterYearMax");
+      var queryDebounce = null;
+      if (queryInput){
+        queryInput.addEventListener("input", function(){
+          clearTimeout(queryDebounce);
+          var val = this.value;
+          queryDebounce = setTimeout(async function(){
+            currentQuery = val.trim();
+            currentPage = 1; accumulatedWorks = [];
+            await fetchWorksPage(currentPage, true);
+          }, 400);
+        });
+      }
+      if (yearMinInput){
+        yearMinInput.addEventListener("change", async function(){
+          currentYearMin = this.value.trim();
+          currentPage = 1; accumulatedWorks = [];
+          await fetchWorksPage(currentPage, true);
+        });
+      }
+      if (yearMaxInput){
+        yearMaxInput.addEventListener("change", async function(){
+          currentYearMax = this.value.trim();
           currentPage = 1; accumulatedWorks = [];
           await fetchWorksPage(currentPage, true);
         });

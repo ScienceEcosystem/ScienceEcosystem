@@ -431,6 +431,9 @@
   var accumulatedWorks = [];
   var currentSort = "date"; // "date" | "citations"
   var currentOrder = "desc"; // "asc" | "desc"
+  var currentQuery = "";
+  var currentYearMin = "";
+  var currentYearMax = "";
   var worksApiBaseUrl = null;
   var abortCtrl = null;
   var isAuthed = false;
@@ -803,12 +806,28 @@
     return "publication_year:"+dir;
   }
 
+  // Adds the text-search and year-range filters on top of whatever entity
+  // filter (author.id:X, single or merged) is already baked into the base
+  // URL — must read the existing filter= value out and rejoin rather than
+  // overwrite it, or this would show ALL works on OpenAlex instead of just
+  // this researcher's (and would break merged-ID profiles entirely).
+  function applyWorksFilters(u){
+    var baseFilter = u.searchParams.get("filter") || "";
+    var filterParts = baseFilter ? [baseFilter] : [];
+    if (currentYearMin) filterParts.push("from_publication_date:" + currentYearMin + "-01-01");
+    if (currentYearMax) filterParts.push("to_publication_date:" + currentYearMax + "-12-31");
+    if (filterParts.length) u.searchParams.set("filter", filterParts.join(","));
+    if (currentQuery) u.searchParams.set("search", currentQuery);
+    else u.searchParams.delete("search");
+  }
+
   async function fetchWorksPage(page, replace){
     if (!worksApiBaseUrl) return;
     if (abortCtrl) abortCtrl.abort();
     abortCtrl = new AbortController();
 
     var u = new URL(worksApiBaseUrl);
+    applyWorksFilters(u);
     u.searchParams.set("page", String(page));
     u.searchParams.set("per_page", String(PAGE_SIZE));
     u.searchParams.set("sort", sortParam());
@@ -853,7 +872,12 @@
       // If last API page OR dedup reduced count to match what we expect, mark done
       if (isLastPage) totalWorksCount = accumulatedWorks.length;
 
-      renderWorksChunk(uniqueNew);
+      if (replace && accumulatedWorks.length === 0) {
+        var list = $("publicationsList");
+        if (list) list.innerHTML = '<p class="muted">No works match this filter.</p>';
+      } else {
+        renderWorksChunk(uniqueNew);
+      }
     }catch(e){
       if (e.name === "AbortError") return;
       hardError(e.message || String(e));
@@ -1354,6 +1378,39 @@
           currentOrder = (this.value === "asc" ? "asc" : "desc");
           currentPage = 1; accumulatedWorks = [];
           await fetchWorksPage(currentPage, true);
+        });
+      }
+
+      var queryInput = $("worksFilterQuery");
+      var yearMinInput = $("worksFilterYearMin");
+      var yearMaxInput = $("worksFilterYearMax");
+      var queryDebounce = null;
+      if (queryInput){
+        queryInput.addEventListener("input", function(){
+          clearTimeout(queryDebounce);
+          var val = this.value;
+          queryDebounce = setTimeout(async function(){
+            currentQuery = val.trim();
+            currentPage = 1; accumulatedWorks = [];
+            await fetchWorksPage(currentPage, true);
+            renderOpenSciencePortfolio(accumulatedWorks);
+          }, 400);
+        });
+      }
+      if (yearMinInput){
+        yearMinInput.addEventListener("change", async function(){
+          currentYearMin = this.value.trim();
+          currentPage = 1; accumulatedWorks = [];
+          await fetchWorksPage(currentPage, true);
+          renderOpenSciencePortfolio(accumulatedWorks);
+        });
+      }
+      if (yearMaxInput){
+        yearMaxInput.addEventListener("change", async function(){
+          currentYearMax = this.value.trim();
+          currentPage = 1; accumulatedWorks = [];
+          await fetchWorksPage(currentPage, true);
+          renderOpenSciencePortfolio(accumulatedWorks);
         });
       }
 

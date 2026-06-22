@@ -226,6 +226,40 @@ USER PROFILE PAGE (currently very empty)
          tabs at all rather than a useless single "Article" filter.
       Verified live: renderFilterableList/filterBarHtml/refsTypeTabs/
       citedByTypeTabs all confirmed present in served scripts/paper.js.
+- [X] Search + year-range filter on entity works lists (2026-06-22) —
+      journal.html, profile.html, institute.html, and publisher.html each
+      had Sort-by/Order only on their works list, no way to narrow it down.
+      Prompted by trying to find something specific in "The Science of The
+      Total Environment" (83,853 works) with only sort available. All four
+      pages independently duplicate the same fetchWorksPage(page, replace)
+      pattern (no shared helper exists beyond SE.components.renderPaperCard/
+      enhancePaperCards) — added the same fix to each:
+        - New text input (debounced 400ms) + From/To year number inputs in
+          each page's .sort-controls row, all sharing the same element ids
+          (#worksFilterQuery/#worksFilterYearMin/#worksFilterYearMax) for
+          consistency across the 4 pages.
+        - New applyWorksFilters(u) helper in each script (journal.js,
+          institute.js, publisher.js, profile.js) — reads the existing
+          filter= value already baked into that page's base works URL
+          (host_venue.id:X / author.id:X / institutions.id:X / publisher
+          equivalent), then rejoins it with new from_publication_date:/
+          to_publication_date: clauses (comma-AND syntax) and a search=
+          param, rather than overwriting filter= outright — overwriting
+          would have silently shown ALL works on OpenAlex instead of just
+          that entity's. Used `search=` and `from_publication_date`/
+          `to_publication_date` syntax already proven elsewhere in this
+          codebase (scripts/search.js), not guessed fresh.
+        - profile.html needed no special-casing despite supporting merged/
+          claimed OpenAlex author IDs — the merge logic resolves the base
+          URL string BEFORE fetchWorksPage ever runs, so by the time the
+          filter logic runs it's just a normal URL like the other 3 pages.
+      Verified directly against the real OpenAlex API (not just code
+      review): the journal case (search "mangrove" + 2020-2022 range on
+      S86852077) correctly narrowed 83,853 works down to 255, properly
+      scoped to just that journal; the merged-author case (Olivier's 3
+      OpenAlex IDs + a year range) correctly returned only his own works
+      in that range. All 4 pages' new markup/JS confirmed present in
+      served output via the live dev server.
 
 PAPER PAGE
 - [X] Include graphical abstracts and figures where available — Europe PMC figures API,
