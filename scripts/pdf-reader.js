@@ -117,7 +117,21 @@ async function tryLoadOaFallback(url) {
 async function loadSignedUrlWithRetry(signedUrl, attempt) {
   attempt = attempt || 1;
   try {
-    const task = pdfjsLib.getDocument({ url: signedUrl });
+    // Fetch the whole file ourselves rather than handing pdf.js the raw
+    // URL — pdf.js's url-mode uses HTTP Range requests for progressive
+    // loading, and Cloudflare R2 has a known issue where range requests
+    // intermittently 408/time out even though a plain full GET to the
+    // same object succeeds reliably (confirmed: curling the exact failing
+    // URL always succeeds in under a second). A full GET avoids range
+    // requests entirely.
+    const res = await fetch(signedUrl);
+    if (!res.ok) {
+      const err = new Error('Unexpected server response (' + res.status + ')');
+      err.status = res.status;
+      throw err;
+    }
+    const bytes = await res.arrayBuffer();
+    const task = pdfjsLib.getDocument({ data: bytes });
     return await task.promise;
   } catch (err) {
     const status = err && (err.status || (String(err.message || err).match(/\b(40[89]|425|429|5\d\d)\b/) || [])[1]);

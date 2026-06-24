@@ -42,6 +42,26 @@ BUGS / QUICK FIXES
       live failure for this user's specific item (W4410980898) couldn't be
       reproduced directly (would need their browser session), but the
       message-masking bug is fixed regardless of the underlying cause.
+- [X] Found the real root cause of the repeat 408s — R2 range-request bug
+      (2026-06-24) — the message-masking fix above immediately surfaced
+      the TRUE underlying error for W4410980898: a genuine, repeating 408
+      on this exact PDF, surviving the loadSignedUrlWithRetry() retries
+      added the day before. Curling the exact signed URL still succeeded
+      instantly (0.6s) every time — confirmed via web search this is a
+      known, documented Cloudflare R2 issue: range requests intermittently
+      fail/timeout even when a plain full GET to the same object succeeds
+      reliably (community-reported, especially on larger files — this PDF
+      is 5.2MB). pdf.js's `getDocument({url:...})` mode uses HTTP Range
+      requests for progressive loading by default — that's the actual
+      culprit, not anything in our code or the stored file. Fixed by
+      rewriting loadSignedUrlWithRetry() (scripts/pdf-reader.js) to fetch
+      the whole file ourselves via a plain `fetch()` (full GET, no Range
+      header) into an ArrayBuffer, then hand pdf.js `{data: bytes}` instead
+      of `{url: signedUrl}` — sidesteps R2's range-request bug entirely,
+      matching the exact request shape that's been reliably succeeding in
+      every direct curl test. Retry-on-transient-status logic kept as a
+      second line of defense. Verified live (fetch/getDocument-with-data
+      pattern confirmed in served scripts/pdf-reader.js).
 
 =======================================================
 NEAR-TERM FEATURES (next 1–3 months)
