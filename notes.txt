@@ -19,6 +19,29 @@ BUGS / QUICK FIXES
       backoff) on 408/425/429/5xx before falling back to the OA-PDF lookup
       / "PDF no longer available" error state. Verified the status-
       extraction regex against the exact error string from the report.
+- [X] Fix misleading "publisher is blocking" message after attaching a
+      library PDF (2026-06-23) — user attached a PDF to a library item
+      that previously had none (got the badge confirming it), but opening
+      it in the reader still showed the OLD "publisher is blocking direct
+      PDF access" message, exactly as before. DB check confirmed the
+      attached PDF was completely healthy (library_pdfs row correct,
+      mime_type application/pdf, 5.2MB file) — so the bug was not the file,
+      it was scripts/pdf-reader.js's tryLoadOaFallback(): it called
+      loadPDF(oaUrl) as a rescue attempt when the library PDF failed, then
+      UNCONDITIONALLY returned true regardless of whether that nested load
+      actually succeeded. If the OA fallback also failed, the nested call's
+      own (generic, "publisher blocking") error message was left on screen
+      while the caller believed the fallback had succeeded and did nothing
+      further — completely masking the real reason the library PDF itself
+      failed. Fixed by making loadPDF(url, silent) return a real true/false
+      and giving tryLoadOaFallback a silent mode (no self-displayed error)
+      so it can be checked honestly; callers now only treat the fallback as
+      "handled" when it actually rendered a PDF, and show the correct,
+      specific library-PDF error otherwise. Verified live (function
+      signatures confirmed in served scripts/pdf-reader.js) — the exact
+      live failure for this user's specific item (W4410980898) couldn't be
+      reproduced directly (would need their browser session), but the
+      message-masking bug is fixed regardless of the underlying cause.
 
 =======================================================
 NEAR-TERM FEATURES (next 1–3 months)

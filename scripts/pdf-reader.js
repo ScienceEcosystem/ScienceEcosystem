@@ -103,12 +103,15 @@ async function getOaPdfUrl() {
 
 // If a stored library PDF can't be loaded, fall back to the paper's
 // open-access copy (if OpenAlex/Unpaywall knows about one) so the reader
-// shows *something* instead of just an error.
+// shows *something* instead of just an error. Loads silently (no self-
+// displayed error) so the caller can decide what to show if this ALSO
+// fails — otherwise a failed fallback would overwrite the screen with a
+// generic "publisher is blocking" message that has nothing to do with why
+// the actual saved library PDF failed to load.
 async function tryLoadOaFallback(url) {
   const oaUrl = await getOaPdfUrl();
   if (!oaUrl || oaUrl === url) return false;
-  await loadPDF(oaUrl);
-  return true;
+  return await loadPDF(oaUrl, true);
 }
 
 async function loadSignedUrlWithRetry(signedUrl, attempt) {
@@ -127,7 +130,11 @@ async function loadSignedUrlWithRetry(signedUrl, attempt) {
   }
 }
 
-async function loadPDF(url) {
+// `silent`: when true, never self-display an error on failure — just
+// return false and let the caller (tryLoadOaFallback) decide what, if
+// anything, to show. Used so a failed OA fallback attempt doesn't paper
+// over the real reason the original (e.g. library) PDF failed to load.
+async function loadPDF(url, silent) {
   setupCanvas();
   await ensurePdfJs();
 
@@ -141,9 +148,10 @@ async function loadPDF(url) {
       const check = await fetch(url, { credentials: 'include' });
       if (!check.ok) {
         const data = await check.json().catch(() => ({}));
-        if (await tryLoadOaFallback(url)) return;
+        if (await tryLoadOaFallback(url)) return true;
+        if (silent) return false;
         showPdfError(data.error || 'PDF not available.', true);
-        return;
+        return false;
       }
       const contentType = check.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
@@ -157,12 +165,13 @@ async function loadPDF(url) {
           const countEl = document.getElementById('pageCount');
           if (countEl) countEl.textContent = String(pdfDoc.numPages);
           renderAllPages();
-          return;
+          return true;
         }
         // JSON response but no signedUrl — error
-        if (await tryLoadOaFallback(url)) return;
+        if (await tryLoadOaFallback(url)) return true;
+        if (silent) return false;
         showPdfError(data?.error || 'PDF not available.', true);
-        return;
+        return false;
       }
       // Binary PDF streamed directly — pass the response body to pdf.js
       const pdfBytes = await check.arrayBuffer();
@@ -171,11 +180,12 @@ async function loadPDF(url) {
       const countEl = document.getElementById('pageCount');
       if (countEl) countEl.textContent = String(pdfDoc.numPages);
       renderAllPages();
-      return;
+      return true;
     } catch (err) {
-      if (await tryLoadOaFallback(url)) return;
+      if (await tryLoadOaFallback(url)) return true;
+      if (silent) return false;
       showPdfError('Could not load PDF: ' + String(err), true);
-      return;
+      return false;
     }
   }
 
@@ -190,10 +200,12 @@ async function loadPDF(url) {
     if (countEl) countEl.textContent = String(pdfDoc.numPages);
 
     renderAllPages();
+    return true;
   } catch (error) {
     console.error('Error loading PDF:', error);
-    if (isLibraryPdf && await tryLoadOaFallback(url)) return;
+    if (silent) return false;
     showPdfError(null, false);
+    return false;
   }
 }
 
