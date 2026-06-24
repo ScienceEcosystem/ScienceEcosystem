@@ -88,18 +88,7 @@ async function resolveByDoi(doi) {
 
 // ── PDF download & upload ─────────────────────────────────────────────────────
 
-async function downloadAndUploadPdf({ pdfUrl, paperId, title }) {
-  // 1. Fetch the PDF from the page (with the user's browser session / cookies)
-  let pdfBlob;
-  try {
-    const res = await fetch(pdfUrl, { credentials: "include" });
-    if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`);
-    pdfBlob = await res.blob();
-  } catch (e) {
-    throw new Error(`Could not download PDF: ${e.message}`);
-  }
-
-  // 2. Upload to SE as either a new import or attach to existing item
+async function uploadPdfBlob({ pdfBlob, paperId, title }) {
   const form = new FormData();
   const filename = `${(title || "paper").replace(/[^a-z0-9]/gi, "_").slice(0, 60)}.pdf`;
   form.append("file", pdfBlob, filename);
@@ -112,6 +101,29 @@ async function downloadAndUploadPdf({ pdfUrl, paperId, title }) {
     // Import as new item (server will try to extract DOI from the PDF)
     return seApi("/api/library/import-pdf", { method: "POST", body: form });
   }
+}
+
+// Fallback path: fetch the PDF from the background context (privileged,
+// bypasses CORS) when the in-page fetch (content script, correct
+// Referer/cookies, but subject to the page's own CORS policy) wasn't
+// possible — e.g. the candidate PDF is cross-origin to the current page.
+async function downloadAndUploadPdf({ pdfUrl, paperId, title }) {
+  let pdfBlob;
+  try {
+    const res = await fetch(pdfUrl, { credentials: "include" });
+    if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`);
+    pdfBlob = await res.blob();
+  } catch (e) {
+    throw new Error(`Could not download PDF: ${e.message}`);
+  }
+  return uploadPdfBlob({ pdfBlob, paperId, title });
+}
+
+// Preferred path: bytes already fetched in-page by the content script
+// (scripts/content.js's fetchPdfBytes) — just needs uploading.
+async function uploadPdfBytes({ bytes, paperId, title }) {
+  const pdfBlob = new Blob([bytes], { type: "application/pdf" });
+  return uploadPdfBlob({ pdfBlob, paperId, title });
 }
 
 // ── Annotation sync helper ────────────────────────────────────────────────────
@@ -262,6 +274,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.type === "DOWNLOAD_PDF") {
     downloadAndUploadPdf(msg)
+      .then(result => sendResponse({ ok: true, result }))
+      .catch(e => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
+
+  if (msg.type === "UPLOAD_PDF_BYTES") {
+    uploadPdfBytes(msg)
       .then(result => sendResponse({ ok: true, result }))
       .catch(e => sendResponse({ ok: false, error: e.message }));
     return true;

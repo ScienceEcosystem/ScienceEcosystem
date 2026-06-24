@@ -117,6 +117,39 @@ BUGS / QUICK FIXES
       pass syntax/JSON validation; the actual runtime behavior needs a
       real reload-and-test in Chrome (can't simulate chrome.storage/
       chrome.tabs APIs from this environment).
+- [X] Extension now fetches PDFs in-page instead of from the background
+      script, matching how Zotero's connector avoids anti-bot rejections
+      (2026-06-24) — user asked specifically how Zotero handles this.
+      Honest answer given: Zotero's real advantage is ~1,400 hand-written,
+      community-maintained per-publisher "translators" (a decade of
+      crowdsourced engineering, not something to replicate generally here)
+      — but ONE concrete, broadly-applicable piece of how it works WAS
+      directly actionable: Zotero fetches the PDF from inside the page
+      itself, not from a separate background context. Our extension was
+      doing the opposite — downloadAndUploadPdf() in service-worker.js
+      fetched from the background service worker, which doesn't carry the
+      page's own Referer header the way a true in-page request does (a
+      same-page fetch looks exactly like clicking the page's own "Download
+      PDF" button; a background fetch doesn't), and many publishers'
+      anti-bot checks gate on exactly that — the likely reason ScienceDirect
+      served an HTML interstitial instead of the real PDF.
+      Added fetchPdfBytes() in content.js (new FETCH_PDF_BYTES message) —
+      fetches in-page, naturally correct cookies/Referer, subject to the
+      page's own CORS policy. Split service-worker.js's upload logic out
+      into a shared uploadPdfBlob() used by both the new in-page path
+      (uploadPdfBytes(), preferred) and the original background-fetch path
+      (downloadAndUploadPdf(), now the fallback for when in-page fetch
+      fails — e.g. a cross-origin candidate the page's CORS policy blocks,
+      or a page where the content script isn't reachable, like the raw-PDF-
+      view case fixed just before this). popup.js's new tryDownloadCandidate()
+      tries in-page first, falls back to the old background-fetch behavior
+      automatically — same "try every candidate" loop as before, just each
+      candidate now gets the better-disguised request first. No regression
+      to the raw-PDF-view fix: that path's content script still isn't
+      reachable, so it falls straight through to the background fetch as
+      it already did. Verified: all 3 files pass syntax checks; can't
+      simulate the actual cross-context messaging/CORS behavior without a
+      real Chrome reload-and-test.
 
 =======================================================
 NEAR-TERM FEATURES (next 1–3 months)

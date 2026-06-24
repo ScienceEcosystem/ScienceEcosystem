@@ -315,6 +315,27 @@
     };
   }
 
+  // Fetches a PDF from inside the page itself rather than from the
+  // background service worker. This matters: a fetch from this content
+  // script carries the page's own cookies AND a correct Referer header
+  // (it's a same-page request, exactly like the page's own "Download PDF"
+  // button would trigger) — many publishers' anti-bot checks gate on
+  // exactly that, which is the likely reason background-script fetches
+  // sometimes get served an HTML interstitial instead of the real file.
+  async function fetchPdfBytes(pdfUrl) {
+    try {
+      const res = await fetch(pdfUrl, { credentials: "include" });
+      if (!res.ok) return { ok: false, error: `PDF fetch failed: ${res.status}` };
+      const buf = await res.arrayBuffer();
+      return { ok: true, bytes: buf };
+    } catch (e) {
+      // Most commonly CORS — the target is cross-origin to this page and
+      // doesn't allow it. The caller falls back to the background-script
+      // fetch (privileged, bypasses CORS) in that case.
+      return { ok: false, error: e?.message || String(e) };
+    }
+  }
+
   // ── Message listener ───────────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -323,6 +344,9 @@
       sendResponse({ ok: true });
     } else if (msg.type === "GET_PAGE_METADATA") {
       sendResponse(getPageMetadata());
+    } else if (msg.type === "FETCH_PDF_BYTES") {
+      fetchPdfBytes(msg.pdfUrl).then(sendResponse);
+      return true;
     }
     return true;
   });

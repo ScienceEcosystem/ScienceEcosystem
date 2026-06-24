@@ -28,6 +28,7 @@ let _work = null;       // OpenAlex work record (may be null)
 let _user = null;       // SE user object
 let _saved = false;     // whether paper is already in library
 let _pdfUrls = [];      // PDF URLs found on page
+let _tabId = null;      // active tab id (for in-page PDF fetch via content script)
 
 function showState(id) {
   ["stateLoading", "stateNoAuth", "stateNoPaper", "statePaper"].forEach(hide);
@@ -51,6 +52,7 @@ async function boot() {
 
   // 2. Get metadata — inject content script on demand (no <all_urls> needed)
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  _tabId = tab.id;
   let meta = null;
   try {
     try {
@@ -285,6 +287,26 @@ async function handleSave() {
 
 // ── Save PDF ──────────────────────────────────────────────────────────────────
 
+// Prefer fetching the PDF from inside the page itself (via the content
+// script) rather than from the background service worker — an in-page
+// fetch carries the page's own cookies AND a correct Referer header,
+// exactly like the page's own "Download PDF" button would send. Many
+// publishers' anti-bot checks gate on that, which is the likely reason a
+// plain background-script fetch sometimes gets served an HTML interstitial
+// instead of the real file (confirmed on ScienceDirect). Falls back to the
+// background-script fetch (privileged, bypasses CORS) when the in-page
+// fetch isn't possible — e.g. the candidate is cross-origin to the current
+// page, or the content script isn't reachable on this page at all.
+async function tryDownloadCandidate(pdfUrl, paperId, title) {
+  try {
+    const inPage = await chrome.tabs.sendMessage(_tabId, { type: "FETCH_PDF_BYTES", pdfUrl });
+    if (inPage?.ok && inPage.bytes) {
+      return await msg("UPLOAD_PDF_BYTES", { bytes: inPage.bytes, paperId, title });
+    }
+  } catch (_) { /* content script not reachable on this page — fall through */ }
+  return await msg("DOWNLOAD_PDF", { pdfUrl, paperId, title });
+}
+
 async function handleSavePdf() {
   const btn = $("btnSavePdf");
   btn.disabled = true;
@@ -306,17 +328,14 @@ async function handleSavePdf() {
   // Try each candidate PDF URL in order, not just the first guess —
   // publisher pages often expose several (citation_pdf_url, constructed
   // download links, etc.) and not all of them resolve to an actual PDF
-  // (anti-bot pages, login walls, redirects our background fetch can't
-  // follow the same way a real browser navigation would). Stop at the
-  // first one that actually validates as a real PDF server-side.
+  // (anti-bot pages, login walls). Stop at the first one that actually
+  // validates as a real PDF server-side.
+  const paperId = openAlexTail || _meta?.doi || null;
+  const title = _meta?.title || "paper";
   let result = null;
   for (let i = 0; i < _pdfUrls.length; i++) {
     if (_pdfUrls.length > 1) setText("btnSavePdfLabel", `Downloading… (${i + 1}/${_pdfUrls.length})`);
-    result = await msg("DOWNLOAD_PDF", {
-      pdfUrl: _pdfUrls[i],
-      paperId: openAlexTail || _meta?.doi || null,
-      title: _meta?.title || "paper"
-    });
+    result = await tryDownloadCandidate(_pdfUrls[i], paperId, title);
     if (result?.ok) break;
   }
 
