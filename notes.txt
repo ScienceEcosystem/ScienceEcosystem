@@ -1,11 +1,34 @@
 ScienceEcosystem — Development Notes
-Last updated: 2026-06-23
+Last updated: 2026-06-24
 =======================================================
 
 
 =======================================================
 BUGS / QUICK FIXES
 =======================================================
+
+- [X] Fix installed-PWA app icon showing a generic "S" placeholder
+      (2026-06-24) — user installs the site as a desktop app (PWA, not an
+      Xcode/Safari extension build — clarified after an initial wrong
+      assumption that this was about the Safari extension Xcode port).
+      Root cause: manifest.json's icons array declared 192x192 and 512x512
+      entries but BOTH pointed at the same /assets/logos_se/logo.png,
+      which is actually 608x653 and not square — doesn't match either
+      declared size. Browsers/macOS reject icons that don't match their
+      declared dimensions and silently fall back to an auto-generated
+      letter placeholder (the big "S", from the short_name "ScienceEco").
+      Generated real icon-192.png and icon-512.png (square, navy #0f172a
+      background matching theme_color/background_color, logo mark scaled
+      to a maskable-safe 72% zone) from the same source logo, saved to
+      assets/logos_se/, and updated manifest.json's icons + shortcuts
+      arrays to reference them instead of logo.png. No service-worker
+      cache bump needed — these are new files, not precached ones being
+      changed. Verified live: both files confirmed 200 via the dev server,
+      manifest.json's icons array confirmed pointing at the new files.
+      (Separately, also generated assets/logos_se/app-icon-1024-navy.png
+      earlier for an actual Xcode App Icon slot, in case the Safari
+      extension port happens later — that one's still valid and unused for
+      now, this PWA fix is independent of it.)
 
 - [X] Retry PDF load on transient R2 408s (2026-06-23) — user hit "PDF no
       longer available... Unexpected server response (408)" opening a

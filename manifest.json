@@ -12,13 +12,13 @@
   "categories": ["education", "science", "research"],
   "icons": [
     {
-      "src": "/assets/logos_se/logo.png",
+      "src": "/assets/logos_se/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/assets/logos_se/logo.png",
+      "src": "/assets/logos_se/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -30,21 +30,21 @@
       "short_name": "Search",
       "description": "Search for research papers",
       "url": "/search.html",
-      "icons": [{ "src": "/assets/logos_se/logo.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/assets/logos_se/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "My Library",
       "short_name": "Library",
       "description": "View your saved papers",
       "url": "/library.html",
-      "icons": [{ "src": "/assets/logos_se/logo.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/assets/logos_se/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "My Profile",
       "short_name": "Profile",
       "description": "Your researcher profile",
       "url": "/user-profile.html",
-      "icons": [{ "src": "/assets/logos_se/logo.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/assets/logos_se/icon-192.png", "sizes": "192x192" }]
     }
   ],
   "screenshots": [
