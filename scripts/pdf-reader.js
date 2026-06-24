@@ -111,6 +111,22 @@ async function tryLoadOaFallback(url) {
   return true;
 }
 
+async function loadSignedUrlWithRetry(signedUrl, attempt) {
+  attempt = attempt || 1;
+  try {
+    const task = pdfjsLib.getDocument({ url: signedUrl });
+    return await task.promise;
+  } catch (err) {
+    const status = err && (err.status || (String(err.message || err).match(/\b(40[89]|425|429|5\d\d)\b/) || [])[1]);
+    const isTransient = [408, 425, 429, 500, 502, 503, 504].indexOf(Number(status)) !== -1;
+    if (isTransient && attempt < 3) {
+      await new Promise(function (r) { setTimeout(r, 700 * attempt); });
+      return loadSignedUrlWithRetry(signedUrl, attempt + 1);
+    }
+    throw err;
+  }
+}
+
 async function loadPDF(url) {
   setupCanvas();
   await ensurePdfJs();
@@ -133,9 +149,11 @@ async function loadPDF(url) {
       if (contentType.includes('application/json')) {
         const data = await check.json().catch(() => null);
         if (data && data.signedUrl) {
-          // R2 signed URL — load directly, no auth needed
-          const signedTask = pdfjsLib.getDocument({ url: data.signedUrl });
-          pdfDoc = await signedTask.promise;
+          // R2 signed URL — load directly, no auth needed. Retry on
+          // transient errors (408/425/429/5xx) — R2 occasionally times out
+          // a single request even though the file is fine; the same URL
+          // typically succeeds on retry within a second or two.
+          pdfDoc = await loadSignedUrlWithRetry(data.signedUrl);
           const countEl = document.getElementById('pageCount');
           if (countEl) countEl.textContent = String(pdfDoc.numPages);
           renderAllPages();

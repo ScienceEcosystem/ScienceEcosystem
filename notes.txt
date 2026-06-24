@@ -1,5 +1,5 @@
 ScienceEcosystem — Development Notes
-Last updated: 2026-06-21
+Last updated: 2026-06-23
 =======================================================
 
 
@@ -7,7 +7,18 @@ Last updated: 2026-06-21
 BUGS / QUICK FIXES
 =======================================================
 
-
+- [X] Retry PDF load on transient R2 408s (2026-06-23) — user hit "PDF no
+      longer available... Unexpected server response (408)" opening a
+      library PDF. Confirmed the file was NOT actually broken: curled the
+      exact signed R2 URL from the error message directly and it returned
+      200 OK in under a second — a one-off Cloudflare R2 timeout, not a
+      missing/corrupted file (same root cause as the earlier 408 diagnosed
+      this session for a different file). Since 408 is specifically a
+      retryable status, added loadSignedUrlWithRetry() in
+      scripts/pdf-reader.js — retries up to 2 more times (700ms/1400ms
+      backoff) on 408/425/429/5xx before falling back to the OA-PDF lookup
+      / "PDF no longer available" error state. Verified the status-
+      extraction regex against the exact error string from the report.
 
 =======================================================
 NEAR-TERM FEATURES (next 1–3 months)
