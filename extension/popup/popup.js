@@ -254,8 +254,6 @@ async function handleSavePdf() {
   setText("btnSavePdfLabel", "Downloading…");
   showPdfStatus("Downloading PDF from publisher…");
 
-  // Use the first URL (best guess: citation_pdf_url or arXiv pdf)
-  const pdfUrl = _pdfUrls[0];
   const openAlexTail = _work?.id?.replace("https://openalex.org/", "");
 
   // If paper isn't saved yet, save it first
@@ -268,11 +266,22 @@ async function handleSavePdf() {
     _saved = true;
   }
 
-  const result = await msg("DOWNLOAD_PDF", {
-    pdfUrl,
-    paperId: openAlexTail || _meta?.doi || null,
-    title: _meta?.title || "paper"
-  });
+  // Try each candidate PDF URL in order, not just the first guess —
+  // publisher pages often expose several (citation_pdf_url, constructed
+  // download links, etc.) and not all of them resolve to an actual PDF
+  // (anti-bot pages, login walls, redirects our background fetch can't
+  // follow the same way a real browser navigation would). Stop at the
+  // first one that actually validates as a real PDF server-side.
+  let result = null;
+  for (let i = 0; i < _pdfUrls.length; i++) {
+    if (_pdfUrls.length > 1) setText("btnSavePdfLabel", `Downloading… (${i + 1}/${_pdfUrls.length})`);
+    result = await msg("DOWNLOAD_PDF", {
+      pdfUrl: _pdfUrls[i],
+      paperId: openAlexTail || _meta?.doi || null,
+      title: _meta?.title || "paper"
+    });
+    if (result?.ok) break;
+  }
 
   if (result?.ok) {
     btn.className = "btn btn-success";

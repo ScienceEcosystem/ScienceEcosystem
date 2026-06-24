@@ -62,6 +62,31 @@ BUGS / QUICK FIXES
       every direct curl test. Retry-on-transient-status logic kept as a
       second line of defense. Verified live (fetch/getDocument-with-data
       pattern confirmed in served scripts/pdf-reader.js).
+- [X] Extension's "Save PDF" only ever tried the FIRST candidate URL
+      (2026-06-24) — user hit this on ScienceDirect: extension found 17
+      candidate PDF links ("Save PDF (17 found)") but clicking it failed
+      with "File is not a valid PDF" — turned out extension/popup/popup.js's
+      handleSavePdf() only ever read `_pdfUrls[0]` and gave up entirely on
+      failure, never trying any of the other 16. Root cause for THIS
+      specific site: ScienceDirect's article pages don't expose the real
+      PDF location directly — the actual file lives behind a short-lived
+      signed URL on a different domain (pdf.sciencedirectassets.com,
+      X-Amz-Expires=300) reachable only via a multi-step redirect/JS flow
+      that a background-script fetch can't replicate; our hardcoded guess
+      (`/pdfft?isDTMRedir=true&download=true`) gets an HTML interstitial
+      instead of the PDF, which correctly fails the server's %PDF- check.
+      Fixed the part actually fixable without fighting Elsevier's anti-bot
+      flow: popup.js now tries each candidate in _pdfUrls in order, stopping
+      at the first one that actually validates as a real PDF, instead of
+      giving up after one attempt. Doesn't guarantee ScienceDirect specifically
+      works (still publisher-dependent — extension/manifest.json's
+      host_permissions also only explicitly covers scienceecosystem.org/
+      api.openalex.org/doi.org, not arbitrary publisher CDN domains, though
+      the fetch to sciencedirect.com itself demonstrably went through fine
+      here), but fixes the underlying "only ever tries 1 of N" bug generically
+      for every publisher, and the user can still always fall back to
+      manually attaching a PDF via the website (which does work, confirmed
+      multiple times this session).
 
 =======================================================
 NEAR-TERM FEATURES (next 1–3 months)
