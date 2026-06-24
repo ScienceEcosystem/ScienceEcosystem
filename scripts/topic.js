@@ -697,6 +697,78 @@
     } catch (_) {}
   }
 
+  // OBIS — marine occurrence stats, same role as GBIF above but
+  // marine-specific. Its checklist endpoint also embeds an IUCN
+  // conservation category for free, ahead of the dedicated IUCN
+  // integration — shown as a bonus badge when present.
+  async function loadObisData(displayName) {
+    if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
+
+    try {
+      const resp = await fetch("/api/field-data/obis?species=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.total_records) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+
+      const container = $("inatContent");
+      if (!container) return;
+
+      const trend = d.year_trend || [];
+      const maxCount = Math.max(...trend.map(r => r.count), 1);
+      const barW = 100 / Math.max(trend.length, 1);
+      const sparkBars = trend.map(r => {
+        const h = Math.round(r.count / maxCount * 100);
+        return `<div class="inat-spark-bar" style="width:${barW}%;height:${h}%;background:#0e7490;" title="${r.year}: ${r.count.toLocaleString()} records"></div>`;
+      }).join("");
+
+      const newest = trend[trend.length - 1];
+      const oldest = trend[0];
+
+      const iucnLabels = { EX:"Extinct", EW:"Extinct in the Wild", CR:"Critically Endangered", EN:"Endangered",
+        VU:"Vulnerable", NT:"Near Threatened", LC:"Least Concern", DD:"Data Deficient", NE:"Not Evaluated" };
+      const iucnColors = { EX:"#1f2937", EW:"#1f2937", CR:"#b91c1c", EN:"#b45309", VU:"#b45309",
+        NT:"#a16207", LC:"#15803d", DD:"#475569", NE:"#475569" };
+      const iucnBadge = d.iucn_category
+        ? `<span class="badge" style="font-size:.72rem;color:${iucnColors[d.iucn_category] || "#374151"};border-color:${iucnColors[d.iucn_category] || "#374151"};">IUCN: ${escapeHtml(iucnLabels[d.iucn_category] || d.iucn_category)}</span>`
+        : "";
+
+      const obisDiv = document.createElement("div");
+      obisDiv.className = "inat-panel";
+      obisDiv.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#0e7490"/><text x="10" y="14" text-anchor="middle" font-size="7" font-family="sans-serif" font-weight="bold" fill="white">OBIS</text></svg>
+          <span class="inat-title">OBIS · Ocean Biodiversity Information System</span>
+        </div>
+        ${iucnBadge ? `<div style="margin-bottom:.4rem;">${iucnBadge}</div>` : ""}
+        <div class="woc-stats-grid">
+          <div class="woc-stat">
+            <div class="woc-stat-value">${d.total_records.toLocaleString()}</div>
+            <div class="woc-stat-label">Marine occurrence records</div>
+          </div>
+        </div>
+
+        ${trend.length ? `
+        <p class="woc-section-label" style="margin-top:.75rem;">Records per year (last ${trend.length} years)</p>
+        <div class="inat-sparkline">${sparkBars}</div>
+        <div style="display:flex;justify-content:space-between;font-size:.72rem;color:#6b7280;margin-top:.2rem;">
+          <span>${oldest?.year || ""}</span>
+          <span>${newest?.year || ""}</span>
+        </div>` : ""}
+
+        <div class="woc-footer" style="margin-top:.75rem;">
+          <a href="${escapeHtml(d.obis_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on OBIS →
+          </a>
+        </div>
+      `;
+      container.appendChild(obisDiv);
+
+    } catch (_) {}
+  }
+
   async function loadInatData(displayName) {
     if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
     const container = $("inatContent");
@@ -808,6 +880,46 @@
         ${synonymNote}
         <div style="margin-top:.5rem;">
           <a href="${escapeHtml(d.col_url)}" target="_blank" rel="noopener" style="font-size:.78rem;">View on Catalogue of Life →</a>
+        </div>
+      `;
+      wrap.style.display = "";
+    } catch (_) {}
+  }
+
+  // WoRMS — authoritative name register for marine/aquatic taxa. Same role
+  // as Catalogue of Life above (taxonomy reference, not occurrence stats) —
+  // shown only when the species actually has a WoRMS record (most
+  // terrestrial species correctly won't, and that's not an error).
+  async function loadWormsData(displayName) {
+    if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
+    const wrap = $("wormsClassification");
+    if (!wrap) return;
+
+    const rankLabels = { kingdom: "Kingdom", phylum: "Phylum", class: "Class", order: "Order", family: "Family", genus: "Genus" };
+
+    try {
+      const resp = await fetch("/api/field-data/worms?species=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.classification?.length) return;
+
+      const rows = d.classification.map(c => `
+        <div style="display:flex;justify-content:space-between;font-size:.82rem;padding:.15rem 0;">
+          <span class="muted">${escapeHtml(rankLabels[c.rank] || c.rank)}</span>
+          <span style="font-style:${c.rank === "genus" ? "italic" : "normal"};">${escapeHtml(c.name)}</span>
+        </div>`).join("");
+
+      const envBadges = [
+        d.is_marine && "Marine", d.is_brackish && "Brackish",
+        d.is_freshwater && "Freshwater", d.is_terrestrial && "Terrestrial",
+      ].filter(Boolean).map(label => `<span class="badge" style="font-size:.72rem;margin-right:.25rem;">${label}</span>`).join("");
+
+      wrap.innerHTML = `
+        <h4 style="margin-bottom:.35rem;">WoRMS classification</h4>
+        ${rows}
+        ${envBadges ? `<div style="margin-top:.35rem;">${envBadges}</div>` : ""}
+        <div style="margin-top:.5rem;">
+          <a href="${escapeHtml(d.worms_url)}" target="_blank" rel="noopener" style="font-size:.78rem;">View on WoRMS →</a>
         </div>
       `;
       wrap.style.display = "";
@@ -1412,6 +1524,8 @@
       loadGbifData(topic.display_name || humanName);
       loadInatData(topic.display_name || humanName);
       loadColData(topic.display_name || humanName);
+      loadWormsData(topic.display_name || humanName);
+      loadObisData(topic.display_name || humanName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 

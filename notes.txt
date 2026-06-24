@@ -2039,26 +2039,48 @@ NOTE: EOL (Encyclopedia of Life) is now behind Cloudflare bot-challenge pages �
 api.eol.org returns an HTML "Just a moment..." challenge instead of JSON.
 Dropped from the roadmap; no workaround without a headless browser.
 
+  [X] WoRMS — World Register of Marine Species (2026-06-24) — taxonomy/
+      validity register, same role as Catalogue of Life above (not an
+      occurrence-stats source — WoRMS has no occurrence counts).
+      GET /api/field-data/worms?species=X →
+      marinespecies.org/rest/AphiaRecordsByName/{species}?like=false&marine_only=false
+      Renders into sidebar #wormsClassification (loadWormsData() in
+      scripts/topic.js): classification breadcrumb + environment badges
+      (Marine/Brackish/Freshwater/Terrestrial — only the true ones shown)
+      + link. Hidden entirely when no WoRMS record exists (most
+      terrestrial species correctly won't have one). Verified live against
+      both a marine species (Gadus morhua — accepted record, Marine+
+      Brackish) and a freshwater-only one (Astacus astacus — still
+      matches, since WoRMS isn't marine_only by default, correctly tagged
+      Freshwater only).
+
+  [X] OBIS — Ocean Biodiversity Information System (2026-06-24) —
+      occurrence stats, same role as GBIF above but marine-specific.
+      GET /api/field-data/obis?species=X →
+      api.obis.org/v3/checklist?scientificname=X (records count + a bonus
+      IUCN conservation category, free, ahead of the dedicated IUCN
+      integration) + api.obis.org/v3/statistics/years?scientificname=X
+      (year trend, same shape as GBIF's). Renders as a .inat-panel in
+      #inatContent (loadObisData()) — total records, IUCN badge if
+      present (color-coded by severity), year-trend sparkline, link.
+      Verified live: Gadus morhua → 3,115,364 records, IUCN "VU", 14 years
+      of trend data; Astacus astacus (freshwater-only) → correctly 404s,
+      no panel shown, no error surfaced.
+
+  [DROPPED] AmphibiaWeb — confirmed via live test (2026-06-24) that both
+      its API endpoints (amphib_ws and amphib_names.json) now redirect
+      into a Cloudflare Turnstile "verify you are human" challenge page
+      (amphibiaweb.org's homepage itself still loads fine — this is
+      API-specific, not a full site outage). Identical failure mode to
+      EOL above. No workaround without a headless browser — dropped from
+      the roadmap for the same reason.
+
 -------------------------------------------------------
-TO BUILD — TIER 1 (no auth required, high value)
+TO BUILD — TIER 1 remaining
 -------------------------------------------------------
 
-WoRMS — World Register of Marine Species
-  URL: marinespecies.org | API: marinespecies.org/rest/
-  Data: ~240,000 accepted marine species, authoritative names for crustaceans, fish, etc.
-  Key endpoint: GET /AphiaRecordsByName/{species}?like=false&marine_only=false
-  Why useful: gold standard for any aquatic species (crayfish are crustaceans — WoRMS applies)
-
-AmphibiaWeb
-  URL: amphibiaweb.org | API: amphibiaweb.org/cgi/amphib_ws
-  Data: full species accounts for all amphibians — distribution, conservation, taxonomy
-  Endpoint: GET /amphib_names.json (full species list), XML web service for individual records
-  Why useful: same model as WoC but for amphibians — curated expert data
-
-OBIS — Ocean Biodiversity Information System
-  URL: obis.org | API: via robis R package or direct API calls
-  Data: 100M+ marine occurrence records, 160,000+ species
-  Why useful: marine counterpart to GBIF; excellent for aquatic invertebrates
+Tier 1 (no-auth) is now complete other than AmphibiaWeb (dropped, see
+above). Nothing else queued here — next actionable item is Tier 2 below.
 
 -------------------------------------------------------
 TO BUILD — TIER 2 (free API key required)
@@ -2136,7 +2158,11 @@ This is the long-term vision for SE topic pages: not just papers and Wikipedia,
 but the living data layer for every field — each field's equivalent of World of Crayfish.
 
 Priority order for next build session:
-  1. IUCN Red List (free key, conservation status badge — single most useful data point)
-  2. WoRMS (no auth, essential for aquatic/marine species)
-  3. AmphibiaWeb (no auth, amphibian species accounts)
-  4. OBIS (no auth, marine occurrence data)
+  1. IUCN Red List (free key — needs Olivier to register at
+     apiv3.iucnredlist.org first, same pattern as the Semantic Scholar key.
+     Conservation status badge — single most useful data point. OBIS's
+     checklist endpoint already surfaces an IUCN category as a bonus
+     where available, but a dedicated IUCN integration would cover far
+     more species and be the authoritative source rather than incidental.)
+  2. eBird (needs a free API key tied to an eBird account)
+  3. Xeno-canto (needs a free key for registered members)

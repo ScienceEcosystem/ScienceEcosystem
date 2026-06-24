@@ -3652,6 +3652,107 @@ app.get("/api/field-data/col", async (req, res) => {
 });
 
 /* ---------------------------
+   Field data — WoRMS (World Register of Marine Species) proxy
+   Taxonomy/validity register, not an occurrence-stats source — same role
+   as Catalogue of Life above, but the authority specifically for marine
+   and aquatic taxa (crustaceans, fish, etc).
+----------------------------*/
+app.get("/api/field-data/worms", async (req, res) => {
+  const species = (req.query?.species || "").trim();
+  if (!species) return res.status(400).json({ error: "species required" });
+
+  const cacheKey = `worms:${species.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const results = await fetchJSONTimeout(
+      `https://www.marinespecies.org/rest/AphiaRecordsByName/${encodeURIComponent(species)}?like=false&marine_only=false`,
+      {}, 8000
+    ).catch(() => null);
+    const records = Array.isArray(results) ? results : [];
+    if (!records.length) return res.status(404).json({ error: "Species not found in WoRMS" });
+
+    const match = records.find(r => r.status === "accepted") || records[0];
+
+    const wantedRanks = ["kingdom", "phylum", "class", "order", "family", "genus"];
+    const classification = wantedRanks
+      .filter(rank => match[rank])
+      .map(rank => ({ name: match[rank], rank }));
+
+    const payload = {
+      aphia_id:         match.AphiaID,
+      scientific_name:  match.scientificname,
+      authority:        match.authority || "",
+      status:           match.status,
+      classification,
+      is_marine:        match.isMarine === 1,
+      is_brackish:      match.isBrackish === 1,
+      is_freshwater:    match.isFreshwater === 1,
+      is_terrestrial:   match.isTerrestrial === 1,
+      worms_url:        match.url,
+    };
+
+    OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/worms failed:", err.message);
+    res.status(502).json({ error: "WoRMS unavailable" });
+  }
+});
+
+/* ---------------------------
+   Field data — OBIS (Ocean Biodiversity Information System) proxy
+   Marine occurrence stats — same role as GBIF above, but marine-specific
+   (and OBIS's checklist endpoint conveniently embeds an IUCN conservation
+   category for free, ahead of the dedicated IUCN integration).
+----------------------------*/
+app.get("/api/field-data/obis", async (req, res) => {
+  const species = (req.query?.species || "").trim();
+  if (!species) return res.status(400).json({ error: "species required" });
+
+  const cacheKey = `obis:${species.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const checklist = await fetchJSONTimeout(
+      `https://api.obis.org/v3/checklist?scientificname=${encodeURIComponent(species)}`,
+      {}, 8000
+    );
+    const entry = (checklist?.results || [])[0];
+    const totalRecords = entry?.records || 0;
+    if (!entry || !totalRecords) return res.status(404).json({ error: "No occurrences in OBIS" });
+
+    // Year trend: last 15 complete years (same shape as GBIF's year_trend)
+    const years = await fetchJSONTimeout(
+      `https://api.obis.org/v3/statistics/years?scientificname=${encodeURIComponent(species)}`,
+      {}, 8000
+    ).catch(() => []);
+    const currentYear = new Date().getUTCFullYear();
+    const yearTrend = (Array.isArray(years) ? years : [])
+      .filter(r => r.year >= currentYear - 14 && r.year < currentYear)
+      .map(r => ({ year: r.year, count: r.records }))
+      .sort((a, b) => a.year - b.year);
+
+    const payload = {
+      taxon_id:        entry.taxonID,
+      scientific_name:  entry.scientificName || species,
+      total_records:    totalRecords,
+      iucn_category:    entry.category || null,
+      year_trend:       yearTrend,
+      obis_url:         `https://obis.org/taxon/${entry.taxonID}`,
+    };
+
+    OA_CACHE.set(cacheKey, { value: payload, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/obis failed:", err.message);
+    res.status(502).json({ error: "OBIS unavailable" });
+  }
+});
+
+/* ---------------------------
    Topic synthesis — Claude Haiku
 ----------------------------*/
 app.get("/api/topic/synthesis", async (req, res) => {
