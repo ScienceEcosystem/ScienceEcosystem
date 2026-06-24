@@ -73,6 +73,28 @@ async function boot() {
     }
   }
 
+  // Still nothing, and this looks like a raw PDF view with no DOI in the
+  // URL (e.g. a publisher's short-lived signed asset link, like
+  // ScienceDirect's pdf.sciencedirectassets.com PDFs) — check whether we
+  // remember the paper this tab was on just before navigating here (saved
+  // below, in step 5, whenever a real paper IS detected).
+  let rememberedPdfUrl = null;
+  if (!meta?.detected && tab.url && /\.pdf(\?|#|$)/i.test(tab.url)) {
+    try {
+      const key = "pdf_paper_tab_" + tab.id;
+      const stored = await chrome.storage.session.get(key);
+      const remembered = stored?.[key];
+      if (remembered) {
+        meta = {
+          detected: true, doi: remembered.doi, title: remembered.title,
+          authors: remembered.authors, year: remembered.year, venue: remembered.venue,
+          isPdf: true,
+        };
+        rememberedPdfUrl = tab.url;
+      }
+    } catch (_) {}
+  }
+
   _meta = meta;
 
   // Badge: set here instead of from the auto-injected content script
@@ -110,7 +132,22 @@ async function boot() {
   }).then(r => r?.saved ?? false).catch(() => false);
 
   // 5. Render paper state
-  _pdfUrls = (meta.pdfUrls || []);
+  _pdfUrls = rememberedPdfUrl ? [rememberedPdfUrl] : (meta.pdfUrls || []);
+
+  // Remember this paper for the tab, in case the user navigates on to a
+  // raw PDF view (e.g. clicks through to an online reader) where we won't
+  // be able to detect anything from the page itself — see the lookup above.
+  if (!rememberedPdfUrl) {
+    try {
+      await chrome.storage.session.set({
+        ["pdf_paper_tab_" + tab.id]: {
+          doi: meta.doi || null, title: meta.title || null, authors: meta.authors || null,
+          year: meta.year || null, venue: meta.venue || null, ts: Date.now(),
+        }
+      });
+    } catch (_) {}
+  }
+
   renderPaperState();
 }
 

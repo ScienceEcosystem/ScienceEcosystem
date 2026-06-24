@@ -284,6 +284,15 @@
   // ── Main: build the full metadata object ──────────────────────────────────
 
   function getPageMetadata() {
+    // Raw PDF being viewed directly (e.g. Firefox's built-in PDF.js viewer
+    // lets content scripts run here; Chrome's usually doesn't, which is
+    // why the popup also has a tab-URL-based fallback for this case).
+    // There's no page metadata to extract — the popup falls back to
+    // whatever paper it remembers for this tab from before navigating here.
+    if (document.contentType === "application/pdf") {
+      return { detected: false, isRawPdf: true, pageUrl: location.href };
+    }
+
     const doi = detectDoi();
     const title = extractTitle();
     const authors = extractAuthors();

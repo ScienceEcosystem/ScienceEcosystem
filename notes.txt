@@ -87,6 +87,36 @@ BUGS / QUICK FIXES
       for every publisher, and the user can still always fall back to
       manually attaching a PDF via the website (which does work, confirmed
       multiple times this session).
+- [X] Extension can now save a paper from its raw PDF view, not just the
+      article page (2026-06-24) — follow-up to the above: user manually
+      found the real, working PDF by clicking through ScienceDirect's UI to
+      its "online reader", landing on a bare PDF render at
+      pdf.sciencedirectassets.com/.../main.pdf?X-Amz-... — but the extension
+      showed "No paper detected on this page" there, since a raw PDF render
+      has no title/DOI/meta-tags to scrape, and Chrome doesn't let content
+      scripts run inside its native PDF viewer anyway (popup.js already had
+      a comment acknowledging this: "chrome://, PDF, restricted page").
+      There was already a narrower fallback (extract a DOI straight from
+      the tab URL) but it only helps when the PDF's OWN url happens to
+      contain a DOI — ScienceDirect's signed asset URLs never do.
+      Fix: popup.js now remembers the detected paper (doi/title/authors/
+      year/venue) in chrome.storage.session, keyed by tab id, every time a
+      real detection succeeds (e.g. on the article page). When later
+      landing on a bare-PDF-looking URL (matches /\.pdf(\?|#|$)/i) in that
+      same tab with nothing else detected, it looks up what was remembered
+      for that tab and offers to save THIS exact PDF (the tab's current
+      URL — which is the real, working file, better than any guessed
+      candidate) against that remembered paper. Added the "storage"
+      permission to manifest.json (wasn't there before — chrome.storage.*
+      needs it), a chrome.tabs.onRemoved cleanup listener in
+      service-worker.js to delete the per-tab entry when the tab closes,
+      and a defensive document.contentType==="application/pdf" check in
+      content.js for browsers where content scripts DO run on PDF viewers
+      (e.g. Firefox) — harmless on Chrome where it just never fires.
+      Bumped extension version to 0.1.3. Verified: all 4 changed files
+      pass syntax/JSON validation; the actual runtime behavior needs a
+      real reload-and-test in Chrome (can't simulate chrome.storage/
+      chrome.tabs APIs from this environment).
 
 =======================================================
 NEAR-TERM FEATURES (next 1–3 months)

@@ -216,6 +216,13 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   }
 });
 
+// Clean up the "remembered paper for this tab" entry (used so a raw PDF
+// view reached by clicking through from an article page can still be
+// saved against the right paper) once the tab closes.
+chrome.tabs.onRemoved.addListener((tabId) => {
+  chrome.storage.session.remove("pdf_paper_tab_" + tabId).catch(() => {});
+});
+
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
