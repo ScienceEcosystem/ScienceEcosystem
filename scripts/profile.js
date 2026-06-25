@@ -931,7 +931,11 @@
         var data = await resp.json();
         // The endpoint returns a flat citationContexts[] (one entry per context
         // sentence, not grouped by citing paper) — see routes/paper.js.
-        var items = data.citationContexts || [];
+        // Only genuine Semantic Scholar extracts are informative about HOW
+        // a paper is cited — filter out the OpenAlex-abstract fallback
+        // (source === "openalex_abstract"), which is just the citing
+        // paper's abstract opening, unrelated to the actual citing sentence.
+        var items = (data.citationContexts || []).filter(function(c){ return c.source !== "openalex_abstract"; });
         if (items.length > 0) allGroups.push({ doi: dois[d], items: items });
       } catch(_) {}
     }
@@ -966,13 +970,7 @@
       for (var r = 0; r < group.items.length && r < 5; r++) {
         var c = group.items[r];
         var extraChips = [];
-        if (c.source === "openalex_abstract") {
-          // Not a real citation context — Semantic Scholar had no
-          // extracted citing sentence for this paper, so this is just its
-          // abstract opening. Flag distinctly rather than showing a
-          // misleading "Background" intent badge (not a real S2 call).
-          extraChips.push('<span class="badge" style="background:#f1f5f9; color:#475569; border-color:#cbd5e1;" title="Semantic Scholar had no extracted citing sentence for this paper">Abstract excerpt, not the citing sentence</span>');
-        } else if (c.intent) {
+        if (c.intent) {
           var intentLabel = c.intent === "background" ? "Background"
                     : c.intent === "methodology" ? "Methodology"
                     : c.intent === "result" ? "Result"

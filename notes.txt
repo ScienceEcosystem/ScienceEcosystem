@@ -25,19 +25,30 @@ BUGS / QUICK FIXES
       said "via Semantic Scholar" regardless. For this specific paper, ALL
       5 shown "citation contexts" turned out to be fallback-sourced, zero
       genuine — confirmed via direct query.
-      Fixed in scripts/paper.js + scripts/profile.js: items with
-      source==="openalex_abstract" now show a distinct "Abstract excerpt,
-      not the citing sentence" badge instead of a misleading "Background"
-      intent badge (which would wrongly imply S2 classified it that way).
-      The section's intro line (paper.html #citationContextsIntro) is now
-      built dynamically based on the actual mix — "via Semantic Scholar"
-      only when ALL contexts are genuine S2 extracts; an honest "Semantic
-      Scholar didn't have the exact citing sentence — showing each paper's
-      abstract instead" when none are; a mixed-count sentence otherwise.
-      Verified live: confirmed via direct API query that this exact paper
-      (10.1016/j.scitotenv.2020.143826) currently has 0 real / 5 fallback
-      contexts, and that the new badge/intro logic is present in served
-      scripts/paper.js.
+      First fix (superseded minutes later, see below): labeled
+      source==="openalex_abstract" items with a distinct "Abstract
+      excerpt, not the citing sentence" badge and made the intro line
+      dynamic based on the real/fallback mix, rather than hiding them.
+      User's actual preference once they saw it in practice: don't show
+      the fallback items AT ALL — an abstract excerpt isn't informative
+      about how a paper is cited, so there's no reason to surface it here
+      just because it's clearly labeled. SIMPLER FINAL FIX: filter
+      source==="openalex_abstract" out of `contexts`/`items` entirely in
+      both scripts/paper.js and scripts/profile.js, right after fetching —
+      removed the now-dead badge/dynamic-intro code from the first fix
+      (the intro line is unconditionally "via Semantic Scholar" again,
+      which is now always true once filtered). Section hides itself
+      entirely via the existing empty-state path when nothing genuine
+      remains (same pattern already used elsewhere — no new logic needed).
+      The OpenAlex-abstract fallback itself stays in the backend (routes/
+      paper.js) unchanged — still useful for other potential consumers,
+      just no longer surfaced in this specific UI section.
+      Verified live: confirmed this exact paper (10.1016/j.scitotenv.
+      2020.143826, 0 real / 5 fallback contexts) now correctly resolves to
+      0 shown contexts, no peer reviews, no impact data — section will
+      hide entirely instead of showing 5 uninformative entries. Confirmed
+      the dead badge code is gone from served scripts/paper.js and
+      scripts/profile.js.
 
 - [X] Fix installed-PWA app icon showing a generic "S" placeholder
       (2026-06-24) — user installs the site as a desktop app (PWA, not an
