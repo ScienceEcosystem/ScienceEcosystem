@@ -68,10 +68,16 @@ BUGS / QUICK FIXES
       cache bump needed — these are new files, not precached ones being
       changed. Verified live: both files confirmed 200 via the dev server,
       manifest.json's icons array confirmed pointing at the new files.
-      (Separately, also generated assets/logos_se/app-icon-1024-navy.png
-      earlier for an actual Xcode App Icon slot, in case the Safari
-      extension port happens later — that one's still valid and unused for
-      now, this PWA fix is independent of it.)
+      FOLLOW-UP same day: user saw the navy icon in their actual Dock next
+      to other apps (mostly white/light-background icons — Finder, Photos,
+      Notes, Calendar, Messages, etc.) and it blended in/was hard to spot.
+      Regenerated icon-192.png and icon-512.png with a white background
+      instead of navy (same logo mark, same 78% safe-zone scale) —
+      filenames unchanged so manifest.json needed no edit. Also
+      regenerated the unused Xcode 1024 variant as app-icon-1024-white.png
+      and deleted the now-redundant app-icon-1024-navy.png. Verified live:
+      both icon files re-confirmed 200 via the dev server after
+      regeneration.
 
 - [X] Retry PDF load on transient R2 408s (2026-06-23) — user hit "PDF no
       longer available... Unexpected server response (408)" opening a
