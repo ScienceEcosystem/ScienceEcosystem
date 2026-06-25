@@ -2262,7 +2262,28 @@
       }
 
       section.style.display = "block";
-      document.getElementById("citationCount").textContent = contexts.length;
+
+      // Be honest about provenance: when Semantic Scholar has no extracted
+      // citing sentence for a paper, we fall back to showing that paper's
+      // OpenAlex abstract opening instead — which is NOT the sentence where
+      // they actually cite this work, just the best available substitute.
+      // Mislabeling that as a "citation context found via Semantic Scholar"
+      // overclaims the data quality, so the intro line reflects the real mix.
+      const introEl = document.getElementById("citationContextsIntro");
+      if (introEl) {
+        const fallbackCount = contexts.filter(c => c.source === "openalex_abstract").length;
+        const realCount = contexts.length - fallbackCount;
+        let text;
+        if (fallbackCount === 0) {
+          text = `The exact sentences where other papers cite this work — <strong id="citationCount">${contexts.length}</strong> citation contexts found via Semantic Scholar:`;
+        } else if (realCount === 0) {
+          text = `Semantic Scholar didn't have the exact citing sentence for these papers — showing each paper's abstract instead (<strong id="citationCount">${contexts.length}</strong> below):`;
+        } else {
+          text = `<strong id="citationCount">${contexts.length}</strong> citing papers found — ${realCount} with the exact citing sentence via Semantic Scholar, ${fallbackCount} showing the paper's abstract instead (exact sentence not available):`;
+        }
+        introEl.innerHTML = text;
+      }
+
       document.getElementById("countAll").textContent = contexts.length;
       document.getElementById("countInfluential").textContent = contexts.filter(c => c.isInfluential).length;
       document.getElementById("countMethodology").textContent = contexts.filter(c => c.intent === "methodology").length;
@@ -2333,7 +2354,15 @@
         </article>`;
       }
       const extraChips = [];
-      if (c.intent) extraChips.push(`<span class="badge">${escapeHtml(c.intent)}</span>`);
+      if (c.source === "openalex_abstract") {
+        // Not a real citation context — Semantic Scholar had nothing for
+        // this paper, so this is just its abstract opening. Flag it
+        // distinctly rather than showing a misleading "background" intent
+        // badge, which would otherwise look like a genuine S2 classification.
+        extraChips.push('<span class="badge" style="background:#f1f5f9;color:#475569;border-color:#cbd5e1;" title="Semantic Scholar had no extracted citing sentence for this paper">Abstract excerpt, not the citing sentence</span>');
+      } else if (c.intent) {
+        extraChips.push(`<span class="badge">${escapeHtml(c.intent)}</span>`);
+      }
       if (c.stance) extraChips.push(`<span class="stance-badge stance-${escapeHtml(c.stance.toLowerCase().replace(/\s+/g, "-"))}">${escapeHtml(c.stance)}</span>`);
       if (c.isInfluential) extraChips.push('<span class="badge badge-warn">Influential</span>');
       if (c.openAccessPdf) extraChips.push(`<a href="/pdf-viewer.html?pdf=${encodeURIComponent(c.openAccessPdf)}" target="_blank" class="badge badge-ok">Read PDF</a>`);

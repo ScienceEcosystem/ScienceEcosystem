@@ -966,7 +966,13 @@
       for (var r = 0; r < group.items.length && r < 5; r++) {
         var c = group.items[r];
         var extraChips = [];
-        if (c.intent) {
+        if (c.source === "openalex_abstract") {
+          // Not a real citation context — Semantic Scholar had no
+          // extracted citing sentence for this paper, so this is just its
+          // abstract opening. Flag distinctly rather than showing a
+          // misleading "Background" intent badge (not a real S2 call).
+          extraChips.push('<span class="badge" style="background:#f1f5f9; color:#475569; border-color:#cbd5e1;" title="Semantic Scholar had no extracted citing sentence for this paper">Abstract excerpt, not the citing sentence</span>');
+        } else if (c.intent) {
           var intentLabel = c.intent === "background" ? "Background"
                     : c.intent === "methodology" ? "Methodology"
                     : c.intent === "result" ? "Result"
