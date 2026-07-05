@@ -1055,8 +1055,9 @@
         const A=Number(a.year||0), B=Number(b.year||0);
         return sortDir==="asc" ? A-B : B-A;
       }
-      const A=(a?.[sortBy]??"").toString().toLowerCase();
-      const B=(b?.[sortBy]??"").toString().toLowerCase();
+      // Author sort should go by last name, not the raw "First Last, ..." string
+      const A=(sortBy==="authors" ? firstAuthorLastName(a?.authors) : (a?.[sortBy]??"")).toString().toLowerCase();
+      const B=(sortBy==="authors" ? firstAuthorLastName(b?.authors) : (b?.[sortBy]??"")).toString().toLowerCase();
       if(A<B) return sortDir==="asc"?-1:1;
       if(A>B) return sortDir==="asc"? 1:-1;
       return 0;
