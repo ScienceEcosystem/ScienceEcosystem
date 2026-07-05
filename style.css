@@ -793,15 +793,95 @@ body.annot-erase .pdf-annot { cursor: crosshair; }
   pointer-events: auto;
 }
 
+/* No persistent background — citations should look like normal paper text
+   until interacted with, not be colored all the time. A faint tint on
+   hover signals it's clickable (same pattern as .pdf-link above); the
+   actual highlight only appears on .active, i.e. the one just clicked. */
 .citation-highlight {
-  background: rgba(255, 235, 59, 0.6);
   border-radius: 2px;
   pointer-events: auto;
+  cursor: pointer;
+}
+.citation-highlight:hover {
+  background: rgba(46, 127, 159, 0.12);
 }
 .citation-highlight.active {
+  background: rgba(255, 235, 59, 0.6);
   outline: 2px solid #0284c7;
   outline-offset: 1px;
 }
+
+/* Sticky notes: free-floating point-anchored annotations placed by clicking
+   the page while the "Note" tool is active (not tied to a text selection). */
+.pdf-annot-note-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffd93d;
+  border: 2px solid #f5b800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  pointer-events: auto;
+  z-index: 5;
+}
+.pdf-annot-note-pin:active { cursor: grabbing; }
+
+.pdf-note-box {
+  position: absolute;
+  z-index: 10;
+  width: 220px;
+  background: #fff9c4;
+  border: 1px solid #f5d90a;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pdf-note-box-handle {
+  cursor: move;
+  background: #ffe066;
+  color: #664d03;
+  font-size: .7rem;
+  font-weight: 600;
+  padding: .3rem .5rem;
+  user-select: none;
+}
+.pdf-note-box-textarea {
+  border: none;
+  background: transparent;
+  resize: vertical;
+  min-height: 70px;
+  padding: .5rem;
+  font-size: .85rem;
+  font-family: inherit;
+  color: #4a3b00;
+  outline: none;
+}
+.pdf-note-box-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .4rem;
+  padding: .3rem .5rem;
+  border-top: 1px solid rgba(0,0,0,.08);
+}
+.pdf-note-box-actions button {
+  font-size: .75rem;
+  padding: .2rem .55rem;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+}
+.pdf-note-box-actions button.pdf-note-save { background: #198754; color: #fff; }
+.pdf-note-box-actions button.pdf-note-delete { background: #dc3545; color: #fff; }
 
 /* Floating selection toolbar (appears on text select) */
 .pdf-sel-toolbar {

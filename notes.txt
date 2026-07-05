@@ -2044,6 +2044,43 @@ DONE
       environment issue, unrelated to these changes). All edited files
       pass `node --check` and the dev server serves library.html and
       pdf-viewer.html with the new UI elements present.
+- [X] PDF reader annotation bug fixes (2026-07-05):
+      1. Highlight overflow: mergeLineRects() (scripts/pdf-reader.js) used
+         a fragile "next rect's top within 60% of the first rect's height"
+         heuristic to decide if two selection rects were on the same line —
+         on tight academic line spacing this could merge two different
+         lines into one band, stretching the highlight box past the actual
+         text. Replaced with a real vertical-overlap-ratio check (two rects
+         are the same line only if their vertical ranges overlap by ≥50%
+         of the shorter rect's height).
+      2. Citation references were permanently painted blue over whole
+         paragraphs. Two bugs stacked: (a) pdf-viewer.html had a second,
+         conflicting `.citation-highlight` CSS rule (blue background) that
+         silently overrode the yellow one in style.css — removed the
+         duplicate, style.css is now the single source; (b) citations are
+         now styled with no background at rest, a hover tint, and a
+         background only on `.active` (the one just clicked) — matches the
+         "only show a link when clicked" request. Also wired the in-text
+         citation click handler to actually mark the clicked span `.active`
+         (it previously only switched the sidebar tab).
+      3. "Note" button did nothing on a plain click: bindAnnotationToolbar()
+         only ever set `annotMode = 'note'` — nothing else in the file
+         checked that mode, so clicking the page did nothing (notes could
+         only be created by first drag-selecting text). Added real sticky
+         notes: a plain click on the page while in Note mode now opens a
+         bright yellow, draggable, editable box anchored at that exact
+         point (openNoteBox()/wireNotePointDrag() in scripts/pdf-reader.js);
+         it collapses to a small 📌 pin when closed, reopens on click, and
+         both the pin and the open box can be dragged to reposition —
+         position and text persist via the existing annotation
+         save/localStorage path.
+      Note: could not run full DB-backed end-to-end interactive testing
+      this session (same pre-existing local Neon/Postgres connectivity
+      issue as above) — verified via `node --check`, a CSS brace-balance
+      check, and confirming the dev server serves the updated style.css/
+      pdf-reader.js correctly before the DB call failed. Real
+      click/drag/multi-line-selection behavior should be spot-checked in
+      a browser against a real PDF.
 
 
 =======================================================

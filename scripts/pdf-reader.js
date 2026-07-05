@@ -20,6 +20,7 @@ let annotations = [];
 let annotationKey = '';
 let pdfLinkIndex = [];
 let pageTextIndex = new Map();
+let _openNoteBox = null; // { el, page, annotId, cleanup() } — the currently open sticky-note editor, if any
 let _paperDoiHref = null; // set by loadPaperMetadata; used by the PDF error state
 
 function renderDoiLink(el, doiHref, oaUrl) {
@@ -574,12 +575,18 @@ function wireCitationHover(layerEl, tooltipEl) {
   });
 
   // Clicking the citation itself scrolls the Refs sidebar to that entry —
-  // it never jumps to a bibliography location inside the PDF page.
+  // it never jumps to a bibliography location inside the PDF page. Since
+  // citations no longer show a persistent highlight (only on hover/click —
+  // see .citation-highlight in style.css), mark the clicked one .active so
+  // there's visible confirmation of what was actually clicked.
   layerEl.addEventListener('click', function (e) {
     const target = e.target.closest('.citation-highlight');
     if (!target) return;
     const refNum = target.getAttribute('data-ref-number');
-    if (refNum) handleReferenceClick(parseInt(refNum, 10));
+    if (!refNum) return;
+    clearCitationActive();
+    target.classList.add('active');
+    handleReferenceClick(parseInt(refNum, 10));
   });
 
   layerEl.addEventListener('mouseout', function (e) {
@@ -1741,29 +1748,202 @@ function createAnnotation(page, normRects, quote, type, note, color) {
   renderAnnotationsForPage(page);
 }
 
+function removeAnnotation(id) {
+  annotations = annotations.filter(a => a.id !== id);
+  saveAnnotations();
+}
+
+// Sticky notes: point-anchored notes placed by clicking anywhere on the page
+// while the "Note" tool is active — not tied to a text selection. Rendered as
+// a small draggable pin; clicking the pin opens an editable box at that spot.
+function pageCanvasSize(wrap) {
+  const canvas = wrap.querySelector('.pdf-page-canvas');
+  return {
+    cw: canvas ? canvas.offsetWidth || canvas.width : wrap.offsetWidth,
+    ch: canvas ? canvas.offsetHeight || canvas.height : wrap.offsetHeight
+  };
+}
+
+function closeNoteBox() {
+  if (_openNoteBox) {
+    _openNoteBox.cleanup();
+    _openNoteBox.el.remove();
+    _openNoteBox = null;
+  }
+}
+
+// Wires shared drag-to-move behavior for a point annotation. `handleEl` is the
+// element that starts the drag (the pin itself, or the box's title-bar
+// handle); `carrierEl` is the element whose position actually moves (same as
+// handleEl for the pin, the whole box for the note editor). Persists the new
+// normalized point on the annotation once the drag ends.
+function wireNotePointDrag(handleEl, carrierEl, wrap, page, annotId, onDragEnd) {
+  let dragging = false, moved = false, startX, startY, origLeft, origTop;
+  const onMove = (e) => {
+    if (!dragging) return;
+    moved = true;
+    carrierEl.style.left = `${origLeft + (e.clientX - startX)}px`;
+    carrierEl.style.top = `${origTop + (e.clientY - startY)}px`;
+  };
+  const onUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    if (!moved) { onDragEnd(false); return; }
+    const { cw, ch } = pageCanvasSize(wrap);
+    const newNorm = {
+      x: parseFloat(carrierEl.style.left) / cw,
+      y: parseFloat(carrierEl.style.top) / ch,
+      _norm: true, _point: true
+    };
+    const a = annotations.find(x => x.id === annotId);
+    if (a) { a.rects = [newNorm]; saveAnnotations(); }
+    onDragEnd(true);
+  };
+  handleEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    dragging = true; moved = false;
+    startX = e.clientX; startY = e.clientY;
+    origLeft = parseFloat(carrierEl.style.left) || 0;
+    origTop = parseFloat(carrierEl.style.top) || 0;
+    e.preventDefault();
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
+// Opens the bright-yellow editable note box at a normalized point. Pass
+// `existingId`/`existingText` to edit an existing sticky note; omit both to
+// create a brand-new one on save.
+function openNoteBox(wrap, page, pointNorm, existingId, existingText) {
+  closeNoteBox();
+  const layer = wrap.querySelector('.pdf-annotation-layer');
+  if (!layer) return;
+  const { cw, ch } = pageCanvasSize(wrap);
+
+  const box = document.createElement('div');
+  box.className = 'pdf-note-box';
+  box.style.left = `${pointNorm.x * cw}px`;
+  box.style.top = `${pointNorm.y * ch}px`;
+
+  const handle = document.createElement('div');
+  handle.className = 'pdf-note-box-handle';
+  handle.textContent = '⠿ Note — drag to move';
+  box.appendChild(handle);
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'pdf-note-box-textarea';
+  textarea.value = existingText || '';
+  textarea.placeholder = 'Type your note…';
+  box.appendChild(textarea);
+
+  const actions = document.createElement('div');
+  actions.className = 'pdf-note-box-actions';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'pdf-note-save';
+  saveBtn.textContent = 'Save';
+  actions.appendChild(saveBtn);
+  if (existingId) {
+    const delBtn = document.createElement('button');
+    delBtn.className = 'pdf-note-delete';
+    delBtn.textContent = 'Delete';
+    delBtn.addEventListener('click', () => {
+      removeAnnotation(existingId);
+      closeNoteBox();
+      renderAnnotationsForPage(page);
+    });
+    actions.appendChild(delBtn);
+  }
+  box.appendChild(actions);
+  layer.appendChild(box);
+
+  let annotId = existingId;
+  const commit = () => {
+    const text = textarea.value.trim();
+    const { cw: cw2, ch: ch2 } = pageCanvasSize(wrap);
+    const norm = { x: parseFloat(box.style.left) / cw2, y: parseFloat(box.style.top) / ch2, _norm: true, _point: true };
+    if (!text) {
+      if (annotId) removeAnnotation(annotId);
+      return;
+    }
+    if (annotId) {
+      const a = annotations.find(x => x.id === annotId);
+      if (a) { a.note = text; a.rects = [norm]; }
+    } else {
+      annotId = String(Date.now()) + '_' + Math.random().toString(16).slice(2);
+      annotations.push({ id: annotId, page, type: 'note', rects: [norm], quote: '', note: text, color: null });
+    }
+    saveAnnotations();
+  };
+
+  const onOutsideDown = (e) => {
+    if (!box.contains(e.target)) finish();
+  };
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') finish();
+  };
+  function finish() {
+    commit();
+    closeNoteBox();
+    renderAnnotationsForPage(page);
+  }
+  saveBtn.addEventListener('click', finish);
+  setTimeout(() => {
+    document.addEventListener('mousedown', onOutsideDown);
+    document.addEventListener('keydown', onKeyDown);
+  }, 0);
+
+  wireNotePointDrag(handle, box, wrap, page, annotId, (didMove) => {
+    if (didMove && !annotId) {
+      // Dragged before the first save — nothing persisted yet, box stays open.
+    }
+  });
+
+  _openNoteBox = {
+    el: box,
+    cleanup() {
+      document.removeEventListener('mousedown', onOutsideDown);
+      document.removeEventListener('keydown', onKeyDown);
+    }
+  };
+}
+
 // Merge selection rects that overlap on the same text line into single wider rects.
-// Each line's "band" is anchored to the FIRST rect placed on it (firstY/firstH) rather
-// than the cumulative merged box — otherwise the merged box's height grows with every
-// rect absorbed, and that growing band starts swallowing the *next* line too, producing
-// one giant highlight/underline spanning several lines instead of one per line.
+// Two rects are considered the same line when their vertical ranges actually
+// overlap by a meaningful fraction of the shorter rect's height — a real
+// geometric check, robust to dense/tight line spacing — rather than comparing
+// against a fixed multiple of whichever rect happened to start the band
+// (that heuristic could misfire on tight line spacing and let one line's box
+// absorb the next line's rects too, stretching the highlight past where the
+// text actually is).
 function mergeLineRects(rects) {
   if (!rects.length) return rects;
   const sorted = [...rects].sort((a, b) => a.y - b.y || a.x - b.x);
   const lines = [];
   for (const r of sorted) {
     const last = lines[lines.length - 1];
-    if (last && r.y < last.firstY + last.firstH * 0.6) {
+    let sameLine = false;
+    if (last) {
+      const top = Math.max(last.y, r.y);
+      const bottom = Math.min(last.y + last.h, r.y + r.h);
+      const overlap = bottom - top;
+      const shorter = Math.min(last.h, r.h);
+      sameLine = overlap > 0 && overlap >= shorter * 0.5;
+    }
+    if (sameLine) {
       const right = Math.max(last.x + last.w, r.x + r.w);
       const bottom = Math.max(last.y + last.h, r.y + r.h);
+      const top = Math.min(last.y, r.y);
       last.x = Math.min(last.x, r.x);
-      last.y = Math.min(last.y, r.y);
+      last.y = top;
       last.w = right - last.x;
-      last.h = bottom - last.y;
+      last.h = bottom - top;
     } else {
-      lines.push({ ...r, firstY: r.y, firstH: r.h });
+      lines.push({ ...r });
     }
   }
-  return lines.map(({ firstY, firstH, ...rest }) => rest);
+  return lines;
 }
 
 function wireAnnotationSelection(layerEl) {
@@ -1807,6 +1987,31 @@ function wireAnnotationSelection(layerEl) {
 
     // Show toolbar at mouse position — selection stays intact so Ctrl+C still works
     showSelToolbar(ev.clientX, ev.clientY, quote, page, normRects);
+  });
+
+  // Note mode: a plain click (no drag-selection) anywhere on the page places
+  // a free-floating sticky note at that exact spot — the top "Note" button
+  // used to only set annotMode with nothing else ever checking it, so
+  // clicking the page while in note mode did nothing.
+  layerEl.addEventListener('click', (ev) => {
+    if (annotMode !== 'note') return;
+    if (ev.target.closest('.pdf-annot-note-pin') || ev.target.closest('.pdf-note-box')) return;
+    if (ev.target.closest('.citation-highlight') || ev.target.closest('.pdf-link')) return;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+
+    const wrap = layerEl.closest('.pdf-page-wrap');
+    if (!wrap) return;
+    const page = Number(wrap.getAttribute('data-page') || '0');
+    const wrapRect = wrap.getBoundingClientRect();
+    if (!wrapRect.width || !wrapRect.height) return;
+
+    const pointNorm = {
+      x: (ev.clientX - wrapRect.left) / wrapRect.width,
+      y: (ev.clientY - wrapRect.top) / wrapRect.height,
+      _norm: true, _point: true
+    };
+    openNoteBox(wrap, page, pointNorm, null, '');
   });
 
   // Erase mode: click annotation to remove it. Otherwise, clicking a note
@@ -1862,6 +2067,30 @@ function renderAnnotationsForPage(page) {
 
   const pageAnnots = annotations.filter(a => a.page === page);
   pageAnnots.forEach(a => {
+    // Point-anchored sticky notes render as a draggable pin, not a rect.
+    if (a.type === 'note' && a.rects[0]?._point) {
+      const point = a.rects[0];
+      const pin = document.createElement('div');
+      pin.className = 'pdf-annot-note-pin';
+      pin.setAttribute('data-annot-id', a.id);
+      pin.style.left = `${point.x * cw}px`;
+      pin.style.top = `${point.y * ch}px`;
+      pin.textContent = '📌';
+      pin.title = a.note || '';
+      pin.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (annotMode === 'erase') {
+          removeAnnotation(a.id);
+          renderAnnotationsForPage(page);
+          return;
+        }
+        openNoteBox(wrap, page, point, a.id, a.note || '');
+      });
+      wireNotePointDrag(pin, pin, wrap, page, a.id, () => {});
+      layer.appendChild(pin);
+      return;
+    }
+
     a.rects.forEach((r, ri) => {
       // r._norm means coords are 0-1 fractions; legacy rects are absolute px
       const px = r._norm ? r.x * cw : r.x;
