@@ -580,6 +580,7 @@ function wireCitationHover(layerEl, tooltipEl) {
   // see .citation-highlight in style.css), mark the clicked one .active so
   // there's visible confirmation of what was actually clicked.
   layerEl.addEventListener('click', function (e) {
+    if (annotMode === 'note') return; // let note placement handle the click instead
     const target = e.target.closest('.citation-highlight');
     if (!target) return;
     const refNum = target.getAttribute('data-ref-number');
@@ -1996,7 +1997,12 @@ function wireAnnotationSelection(layerEl) {
   layerEl.addEventListener('click', (ev) => {
     if (annotMode !== 'note') return;
     if (ev.target.closest('.pdf-annot-note-pin') || ev.target.closest('.pdf-note-box')) return;
-    if (ev.target.closest('.citation-highlight') || ev.target.closest('.pdf-link')) return;
+    // Deliberately NOT excluding .citation-highlight here: those spans often
+    // cover far more area than the visible citation text (a whole PDF.js
+    // text-layer span can span a full line), so excluding them silently
+    // blocked most clicks in citation-dense papers. The citation click
+    // handler above already yields to note placement when annotMode is 'note'.
+    if (ev.target.closest('.pdf-link')) return;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && sel.toString().trim()) return;
 
