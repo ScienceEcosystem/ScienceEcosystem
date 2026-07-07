@@ -766,6 +766,17 @@ Still needed in Stage 1 (before moving to Stage 2):
       be accepted on a legally clean footing.
   [X] Public roadmap page on the site (2026-07-07) — see PHASE 2 checklist
       above for details
+  [X] LICENSE file (2026-07-07) — Olivier chose AGPL-3.0: closes the gap
+      flagged above (2026-06-20). AGPL specifically over MIT/Apache-2.0
+      because ScienceEcosystem is a network service, not a library — AGPL's
+      network-use clause means a fork run as a competing closed SaaS must
+      also open-source its changes, which plain copyleft (GPL) wouldn't
+      catch since there's no "distribution" happening in a hosted-service
+      fork. Added LICENSE (full AGPL-3.0 text, copyright notice filled in
+      per FSF's own "how to apply" instructions at the end of the license)
+      and updated CONTRIBUTING.md's License section to point to it instead
+      of flagging the gap. Outside PRs can now be accepted on a legally
+      clean footing.
 
 DECISION: Do not start Stage 2 features until CSRF and rate limiting are done.
 STATUS: Done as of 2026-06-20 — Stage 2 is now unblocked.
@@ -871,6 +882,28 @@ Server endpoint needed:
       endpoint, or it needs longer to fully activate than basic lookups.
       Not fully resolved — revisit by retesting just the citations
       endpoint after a longer wait (hours, not seconds).
+  [X] Found and fixed a real bug while investigating the 429s (2026-07-07)
+      — routes/paper.js:400 requested the nested citingPaper field bare
+      (fields=...,citingPaper) instead of with dot notation. Confirmed
+      directly against the live S2 API: after a clean cooldown, the bare
+      field name gets a consistent 400 "Unrecognized or unsupported
+      fields: [citingPaper]" — a real, permanent bug independent of rate
+      limiting. Fixed to fields=...,citingPaper.title,citingPaper.year,
+      citingPaper.authors,citingPaper.url,citingPaper.externalIds,
+      citingPaper.openAccessPdf — verified this exact field list returns
+      200 with real data on a clean call before the key got rate-limited
+      again from testing.
+      Rate limit itself is SEPARATE and still unresolved: retested once,
+      cleanly, ~20 min after the last hit — still 429. So the limit on
+      this specific /citations endpoint outlasts a 20-minute cooldown,
+      confirming it's stricter than basic paper lookups, not just slower
+      to activate. NEXT STEP: wait several hours (not just ~20 min) and
+      retest once, OR contact Semantic Scholar support about this key's
+      quota tier for the citations endpoint specifically — a 429 that
+      persists this long on a low-volume test key suggests a
+      misconfigured/undocumented limit, not normal usage backpressure.
+      Do not hammer this endpoint with repeated test calls — each one
+      appears to reset however long the cooldown actually is.
   [X] OpenAlex fallback wired in (2026-06-21) — rather than wait on S2,
       wired the existing-but-unused getOpenAlexCitingAbstractSnippets()
       (routes/paper.js, was dead code) into the citation-contexts endpoint

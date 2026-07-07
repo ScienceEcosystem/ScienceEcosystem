@@ -56,7 +56,7 @@ Check the `[ ]` (not-yet-done) items in `notes.txt` for the current priority lis
 
 ## License
 
-This repository doesn't have a LICENSE file yet — that's a decision the maintainer needs to make and document before outside contributions can be safely accepted long-term. If you're opening a PR before that's resolved, assume nothing is implicitly granted beyond what's needed to review and merge your own change.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) — see the `LICENSE` file. In short: you can use, modify, and redistribute this code, but if you run a modified version as a network service, you must also make your modified source available to its users under the same license.
 
 ## Questions
 
