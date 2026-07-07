@@ -397,7 +397,7 @@ async function getSemanticScholarCitations(doi) {
 async function getSemanticScholarCitationsByPaperId(paperId) {
   try {
     const citationsRes = await s2FetchJson(
-      `${S2_API_BASE}/paper/${encodeURIComponent(paperId)}/citations?fields=contexts,intents,isInfluential,citingPaper&limit=100`
+      `${S2_API_BASE}/paper/${encodeURIComponent(paperId)}/citations?fields=contexts,intents,isInfluential,citingPaper.title,citingPaper.year,citingPaper.authors,citingPaper.url,citingPaper.externalIds,citingPaper.openAccessPdf&limit=100`
     );
     if (!citationsRes.ok) return { items: null, error: `s2 citations ${citationsRes.status}` };
     const data = citationsRes.data || {};

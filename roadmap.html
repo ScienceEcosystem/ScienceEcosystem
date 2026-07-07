@@ -1,0 +1,151 @@
+<!-- =========================
+FILE: roadmap.html
+========================== -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roadmap | ScienceEcosystem</title>
+  <meta name="description" content="What's built, what's in progress, and what's next for ScienceEcosystem — an open, honest look at where the project stands." />
+  <link rel="stylesheet" href="assets/fonts/fonts.css" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="ScienceEco"/>
+  <link rel="apple-touch-icon" href="/assets/logos_se/logo.png"/>
+</head>
+
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+  <div class="nav-inner container">
+    <div class="logo">
+      <a href="index.html" aria-label="ScienceEcosystem Home">
+        <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+      </a>
+    </div>
+
+    <div class="nav-center">
+      <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+        <label class="visually-hidden" for="searchInput">Search</label>
+        <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+      </form>
+    </div>
+
+    <div class="nav-right">
+      <a class="nav-link" href="about.html">About</a>
+      <div class="nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Tools<span class="nav-chevron">▾</span></button>
+        <div class="nav-dropdown-menu">
+          <a class="nav-dropdown-item" href="journal-finder.html">Journal finder</a>
+          <a class="nav-dropdown-item" href="research-tools.html">Tools finder</a>
+        </div>
+      </div>
+
+      <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+
+      <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+        <span>Login with</span>
+        <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID" />
+      </a>
+
+      <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+    </div>
+  </div>
+</nav>
+
+  <main id="main" class="container">
+    <header class="hero">
+      <h1>Roadmap</h1>
+      <p class="lead">An honest, public account of where ScienceEcosystem stands — what's built, what's actively in progress, and what depends on what. Built by one person, in the open, updated as work happens.</p>
+    </header>
+
+    <!-- STAGE 1 -->
+    <section class="panel">
+      <h2>Stage 1 — Be useful today <span class="pill" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0;">Substantially done</span></h2>
+      <p>The foundation: paper discovery, researcher profiles, topic pages, a personal library, and the tools needed to run a platform that stores user data responsibly.</p>
+      <ul>
+        <li><strong>Done:</strong> Paper pages (metadata, abstracts, citations, figures, citation graph, open access status), author profiles, topic pages, library with Zotero sync and PDF storage, full-text/DOI/boolean search, Chrome extension (Firefox submitted), admin stats dashboard.</li>
+        <li><strong>Done:</strong> CSRF protection and rate limiting on all endpoints that write data.</li>
+        <li><strong>Done:</strong> Terms of service and a CONTRIBUTING guide.</li>
+        <li><strong>This page.</strong> The last item on the Stage 1 list.</li>
+      </ul>
+      <p class="note">Stage 1 unblocked Stage 2 as of 2026-06-20 — the security baseline (CSRF + rate limiting) had to be in place first for a platform handling user accounts.</p>
+    </section>
+
+    <!-- STAGE 2 -->
+    <section class="panel">
+      <h2>Stage 2 — Making the conversation visible <span class="pill" style="background:#fef9c3;color:#a16207;border-color:#fde68a;">In progress</span></h2>
+      <p>Today, a citation count tells you a paper was cited 47 times. It doesn't tell you <em>how</em> — whether those papers built on it, contested it, corrected it, or just mentioned it in passing. Stage 2 makes that visible, and gives cited authors a voice in their own citation record.</p>
+      <ul>
+        <li><strong>Done — "Who cited me":</strong> researcher profiles list papers that cite their work, sourced from OpenAlex.</li>
+        <li><strong>Done — Citation context:</strong> paper pages show the actual sentences from citing papers where a work is discussed, not just a count. Sourced from the Semantic Scholar API, with an OpenAlex-abstract fallback when Semantic Scholar doesn't have a citing paper indexed yet.</li>
+        <li><strong>Built, not yet live — Citation stance classification:</strong> automatic labelling of each citation context as Supports, Challenges, Corrects, Extends, Uses method, or Background, using the Claude API. Currently held behind a kill switch pending cost and abuse hardening before it's exposed to real traffic.</li>
+        <li><strong>Done — Author response:</strong> paper owners can add a note responding to how their work has been cited, visible to all readers.</li>
+      </ul>
+      <p class="note">Current bottleneck: the Semantic Scholar citations endpoint (<code>/paper/{id}/citations</code>) intermittently rate-limits even with a valid, correctly-provisioned API key — a stricter quota on that specific endpoint than on basic lookups. Being retested now with a longer wait between attempts. This is what's holding Stage 2 from being fully done and Stage 3 from starting for real, since Stage 3 depends on citation-context data accumulating at scale.</p>
+    </section>
+
+    <!-- STAGE 3 -->
+    <section class="panel">
+      <h2>Stage 3 — Topic pages as field records <span class="pill" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;">Depends on Stage 2 data</span></h2>
+      <p>Once citation stance data exists at scale, topic pages can move beyond "here are the top papers" to something closer to a live field record: where a research area has reached consensus, where it's contested, and where the open questions actually are.</p>
+      <ul>
+        <li>Aggregate citation stances (Supports / Challenges / Corrects / Extends) at the topic level, not just per-paper.</li>
+        <li>Surface contested claims and open questions algorithmically, grounded in real citation behaviour rather than editorial judgement.</li>
+        <li>Estimated timeline: 6–12 months after Stage 2 is complete, depending on how much citation-context data accumulates in the meantime.</li>
+      </ul>
+      <p class="note">Not started for real yet — needs Stage 2 stable and generating stance data at meaningful volume first.</p>
+    </section>
+
+    <!-- MEDIUM/LONG TERM -->
+    <section class="panel">
+      <h2>Further out</h2>
+      <ul>
+        <li><strong>Medium-term:</strong> claim extraction from abstracts and results sections, claim-to-claim linking across papers, a community annotation layer with governance rules.</li>
+        <li><strong>Long-term:</strong> a full claim graph across the indexed literature, and a "living paper" format — new papers published directly into the graph as structured, linked claim sets rather than static PDFs.</li>
+      </ul>
+      <p>These depend on funding and contributors. The full strategic narrative is on the <a href="business-plan.html">business plan page</a>.</p>
+    </section>
+
+    <!-- GET INVOLVED -->
+    <section class="panel">
+      <h2>Follow along or get involved</h2>
+      <p>ScienceEcosystem is built by <a href="about.html">one person</a>, in the open. The code is on <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener">GitHub</a> — issues, pull requests, and ideas are welcome.</p>
+      <p>Email: <a href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a></p>
+      <p style="margin-top:1.5rem;">
+        <a class="btn btn-primary" href="index.html">Try ScienceEcosystem</a>
+      </p>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span class="js-year">2026</span> ScienceEcosystem. All rights reserved.</p>
+      <div class="footer-utility-row">
+        <p><a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a> &nbsp;·&nbsp; <a class="footer-link" href="privacy.html">Privacy policy</a> &nbsp;·&nbsp; <a class="footer-link" href="terms.html">Terms of service</a> &nbsp;·&nbsp; <a class="footer-link" href="roadmap.html">Roadmap</a></p>
+
+        <div class="footer-socials">
+          <a href="https://www.linkedin.com/company/107994961/" target="_blank" rel="noopener" aria-label="LinkedIn" class="social-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true"><path fill="currentColor" d="M20.451 20.451h-3.554v-5.569c0-1.329-.024-3.039-1.852-3.039-1.854 0-2.137 1.447-2.137 2.943v5.665H9.354V9h3.411v1.561h.047c.476-.9 1.637-1.852 3.368-1.852 3.603 0 4.268 2.371 4.268 5.455v6.287zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM7.114 20.451H3.559V9h3.555v11.451zM22.225 0H1.771C.793 0 0 .774 0 1.729v20.542C0 23.226.793 24 1.771 24h20.454C23.2 24 24 23.226 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg>
+          </a>
+          <a href="https://github.com/ScienceEcosystem" target="_blank" rel="noopener" aria-label="GitHub" class="social-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" role="img" aria-hidden="true"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.638 22.41c.575.105.785-.247.785-.551 0-.272-.01-.995-.015-1.953-3.194.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.044-.713.079-.699.079-.699 1.154.082 1.762 1.186 1.762 1.186 1.027 1.76 2.695 1.252 3.35.957.104-.743.402-1.252.73-1.54-2.552-.29-5.238-1.276-5.238-5.679 0-1.255.45-2.28 1.186-3.084-.119-.29-.514-1.459.113-3.043 0 0 .966-.31 3.167 1.178a10.99 10.99 0 0 1 2.885-.388c.98.004 1.968.132 2.893.388 2.2-1.488 3.164-1.178 3.164-1.178.63 1.584.235 2.753.116 3.043.74.804 1.185 1.83 1.185 3.084 0 4.414-2.69 5.385-5.253 5.67.413.357.78 1.06.78 2.136 0 1.542-.014 2.785-.014 3.162 0 .307.206.663.79.55A11.502 11.502 0 0 0 12 .5z"/></svg>
+          </a>
+        </div>
+      </div>
+      <p class="footer-tagline">Open science, reimagined, for researchers, by researchers.</p>
+    </div>
+  </footer>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/library.js" defer></script>
+  <script src="scripts/components.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+</body>
+</html>

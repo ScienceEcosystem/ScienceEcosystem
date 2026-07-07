@@ -545,7 +545,14 @@ PHASE 2 — EVIDENCE LINKS (medium-term, needs funding/help)
 - [ ] Knowledge graph foundation: begin building the internal graph structure that
       connects papers → datasets → code → authors → institutions
       (see business_plan/future.tex for architecture vision)
-- [ ] Public roadmap page on the site itself (not just Overleaf)
+- [X] Public roadmap page on the site itself (not just Overleaf) (2026-07-07)
+      — added roadmap.html, matching site's panel/nav/footer template.
+      Content pulled from this file's Stage 1/2/3 build plan (not the vaguer
+      Phase 1/2/3 summary already on about.html): Stage 1 marked
+      substantially done, Stage 2 in progress with the current Semantic
+      Scholar citations-endpoint bottleneck called out explicitly, Stage 3
+      marked as blocked on Stage 2 data. Linked from about.html's "What's
+      next" section and from roadmap.html's own footer. Verified 200 locally.
 
 
 =======================================================
@@ -757,7 +764,8 @@ Still needed in Stage 1 (before moving to Stage 2):
       root. FLAGS A GAP: there is no LICENSE file in the repo yet, which
       needs to be decided (MIT/Apache-2.0/AGPL/etc.) before outside PRs can
       be accepted on a legally clean footing.
-  [ ] Public roadmap page on the site
+  [X] Public roadmap page on the site (2026-07-07) — see PHASE 2 checklist
+      above for details
 
 DECISION: Do not start Stage 2 features until CSRF and rate limiting are done.
 STATUS: Done as of 2026-06-20 — Stage 2 is now unblocked.
