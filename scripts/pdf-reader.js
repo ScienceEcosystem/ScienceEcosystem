@@ -334,9 +334,10 @@ async function resolveDestToPage(dest) {
   }
 }
 
-async function renderLinkLayer(page, viewport, layerEl, pageNumber) {
+async function renderLinkLayer(page, viewport, layerEl, pageNumber, tooltipEl) {
   if (!layerEl || !pdfjsLib) return;
   layerEl.innerHTML = '';
+  const pageWrap = layerEl.closest('.pdf-page-wrap');
 
   let annotationsList = [];
   try {
@@ -364,12 +365,13 @@ async function renderLinkLayer(page, viewport, layerEl, pageNumber) {
     const url = ann.url || null;
     const dest = ann.dest || null;
     let inferredLabel = '';
+    let hitText = '';
     try {
       const hits = (pageTextIndex.get(pageNumber) || []).filter(s => {
         return !(s.rect.right < left || s.rect.left > left + width || s.rect.bottom < top || s.rect.top > top + height);
       });
-      const text = hits.map(h => h.text).join(' ');
-      inferredLabel = labelFromTextHits(text);
+      hitText = hits.map(h => h.text).join(' ');
+      inferredLabel = labelFromTextHits(hitText);
     } catch (_) {}
     if (url) {
       linkEl.href = url;
@@ -378,19 +380,38 @@ async function renderLinkLayer(page, viewport, layerEl, pageNumber) {
       linkEl.title = url;
       pdfLinkIndex.push({ page: pageNumber, label: inferredLabel || url, url });
     } else if (dest) {
-      linkEl.href = '#';
-      linkEl.title = 'Jump to linked section';
-      linkEl.addEventListener('click', async (ev) => {
-        ev.preventDefault();
-        const targetPage = await resolveDestToPage(dest);
-        if (targetPage) {
-          pageNum = targetPage;
-          renderPage(targetPage);
-          // All pages are pre-rendered — just scroll; use setTimeout to let paint settle
-          setTimeout(() => scrollToPage(targetPage), 30);
-        }
-      });
-      pdfLinkIndex.push({ page: pageNumber, label: inferredLabel || 'Internal link', dest });
+      // A numbered in-text citation (e.g. "[12]") is usually a real embedded
+      // PDF link pointing at the bibliography page. Following it used to
+      // scroll the whole main PDF pane down to that page — jarring when you
+      // just want to check what a citation is. Numbers matching a known
+      // reference instead get the same hover-preview + jump-to-sidebar
+      // treatment as author-year citations, with no PDF scrolling. Figure/
+      // table cross-references keep the real in-PDF jump — that one's useful.
+      const trimmed = hitText.trim();
+      const numericMatch = trimmed.match(/^\[?\s*(\d{1,4})\s*\]?$/);
+      const isFigTbl = /fig(ure)?\.?\s*\d|table\s*\d/i.test(trimmed);
+      const refNum = numericMatch ? parseInt(numericMatch[1], 10) : null;
+      const isKnownCitation = refNum && !isFigTbl && (getExtractedRefByNumber(refNum) || getRefByNumber(refNum));
+
+      if (isKnownCitation && pageWrap && tooltipEl) {
+        linkEl.classList.add('citation-highlight');
+        linkEl.setAttribute('data-ref-number', String(refNum));
+        wireInlineCitationLink(linkEl, tooltipEl, pageWrap, refNum);
+      } else {
+        linkEl.href = '#';
+        linkEl.title = 'Jump to linked section';
+        linkEl.addEventListener('click', async (ev) => {
+          ev.preventDefault();
+          const targetPage = await resolveDestToPage(dest);
+          if (targetPage) {
+            pageNum = targetPage;
+            renderPage(targetPage);
+            // All pages are pre-rendered — just scroll; use setTimeout to let paint settle
+            setTimeout(() => scrollToPage(targetPage), 30);
+          }
+        });
+        pdfLinkIndex.push({ page: pageNumber, label: inferredLabel || 'Internal link', dest });
+      }
     } else {
       continue;
     }
@@ -514,6 +535,86 @@ function getRefByNumber(n) {
   return (idx >= 0 && idx < openAlexRefsList.length) ? openAlexRefsList[idx] : null;
 }
 
+function getExtractedRefByNumber(n) {
+  const num = parseInt(n, 10);
+  return extractedReferences.find(r => parseInt(r.number, 10) === num) || null;
+}
+
+// Builds the hover-preview HTML for a reference number, regardless of which
+// numbering scheme it belongs to: PDF-extracted references keep their native
+// bibliography number; the OpenAlex fallback list is numbered alphabetically.
+function buildRefTooltipHtml(refNum) {
+  const n = parseInt(refNum, 10);
+  const extracted = getExtractedRefByNumber(n);
+  if (extracted) {
+    const authors = (extracted.authors || []).slice(0, 3).join(', ');
+    const hasMore = (extracted.authors || []).length > 3;
+    return `
+      <div style="font-weight:600;margin-bottom:.3rem;font-size:.85rem;line-height:1.3;">[${n}] — ${escapeHtml(extracted.title || 'Untitled')}</div>
+      ${authors ? `<div style="font-size:.78rem;color:#475569;margin-bottom:.15rem;">${escapeHtml(authors)}${hasMore ? ' et al.' : ''}</div>` : ''}
+      ${extracted.year ? `<div style="font-size:.75rem;color:#64748b;margin-bottom:.4rem;">${escapeHtml(String(extracted.year))}</div>` : ''}
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;">
+        <button onclick="handleReferenceClick(${n})" style="font-size:.73rem;padding:.15rem .5rem;background:#0284c7;color:#fff;border:none;border-radius:4px;cursor:pointer;">View in Refs ↗</button>
+        ${extracted.doi ? `<a href="https://doi.org/${encodeURIComponent(extracted.doi)}" target="_blank" style="font-size:.73rem;color:#0284c7;text-decoration:none;">DOI →</a>` : ''}
+      </div>`;
+  }
+  const w = getRefByNumber(n);
+  if (!w) return null;
+  const authors = w.authorships?.slice(0, 3).map(a => a.author?.display_name).filter(Boolean).join(', ') || '';
+  const hasMore = (w.authorships?.length || 0) > 3;
+  const cleanId = w.id?.replace('https://openalex.org/', '') || '';
+  const firstAuthorLast = (w.authorships?.[0]?.author?.display_name || '').split(' ').pop();
+  const refLabel = firstAuthorLast && w.publication_year ? `${firstAuthorLast}, ${w.publication_year}` : `[${n}]`;
+  return `
+    <div style="font-weight:600;margin-bottom:.3rem;font-size:.85rem;line-height:1.3;">${escapeHtml(refLabel)} — ${escapeHtml(w.title || 'Untitled')}</div>
+    ${authors ? `<div style="font-size:.78rem;color:#475569;margin-bottom:.15rem;">${escapeHtml(authors)}${hasMore ? ' et al.' : ''}</div>` : ''}
+    ${w.publication_year ? `<div style="font-size:.75rem;color:#64748b;margin-bottom:.4rem;">${w.publication_year}</div>` : ''}
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;">
+      <button onclick="handleReferenceClick(${n})" style="font-size:.73rem;padding:.15rem .5rem;background:#0284c7;color:#fff;border:none;border-radius:4px;cursor:pointer;">View in Refs ↗</button>
+      ${cleanId ? `<a href="/paper.html?id=${escapeHtml(cleanId)}" target="_blank" style="font-size:.73rem;color:#0284c7;text-decoration:none;">Paper page →</a>` : ''}
+    </div>`;
+}
+
+// Positions a tooltip relative to a page wrap, clamped to stay inside it.
+function positionRefTooltip(tooltipEl, wrapRect, anchorRect) {
+  const ttW = tooltipEl.offsetWidth || 280;
+  const ttH = tooltipEl.offsetHeight || 120;
+  let left = anchorRect.left - wrapRect.left + 8;
+  let top = anchorRect.bottom - wrapRect.top + 6;
+  if (left + ttW > wrapRect.right - wrapRect.left - 8) left = anchorRect.right - wrapRect.left - ttW - 8;
+  if (left < 0) left = 4;
+  if (top + ttH > wrapRect.bottom - wrapRect.top - 8) top = anchorRect.top - wrapRect.top - ttH - 6;
+  tooltipEl.style.left = left + 'px';
+  tooltipEl.style.top = top + 'px';
+}
+
+// Wires hover-preview + click-to-sidebar behavior on a single citation-style
+// element that lives outside the text layer's delegated listeners (e.g. a
+// numbered in-text citation that's a real embedded PDF link, not a text
+// span). Never scrolls the main PDF — only the Refs sidebar.
+function wireInlineCitationLink(el, tooltipEl, pageWrap, refNum) {
+  let hideTimer = null;
+  el.addEventListener('mouseenter', () => {
+    clearTimeout(hideTimer);
+    const html = buildRefTooltipHtml(refNum);
+    if (!html) return;
+    tooltipEl.innerHTML = html;
+    tooltipEl.style.visibility = 'hidden';
+    tooltipEl.style.display = 'block';
+    positionRefTooltip(tooltipEl, pageWrap.getBoundingClientRect(), el.getBoundingClientRect());
+    tooltipEl.style.visibility = 'visible';
+  });
+  el.addEventListener('mouseleave', () => {
+    hideTimer = setTimeout(() => { tooltipEl.style.display = 'none'; }, 120);
+  });
+  el.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    clearCitationActive();
+    el.classList.add('active');
+    handleReferenceClick(refNum);
+  });
+}
+
 function wireCitationHover(layerEl, tooltipEl) {
   if (!layerEl || !tooltipEl) return;
 
@@ -523,40 +624,16 @@ function wireCitationHover(layerEl, tooltipEl) {
   function showTooltip(target) {
     const refNum = target.getAttribute('data-ref-number');
     if (refNum === shownForNum) return;
-    const w = getRefByNumber(refNum);
-    if (!w) { tooltipEl.style.display = 'none'; shownForNum = null; return; }
+    const html = buildRefTooltipHtml(refNum);
+    if (!html) { tooltipEl.style.display = 'none'; shownForNum = null; return; }
     shownForNum = refNum;
-    const authors = w.authorships?.slice(0, 3).map(a => a.author?.display_name).filter(Boolean).join(', ') || '';
-    const hasMore = (w.authorships?.length || 0) > 3;
-    const cleanId = w.id?.replace('https://openalex.org/', '') || '';
-    const firstAuthorLast = (w.authorships?.[0]?.author?.display_name || '').split(' ').pop();
-    const refLabel = firstAuthorLast && w.publication_year
-      ? `${firstAuthorLast}, ${w.publication_year}`
-      : `[${refNum}]`;
-    tooltipEl.innerHTML = `
-      <div style="font-weight:600;margin-bottom:.3rem;font-size:.85rem;line-height:1.3;">${escapeHtml(refLabel)} — ${escapeHtml(w.title || 'Untitled')}</div>
-      ${authors ? `<div style="font-size:.78rem;color:#475569;margin-bottom:.15rem;">${escapeHtml(authors)}${hasMore ? ' et al.' : ''}</div>` : ''}
-      ${w.publication_year ? `<div style="font-size:.75rem;color:#64748b;margin-bottom:.4rem;">${w.publication_year}</div>` : ''}
-      <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;">
-        <button onclick="handleReferenceClick(${parseInt(refNum, 10)})" style="font-size:.73rem;padding:.15rem .5rem;background:#0284c7;color:#fff;border:none;border-radius:4px;cursor:pointer;">View in Refs ↗</button>
-        ${cleanId ? `<a href="/paper.html?id=${escapeHtml(cleanId)}" target="_blank" style="font-size:.73rem;color:#0284c7;text-decoration:none;">Paper page →</a>` : ''}
-      </div>`;
+    tooltipEl.innerHTML = html;
     tooltipEl.style.visibility = 'hidden';
     tooltipEl.style.display = 'block';
 
-    // Position relative to page wrap
     const pageWrap = layerEl.closest('.pdf-page-wrap');
     const wrapRect = pageWrap ? pageWrap.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
-    const spanRect = target.getBoundingClientRect();
-    const ttW = tooltipEl.offsetWidth || 280;
-    const ttH = tooltipEl.offsetHeight || 120;
-    let left = spanRect.left - wrapRect.left + 8;
-    let top = spanRect.bottom - wrapRect.top + 6;
-    if (left + ttW > wrapRect.right - wrapRect.left - 8) left = spanRect.right - wrapRect.left - ttW - 8;
-    if (left < 0) left = 4;
-    if (top + ttH > wrapRect.bottom - wrapRect.top - 8) top = spanRect.top - wrapRect.top - ttH - 6;
-    tooltipEl.style.left = left + 'px';
-    tooltipEl.style.top = top + 'px';
+    positionRefTooltip(tooltipEl, wrapRect, target.getBoundingClientRect());
     tooltipEl.style.visibility = 'visible';
   }
 
@@ -685,7 +762,7 @@ async function renderAllPages() {
     const linkLayerEl = wrap.querySelector('.pdf-link-layer');
     const tooltipEl = wrap.querySelector('.citation-tooltip');
     await renderTextLayer(page, viewport, layerEl, tooltipEl);
-    await renderLinkLayer(page, viewport, linkLayerEl, i);
+    await renderLinkLayer(page, viewport, linkLayerEl, i, tooltipEl);
     renderAnnotationsForPage(i);
   }
 
@@ -1418,9 +1495,13 @@ function handleReferenceClick(refNumber) {
   const refsTabBtn = document.querySelector('.pdf-tab-btn[data-tab="refs"]');
   if (refsTabBtn) refsTabBtn.click();
 
-  // Scroll to and highlight the ref card
+  // Scroll to and highlight the ref card. The Refs tab renders one of two
+  // lists depending on what loaded: PDF-extracted references (native
+  // bibliography numbering, `.reference-item[data-ref-number]`) or the
+  // OpenAlex fallback list (alphabetical, `#oa-ref-N`) — try both.
   const refNum = parseInt(refNumber, 10);
-  const card = document.getElementById(`oa-ref-${refNum}`);
+  const card = document.querySelector(`.reference-item[data-ref-number="${refNum}"]`) ||
+    document.getElementById(`oa-ref-${refNum}`);
   if (!card) return;
   card.scrollIntoView({ behavior: 'smooth', block: 'center' });
   card.style.outline = '2px solid #0284c7';
