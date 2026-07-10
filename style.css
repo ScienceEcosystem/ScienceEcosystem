@@ -163,18 +163,14 @@ body {
   outline: none;
 }
 
-/* ORCID button kept compact — white background, not green: the official
-   ORCID logo (grey wordmark + lime-green "iD" icon) is designed for light
-   backgrounds, per ORCID's own brand guidelines. On a green button the icon
-   becomes near-invisible green-on-green. */
 .btn-orcid {
   background: #fff;
-  color: #166534;
+  color: var(--ink);
   padding: .5rem .75rem;
   font-size: .9rem;
   line-height: 1;
   border-radius: 8px;
-  border: 1px solid var(--success);
+  border: 1px solid #e5e7eb;
   display: inline-flex;
   align-items: center;
   gap: .5rem;
@@ -182,7 +178,7 @@ body {
   white-space: nowrap;
 }
 .btn-orcid:hover,
-.btn-orcid:focus { background: #f0fdf4; color: #166534; outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn-orcid:focus { background: #f8fafc; color: var(--ink); outline: 2px solid var(--ring); outline-offset: 2px; }
 .orcid-icon { height: 22px; width: auto; }
 
 /* Buttons & Inputs */

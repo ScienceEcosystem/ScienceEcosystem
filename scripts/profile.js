@@ -528,8 +528,13 @@
     alt = alt.filter(function(n){ return n && n.toLowerCase().trim() !== mainName; });
     if ($("otherNames")) $("otherNames").innerHTML = alt.length ? '<span class="muted" style="font-size:.85rem;">Also published as: '+alt.map(escapeHtml).join(", ")+'</span>' : "";
 
-    if (a.orcid && $("profileOrcid")){
-      var orcidHref = (a.orcid.indexOf("http")===0 ? a.orcid : ("https://orcid.org/"+a.orcid.replace(/^ORCID:/i,"")));
+    // Prefer the OpenAlex author record's ORCID, but fall back to the SE
+    // account's own ORCID (same fallback pattern used below for the avatar) —
+    // many OpenAlex author records simply don't have an ORCID on file even
+    // when the underlying person does, which was silently hiding this link.
+    var orcidRaw = a.orcid || (seUser && seUser.orcid) || null;
+    if (orcidRaw && $("profileOrcid")){
+      var orcidHref = (String(orcidRaw).indexOf("http")===0 ? orcidRaw : ("https://orcid.org/"+String(orcidRaw).replace(/^ORCID:/i,"")));
       $("profileOrcid").href = orcidHref;
       $("profileOrcid").textContent = "ORCID: "+orcidHref.split("/").pop();
       $("profileOrcid").style.display = "inline-block";
