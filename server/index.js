@@ -1967,7 +1967,7 @@ app.get("/api/profile/openalex/:authorId", async (req, res) => {
     );
     if (primary.rowCount) return res.json({ orcid: primary.rows[0].orcid });
 
-    // Check merged/claimed additional IDs
+    // Check merged additional IDs
     const merged = await pool.query(
       `SELECT mc.orcid FROM merged_claims mc
        JOIN users u ON u.orcid = mc.orcid
@@ -1977,6 +1977,20 @@ app.get("/api/profile/openalex/:authorId", async (req, res) => {
       [authorId]
     );
     if (merged.rowCount) return res.json({ orcid: merged.rows[0].orcid });
+
+    // Check claimed additional IDs (extra author IDs a user has attached to
+    // their account without going through the explicit "merge" flow — these
+    // were being missed here, so profile.html?id=<a claimed-but-not-merged
+    // ID> never redirected to the user's canonical profile).
+    const claimed = await pool.query(
+      `SELECT ca.orcid FROM claimed_authors ca
+       JOIN users u ON u.orcid = ca.orcid
+       WHERE UPPER(ca.author_id) = $1
+         AND u.visibility != 'private'
+       LIMIT 1`,
+      [authorId]
+    );
+    if (claimed.rowCount) return res.json({ orcid: claimed.rows[0].orcid });
 
     res.json({ orcid: null });
   } catch (e) {
@@ -1993,12 +2007,14 @@ app.get("/api/profile/orcid/:orcid", async (req, res) => {
     if (row.visibility === "private") return res.status(403).json({ error: "Profile is private" });
     // Strip any sensitive fields before returning
     const { links: _links, languages: _lang, ...pub } = row;
-    // Additional claimed author IDs are public — the whole point is that
-    // visitors (not just the owner) see the merged publication list.
-    const { rows: claimRows } = await pool.query(
-      `SELECT author_id FROM claimed_authors WHERE orcid=$1`, [orcid]
-    );
-    pub.claimed_author_ids = claimRows.map(r => r.author_id);
+    // Additional author IDs are public — the whole point is that visitors
+    // (not just the owner) see the merged publication list. Pulls from both
+    // claimed_authors AND merged_claims (getUserAuthorIds unions all three
+    // sources) — this used to only check claimed_authors, silently dropping
+    // any author ID a user had added via the separate "merge" flow instead.
+    const primaryId = (row.openalex_author_id || "").trim();
+    const allIds = await getUserAuthorIds(orcid);
+    pub.claimed_author_ids = allIds.filter(id => id && id !== primaryId);
     res.json(pub);
   } catch (e) {
     console.error("GET /api/profile/orcid failed:", e);
