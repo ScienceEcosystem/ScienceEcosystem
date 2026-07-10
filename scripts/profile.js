@@ -951,6 +951,44 @@
     }
 
     var anyStance = false;
+    var PAGE_SIZE = 5;
+
+    // Each citing paper rendered as a standard paper card (same design used
+    // everywhere else), with the citation snippet shown where the abstract
+    // would normally go — instead of the bespoke "cited-me-item" markup
+    // this used to have.
+    function renderCitationCard(c) {
+      var extraChips = [];
+      if (c.intent) {
+        var intentLabel = c.intent === "background" ? "Background"
+                  : c.intent === "methodology" ? "Methodology"
+                  : c.intent === "result" ? "Result"
+                  : c.intent;
+        extraChips.push('<span class="stance-badge stance-' + escapeHtml(c.intent) + '">' + escapeHtml(intentLabel) + '</span>');
+      }
+      if (c.stance) {
+        anyStance = true;
+        extraChips.push('<span class="stance-badge stance-' + escapeHtml(c.stance.toLowerCase().replace(/\s+/g, "-")) + '">' + escapeHtml(c.stance) + '</span>');
+      }
+      var fakeWork = {
+        id: null,
+        display_name: c.title || "Untitled",
+        publication_year: c.year || null,
+        authorships: (c.authors || "").split(",").map(function(n){
+          n = n.trim();
+          return n ? { author: { display_name: n } } : null;
+        }).filter(Boolean),
+      };
+      return SE.components.renderPaperCard(fakeWork, {
+        compact: true,
+        abstract: c.snippet || "",
+        hideActions: true,
+        minimalMeta: true,
+        titleHref: c.url || "#",
+        extraChips: extraChips,
+      });
+    }
+
     var html = "";
     for (var g = 0; g < allGroups.length; g++) {
       var group = allGroups[g];
@@ -968,46 +1006,16 @@
             + group.items.length.toLocaleString() + ' citation context' + (group.items.length !== 1 ? 's' : '')
             + '</span></h3>';
 
-      // Each citing paper rendered as a standard paper card (same design used
-      // everywhere else), with the citation snippet shown where the abstract
-      // would normally go — instead of the bespoke "cited-me-item" markup
-      // this used to have.
-      for (var r = 0; r < group.items.length && r < 5; r++) {
-        var c = group.items[r];
-        var extraChips = [];
-        if (c.intent) {
-          var intentLabel = c.intent === "background" ? "Background"
-                    : c.intent === "methodology" ? "Methodology"
-                    : c.intent === "result" ? "Result"
-                    : c.intent;
-          extraChips.push('<span class="stance-badge stance-' + escapeHtml(c.intent) + '">' + escapeHtml(intentLabel) + '</span>');
-        }
-        if (c.stance) {
-          anyStance = true;
-          extraChips.push('<span class="stance-badge stance-' + escapeHtml(c.stance.toLowerCase().replace(/\s+/g, "-")) + '">' + escapeHtml(c.stance) + '</span>');
-        }
-        var fakeWork = {
-          id: null,
-          display_name: c.title || "Untitled",
-          publication_year: c.year || null,
-          authorships: (c.authors || "").split(",").map(function(n){
-            n = n.trim();
-            return n ? { author: { display_name: n } } : null;
-          }).filter(Boolean),
-        };
-        html += SE.components.renderPaperCard(fakeWork, {
-          compact: true,
-          abstract: c.snippet || "",
-          hideActions: true,
-          minimalMeta: true,
-          titleHref: c.url || "#",
-          extraChips: extraChips,
-        });
+      html += '<div class="cited-me-items" id="citedMeItems-' + g + '">';
+      for (var r = 0; r < group.items.length && r < PAGE_SIZE; r++) {
+        html += renderCitationCard(group.items[r]);
       }
+      html += '</div>';
 
-      if (group.items.length > 5) {
-        html += '<p class="muted" style="font-size:.82rem;">+'
-              + (group.items.length - 5) + ' more citing papers with context available</p>';
+      if (group.items.length > PAGE_SIZE) {
+        html += '<button type="button" class="btn btn-secondary btn-xs load-more-citations-btn" '
+              + 'data-group="' + g + '" data-shown="' + PAGE_SIZE + '" style="margin-top:.5rem;">Show '
+              + (group.items.length - PAGE_SIZE) + ' more citing paper' + (group.items.length - PAGE_SIZE !== 1 ? 's' : '') + '</button>';
       }
       html += '</div>';
     }
@@ -1016,6 +1024,32 @@
     }
     list.innerHTML = html;
     SE.components.enhancePaperCards(list);
+
+    list.querySelectorAll(".load-more-citations-btn").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var g = parseInt(this.getAttribute("data-group"), 10);
+        var shown = parseInt(this.getAttribute("data-shown"), 10);
+        var group = allGroups[g];
+        var itemsEl = $("citedMeItems-" + g);
+        if (!itemsEl) return;
+
+        var nextShown = Math.min(shown + PAGE_SIZE, group.items.length);
+        var batchHtml = "";
+        for (var r = shown; r < nextShown; r++) batchHtml += renderCitationCard(group.items[r]);
+        var frag = document.createElement("div");
+        frag.innerHTML = batchHtml;
+        while (frag.firstChild) itemsEl.appendChild(frag.firstChild);
+        SE.components.enhancePaperCards(itemsEl);
+
+        var remaining = group.items.length - nextShown;
+        if (remaining > 0) {
+          this.setAttribute("data-shown", nextShown);
+          this.textContent = "Show " + remaining + " more citing paper" + (remaining !== 1 ? "s" : "");
+        } else {
+          this.remove();
+        }
+      });
+    });
   }
 
   // ---- Bulk "Add all to library" (opt-in — library stays curated, never auto-synced on claim) ----
