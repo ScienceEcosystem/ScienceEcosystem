@@ -142,7 +142,7 @@ app.use((req, res, next) => {
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
     "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk https://*.wikipedia.org https://api.inaturalist.org https://www.inaturalist.org https://api.gbif.org https://*.r2.cloudflarestorage.com",
-    "media-src https://upload.wikimedia.org",
+    "media-src https://upload.wikimedia.org https://xeno-canto.org",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'self'"
@@ -4046,6 +4046,127 @@ app.get("/api/field-data/ebird", async (req, res) => {
   } catch (err) {
     console.error("GET /api/field-data/ebird failed:", err.message);
     res.status(502).json({ error: "eBird unavailable" });
+  }
+});
+
+app.get("/api/field-data/xenocanto", async (req, res) => {
+  const species = (req.query?.species || "").trim();
+  if (!species) return res.status(400).json({ error: "species required" });
+  const key = process.env.XENO_CANTO_API_KEY || "";
+  if (!key) return res.status(404).json({ error: "Xeno-canto not configured" });
+
+  const cacheKey = `xenocanto:${species.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const query = `sp:"${species}"`;
+    const data = await fetchJSONTimeout(
+      `https://xeno-canto.org/api/3/recordings?query=${encodeURIComponent(query)}&per_page=5&key=${encodeURIComponent(key)}`,
+      {}, 8000
+    );
+    const total = parseInt(data?.numRecordings || "0", 10);
+    if (!total) return res.status(404).json({ error: "No Xeno-canto recordings" });
+
+    // Restricted/vulnerable species have loc/file/file-name redacted (see
+    // API's `_meta.redacted_fields`) — skip those rather than showing a
+    // broken audio player with no file to play.
+    const recordings = (data?.recordings || [])
+      .filter(r => r.file)
+      .slice(0, 5)
+      .map(r => ({
+        id:       r.id,
+        rec:      r.rec || null,
+        cnt:      r.cnt || null,
+        loc:      r.loc || null,
+        type:     r.type || null,
+        quality:  r.q || null,
+        length:   r.length || null,
+        date:     r.date || null,
+        file_url: r.file,
+        sono_url: r.sono?.small || null,
+        page_url: r.url ? (r.url.startsWith("http") ? r.url : `https:${r.url}`) : null,
+      }));
+    if (!recordings.length) return res.status(404).json({ error: "No playable Xeno-canto recordings" });
+
+    const payload = {
+      total_recordings: total,
+      recordings,
+      xenocanto_url: `https://xeno-canto.org/species/${encodeURIComponent(species.replace(" ", "-"))}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/xenocanto failed:", err.message);
+    res.status(502).json({ error: "Xeno-canto unavailable" });
+  }
+});
+
+// Common element names → symbols, so a topic page named "Silicon" or "Gold"
+// can be resolved to the formula Materials Project's search actually
+// requires (its formula parser rejects plain-English names outright — see
+// notes.txt for the live false-positive/negative check that confirmed this
+// fails closed safely rather than fuzzy-matching).
+const ELEMENT_SYMBOLS = {
+  hydrogen:"H", helium:"He", lithium:"Li", beryllium:"Be", boron:"B", carbon:"C", nitrogen:"N",
+  oxygen:"O", fluorine:"F", neon:"Ne", sodium:"Na", magnesium:"Mg", aluminium:"Al", aluminum:"Al",
+  silicon:"Si", phosphorus:"P", sulfur:"S", sulphur:"S", chlorine:"Cl", argon:"Ar", potassium:"K",
+  calcium:"Ca", scandium:"Sc", titanium:"Ti", vanadium:"V", chromium:"Cr", manganese:"Mn", iron:"Fe",
+  cobalt:"Co", nickel:"Ni", copper:"Cu", zinc:"Zn", gallium:"Ga", germanium:"Ge", arsenic:"As",
+  selenium:"Se", bromine:"Br", krypton:"Kr", rubidium:"Rb", strontium:"Sr", yttrium:"Y",
+  zirconium:"Zr", niobium:"Nb", molybdenum:"Mo", technetium:"Tc", ruthenium:"Ru", rhodium:"Rh",
+  palladium:"Pd", silver:"Ag", cadmium:"Cd", indium:"In", tin:"Sn", antimony:"Sb", tellurium:"Te",
+  iodine:"I", xenon:"Xe", caesium:"Cs", cesium:"Cs", barium:"Ba", lanthanum:"La", cerium:"Ce",
+  praseodymium:"Pr", neodymium:"Nd", promethium:"Pm", samarium:"Sm", europium:"Eu", gadolinium:"Gd",
+  terbium:"Tb", dysprosium:"Dy", holmium:"Ho", erbium:"Er", thulium:"Tm", ytterbium:"Yb",
+  lutetium:"Lu", hafnium:"Hf", tantalum:"Ta", tungsten:"W", rhenium:"Re", osmium:"Os", iridium:"Ir",
+  platinum:"Pt", gold:"Au", mercury:"Hg", thallium:"Tl", lead:"Pb", bismuth:"Bi", polonium:"Po",
+  astatine:"At", radon:"Rn", francium:"Fr", radium:"Ra", actinium:"Ac", thorium:"Th",
+  protactinium:"Pa", uranium:"U", neptunium:"Np", plutonium:"Pu",
+};
+
+app.get("/api/field-data/materials", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+  const key = process.env.MATERIALS_PROJECT_API_KEY || "";
+  if (!key) return res.status(404).json({ error: "Materials Project not configured" });
+
+  const cacheKey = `materials:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const formula = ELEMENT_SYMBOLS[name.toLowerCase()] || name;
+
+  try {
+    const fields = "material_id,formula_pretty,symmetry,density,band_gap,is_stable,energy_above_hull,nsites";
+    const url = `https://api.materialsproject.org/materials/summary/?formula=${encodeURIComponent(formula)}&is_stable=true&_fields=${fields}`;
+    const apiRes = await fetchWithTimeout(url, { headers: { "X-API-KEY": key, "Accept": "application/json" } }, 8000);
+    // Materials Project returns 400 for anything that isn't valid chemical
+    // formula syntax (confirmed live: both a random word and the plain-
+    // English element name itself get rejected this way) — treat that the
+    // same as "no match" rather than an upstream failure.
+    if (apiRes.status === 400) return res.status(404).json({ error: "Not a resolvable formula" });
+    if (!apiRes.ok) throw new Error(`${apiRes.status} ${apiRes.statusText}`);
+    const data = await apiRes.json();
+    const mat = (data?.data || [])[0];
+    if (!mat?.material_id) return res.status(404).json({ error: "No stable Materials Project entry" });
+
+    const payload = {
+      material_id:        mat.material_id,
+      formula:             mat.formula_pretty,
+      crystal_system:      mat.symmetry?.crystal_system || null,
+      space_group:         mat.symmetry?.symbol || null,
+      density:              mat.density != null ? Number(mat.density.toFixed(2)) : null,
+      band_gap_ev:          mat.band_gap != null ? mat.band_gap : null,
+      materials_project_url: `https://materialsproject.org/materials/${mat.material_id}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/materials failed:", err.message);
+    res.status(502).json({ error: "Materials Project unavailable" });
   }
 });
 

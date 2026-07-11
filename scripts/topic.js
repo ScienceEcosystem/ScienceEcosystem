@@ -845,6 +845,52 @@
     } catch (_) {}
   }
 
+  async function loadXenoCantoData(displayName) {
+    if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
+
+    try {
+      const resp = await fetch("/api/field-data/xenocanto?species=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.total_recordings || !(d.recordings || []).length) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const items = d.recordings.map(r => {
+        const meta = [r.type, r.loc || r.cnt, r.date].filter(Boolean).join(" · ");
+        return `
+          <div style="margin-bottom:.6rem;padding-bottom:.6rem;border-bottom:1px solid #f1f5f9;">
+            ${r.sono_url ? `<img src="${escapeHtml(r.sono_url)}" alt="Sonogram" style="width:100%;max-width:280px;border-radius:4px;display:block;margin-bottom:.3rem;" loading="lazy">` : ""}
+            <audio controls preload="none" style="width:100%;max-width:280px;height:32px;" src="${escapeHtml(r.file_url)}"></audio>
+            <p class="muted" style="font-size:.75rem;margin:.25rem 0 0;">
+              ${escapeHtml(meta)}${r.rec ? ` · rec. ${escapeHtml(r.rec)}` : ""}
+              ${r.page_url ? ` · <a href="${escapeHtml(r.page_url)}" target="_blank" rel="noopener">XC${escapeHtml(String(r.id))}</a>` : ""}
+            </p>
+          </div>`;
+      }).join("");
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#ca8a04"/><text x="10" y="14" text-anchor="middle" font-size="6" font-family="sans-serif" font-weight="bold" fill="white">XC</text></svg>
+          <span class="inat-title">Xeno-canto · ${d.total_recordings.toLocaleString()} recordings</span>
+        </div>
+        ${items}
+        <div class="woc-footer" style="margin-top:.25rem;">
+          <a href="${escapeHtml(d.xenocanto_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View all on Xeno-canto →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+
+    } catch (_) {}
+  }
+
   // ---- Tier 3: beyond species pages ----
   // No structural pre-filter like the binomial-name regex above exists for
   // these (a compound, protein, or planet name doesn't have a fixed shape),
@@ -995,6 +1041,41 @@
         <div class="woc-footer" style="margin-top:.75rem;">
           <a href="${escapeHtml(d.pangaea_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
             Search PANGAEA →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
+  async function loadMaterialsData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/materials?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.material_id) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#4338ca"/><text x="10" y="14" text-anchor="middle" font-size="5.5" font-family="sans-serif" font-weight="bold" fill="white">MP</text></svg>
+          <span class="inat-title">Materials Project · ${escapeHtml(d.formula)}</span>
+        </div>
+        <div class="woc-stats-grid">
+          ${d.crystal_system ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.crystal_system)}</div><div class="woc-stat-label">Crystal system</div></div>` : ""}
+          ${d.space_group ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.space_group)}</div><div class="woc-stat-label">Space group</div></div>` : ""}
+          ${d.density != null ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(d.density))} g/cm³</div><div class="woc-stat-label">Density</div></div>` : ""}
+          ${d.band_gap_ev != null ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(d.band_gap_ev))} eV</div><div class="woc-stat-label">Band gap</div></div>` : ""}
+        </div>
+        <div class="woc-footer" style="margin-top:.75rem;">
+          <a href="${escapeHtml(d.materials_project_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on Materials Project →
           </a>
         </div>
       `;
@@ -1761,11 +1842,13 @@
       loadObisData(topic.display_name || humanName);
       loadIucnData(topic.display_name || humanName);
       loadEbirdData(topic.display_name || humanName);
+      loadXenoCantoData(topic.display_name || humanName);
       // Tier 3 — beyond species pages (compounds, structures, exoplanets, datasets)
       loadChemblData(topic.display_name || humanName);
       loadPdbData(topic.display_name || humanName);
       loadExoplanetData(topic.display_name || humanName);
       loadPangaeaData(topic.display_name || humanName);
+      loadMaterialsData(topic.display_name || humanName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 

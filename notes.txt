@@ -2295,19 +2295,39 @@ TIER 2 (free API key required)
       migratorius → American Robin, Thrushes and Allies (Turdidae); a
       non-bird species (Astacus astacus, a crayfish) correctly 404s.
 
-Xeno-canto
-  URL: xeno-canto.org | API: xeno-canto.org/api/3/recordings
-  Data: 700,000+ bird and animal sound recordings with metadata and audio URLs
-  Auth: free key for registered members
-  Why useful: audio on species pages — completely unique content type
+  [X] Xeno-canto (2026-07-12) — GET /api/field-data/xenocanto?species=X →
+      xeno-canto.org/api/3/recordings, query=sp:"X" (v3 API requires the
+      sp: tag now — the old tag-less search from v2 is discontinued),
+      key free-registered by Olivier. First genuinely new content type
+      across all these panels — up to 5 sample recordings, each with a
+      sonogram thumbnail and an inline <audio> player (not just a link
+      out), plus recordist/location/date/quality and a link to the full
+      recording + species page. Restricted/vulnerable species have
+      loc/file/file-name redacted per the API's `_meta.redacted_fields` —
+      filtered out rather than showing a broken audio player with no
+      file to play. Verified live: Turdus migratorius → 977 recordings,
+      5 playable samples rendered with working audio; Astacus astacus
+      (a crayfish) correctly 404s.
+      BUG CAUGHT: the site's CSP `media-src` directive only allowlisted
+      upload.wikimedia.org, so the <audio src="https://xeno-canto.org/...">
+      elements were silently blocked by the browser (console warning,
+      panel still rendered, audio just never loaded) — caught via a real
+      Playwright run, not just a curl check. Added xeno-canto.org to
+      media-src.
 
-Materials Project (moved here from Tier 3 — it's the one Tier 3 item that needs a key)
-  URL: materialsproject.org | API: api.materialsproject.org (needs free key)
-  Data: 150,000+ computed material structures and properties
-  Trigger: same unconditional-fire-per-topic-page pattern as the other
-  Tier 3 integrations above, once a key exists.
-
-Priority order for next build session (both blocked on Olivier
-registering a free key first — same pattern as the Semantic Scholar key):
-  1. Xeno-canto
-  2. Materials Project
+  [X] Materials Project (2026-07-12) — GET /api/field-data/materials?name=X
+      → api.materialsproject.org/materials/summary (X-API-KEY header, key
+      free-registered by Olivier), formula=X&is_stable=true to get the
+      one canonical stable structure per formula (many formulas have
+      dozens of unstable polymorphs otherwise). MP's formula parser
+      rejects anything that isn't valid chemical-formula syntax outright
+      (400 error) — live-tested this is a SAFE fail-closed, not a fuzzy
+      match (confirmed with both "Sociology" and the plain-English word
+      "Silicon" itself, which isn't valid formula syntax either). Added a
+      118-element name→symbol map (hydrogen→H, silicon→Si, gold→Au, etc.)
+      so element topic pages resolve to a real formula the API accepts;
+      multi-word compound names (e.g. "table salt") aren't resolved and
+      correctly stay hidden — no name-resolution API for those was built.
+      Lives in the Tier 3 unconditional-fire group, not species-gated.
+      Verified live: Silicon → Si, cubic Fd-3m, 2.31 g/cm³, 0.61 eV band
+      gap; Sociology correctly 404s.
