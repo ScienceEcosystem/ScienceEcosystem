@@ -3960,6 +3960,96 @@ app.get("/api/field-data/pangaea", async (req, res) => {
 });
 
 /* ---------------------------
+   Tier 2 field data — needs a free registered API key/token.
+----------------------------*/
+
+app.get("/api/field-data/iucn", async (req, res) => {
+  const species = (req.query?.species || "").trim();
+  if (!species) return res.status(400).json({ error: "species required" });
+  const token = process.env.IUCN_API_TOKEN || "";
+  if (!token) return res.status(404).json({ error: "IUCN not configured" });
+
+  const cacheKey = `iucn:${species.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  const parts = species.trim().split(/\s+/);
+  if (parts.length < 2) return res.status(404).json({ error: "Not a binomial name" });
+  const [genusName, ...rest] = parts;
+  const speciesName = rest.join(" ");
+
+  try {
+    const url = `https://api.iucnredlist.org/api/v4/taxa/scientific_name?genus_name=${encodeURIComponent(genusName)}&species_name=${encodeURIComponent(speciesName)}`;
+    const apiRes = await fetchWithTimeout(url, { headers: { "Authorization": token, "Accept": "application/json" } }, 8000);
+    if (apiRes.status === 404) return res.status(404).json({ error: "Not in IUCN Red List" });
+    if (!apiRes.ok) throw new Error(`${apiRes.status} ${apiRes.statusText}`);
+    const data = await apiRes.json();
+
+    // `assessments` is a sibling of `taxon` in the response, not nested
+    // inside it. `latest: true` is scoped per-region (e.g. a species can be
+    // Regionally Extinct in one area and Vulnerable globally, both flagged
+    // "latest") — scope code "1" is IUCN's code for the global assessment,
+    // the one worth showing as this species' headline conservation status.
+    const assessments = data?.assessments || [];
+    const globalLatest = assessments.find(a => a.latest && (a.scopes || []).some(s => s.code === "1"));
+    if (!globalLatest) return res.status(404).json({ error: "No global IUCN assessment" });
+
+    const payload = {
+      category_code:   globalLatest.red_list_category_code,
+      year_published:  globalLatest.year_published,
+      assessment_url:  globalLatest.url,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/iucn failed:", err.message);
+    res.status(502).json({ error: "IUCN Red List unavailable" });
+  }
+});
+
+app.get("/api/field-data/ebird", async (req, res) => {
+  const species = (req.query?.species || "").trim();
+  if (!species) return res.status(400).json({ error: "species required" });
+  const key = process.env.EBIRD_API_KEY || "";
+  if (!key) return res.status(404).json({ error: "eBird not configured" });
+
+  const cacheKey = `ebird:${species.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    // eBird's data is fundamentally region/checklist-based — there's no
+    // global occurrence-count endpoint like GBIF/OBIS have. This confirms
+    // the species is in eBird's taxonomy (i.e. it's a bird) and surfaces
+    // its common name + family, same role as the Catalogue of Life /
+    // WoRMS taxonomy panels rather than an occurrence-stats one.
+    const data = await fetchJSONTimeout(
+      `https://api.ebird.org/v2/ref/taxonomy/ebird?species=${encodeURIComponent(species)}&fmt=json`,
+      { headers: { "X-eBirdApiToken": key } }, 8000
+    );
+    const entry = (Array.isArray(data) ? data : [])[0];
+    if (!entry?.speciesCode) return res.status(404).json({ error: "No eBird taxonomy match" });
+
+    const payload = {
+      species_code:     entry.speciesCode,
+      com_name:         entry.comName,
+      sci_name:         entry.sciName,
+      order_name:       entry.order || null,
+      family_com_name:  entry.familyComName || null,
+      family_sci_name:  entry.familySciName || null,
+      ebird_url:        `https://ebird.org/species/${entry.speciesCode}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/ebird failed:", err.message);
+    res.status(502).json({ error: "eBird unavailable" });
+  }
+});
+
+/* ---------------------------
    Topic synthesis — Claude Haiku
 ----------------------------*/
 app.get("/api/topic/synthesis", async (req, res) => {

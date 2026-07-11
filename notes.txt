@@ -2207,30 +2207,7 @@ TO BUILD — TIER 1 remaining
 -------------------------------------------------------
 
 Tier 1 (no-auth) is now complete other than AmphibiaWeb (dropped, see
-above). Nothing else queued here — next actionable item is Tier 2 below.
-
--------------------------------------------------------
-TO BUILD — TIER 2 (free API key required)
--------------------------------------------------------
-
-IUCN Red List
-  URL: iucnredlist.org | API: api.iucnredlist.org (v4)
-  Data: conservation status for 160,000+ species (Least Concern → Extinct)
-  Auth: free registration for API token
-  Why useful: THE conservation status source — single most important biodiversity data point
-  Plan: show status badge (e.g. "Vulnerable") on species topic pages
-
-eBird (Cornell Lab of Ornithology)
-  URL: ebird.org | API: eBird API 2.0
-  Data: 150M+ bird observations, real-time data, species profiles
-  Auth: free API key tied to eBird account
-  Why useful: for birds, the equivalent of WoC — living, validated, expert-curated
-
-Xeno-canto
-  URL: xeno-canto.org | API: xeno-canto.org/api/3/recordings
-  Data: 700,000+ bird and animal sound recordings with metadata and audio URLs
-  Auth: free key for registered members
-  Why useful: audio on species pages — completely unique content type
+above). Nothing else queued here.
 
 -------------------------------------------------------
 TIER 3 (beyond biology) — DONE for the 4 no-auth sources (2026-07-11)
@@ -2287,21 +2264,36 @@ pages for chemistry, structural biology, astronomy, and earth science.
   since those are exact-match).
 
 -------------------------------------------------------
-TO BUILD — TIER 2 (free API key required)
+TIER 2 (free API key required)
 -------------------------------------------------------
 
-IUCN Red List
-  URL: iucnredlist.org | API: api.iucnredlist.org (v4)
-  Data: conservation status for 160,000+ species (Least Concern → Extinct)
-  Auth: free registration for API token
-  Why useful: THE conservation status source — single most important biodiversity data point
-  Plan: show status badge (e.g. "Vulnerable") on species topic pages
+  [X] IUCN Red List (2026-07-11) — GET /api/field-data/iucn?species=X →
+      api.iucnredlist.org/api/v4/taxa/scientific_name (Authorization
+      header, token free-registered by Olivier). Splits the binomial into
+      genus_name/species_name query params. `assessments` is a SIBLING of
+      `taxon` in the response, not nested inside it — got this wrong on
+      the first pass (empty result every time) before checking the raw
+      response shape directly. `latest: true` is scoped per-region (a
+      species can be Regionally Extinct in one area and Vulnerable
+      globally, both flagged "latest") — filters for scope code "1"
+      (Global) to get the real headline status. Renders a colored
+      category badge (VU/EN/CR/etc, same label/color map already used for
+      OBIS's bonus IUCN field) + assessment year + link. Verified live:
+      Panthera leo → Vulnerable (2025 assessment); a fake binomial
+      correctly 404s (also fixed a bug where IUCN's own 404 "not found"
+      response was being caught and reported as a 502 "service
+      unavailable" instead of passed through as a clean "no match").
 
-eBird (Cornell Lab of Ornithology)
-  URL: ebird.org | API: eBird API 2.0
-  Data: 150M+ bird observations, real-time data, species profiles
-  Auth: free API key tied to eBird account
-  Why useful: for birds, the equivalent of WoC — living, validated, expert-curated
+  [X] eBird (2026-07-11) — GET /api/field-data/ebird?species=X →
+      api.ebird.org/v2/ref/taxonomy/ebird (X-eBirdApiToken header, key
+      free-registered by Olivier via the API access request form).
+      eBird's API is fundamentally region/checklist-based — there's no
+      global occurrence-count endpoint like GBIF/OBIS have — so this is a
+      taxonomy-confirmation panel (common name, family, link to the
+      species' eBird page), same role as the Catalogue of Life/WoRMS
+      panels rather than an occurrence-stats one. Verified live: Turdus
+      migratorius → American Robin, Thrushes and Allies (Turdidae); a
+      non-bird species (Astacus astacus, a crayfish) correctly 404s.
 
 Xeno-canto
   URL: xeno-canto.org | API: xeno-canto.org/api/3/recordings
@@ -2315,13 +2307,7 @@ Materials Project (moved here from Tier 3 — it's the one Tier 3 item that need
   Trigger: same unconditional-fire-per-topic-page pattern as the other
   Tier 3 integrations above, once a key exists.
 
-Priority order for next build session (all three below are blocked on
-Olivier registering a free key first — same pattern as the Semantic
-Scholar key):
-  1. IUCN Red List — conservation status badge, single most useful data
-     point. OBIS's checklist endpoint already surfaces an IUCN category as
-     a bonus where available, but a dedicated IUCN integration would cover
-     far more species and be the authoritative source rather than incidental.
-  2. eBird
-  3. Xeno-canto
-  4. Materials Project
+Priority order for next build session (both blocked on Olivier
+registering a free key first — same pattern as the Semantic Scholar key):
+  1. Xeno-canto
+  2. Materials Project
