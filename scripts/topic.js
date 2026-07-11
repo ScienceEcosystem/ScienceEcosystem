@@ -769,6 +769,163 @@
     } catch (_) {}
   }
 
+  // ---- Tier 3: beyond species pages ----
+  // No structural pre-filter like the binomial-name regex above exists for
+  // these (a compound, protein, or planet name doesn't have a fixed shape),
+  // and OpenAlex's legacy Concepts API no longer returns useful `ancestors`
+  // data to gate by field. Each of these fires on every topic page and
+  // relies on the backend endpoint's own precision (exact-match lookups,
+  // title verification, or a score floor — see server/index.js) to stay
+  // silent on irrelevant topics.
+
+  async function loadChemblData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/chembl?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.chembl_id) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const phaseLabels = { "4": "Approved drug", "3": "Phase 3 trials", "2": "Phase 2 trials", "1": "Phase 1 trials", "0.5": "Early phase 1", "0": "Preclinical" };
+      const phaseBadge = d.max_phase != null
+        ? `<span class="badge" style="font-size:.72rem;">${escapeHtml(phaseLabels[String(d.max_phase)] || ("Phase " + d.max_phase))}</span>`
+        : "";
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#7c3aed"/><text x="10" y="14" text-anchor="middle" font-size="6" font-family="sans-serif" font-weight="bold" fill="white">ChEMBL</text></svg>
+          <span class="inat-title">ChEMBL · Bioactive Molecule Database</span>
+        </div>
+        ${phaseBadge ? `<div style="margin-bottom:.4rem;">${phaseBadge}</div>` : ""}
+        <div class="woc-stats-grid">
+          ${d.molecular_formula ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.molecular_formula)}</div><div class="woc-stat-label">Molecular formula</div></div>` : ""}
+          ${d.molecular_weight ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(d.molecular_weight))}</div><div class="woc-stat-label">Molecular weight (g/mol)</div></div>` : ""}
+          ${d.first_approval ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(d.first_approval))}</div><div class="woc-stat-label">First approved</div></div>` : ""}
+        </div>
+        <div class="woc-footer" style="margin-top:.75rem;">
+          <a href="${escapeHtml(d.chembl_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on ChEMBL →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
+  async function loadPdbData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/pdb?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.pdb_id) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#1d4ed8"/><text x="10" y="14" text-anchor="middle" font-size="7" font-family="sans-serif" font-weight="bold" fill="white">PDB</text></svg>
+          <span class="inat-title">Protein Data Bank · ${escapeHtml(d.pdb_id)}</span>
+        </div>
+        <p style="font-size:.85rem;color:#374151;margin:.25rem 0 .5rem;">${escapeHtml(d.title)}</p>
+        <div class="woc-stats-grid">
+          ${d.method ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.method)}</div><div class="woc-stat-label">Method</div></div>` : ""}
+          ${d.resolution ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(d.resolution))} Å</div><div class="woc-stat-label">Resolution</div></div>` : ""}
+          ${d.total_count > 1 ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${d.total_count.toLocaleString()}</div><div class="woc-stat-label">Related structures</div></div>` : ""}
+        </div>
+        <div class="woc-footer" style="margin-top:.75rem;">
+          <a href="${escapeHtml(d.pdb_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on RCSB PDB →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
+  async function loadExoplanetData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/exoplanet?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.pl_name) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#0f172a"/><text x="10" y="14" text-anchor="middle" font-size="6" font-family="sans-serif" font-weight="bold" fill="white">NASA</text></svg>
+          <span class="inat-title">NASA Exoplanet Archive</span>
+        </div>
+        <div class="woc-stats-grid">
+          ${d.hostname ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.hostname)}</div><div class="woc-stat-label">Host star</div></div>` : ""}
+          ${d.disc_year ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(d.disc_year))}</div><div class="woc-stat-label">Discovered</div></div>` : ""}
+          ${d.discoverymethod ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.discoverymethod)}</div><div class="woc-stat-label">Detection method</div></div>` : ""}
+          ${d.radius_earth != null ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(d.radius_earth))}× Earth</div><div class="woc-stat-label">Radius</div></div>` : ""}
+          ${d.mass_earth != null ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(d.mass_earth))}× Earth</div><div class="woc-stat-label">Mass</div></div>` : ""}
+          ${d.eq_temp_k != null ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(Math.round(d.eq_temp_k)))} K</div><div class="woc-stat-label">Equilibrium temp</div></div>` : ""}
+          ${d.distance_pc != null ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(String(Math.round(d.distance_pc)))} pc</div><div class="woc-stat-label">Distance</div></div>` : ""}
+        </div>
+        <div class="woc-footer" style="margin-top:.75rem;">
+          <a href="${escapeHtml(d.exoplanet_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on NASA Exoplanet Archive →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
+  async function loadPangaeaData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/pangaea?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.total_count) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const items = (d.datasets || []).map(ds => `
+        <li style="margin-bottom:.4rem;font-size:.83rem;">
+          ${ds.url ? `<a href="${escapeHtml(ds.url)}" target="_blank" rel="noopener">${escapeHtml(ds.citation)}</a>` : escapeHtml(ds.citation)}
+        </li>`).join("");
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#0369a1"/><text x="10" y="14" text-anchor="middle" font-size="6" font-family="sans-serif" font-weight="bold" fill="white">PANG</text></svg>
+          <span class="inat-title">PANGAEA · Earth &amp; Environmental Datasets</span>
+        </div>
+        <ul style="margin:.4rem 0 0;padding-left:1.1rem;">${items}</ul>
+        <div class="woc-footer" style="margin-top:.75rem;">
+          <a href="${escapeHtml(d.pangaea_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            Search PANGAEA →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
   async function loadInatData(displayName) {
     if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
     const container = $("inatContent");
@@ -1526,6 +1683,11 @@
       loadColData(topic.display_name || humanName);
       loadWormsData(topic.display_name || humanName);
       loadObisData(topic.display_name || humanName);
+      // Tier 3 — beyond species pages (compounds, structures, exoplanets, datasets)
+      loadChemblData(topic.display_name || humanName);
+      loadPdbData(topic.display_name || humanName);
+      loadExoplanetData(topic.display_name || humanName);
+      loadPangaeaData(topic.display_name || humanName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 

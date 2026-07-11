@@ -3769,6 +3769,197 @@ app.get("/api/field-data/obis", async (req, res) => {
 });
 
 /* ---------------------------
+   Tier 3 field data — beyond species pages. No reliable OpenAlex concept
+   ancestor data exists to gate these by field (the legacy Concepts API's
+   `ancestors` array is empty for essentially every concept tested, e.g.
+   "Aspirin", "Hemoglobin", "Exoplanet" all return ancestors: []). Instead
+   each endpoint is queried unconditionally per topic page and relies on
+   its own precision to stay silent on irrelevant topics: ChEMBL and the
+   Exoplanet Archive use exact-match lookups (a random topic name won't
+   coincidentally equal a real compound's pref_name or a real planet's
+   pl_name), PDB verifies the topic name actually appears in the matched
+   structure's title (its full-text search alone false-positived on
+   "Sociology" → an unrelated cryo-EM structure), and PANGAEA applies a
+   minimum relevance-score floor calibrated against a known false-positive
+   ("Sociology" topped out at score ~28) vs a true positive ("coral reef
+   bleaching" scored ~78).
+----------------------------*/
+
+app.get("/api/field-data/chembl", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+
+  const cacheKey = `chembl:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const data = await fetchJSONTimeout(
+      `https://www.ebi.ac.uk/chembl/api/data/molecule.json?pref_name__iexact=${encodeURIComponent(name)}&limit=1`,
+      {}, 8000
+    );
+    const mol = (data?.molecules || [])[0];
+    if (!mol) return res.status(404).json({ error: "No ChEMBL molecule" });
+
+    const props = mol.molecule_properties || {};
+    const struct = mol.molecule_structures || {};
+    const payload = {
+      chembl_id:      mol.molecule_chembl_id,
+      pref_name:      mol.pref_name || name,
+      max_phase:      mol.max_phase != null ? mol.max_phase : null,
+      first_approval: mol.first_approval || null,
+      molecular_formula: props.full_molformula || null,
+      molecular_weight:  props.full_mwt || null,
+      smiles:         struct.canonical_smiles || null,
+      chembl_url:     `https://www.ebi.ac.uk/chembl/explore/compound/${mol.molecule_chembl_id}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/chembl failed:", err.message);
+    res.status(502).json({ error: "ChEMBL unavailable" });
+  }
+});
+
+app.get("/api/field-data/pdb", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+
+  const cacheKey = `pdb:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const searchRes = await fetchJSONTimeout("https://search.rcsb.org/rcsbsearch/v2/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: { type: "terminal", service: "full_text", parameters: { value: name } },
+        return_type: "entry",
+        request_options: { paginate: { start: 0, rows: 1 } },
+      }),
+    }, 8000).catch(() => null); // RCSB returns a plain empty response (not JSON) on zero hits
+
+    const top = searchRes?.result_set?.[0];
+    if (!top?.identifier) return res.status(404).json({ error: "No PDB match" });
+
+    const entry = await fetchJSONTimeout(
+      `https://data.rcsb.org/rest/v1/core/entry/${encodeURIComponent(top.identifier)}`, {}, 8000
+    );
+    const title = entry?.struct?.title || "";
+    // Full-text search matches on any metadata field (authors, citations…),
+    // not just the structure's actual subject — verify the topic name is
+    // actually part of the title before trusting the match.
+    if (!title.toLowerCase().includes(name.toLowerCase())) {
+      return res.status(404).json({ error: "No confident PDB match" });
+    }
+
+    const payload = {
+      pdb_id:       top.identifier,
+      title,
+      method:       entry?.exptl?.[0]?.method || null,
+      resolution:   (entry?.rcsb_entry_info?.resolution_combined || [])[0] || null,
+      release_date: entry?.rcsb_accession_info?.initial_release_date || null,
+      total_count:  searchRes?.total_count || 1,
+      pdb_url:      `https://www.rcsb.org/structure/${top.identifier}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/pdb failed:", err.message);
+    res.status(502).json({ error: "PDB unavailable" });
+  }
+});
+
+app.get("/api/field-data/exoplanet", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+
+  const cacheKey = `exoplanet:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    // pscomppars = one composite "best" parameter row per planet, vs the
+    // raw `ps` table which has one row per publication (many duplicates).
+    const escaped = name.replace(/'/g, "''");
+    const query = `select pl_name,hostname,disc_year,discoverymethod,pl_orbper,pl_rade,pl_masse,pl_eqt,sy_dist from pscomppars where pl_name='${escaped}'`;
+    const url = `https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query=${encodeURIComponent(query)}&format=json`;
+    const rows = await fetchJSONTimeout(url, {}, 8000);
+    const planet = (Array.isArray(rows) ? rows : [])[0];
+    if (!planet) return res.status(404).json({ error: "No exoplanet match" });
+
+    const payload = {
+      pl_name:         planet.pl_name,
+      hostname:        planet.hostname,
+      disc_year:       planet.disc_year,
+      discoverymethod: planet.discoverymethod,
+      orbital_period_days: planet.pl_orbper,
+      radius_earth:    planet.pl_rade,
+      mass_earth:      planet.pl_masse,
+      eq_temp_k:       planet.pl_eqt,
+      distance_pc:     planet.sy_dist,
+      exoplanet_url:   `https://exoplanetarchive.ipac.caltech.edu/overview/${encodeURIComponent(planet.pl_name)}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/exoplanet failed:", err.message);
+    res.status(502).json({ error: "Exoplanet Archive unavailable" });
+  }
+});
+
+app.get("/api/field-data/pangaea", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+
+  const cacheKey = `pangaea:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const data = await fetchJSONTimeout(
+      `https://www.pangaea.de/advanced/search.php?count=5&q=${encodeURIComponent(name)}`,
+      {}, 8000
+    );
+    // Score floor calibrated live: an unrelated topic ("Sociology") topped
+    // out around 28, a genuinely relevant one ("coral reef bleaching")
+    // scored 76-79 — full-text search alone isn't a reliable enough gate.
+    const SCORE_FLOOR = 45;
+    const results = (data?.results || []).filter(r => (r.score || 0) >= SCORE_FLOOR);
+    if (!results.length) return res.status(404).json({ error: "No confident PANGAEA match" });
+
+    const datasets = results.slice(0, 5).map(r => {
+      // Pull just the <div class="citation">...</div> — the rest of the
+      // markup (Size/Score table, dataset ID footer) isn't part of the
+      // actual citation and was leaking into the text when the whole
+      // block was tag-stripped instead.
+      const html = String(r.html || "");
+      const citationMatch = html.match(/<div class="citation">([\s\S]*?)<\/div>/);
+      const citation = (citationMatch ? citationMatch[1] : html)
+        .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const doi = String(r.URI || "").replace(/^doi:/i, "");
+      return { citation, doi, url: doi ? `https://doi.org/${doi}` : null, score: r.score };
+    });
+
+    const payload = {
+      total_count: datasets.length,
+      datasets,
+      pangaea_url: `https://www.pangaea.de/advanced/search.php?q=${encodeURIComponent(name)}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/pangaea failed:", err.message);
+    res.status(502).json({ error: "PANGAEA unavailable" });
+  }
+});
+
+/* ---------------------------
    Topic synthesis — Claude Haiku
 ----------------------------*/
 app.get("/api/topic/synthesis", async (req, res) => {

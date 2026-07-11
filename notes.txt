@@ -2233,63 +2233,95 @@ Xeno-canto
   Why useful: audio on species pages — completely unique content type
 
 -------------------------------------------------------
-TO BUILD — TIER 3 (beyond biology, opens SE to other fields)
+TIER 3 (beyond biology) — DONE for the 4 no-auth sources (2026-07-11)
 -------------------------------------------------------
 
-These expand the "Field Data" concept beyond species pages.
-Detection would shift from binomial name → OpenAlex concept type/field.
+These expand the "Field Data" concept beyond species pages, into topic
+pages for chemistry, structural biology, astronomy, and earth science.
 
-ChEMBL
-  URL: ebi.ac.uk/chembl | API: fully open, no auth
-  Data: 1.7M compounds, 14M bioactivities, drug/target data
-  Trigger: chemistry, pharmacology, biochemistry topic pages
-  Endpoint: GET /api/data/molecule?pref_name={compound_name}
+  [X] ChEMBL — bioactive molecule database. GET /api/field-data/chembl?name=X
+      → ebi.ac.uk/chembl pref_name__iexact exact match. Shows molecular
+      formula/weight, first approval year, clinical phase badge, ChEMBL link.
+  [X] Protein Data Bank (RCSB) — GET /api/field-data/pdb?name=X → RCSB
+      full-text search + title-verification (see below), shows entry title,
+      method, resolution, RCSB link.
+  [X] NASA Exoplanet Archive — GET /api/field-data/exoplanet?name=X →
+      TAP query against `pscomppars` (composite params, one row per planet)
+      for an exact pl_name match. Shows host star, discovery year/method,
+      radius/mass/eq. temp/distance.
+  [X] PANGAEA — GET /api/field-data/pangaea?name=X → full-text dataset
+      search with a relevance-score floor (see below). Shows up to 5
+      matching dataset citations with DOI links.
+  Materials Project (needs a free API key) intentionally left for later —
+  it's the only Tier 3 item that isn't no-auth.
 
-Protein Data Bank (PDB / RCSB)
-  URL: rcsb.org | API: data.rcsb.org/rest/v1/core/
-  Data: 200,000+ 3D protein structures
-  Trigger: molecular biology, structural biology topic pages
-  Endpoint: GET /entry/{pdb_id} or search by molecule name
+  IMPORTANT — the original plan for this section ("detection shifts from
+  binomial name → OpenAlex concept ancestors") turned out not to work:
+  live-tested against OpenAlex's Concepts API, `ancestors` comes back
+  EMPTY for essentially everything (Aspirin, Hemoglobin, Exoplanet, Coral
+  reef, Organic chemistry all returned ancestors: [] — that API is legacy/
+  frozen since OpenAlex moved to their newer Topics system). So there's no
+  reliable field/domain signal to gate on before calling these APIs.
 
-NASA Exoplanet Archive
-  URL: exoplanetarchive.ipac.caltech.edu | API: open, no auth
-  Data: 5,000+ confirmed exoplanets with orbital/physical properties
-  Trigger: astronomy, exoplanet, astrobiology topic pages
-  Endpoint: SQL-style query API returning JSON/CSV
+  Instead all 4 fire unconditionally on every topic page (non-blocking,
+  same as the species panels) and rely on each endpoint's own precision to
+  stay silent on irrelevant topics:
+    - ChEMBL & NASA Exoplanet Archive: exact-match lookups (pref_name /
+      pl_name) — a random topic name won't coincidentally equal a real
+      compound or planet's exact registered name.
+    - PDB: its full-text search alone is NOT safe — live-tested "Sociology"
+      as a control and it returned a confident-looking match (a cryo-EM
+      structure completely unrelated to sociology). Fixed by verifying the
+      topic name actually appears in the matched entry's title before
+      trusting it — that same "Sociology" query now correctly 404s.
+    - PANGAEA: full-text search over datasets also returns weak matches for
+      almost any term (an ethnography dataset scored ~28 for "Sociology"),
+      so a minimum score floor (45) is applied, calibrated against that
+      same false positive vs. a true positive ("coral reef bleaching"
+      scored 76-79).
+  All 4 verified live end-to-end (real curl calls + a rendered topic.html
+  in a real browser via Playwright) for both true positives (Aspirin →
+  ChEMBL+PDB, Kepler-186 f → Exoplanet Archive, Coral reef → PANGAEA) and
+  the Sociology false-positive control (correctly hidden on PDB and
+  PANGAEA, and never even queried as a false match on ChEMBL/Exoplanet
+  since those are exact-match).
 
-Materials Project
+-------------------------------------------------------
+TO BUILD — TIER 2 (free API key required)
+-------------------------------------------------------
+
+IUCN Red List
+  URL: iucnredlist.org | API: api.iucnredlist.org (v4)
+  Data: conservation status for 160,000+ species (Least Concern → Extinct)
+  Auth: free registration for API token
+  Why useful: THE conservation status source — single most important biodiversity data point
+  Plan: show status badge (e.g. "Vulnerable") on species topic pages
+
+eBird (Cornell Lab of Ornithology)
+  URL: ebird.org | API: eBird API 2.0
+  Data: 150M+ bird observations, real-time data, species profiles
+  Auth: free API key tied to eBird account
+  Why useful: for birds, the equivalent of WoC — living, validated, expert-curated
+
+Xeno-canto
+  URL: xeno-canto.org | API: xeno-canto.org/api/3/recordings
+  Data: 700,000+ bird and animal sound recordings with metadata and audio URLs
+  Auth: free key for registered members
+  Why useful: audio on species pages — completely unique content type
+
+Materials Project (moved here from Tier 3 — it's the one Tier 3 item that needs a key)
   URL: materialsproject.org | API: api.materialsproject.org (needs free key)
   Data: 150,000+ computed material structures and properties
-  Trigger: materials science, condensed matter physics topic pages
+  Trigger: same unconditional-fire-per-topic-page pattern as the other
+  Tier 3 integrations above, once a key exists.
 
-PANGAEA
-  URL: pangaea.de | API: open
-  Data: 150K+ earth/environmental science datasets (climate, geology, oceanography)
-  Trigger: climate, paleontology, oceanography, ecology topic pages
-
--------------------------------------------------------
-ARCHITECTURAL NOTE
--------------------------------------------------------
-
-The pattern across all of these is the same:
-  1. Detect topic type from OpenAlex concept (level, field, display name format)
-  2. Call the relevant external API via server proxy (24h cache)
-  3. Render a data panel — hidden when no data, no errors shown to user
-
-For biology: trigger on binomial species names (already working)
-For chemistry: trigger on concepts with ancestors including "Chemistry"
-For astronomy: trigger on concepts with ancestors including "Astrophysics"
-For structural biology: trigger on concepts with ancestors including "Biochemistry"
-
-This is the long-term vision for SE topic pages: not just papers and Wikipedia,
-but the living data layer for every field — each field's equivalent of World of Crayfish.
-
-Priority order for next build session:
-  1. IUCN Red List (free key — needs Olivier to register at
-     apiv3.iucnredlist.org first, same pattern as the Semantic Scholar key.
-     Conservation status badge — single most useful data point. OBIS's
-     checklist endpoint already surfaces an IUCN category as a bonus
-     where available, but a dedicated IUCN integration would cover far
-     more species and be the authoritative source rather than incidental.)
-  2. eBird (needs a free API key tied to an eBird account)
-  3. Xeno-canto (needs a free key for registered members)
+Priority order for next build session (all three below are blocked on
+Olivier registering a free key first — same pattern as the Semantic
+Scholar key):
+  1. IUCN Red List — conservation status badge, single most useful data
+     point. OBIS's checklist endpoint already surfaces an IUCN category as
+     a bonus where available, but a dedicated IUCN integration would cover
+     far more species and be the authoritative source rather than incidental.
+  2. eBird
+  3. Xeno-canto
+  4. Materials Project
