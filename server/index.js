@@ -280,6 +280,15 @@ app.use((req, res, next) => {
    Postgres (Neon) connection + DDL
 ----------------------------------*/
 const pool = HAS_DATABASE_URL ? new Pool({ connectionString: DATABASE_URL }) : null;
+// Idle pooled connections to Neon get dropped by the server/network from
+// time to time (ECONNRESET) — pg emits that as an 'error' event on the
+// pool, and an unhandled 'error' event crashes the whole Node process.
+// The pool itself already recovers by opening a fresh connection on the
+// next query; this just stops that recovery from taking the server down
+// with it.
+pool?.on("error", (err) => {
+  console.error("Postgres pool error (connection recovered automatically):", err.message);
+});
 function assertDb(res) {
   if (pool) return true;
   res.status(503).json({ error: "Database unavailable" });
@@ -4167,6 +4176,231 @@ app.get("/api/field-data/materials", async (req, res) => {
   } catch (err) {
     console.error("GET /api/field-data/materials failed:", err.message);
     res.status(502).json({ error: "Materials Project unavailable" });
+  }
+});
+
+/* ---------------------------
+   Round 2 field data — UniProt, Wikidata, USGS earthquakes, World Bank.
+   All no-auth. Live false-positive tested the same way as the round 1
+   Tier 3 sources (see notes.txt) before writing any of this.
+----------------------------*/
+
+app.get("/api/field-data/uniprot", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+
+  const cacheKey = `uniprot:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    // protein_name: is a precise field match (not fuzzy/full-text) — live-
+    // tested "Sociology" and "Aspirin" (a compound, not a protein) both
+    // correctly return zero results rather than a loose/wrong match.
+    // Without an organism filter, UniProt's default relevance ranking can
+    // surface an obscure species' version over the well-known human one
+    // (live-tested "Insulin" → returned a sea hare's insulin first) — try
+    // human first since that's what's almost always meant in a general
+    // research context, falling back to any organism if there's no human
+    // match for this protein.
+    const fields = "accession,organism_name,protein_name,gene_names,length,cc_function";
+    const humanQuery = `protein_name:${name} AND reviewed:true AND organism_id:9606`;
+    const anyQuery = `protein_name:${name} AND reviewed:true`;
+    let data = await fetchJSONTimeout(
+      `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(humanQuery)}&fields=${fields}&format=json&size=1`,
+      {}, 8000
+    );
+    if (!data?.results?.length) {
+      data = await fetchJSONTimeout(
+        `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(anyQuery)}&fields=${fields}&format=json&size=1`,
+        {}, 8000
+      );
+    }
+    const entry = (data?.results || [])[0];
+    if (!entry) return res.status(404).json({ error: "No UniProt match" });
+
+    const functionText = (entry.comments || []).find(c => c.commentType === "FUNCTION")?.texts?.[0]?.value || null;
+    const payload = {
+      accession:      entry.primaryAccession,
+      protein_name:   entry.proteinDescription?.recommendedName?.fullName?.value || name,
+      gene_name:      entry.genes?.[0]?.geneName?.value || null,
+      organism:       entry.organism?.scientificName || null,
+      length_aa:      entry.sequence?.length || null,
+      function_text:  functionText ? (functionText.length > 280 ? functionText.slice(0, 277) + "…" : functionText) : null,
+      uniprot_url:    `https://www.uniprot.org/uniprotkb/${entry.primaryAccession}/entry`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/uniprot failed:", err.message);
+    res.status(502).json({ error: "UniProt unavailable" });
+  }
+});
+
+// Curated external-ID properties worth surfacing — deliberately excludes
+// ones we already show from a dedicated integration (IUCN ID P141, WoRMS ID
+// P850, eBird taxon P3444) to avoid redundant panels for the same fact.
+const WIKIDATA_ID_PROPS = {
+  P231: { label: "CAS Number", url: null },
+  P662: { label: "PubChem CID", url: id => `https://pubchem.ncbi.nlm.nih.gov/compound/${id}` },
+  P592: { label: "ChEMBL ID", url: id => `https://www.ebi.ac.uk/chembl/explore/compound/${id}` },
+  P352: { label: "UniProt ID", url: id => `https://www.uniprot.org/uniprotkb/${id}/entry` },
+  P486: { label: "MeSH ID", url: id => `https://meshb.nlm.nih.gov/record/ui?ui=${id}` },
+  P214: { label: "VIAF ID", url: id => `https://viaf.org/viaf/${id}` },
+  P244: { label: "Library of Congress ID", url: id => `https://id.loc.gov/authorities/${id}` },
+};
+
+app.get("/api/field-data/wikidata", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+
+  const cacheKey = `wikidata:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const searchData = await fetchJSONTimeout(
+      `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(name)}&language=en&format=json&limit=1`,
+      {}, 8000
+    );
+    const hit = (searchData?.search || [])[0];
+    if (!hit?.id) return res.status(404).json({ error: "No Wikidata entity" });
+
+    const entityData = await fetchJSONTimeout(
+      `https://www.wikidata.org/wiki/Special:EntityData/${hit.id}.json`, {}, 8000
+    );
+    const entity = entityData?.entities?.[hit.id];
+    const claims = entity?.claims || {};
+
+    const identifiers = [];
+    for (const [prop, meta] of Object.entries(WIKIDATA_ID_PROPS)) {
+      const val = claims[prop]?.[0]?.mainsnak?.datavalue?.value;
+      if (typeof val === "string" && val) {
+        identifiers.push({ label: meta.label, value: val, url: meta.url ? meta.url(val) : null });
+      }
+    }
+
+    let coords = null;
+    const coordClaim = claims.P625?.[0]?.mainsnak?.datavalue?.value;
+    if (coordClaim?.latitude != null && coordClaim?.longitude != null) {
+      coords = { lat: coordClaim.latitude, lon: coordClaim.longitude };
+    }
+
+    const population = claims.P1082?.[0]?.mainsnak?.datavalue?.value?.amount || null;
+    const image = claims.P18?.[0]?.mainsnak?.datavalue?.value || null;
+
+    // Nothing worth showing at all — description alone isn't enough to
+    // justify a panel when the Wikipedia article already covers it.
+    if (!identifiers.length && !coords && !population && !image) {
+      return res.status(404).json({ error: "No distinguishing Wikidata facts" });
+    }
+
+    const payload = {
+      qid: hit.id,
+      description: hit.description || null,
+      identifiers,
+      coords,
+      population: population ? String(population).replace(/^\+/, "") : null,
+      image_url: image ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(image)}?width=300` : null,
+      wikidata_url: `https://www.wikidata.org/wiki/${hit.id}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/wikidata failed:", err.message);
+    res.status(502).json({ error: "Wikidata unavailable" });
+  }
+});
+
+app.get("/api/field-data/earthquakes", async (req, res) => {
+  const lat = parseFloat(req.query?.lat);
+  const lon = parseFloat(req.query?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return res.status(400).json({ error: "lat/lon required" });
+
+  const cacheKey = `earthquakes:${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const url = `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=${lat}&longitude=${lon}`
+      + `&maxradiuskm=500&starttime=${oneYearAgo}&minmagnitude=4.5&orderby=magnitude&limit=5`;
+    const data = await fetchJSONTimeout(url, {}, 8000);
+    const features = data?.features || [];
+    if (!features.length) return res.status(404).json({ error: "No significant recent earthquakes nearby" });
+
+    const quakes = features.map(f => ({
+      mag:   f.properties.mag,
+      place: f.properties.place,
+      time:  f.properties.time,
+      url:   f.properties.url,
+    }));
+
+    const payload = { quakes, radius_km: 500, since: oneYearAgo };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/earthquakes failed:", err.message);
+    res.status(502).json({ error: "USGS unavailable" });
+  }
+});
+
+let _wbCountriesCache = null; // { at: timestamp, list: [{name, id}] }
+async function getWorldBankCountries() {
+  if (_wbCountriesCache && Date.now() - _wbCountriesCache.at < OA_TTL_MS) return _wbCountriesCache.list;
+  const data = await fetchJSONTimeout("https://api.worldbank.org/v2/country?format=json&per_page=400", {}, 8000);
+  const list = (data?.[1] || [])
+    .filter(c => c.region?.id && c.region.id !== "NA") // World Bank uses region "Aggregates" (id NA) for non-country groupings
+    .map(c => ({ name: c.name, id: c.id }));
+  _wbCountriesCache = { at: Date.now(), list };
+  return list;
+}
+
+const WB_INDICATORS = [
+  { code: "NY.GDP.MKTP.CD", key: "gdp_usd", label: "GDP (current US$)" },
+  { code: "SP.POP.TOTL", key: "population", label: "Population" },
+  { code: "SP.DYN.LE00.IN", key: "life_expectancy", label: "Life expectancy (years)" },
+];
+
+app.get("/api/field-data/worldbank", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+
+  const cacheKey = `worldbank:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const countries = await getWorldBankCountries();
+    const match = countries.find(c => c.name.toLowerCase() === name.toLowerCase());
+    if (!match) return res.status(404).json({ error: "Not a World Bank country" });
+
+    const results = {};
+    for (const ind of WB_INDICATORS) {
+      const data = await fetchJSONTimeout(
+        `https://api.worldbank.org/v2/country/${match.id}/indicator/${ind.code}?format=json&per_page=20`,
+        {}, 8000
+      ).catch(() => null); // fail soft per-indicator — World Bank's API is occasionally slow/flaky
+      const rows = data?.[1] || [];
+      const latest = rows.find(r => r.value != null);
+      if (latest) results[ind.key] = { value: latest.value, year: latest.date };
+    }
+    if (!Object.keys(results).length) return res.status(404).json({ error: "No World Bank indicator data" });
+
+    const payload = {
+      country: match.name,
+      indicators: results,
+      worldbank_url: `https://data.worldbank.org/country/${match.id}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/worldbank failed:", err.message);
+    res.status(502).json({ error: "World Bank unavailable" });
   }
 });
 

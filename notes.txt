@@ -2331,3 +2331,87 @@ TIER 2 (free API key required)
       Lives in the Tier 3 unconditional-fire group, not species-gated.
       Verified live: Silicon → Si, cubic Fd-3m, 2.31 g/cm³, 0.61 eV band
       gap; Sociology correctly 404s.
+
+-------------------------------------------------------
+ROUND 2 (2026-07-12) — UniProt, Wikidata, USGS earthquakes, World Bank
+-------------------------------------------------------
+
+Four more no-auth sources, chosen to push Field Data into fields it had
+zero coverage in before: humanities/geography identifiers (Wikidata),
+economics (World Bank), and earth science beyond PANGAEA (USGS). All
+fire unconditionally per topic page (Tier 3 style) except UniProt.
+
+  [X] UniProt — GET /api/field-data/uniprot?name=X → rest.uniprot.org,
+      query=protein_name:X AND reviewed:true. protein_name: is a precise
+      field match, not full-text — live-tested "Sociology" and "Aspirin"
+      (a compound, not a protein) both correctly return zero results.
+      BUG CAUGHT before shipping: without an organism filter, UniProt's
+      relevance ranking can surface an obscure species' version of a
+      protein over the well-known human one — live-tested "Insulin"
+      returned a sea hare's insulin first, not human insulin. Fixed by
+      querying organism_id:9606 (human) first and only falling back to
+      any organism if there's no human match. Shows protein name, gene,
+      organism, a truncated function summary, sequence length, link.
+      Complements PDB (which is structure-only) rather than duplicating
+      it. Verified live: Insulin → human INS gene, Q9NDE7→P01308 fix
+      confirmed; Sociology correctly 404s.
+
+  [X] Wikidata — GET /api/field-data/wikidata?name=X → wbsearchentities
+      + Special:EntityData. Deliberately does NOT duplicate the full
+      Wikipedia article already shown as the page's main content —
+      instead surfaces a curated "Identifiers" panel of external
+      cross-reference IDs (CAS Number, PubChem CID, ChEMBL ID, UniProt
+      ID, MeSH ID, VIAF, Library of Congress ID — chosen to exclude
+      anything we already show from a dedicated integration, like IUCN
+      or WoRMS IDs) plus population/coordinates/image when present.
+      Fires for virtually any topic (it's a universal knowledge base),
+      but only renders when there's something not already on the page —
+      no identifiers/population/coords/image at all means no panel.
+      Verified live: Aspirin → 5 identifiers + image; Sumatra → 2
+      identifiers + population (50.4M) + coordinates + image.
+
+  [X] USGS earthquakes — GET /api/field-data/earthquakes?lat=X&lon=Y →
+      earthquake.usgs.gov, magnitude ≥4.5 within 500km, last 12 months.
+      No name-based trigger of its own — chained directly off Wikidata's
+      coordinates (loadWikidataData calls loadEarthquakeData when P625
+      is present) rather than needing a separate geocoding step or key.
+      GeoNames (the originally-considered geography source) needs a
+      free-registered username and wasn't set up this round — this
+      approach gets real seismic data onto place topic pages without
+      waiting on that. Verified live: Sumatra/New Zealand coordinates →
+      5 real recent M4.5+ quakes each, correct place names and links.
+
+  [X] World Bank — GET /api/field-data/worldbank?name=X → matches the
+      topic name exactly against the World Bank's own ~215-country list
+      (fetched once, cached), then pulls GDP/population/life-expectancy
+      for whichever is the most recent available year per indicator.
+      First integration to open Field Data to economics/social-science
+      topic pages — previously biology, chemistry, astronomy, earth
+      science, and materials science only. Verified live: New Zealand →
+      GDP $264B (2025), population 5.32M (2025), life expectancy 82.0
+      (2024); Aspirin correctly 404s (not a country name).
+
+  BUG CAUGHT (unrelated to the above, found while testing them): the
+  Neon Postgres pool had no 'error' event handler — pg emits dropped
+  idle connections (ECONNRESET, which happens periodically and is
+  normal/expected for pooled serverless Postgres) as an 'error' event on
+  the pool, and an unhandled 'error' event crashes the entire Node
+  process. Hit this live mid-testing session — the dev server died with
+  no request in flight, purely from an idle connection reset. Added
+  pool.on('error', ...) to log and let the pool recover (it already
+  does, via opening a fresh connection on the next query) instead of
+  taking the whole server down. This would have crashed production on
+  Render too, not just local dev — worth flagging as a real fix, not
+  incidental to this round's actual feature work.
+
+  Also note: OpenAlex's legacy Concepts API search (topic.js's
+  fetchConceptByIdOrSearch) is broadly unreliable for exact name lookups
+  independent of any of the above — live-tested searching for "Japan",
+  "Chile", "Turkey", "Australia" as topic IDs and got "Japanese
+  encephalitis", "Very Large Telescope", "Turkish", "Australian English"
+  back respectively. Pre-existing behavior, not something this round
+  touched or is in scope to fix, but it means a topic page whose title
+  the resolver mangled will silently get none of these panels (they're
+  keyed off whatever display_name it actually resolved to) — always
+  verify against the resolved display_name, not the input search term,
+  when spot-checking any Field Data panel by URL.

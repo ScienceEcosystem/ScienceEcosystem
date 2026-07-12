@@ -1083,6 +1083,152 @@
     } catch (_) {}
   }
 
+  async function loadUniprotData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/uniprot?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.accession) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#166534"/><text x="10" y="14" text-anchor="middle" font-size="5.5" font-family="sans-serif" font-weight="bold" fill="white">UniProt</text></svg>
+          <span class="inat-title">UniProt · ${escapeHtml(d.protein_name)}</span>
+        </div>
+        ${d.organism ? `<p class="muted" style="font-size:.82rem;margin:.25rem 0 .4rem;">${escapeHtml(d.organism)}${d.gene_name ? ` · gene ${escapeHtml(d.gene_name)}` : ""}</p>` : ""}
+        ${d.function_text ? `<p style="font-size:.85rem;color:#374151;margin:0 0 .5rem;">${escapeHtml(d.function_text)}</p>` : ""}
+        ${d.length_aa ? `<div class="woc-stats-grid"><div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${d.length_aa.toLocaleString()}</div><div class="woc-stat-label">Amino acids</div></div></div>` : ""}
+        <div class="woc-footer" style="margin-top:.5rem;">
+          <a href="${escapeHtml(d.uniprot_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on UniProt →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
+  async function loadWikidataData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/wikidata?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.qid) return;
+
+      // Chain into the earthquake panel when this entity has real-world
+      // coordinates — avoids needing a separate geocoding step/key just to
+      // find out whether a topic is a place worth checking seismic data for.
+      if (d.coords) loadEarthquakeData(d.coords.lat, d.coords.lon);
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const idBadges = (d.identifiers || []).map(idf => idf.url
+        ? `<a href="${escapeHtml(idf.url)}" target="_blank" rel="noopener" class="badge" style="font-size:.72rem;">${escapeHtml(idf.label)}: ${escapeHtml(idf.value)}</a>`
+        : `<span class="badge" style="font-size:.72rem;">${escapeHtml(idf.label)}: ${escapeHtml(idf.value)}</span>`
+      ).join(" ");
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#14532d"/><text x="10" y="15" text-anchor="middle" font-size="12" font-family="sans-serif" font-weight="bold" fill="white">W</text></svg>
+          <span class="inat-title">Wikidata</span>
+        </div>
+        ${d.image_url ? `<img src="${escapeHtml(d.image_url)}" alt="" style="width:100%;max-width:240px;border-radius:4px;display:block;margin-bottom:.4rem;" loading="lazy">` : ""}
+        <div class="woc-stats-grid">
+          ${d.population ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${Number(d.population).toLocaleString()}</div><div class="woc-stat-label">Population</div></div>` : ""}
+          ${d.coords ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1rem;">${d.coords.lat.toFixed(2)}, ${d.coords.lon.toFixed(2)}</div><div class="woc-stat-label">Coordinates</div></div>` : ""}
+        </div>
+        ${idBadges ? `<div style="margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.3rem;">${idBadges}</div>` : ""}
+        <div class="woc-footer" style="margin-top:.5rem;">
+          <a href="${escapeHtml(d.wikidata_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on Wikidata →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
+  async function loadEarthquakeData(lat, lon) {
+    try {
+      const resp = await fetch(`/api/field-data/earthquakes?lat=${lat}&lon=${lon}`);
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!(d.quakes || []).length) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const rows = d.quakes.map(q => `
+        <li style="margin-bottom:.3rem;font-size:.83rem;">
+          <a href="${escapeHtml(q.url)}" target="_blank" rel="noopener">M${q.mag.toFixed(1)} — ${escapeHtml(q.place)}</a>
+          <span class="muted" style="font-size:.75rem;"> · ${new Date(q.time).toLocaleDateString()}</span>
+        </li>`).join("");
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#b91c1c"/><text x="10" y="14" text-anchor="middle" font-size="6" font-family="sans-serif" font-weight="bold" fill="white">USGS</text></svg>
+          <span class="inat-title">Recent earthquakes within ${d.radius_km} km</span>
+        </div>
+        <ul style="margin:.4rem 0 0;padding-left:1.1rem;">${rows}</ul>
+        <p class="muted" style="font-size:.72rem;margin-top:.4rem;">Magnitude ≥4.5, since ${escapeHtml(d.since)} · USGS Earthquake Hazards Program</p>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
+  async function loadWorldBankData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/worldbank?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.indicators) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const ind = d.indicators;
+      const fmtMoney = v => v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${v.toLocaleString()}`;
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#1e3a8a"/><text x="10" y="14" text-anchor="middle" font-size="5" font-family="sans-serif" font-weight="bold" fill="white">World Bank</text></svg>
+          <span class="inat-title">World Bank · ${escapeHtml(d.country)}</span>
+        </div>
+        <div class="woc-stats-grid">
+          ${ind.gdp_usd ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${fmtMoney(ind.gdp_usd.value)}</div><div class="woc-stat-label">GDP (${escapeHtml(ind.gdp_usd.year)})</div></div>` : ""}
+          ${ind.population ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${Number(ind.population.value).toLocaleString()}</div><div class="woc-stat-label">Population (${escapeHtml(ind.population.year)})</div></div>` : ""}
+          ${ind.life_expectancy ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${Number(ind.life_expectancy.value).toFixed(1)}</div><div class="woc-stat-label">Life expectancy (${escapeHtml(ind.life_expectancy.year)})</div></div>` : ""}
+        </div>
+        <div class="woc-footer" style="margin-top:.75rem;">
+          <a href="${escapeHtml(d.worldbank_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on World Bank →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
   async function loadInatData(displayName) {
     if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
     const container = $("inatContent");
@@ -1849,6 +1995,9 @@
       loadExoplanetData(topic.display_name || humanName);
       loadPangaeaData(topic.display_name || humanName);
       loadMaterialsData(topic.display_name || humanName);
+      loadUniprotData(topic.display_name || humanName);
+      loadWikidataData(topic.display_name || humanName); // also chains into loadEarthquakeData when the entity has coordinates
+      loadWorldBankData(topic.display_name || humanName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 
