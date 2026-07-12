@@ -4404,6 +4404,57 @@ app.get("/api/field-data/worldbank", async (req, res) => {
   }
 });
 
+app.get("/api/field-data/geonames", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+  const username = process.env.GEONAMES_USERNAME || "";
+  if (!username) return res.status(404).json({ error: "GeoNames not configured" });
+
+  const cacheKey = `geonames:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    // name_equals is an exact match, not full-text search — live-tested
+    // "Sociology" returns zero results rather than a loose/wrong place.
+    // orderby=population resolves name collisions in favor of the place
+    // someone actually means (e.g. "Auckland" the city of 1.5M ahead of
+    // an unrelated hamlet in California also named Auckland).
+    const searchData = await fetchJSONTimeout(
+      `http://api.geonames.org/searchJSON?name_equals=${encodeURIComponent(name)}&maxRows=1&orderby=population&username=${encodeURIComponent(username)}`,
+      {}, 8000
+    );
+    const hit = (searchData?.geonames || [])[0];
+    if (!hit?.geonameId) return res.status(404).json({ error: "No GeoNames match" });
+
+    const detail = await fetchJSONTimeout(
+      `http://api.geonames.org/getJSON?geonameId=${hit.geonameId}&username=${encodeURIComponent(username)}`,
+      {}, 8000
+    ).catch(() => null);
+
+    const elevation = detail?.srtm3 ?? detail?.astergdem ?? null;
+    const adminPath = [detail?.adminName1, detail?.adminName2].filter(Boolean).join(", ") || null;
+
+    const payload = {
+      name:          hit.toponymName || hit.name,
+      feature_type:  hit.fcodeName || null,
+      country:       hit.countryName || null,
+      admin_area:    adminPath,
+      population:    hit.population || null,
+      elevation_m:   elevation,
+      timezone:      detail?.timezone?.timeZoneId || null,
+      wikipedia_url: detail?.wikipediaURL ? `https://${detail.wikipediaURL}` : null,
+      geonames_url:  `https://www.geonames.org/${hit.geonameId}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/geonames failed:", err.message);
+    res.status(502).json({ error: "GeoNames unavailable" });
+  }
+});
+
 /* ---------------------------
    Topic synthesis — Claude Haiku
 ----------------------------*/

@@ -2391,6 +2391,22 @@ fire unconditionally per topic page (Tier 3 style) except UniProt.
       GDP $264B (2025), population 5.32M (2025), life expectancy 82.0
       (2024); Aspirin correctly 404s (not a country name).
 
+  [X] GeoNames (2026-07-12, right after the round above — Olivier
+      registered a username and enabled Free Web Services, which is off
+      by default even after signup) — GET /api/field-data/geonames?name=X
+      → api.geonames.org/searchJSON with name_equals (exact match, not
+      full-text — live-tested "Sociology" correctly 404s) + orderby=
+      population to resolve name collisions toward the place someone
+      actually means (live-tested "Auckland" — returns the 1.5M-person
+      city/region, not an unrelated hamlet in California also named
+      Auckland), then a second getJSON call for timezone/elevation.
+      Deliberately doesn't duplicate Wikidata's population/coordinates —
+      shows feature type (island/mountain/city/etc), admin hierarchy,
+      elevation, and timezone instead, the things GeoNames actually has
+      that Wikidata mostly doesn't. Verified live: Sumatra → island,
+      Indonesia, pop 50.4M, Asia/Jakarta; Auckland → correctly
+      disambiguated to the NZ region over the CA hamlet.
+
   BUG CAUGHT (unrelated to the above, found while testing them): the
   Neon Postgres pool had no 'error' event handler — pg emits dropped
   idle connections (ECONNRESET, which happens periodically and is

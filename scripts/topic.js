@@ -1229,6 +1229,41 @@
     } catch (_) {}
   }
 
+  async function loadGeonamesData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/geonames?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.name) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#0e7490"/><text x="10" y="14" text-anchor="middle" font-size="5.5" font-family="sans-serif" font-weight="bold" fill="white">GEO</text></svg>
+          <span class="inat-title">GeoNames · ${escapeHtml(d.feature_type || "place")}</span>
+        </div>
+        <p class="muted" style="font-size:.82rem;margin:.25rem 0 .5rem;">${[d.admin_area, d.country].filter(Boolean).map(escapeHtml).join(", ")}</p>
+        <div class="woc-stats-grid">
+          ${d.population ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${d.population.toLocaleString()}</div><div class="woc-stat-label">Population</div></div>` : ""}
+          ${d.elevation_m != null ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${d.elevation_m.toLocaleString()} m</div><div class="woc-stat-label">Elevation</div></div>` : ""}
+          ${d.timezone ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1rem;">${escapeHtml(d.timezone)}</div><div class="woc-stat-label">Timezone</div></div>` : ""}
+        </div>
+        <div class="woc-footer" style="margin-top:.75rem;">
+          <a href="${escapeHtml(d.geonames_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on GeoNames →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
   async function loadInatData(displayName) {
     if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
     const container = $("inatContent");
@@ -1998,6 +2033,7 @@
       loadUniprotData(topic.display_name || humanName);
       loadWikidataData(topic.display_name || humanName); // also chains into loadEarthquakeData when the entity has coordinates
       loadWorldBankData(topic.display_name || humanName);
+      loadGeonamesData(topic.display_name || humanName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 
