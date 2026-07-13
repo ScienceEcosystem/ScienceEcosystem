@@ -4261,11 +4261,20 @@ app.get("/api/field-data/wikidata", async (req, res) => {
 
   try {
     const searchData = await fetchJSONTimeout(
-      `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(name)}&language=en&format=json&limit=1`,
+      `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(name)}&language=en&format=json&limit=5`,
       {}, 8000
     );
-    const hit = (searchData?.search || [])[0];
-    if (!hit?.id) return res.status(404).json({ error: "No Wikidata entity" });
+    // wbsearchentities' top result isn't always the entity actually named
+    // this — live-tested "Tūī" (the NZ bird) and the top hit was "TUI
+    // Group" (a German travel company), with the real bird entity ("tūī")
+    // only appearing further down for a plain "tui bird" query, not even
+    // in this result set at all. Only trust a hit whose own label equals
+    // the query after normalizing case and diacritics — showing nothing
+    // is much better than showing the wrong entity's facts/image.
+    const normalize = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const target = normalize(name);
+    const hit = (searchData?.search || []).find(r => normalize(r.label) === target);
+    if (!hit?.id) return res.status(404).json({ error: "No confidently-matching Wikidata entity" });
 
     const entityData = await fetchJSONTimeout(
       `https://www.wikidata.org/wiki/Special:EntityData/${hit.id}.json`, {}, 8000
