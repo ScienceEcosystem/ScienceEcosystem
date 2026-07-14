@@ -891,6 +891,28 @@
     } catch (_) {}
   }
 
+  // Resolves a topic display name to a scientific binomial name when it
+  // isn't one already — e.g. a page titled with a common/vernacular name
+  // like "Tūī" would otherwise never trigger any of the species-gated
+  // panels above, even though the species is fully documented in all of
+  // them under its scientific name (see server/index.js resolve-species
+  // for how the match is verified against GBIF's real vernacular-names
+  // list before being trusted). Falls back to the original name — and
+  // every species panel just stays hidden, same as before this existed —
+  // if nothing resolves.
+  async function resolveSpeciesName(displayName) {
+    const trimmed = displayName.trim();
+    if (/^[A-Z][a-z]+ [a-z]+/.test(trimmed)) return trimmed;
+    try {
+      const resp = await fetch("/api/field-data/resolve-species?name=" + encodeURIComponent(trimmed));
+      if (!resp.ok) return trimmed;
+      const d = await resp.json();
+      return d.scientific_name || trimmed;
+    } catch (_) {
+      return trimmed;
+    }
+  }
+
   // ---- Tier 3: beyond species pages ----
   // No structural pre-filter like the binomial-name regex above exists for
   // these (a compound, protein, or planet name doesn't have a fixed shape),
@@ -2014,26 +2036,34 @@
       // ToC (from body only)
       buildTOC(bodyWrap);
 
-      // Field data (non-blocking, fires in background)
-      loadFieldData(topic.display_name || humanName);
-      loadGbifData(topic.display_name || humanName);
-      loadInatData(topic.display_name || humanName);
-      loadColData(topic.display_name || humanName);
-      loadWormsData(topic.display_name || humanName);
-      loadObisData(topic.display_name || humanName);
-      loadIucnData(topic.display_name || humanName);
-      loadEbirdData(topic.display_name || humanName);
-      loadXenoCantoData(topic.display_name || humanName);
-      // Tier 3 — beyond species pages (compounds, structures, exoplanets, datasets)
-      loadChemblData(topic.display_name || humanName);
-      loadPdbData(topic.display_name || humanName);
-      loadExoplanetData(topic.display_name || humanName);
-      loadPangaeaData(topic.display_name || humanName);
-      loadMaterialsData(topic.display_name || humanName);
-      loadUniprotData(topic.display_name || humanName);
-      loadWikidataData(topic.display_name || humanName); // also chains into loadEarthquakeData when the entity has coordinates
-      loadWorldBankData(topic.display_name || humanName);
-      loadGeonamesData(topic.display_name || humanName);
+      // Field data (non-blocking, fires in background). Species-gated
+      // panels need a binomial-shaped name to fire at all — resolve one
+      // first for topics titled with a common name (e.g. "Tūī" →
+      // "Prosthemadera novaeseelandiae") so those panels aren't silently
+      // skipped just because the page title happens to use the common name.
+      const baseTopicName = topic.display_name || humanName;
+      const speciesName = await resolveSpeciesName(baseTopicName);
+      loadFieldData(speciesName);
+      loadGbifData(speciesName);
+      loadInatData(speciesName);
+      loadColData(speciesName);
+      loadWormsData(speciesName);
+      loadObisData(speciesName);
+      loadIucnData(speciesName);
+      loadEbirdData(speciesName);
+      loadXenoCantoData(speciesName);
+      // Tier 3 — beyond species pages (compounds, structures, exoplanets,
+      // datasets) — these key off the page's own title, not the resolved
+      // scientific name, since they're not species-specific.
+      loadChemblData(baseTopicName);
+      loadPdbData(baseTopicName);
+      loadExoplanetData(baseTopicName);
+      loadPangaeaData(baseTopicName);
+      loadMaterialsData(baseTopicName);
+      loadUniprotData(baseTopicName);
+      loadWikidataData(baseTopicName); // also chains into loadEarthquakeData when the entity has coordinates
+      loadWorldBankData(baseTopicName);
+      loadGeonamesData(baseTopicName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 

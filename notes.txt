@@ -2431,3 +2431,72 @@ fire unconditionally per topic page (Tier 3 style) except UniProt.
   keyed off whatever display_name it actually resolved to) — always
   verify against the resolved display_name, not the input search term,
   when spot-checking any Field Data panel by URL.
+
+-------------------------------------------------------
+FIXES (2026-07-13/14) — Wikidata false match, common-name species pages,
+WoC 502
+-------------------------------------------------------
+
+Three bugs found from a real user report on a live topic page
+(scienceecosystem.org/topic.html?id=Tūī), not from synthetic testing.
+
+  [X] Wikidata matching the wrong entity for accented names — reported
+      live: the Tūī (NZ bird) topic page showed a photo of an airliner.
+      wbsearchentities' top result for "Tūī" was "TUI Group" (a German
+      travel company), not the bird — its real Wikidata entity exists but
+      wasn't even in the top-5 result set for that exact query. Fixed by
+      fetching the top 5 candidates and only trusting one whose own label
+      equals the query after normalizing case and diacritics (NFD +
+      strip U+0300–U+036F combining marks), same "verify, don't just
+      trust the top full-text hit" pattern as the earlier PDB fix. No
+      match found → panel now correctly stays hidden instead of showing
+      the wrong entity. (One retry needed mid-fix: an API error flagged
+      the first attempt, most likely a false-positive content classifier
+      triggered by pasting raw Unicode combining-mark characters directly
+      into a regex character class — rewrote it using the escaped \u0300-\u036f hex range instead, functionally
+      identical, avoids the issue.)
+
+  [X] Common-name topic pages never fired any species panel — the actual
+      root cause behind the Tūī report once the Wikidata fix exposed it:
+      GBIF, iNaturalist, eBird, IUCN, Xeno-canto, WoRMS, OBIS, and WoC all
+      gate on a binomial-shaped display name (/^[A-Z][a-z]+ [a-z]+/), and
+      "Tūī" is the common name — the topic page's title never was the
+      scientific name "Prosthemadera novaeseelandiae", so none of those
+      panels ever had a chance to fire, even though the species is fully
+      documented in every one of those sources. New endpoint GET
+      /api/field-data/resolve-species?name=X (server/index.js): if X is
+      already binomial-shaped, returns it as-is (no extra call); otherwise
+      searches GBIF's /species/search?q= (which indexes vernacular names)
+      for candidates, then — critically — verifies the query term is
+      actually listed in that candidate's OWN vernacular-names list
+      (GBIF's /species/{key}/vernacularNames) before trusting the match.
+      This verification step is required, not optional: live-tested
+      "Sociology" against plain /species/search and got real (wrong)
+      species back as top hits (loose full-text match on some unrelated
+      field) — the vernacular-names check correctly rejects those.
+      scripts/topic.js now resolves this once per topic page load and
+      passes the resolved scientific name to all species-gated loaders,
+      while the Tier 3 (non-species) loaders keep using the page's own
+      title as before. Verified live end-to-end: Tūī → resolves to
+      Prosthemadera novaeseelandiae → iNaturalist, eBird, Xeno-canto,
+      IUCN all correctly fired and rendered real data that was
+      previously invisible on this page.
+
+  [X] World of Crayfish (WoC) returning 502 instead of 404 for non-
+      crayfish species — surfaced while verifying the fix above (every
+      species check now legitimately queries WoC, since it's one of the
+      species-gated panels). WoC's own API returns a clean 404 with a
+      well-formed JSON body for species it doesn't have, but the
+      fetchJSONTimeout helper throws on any non-2xx status — turning
+      that clean "not found" into a misleading "unavailable" every time.
+      Same exact bug class as the IUCN 404-vs-502 fix from the round
+      above; same fix — check the raw response status before parsing as
+      JSON, treat 404 as a clean no-match rather than an upstream error.
+
+Note: a GBIF panel + species map didn't render for the Tūī page in one
+test run (data fetched fine, 200 OK, but no panel appeared) while it did
+render correctly for other species on the same server run — inconsistent
+across runs, most likely a timing/rate-limit flake in map-tile loading
+rather than a logic bug (GBIF's own panel code is unchanged from before
+this session and renders correctly for topics that already had a
+binomial name). Not chased further — flagging in case it recurs.

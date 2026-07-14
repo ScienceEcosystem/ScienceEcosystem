@@ -3401,11 +3401,17 @@ app.get("/api/field-data/woc", async (req, res) => {
 
   try {
     const wocHeaders = { "User-Agent": "ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)" };
-    const data = await fetchJSONTimeout(
+    // WoC's own API returns a clean 404 (with a well-formed JSON body) for
+    // species it doesn't have — checked directly rather than via
+    // fetchJSONTimeout, which throws on any non-2xx and would otherwise
+    // turn that clean "not found" into a misleading 502 "unavailable".
+    const checkRes = await fetchWithTimeout(
       `https://world.crayfish.ro/services/api/check-engine.php?baseline=${encodeURIComponent(species)}`,
-      { headers: wocHeaders },
-      12000
+      { headers: wocHeaders }, 12000
     );
+    if (checkRes.status === 404) return res.status(404).json({ error: "Species not found in WoC" });
+    if (!checkRes.ok) throw new Error(`${checkRes.status} ${checkRes.statusText}`);
+    const data = await checkRes.json();
     if (!data?.baseline?.total_records) return res.status(404).json({ error: "Species not found in WoC" });
 
     const b = data.baseline;
@@ -3723,6 +3729,64 @@ app.get("/api/field-data/worms", async (req, res) => {
   } catch (err) {
     console.error("GET /api/field-data/worms failed:", err.message);
     res.status(502).json({ error: "WoRMS unavailable" });
+  }
+});
+
+const BINOMIAL_RE = /^[A-Z][a-z]+ [a-z]+/;
+
+// Resolves a topic display name to a scientific binomial name when it isn't
+// one already — e.g. "Tūī" (the Māori/common name for a NZ bird) →
+// "Prosthemadera novaeseelandiae". Without this, a topic page titled with a
+// common name never triggers any of the species-gated Field Data panels
+// (GBIF, iNaturalist, eBird, IUCN, Xeno-canto, WoRMS, OBIS all require a
+// binomial-shaped name) even though the species itself is fully documented
+// in all of those sources under its scientific name.
+//
+// GBIF's /species/search?q= indexes vernacular names, but it's a loose
+// full-text search, not a precise vernacular-name match — live-tested
+// "Sociology" and it returned real (wrong) species as top hits (e.g.
+// "Bracon frankjoycei", matched on some unrelated text field). So the top
+// candidate's OWN vernacular-names list is fetched and checked to confirm
+// the query term is actually a real common name for it before trusting the
+// match — same "verify, don't just trust the top full-text hit" pattern as
+// the earlier PDB and Wikidata fixes.
+app.get("/api/field-data/resolve-species", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+
+  if (BINOMIAL_RE.test(name)) return res.json({ scientific_name: name });
+
+  const cacheKey = `resolve-species:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const searchData = await fetchJSONTimeout(
+      `https://api.gbif.org/v1/species/search?q=${encodeURIComponent(name)}&rank=SPECIES&limit=3`,
+      {}, 8000
+    );
+    const candidates = searchData?.results || [];
+
+    for (const c of candidates.slice(0, 3)) {
+      if (!c?.key || !c?.scientificName) continue;
+      const vernRes = await fetchJSONTimeout(
+        `https://api.gbif.org/v1/species/${c.key}/vernacularNames?limit=100`, {}, 8000
+      ).catch(() => null);
+      const vernNames = (vernRes?.results || []).map(v => (v.vernacularName || "").toLowerCase());
+      if (!vernNames.includes(name.toLowerCase())) continue;
+
+      const scientificName = (c.scientificName.match(BINOMIAL_RE) || [])[0];
+      if (!scientificName) continue;
+
+      const payload = { scientific_name: scientificName };
+      cacheSet(cacheKey, payload);
+      return res.json(payload);
+    }
+
+    return res.status(404).json({ error: "No verified species match" });
+  } catch (err) {
+    console.error("GET /api/field-data/resolve-species failed:", err.message);
+    res.status(502).json({ error: "GBIF unavailable" });
   }
 });
 
