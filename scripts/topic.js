@@ -1956,32 +1956,71 @@
         const res = await fetch(`${API_OA}/concepts/${encodeURIComponent(idOrName)}`);
         if (res.ok) return await res.json();
       } catch (_) {}
-      // Fallback: search by name — replace underscores with spaces so Wikipedia slugs match
+
       const searchTerm = idOrName.replace(/_/g, " ");
-      try {
-        const searchURL = `${API_OA}/concepts?search=${encodeURIComponent(searchTerm)}&per_page=1`;
-        const data = await fetchOpenAlexJSON(searchURL);
-        const c = data.results?.[0];
-        if (c?.id) { idTail = tail(c.id); return c; }
-      } catch (_) {}
-      // Second fallback: Wikipedia search resolves common names → scientific names
-      // e.g. "Red swamp crayfish" → "Procambarus clarkii"
+
+      // Resolve the canonical title via Wikipedia FIRST, then use THAT to
+      // query OpenAlex — not the other way around. OpenAlex's own legacy
+      // concept search is frozen/unmaintained and frequently returns a
+      // confidently-wrong match instead of nothing (live-tested: "Japan" →
+      // "Japanese encephalitis", "Chile" → "Very Large Telescope", "Turkey"
+      // → "Turkish", "Australia" → "Australian English"). Trying it first
+      // meant the Wikipedia fallback below almost never ran, since OpenAlex
+      // search nearly always returns SOMETHING — just often the wrong
+      // thing. OpenAlex concept IDs are still required downstream (top
+      // papers/authors are queried by concept ID, which Wikipedia has no
+      // equivalent for), but querying it with a Wikipedia-verified
+      // canonical title lands on the right concept far more reliably than
+      // querying it with the raw, possibly-ambiguous user input directly.
+      let canonicalTitle = searchTerm;
       try {
         const wpUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search"
           + "&srsearch=" + encodeURIComponent(searchTerm)
-          + "&srlimit=3&format=json&origin=*";
+          + "&srlimit=1&format=json&origin=*";
         const wpData = await fetchOpenAlexJSON(wpUrl);
-        const wpTitles = (wpData?.query?.search || []).map(r => r.title).filter(Boolean);
-        for (const title of wpTitles) {
-          if (title.toLowerCase() === searchTerm.toLowerCase()) continue;
-          const altData = await fetchOpenAlexJSON(`${API_OA}/concepts?search=${encodeURIComponent(title)}&per_page=1`);
-          const c = altData.results?.[0];
-          if (c?.id) { idTail = tail(c.id); return c; }
-        }
+        const wpTitle = wpData?.query?.search?.[0]?.title;
+        if (wpTitle) canonicalTitle = wpTitle;
       } catch (_) {}
+
+      // Even given the verified-correct title, OpenAlex's own concept
+      // search still doesn't reliably return a real match — live-tested
+      // querying it with the exact right term "Japan" and it still
+      // returned "Japanese encephalitis". Its Concepts vocabulary is a
+      // scientific/academic-subject taxonomy, not a general entity index —
+      // plain countries/places often aren't in there as concepts at all,
+      // and the search falls back to loosely matching on any substring
+      // instead of admitting no match. So the returned concept's own name
+      // is checked against what was actually searched for (case-
+      // insensitive, punctuation-insensitive) before it's trusted — same
+      // "verify, don't just trust the API's top hit" lesson as the
+      // Wikidata/GeoNames Field Data fixes.
+      const normalize = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const verifiedConceptSearch = async (term) => {
+        const data = await fetchOpenAlexJSON(`${API_OA}/concepts?search=${encodeURIComponent(term)}&per_page=1`);
+        const c = data.results?.[0];
+        if (c?.id && normalize(c.display_name) === normalize(term)) return c;
+        return null;
+      };
+
+      try {
+        const c = await verifiedConceptSearch(canonicalTitle);
+        if (c) { idTail = tail(c.id); return c; }
+      } catch (_) {}
+
+      // Wikipedia-corrected title found nothing verified in OpenAlex — try
+      // the raw original term too, in case the correction wasn't needed.
+      if (canonicalTitle !== searchTerm) {
+        try {
+          const c = await verifiedConceptSearch(searchTerm);
+          if (c) { idTail = tail(c.id); return c; }
+        } catch (_) {}
+      }
+
       // Last resort: return a stub so the Wikipedia article still loads
+      // (using the Wikipedia-verified title when we have one — it's more
+      // likely correct than the raw slug-derived humanName).
       if (isWikiSlug) {
-        return { display_name: humanName, description: "", id: "", related_concepts: [], ancestors: [] };
+        return { display_name: canonicalTitle || humanName, description: "", id: "", related_concepts: [], ancestors: [] };
       }
       throw new Error("Concept not found");
     }

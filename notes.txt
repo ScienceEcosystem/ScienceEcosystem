@@ -2545,3 +2545,56 @@ result yourself, and even a correct string-level verification isn't
 enough when two genuinely different real-world entities can share
 the exact same name — that needs a second, independent source to
 corroborate, not just written the name-matching logic more carefully.
+
+-------------------------------------------------------
+FIX (2026-07-14) — topic-page name resolution now uses Wikipedia to
+verify OpenAlex matches, instead of trusting OpenAlex's own search
+-------------------------------------------------------
+
+Prompted directly by "why are we still using OpenAlex topics, they're
+so bad, can't we use Wikipedia instead" — investigated properly rather
+than just reassuring. Two real findings, not one:
+
+1. The resolution order in scripts/topic.js's fetchConceptByIdOrSearch()
+   was backwards: it tried OpenAlex's own fuzzy concept search FIRST,
+   and only fell back to Wikipedia if that search returned literally
+   zero results. But OpenAlex's search almost always returns SOMETHING
+   — it just returns the wrong thing — so the Wikipedia fallback almost
+   never actually ran in practice. Flipped the order: Wikipedia search
+   runs first now to get a canonical, reliably-correct title.
+
+2. That alone wasn't enough, and confirming this took an extra check
+   (worth recording, since the fix looked obviously sufficient before
+   testing it): even querying OpenAlex WITH the verified-correct
+   Wikipedia title, it still returns the same wrong matches. Live-
+   tested with the exact right term "Japan" and OpenAlex still returned
+   "Japanese encephalitis". Root cause: OpenAlex's Concepts vocabulary
+   is a scientific/academic-subject taxonomy (chemistry, biology,
+   physics topics etc), not a general entity index — plain countries
+   very likely aren't "concepts" in it at all, and its search silently
+   falls back to a loose substring match instead of admitting no match.
+   Fixed by verifying the returned concept's own display_name actually
+   equals what was searched for (case/punctuation-insensitive) before
+   trusting it — same "verify, don't just trust the API's top hit"
+   pattern used for the Wikidata and GeoNames Field Data fixes earlier.
+   No verified match → falls through to the existing stub (Wikipedia
+   article still loads, using the Wikipedia-verified title now instead
+   of the raw slug) rather than accepting a wrong concept.
+
+OpenAlex concept IDs are still required for the "top papers"/"top
+authors" sections specifically (queried by works?filter=concepts.id:X
+— Wikipedia has no equivalent), so this doesn't replace OpenAlex, it
+just stops trusting its search blindly. A real, unavoidable consequence:
+topics with no genuine OpenAlex concept (most countries/places, as it
+turns out — "Sumatra" itself has zero OpenAlex concept matches, verified
+live, and was already working this whole time purely via the stub
+fallback) will correctly show no "top papers" section, since there's no
+concept ID to query by. That's accurate, not a bug — OpenAlex's own
+scientific-subject taxonomy just doesn't cover country/place articles as
+research topics.
+
+Verified live end-to-end: "Japan", "Chile", "Turkey", "Australia" (all
+previously mangled) now correctly resolve to themselves. Re-tested known-
+good cases (Aspirin, Silicon, Coral reef, Insulin, Hemoglobin) to confirm
+the new stricter verification doesn't regress anything that was already
+working — all still resolve correctly.
