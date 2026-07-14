@@ -559,6 +559,17 @@
       });
     }
 
+    // Reveal the (until now display:none) map section BEFORE creating the
+    // Leaflet map — Leaflet computes its SVG overlay size and tile grid
+    // from the container's on-screen dimensions at the moment each layer
+    // is added. Doing this after building the map left the container at
+    // zero size for all of that setup, so the country-outline SVG
+    // permanently ended up width="0" height="0" (invisible despite having
+    // real paths in it) and the GBIF tile requests came out wrong — live-
+    // tested on the Tūī page and reproduced exactly this.
+    const mapSection = $("speciesMapSection");
+    if (mapSection) mapSection.style.display = "";
+
     const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false, attributionControl: false });
     _leafletMap = map;
 
@@ -594,9 +605,7 @@
       .addTo(map);
 
     map.setView([20, 10], 2);
-
-    const mapSection = $("speciesMapSection");
-    if (mapSection) mapSection.style.display = "";
+    map.invalidateSize(); // cheap safety net in case layout hadn't settled yet
 
     return map;
   }

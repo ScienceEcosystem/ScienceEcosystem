@@ -2598,3 +2598,41 @@ previously mangled) now correctly resolve to themselves. Re-tested known-
 good cases (Aspirin, Silicon, Coral reef, Insulin, Hemoglobin) to confirm
 the new stricter verification doesn't regress anything that was already
 working — all still resolve correctly.
+
+-------------------------------------------------------
+FIX (2026-07-14) — species distribution map rendering blank
+-------------------------------------------------------
+
+Reported live: the map on the Field Data panel showed as a plain grey
+box (zoom controls visible, nothing else) even though the panel data
+below it (iNaturalist counts, etc.) rendered fine.
+
+Root cause: initSpeciesMap() (scripts/topic.js) built the entire Leaflet
+map — created L.map(), added the world-countries GeoJSON background
+layer, added the GBIF occurrence-density tile layer — all while the
+map's parent container (#speciesMapSection) was still display:none, and
+only revealed it (style.display = "") as the very last step. Leaflet
+computes its SVG overlay size and tile-grid math from the container's
+actual on-screen pixel size at the moment each layer is added. A
+display:none container has zero size, so the country-outline SVG ended
+up permanently width="0" height="0" (confirmed live via the rendered
+DOM — 177 real <path> elements existed, just inside a zero-size SVG,
+hence invisible) and the tile layer's positioning was thrown off too.
+
+Fixed by moving the display:none → visible toggle to BEFORE creating
+the Leaflet map, so every subsequent Leaflet operation sees the
+container's real dimensions from the start. Also added a
+map.invalidateSize() call after the initial setView() as a cheap safety
+net in case layout hadn't fully settled by then.
+
+Verified live (local): the SVG overlay went from width="0" height="0"
+to real dimensions (898×334); GBIF tiles started loading real occurrence
+images instead of universally falling back to the transparent
+error-tile placeholder (2 of 8 zoom-2 tiles had real 512×512 image data
+— correct, since tūī is NZ-only and most of a world-zoom map legitimately
+has no occurrences to show).
+
+Separately checked but NOT a bug: the iNaturalist photo (408 timeout in
+the original report) loads instantly and correctly via direct request
+(200 OK, valid JPEG, hosted on inaturalist-open-data's S3 bucket) — a
+one-off network hiccup on that specific load, not a code issue.
