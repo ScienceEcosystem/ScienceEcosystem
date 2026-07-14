@@ -2500,3 +2500,48 @@ across runs, most likely a timing/rate-limit flake in map-tile loading
 rather than a logic bug (GBIF's own panel code is unchanged from before
 this session and renders correctly for topics that already had a
 binomial name). Not chased further — flagging in case it recurs.
+
+-------------------------------------------------------
+FIX (2026-07-14) — GeoNames matching a same-named-but-wrong place
+-------------------------------------------------------
+
+Also caught on the live Tūī page, right after the fixes above went out
+and the missing Render env vars (EBIRD_API_KEY, IUCN_API_TOKEN,
+XENO_CANTO_API_KEY, MATERIALS_PROJECT_API_KEY, GEONAMES_USERNAME — all
+of these only ever lived in the local .env, never added to Render's
+environment, so all five 404'd as "not configured" in production until
+added there) got added. Once GeoNames was actually reachable, it
+returned "Province du Tuy" (Burkina Faso) for "Tūī" — GeoNames'
+name_equals param turned out NOT to be a strict exact match despite its
+name; it appears to fold/ignore diacritics internally.
+
+Fixed in two layers:
+  1. Backend (server/index.js): fetch 5 candidates instead of trusting
+     result[0], verify the candidate's own toponymName equals the query
+     after the same case+diacritic normalization used for the earlier
+     Wikidata fix. This alone eliminates the "Province du Tuy" class of
+     error (clearly a different string once normalized).
+  2. That's not sufficient by itself, though: GeoNames also has a real
+     town in Spain literally spelled "Tui" (no macrons) — which DOES
+     equal "tūī" after normalization, and got served up as the "verified"
+     match instead. No amount of string comparison can tell a genuine
+     same-spelled place apart from what the topic is actually about — it
+     requires independent corroboration. So GeoNames no longer fires
+     unconditionally on name alone: scripts/topic.js now only calls
+     loadGeonamesData() from inside loadWikidataData(), gated behind
+     Wikidata having ALREADY confirmed real coordinates for this exact
+     entity (the same gate that already protects the earthquake panel).
+     Since the Wikidata fix already correctly finds no confident entity
+     for "Tūī", GeoNames now correctly never fires for it either.
+
+Verified live end-to-end (local, before pushing): Tūī → Wikidata 404s →
+GeoNames never even called, no wrong "Tui, Spain" data shown. Sumatra
+(a real place) → Wikidata confirms coordinates → both the earthquake
+panel and GeoNames fire correctly with accurate data, no regression.
+
+Lesson for any future "resolve name → external ID" integration: an
+API's own "exact match" parameter is not a substitute for verifying the
+result yourself, and even a correct string-level verification isn't
+enough when two genuinely different real-world entities can share
+the exact same name — that needs a second, independent source to
+corroborate, not just written the name-matching logic more carefully.

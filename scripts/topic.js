@@ -1144,10 +1144,18 @@
       const d = await resp.json();
       if (!d.qid) return;
 
-      // Chain into the earthquake panel when this entity has real-world
-      // coordinates — avoids needing a separate geocoding step/key just to
-      // find out whether a topic is a place worth checking seismic data for.
-      if (d.coords) loadEarthquakeData(d.coords.lat, d.coords.lon);
+      // Chain into the earthquake and GeoNames panels when this entity has
+      // real-world coordinates — i.e. only after Wikidata has already
+      // independently confirmed this topic IS a place. GeoNames used to
+      // fire unconditionally on name alone, but live-tested "Tūī" (the NZ
+      // bird) matched a same-named Spanish town — a real place, just not
+      // what the topic is about. No string-matching fix solves that class
+      // of error; requiring independent confirmation from another source
+      // does.
+      if (d.coords) {
+        loadEarthquakeData(d.coords.lat, d.coords.lon);
+        loadGeonamesData(displayName);
+      }
 
       const block = $("fieldDataBlock");
       if (block) block.style.display = "";
@@ -2061,9 +2069,8 @@
       loadPangaeaData(baseTopicName);
       loadMaterialsData(baseTopicName);
       loadUniprotData(baseTopicName);
-      loadWikidataData(baseTopicName); // also chains into loadEarthquakeData when the entity has coordinates
+      loadWikidataData(baseTopicName); // also chains into loadEarthquakeData + loadGeonamesData when the entity has coordinates
       loadWorldBankData(baseTopicName);
-      loadGeonamesData(baseTopicName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 

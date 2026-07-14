@@ -4488,17 +4488,22 @@ app.get("/api/field-data/geonames", async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    // name_equals is an exact match, not full-text search — live-tested
-    // "Sociology" returns zero results rather than a loose/wrong place.
-    // orderby=population resolves name collisions in favor of the place
-    // someone actually means (e.g. "Auckland" the city of 1.5M ahead of
-    // an unrelated hamlet in California also named Auckland).
+    // name_equals turned out NOT to be a strict exact match despite its
+    // name — live-tested "Tūī" (the NZ bird) and it matched "Province du
+    // Tuy" (Burkina Faso) as the top hit, plus "Turaif" and "Tuhi" further
+    // down: GeoNames appears to fold/ignore diacritics internally. Fetch a
+    // few candidates and only trust one whose own toponymName equals the
+    // query after the same case+diacritic normalization used for the
+    // Wikidata fix, same "verify, don't just trust the API's own claimed
+    // exact-match filter" lesson as that bug.
     const searchData = await fetchJSONTimeout(
-      `http://api.geonames.org/searchJSON?name_equals=${encodeURIComponent(name)}&maxRows=1&orderby=population&username=${encodeURIComponent(username)}`,
+      `http://api.geonames.org/searchJSON?name_equals=${encodeURIComponent(name)}&maxRows=5&orderby=population&username=${encodeURIComponent(username)}`,
       {}, 8000
     );
-    const hit = (searchData?.geonames || [])[0];
-    if (!hit?.geonameId) return res.status(404).json({ error: "No GeoNames match" });
+    const normalize = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const target = normalize(name);
+    const hit = (searchData?.geonames || []).find(g => normalize(g.toponymName || g.name) === target);
+    if (!hit?.geonameId) return res.status(404).json({ error: "No confidently-matching GeoNames place" });
 
     const detail = await fetchJSONTimeout(
       `http://api.geonames.org/getJSON?geonameId=${hit.geonameId}&username=${encodeURIComponent(username)}`,
