@@ -829,19 +829,20 @@
     } catch (_) {}
   }
 
+  // Renders as a small sidebar Infobox item (same footprint as the CoL/WoRMS
+  // classification boxes), not a full-width Field Data panel — it's a
+  // single status fact, not occurrence data, so it doesn't need that much
+  // space.
   async function loadIucnData(displayName) {
     if (!/^[A-Z][a-z]+ [a-z]+/.test(displayName.trim())) return;
+    const wrap = $("iucnStatus");
+    if (!wrap) return;
 
     try {
       const resp = await fetch("/api/field-data/iucn?species=" + encodeURIComponent(displayName));
       if (!resp.ok) return;
       const d = await resp.json();
       if (!d.category_code) return;
-
-      const block = $("fieldDataBlock");
-      if (block) block.style.display = "";
-      const container = $("inatContent");
-      if (!container) return;
 
       const iucnLabels = { EX:"Extinct", EW:"Extinct in the Wild", CR:"Critically Endangered", EN:"Endangered",
         VU:"Vulnerable", NT:"Near Threatened", LC:"Least Concern", DD:"Data Deficient", NE:"Not Evaluated" };
@@ -850,25 +851,15 @@
       const color = iucnColors[d.category_code] || "#374151";
       const label = iucnLabels[d.category_code] || d.category_code;
 
-      const div = document.createElement("div");
-      div.className = "inat-panel";
-      div.innerHTML = `
-        <div class="inat-header">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="${color}"/><text x="10" y="14" text-anchor="middle" font-size="8" font-family="sans-serif" font-weight="bold" fill="white">${escapeHtml(d.category_code)}</text></svg>
-          <span class="inat-title">IUCN Red List of Threatened Species</span>
-        </div>
-        <div style="margin-bottom:.4rem;">
-          <span class="badge" style="font-size:.85rem;color:${color};border-color:${color};font-weight:600;">${escapeHtml(label)}</span>
-        </div>
-        ${d.year_published ? `<p class="muted" style="font-size:.78rem;">Assessed ${escapeHtml(String(d.year_published))}</p>` : ""}
-        <div class="woc-footer" style="margin-top:.5rem;">
-          <a href="${escapeHtml(d.assessment_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
-            View assessment on IUCN Red List →
-          </a>
+      wrap.innerHTML = `
+        <h4 style="margin-bottom:.35rem;">IUCN Red List</h4>
+        <span class="badge" style="font-size:.85rem;color:${color};border-color:${color};font-weight:600;">${escapeHtml(label)}</span>
+        ${d.year_published ? `<p class="muted" style="font-size:.75rem;margin:.3rem 0 0;">Assessed ${escapeHtml(String(d.year_published))}</p>` : ""}
+        <div style="margin-top:.5rem;">
+          <a href="${escapeHtml(d.assessment_url)}" target="_blank" rel="noopener" style="font-size:.78rem;">View assessment →</a>
         </div>
       `;
-      container.appendChild(div);
-
+      wrap.style.display = "";
     } catch (_) {}
   }
 

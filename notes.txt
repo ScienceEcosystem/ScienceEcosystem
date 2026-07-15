@@ -2692,3 +2692,52 @@ Two changes, plus a real bug caught while building the second one.
   Verified live (local): map now opens zoomed to New Zealand with visible
   orange density tracing the coastline, Chatham Islands cluster still
   visible off to the side rather than forcing a world-view zoom-out.
+
+-------------------------------------------------------
+IMPROVEMENT (2026-07-15) — IUCN moved to sidebar Infobox
+-------------------------------------------------------
+
+Requested directly: IUCN status is a single fact (like CoL/WoRMS
+classification), not occurrence data, so it doesn't need a full-width
+Field Data panel — moved it to the sidebar Infobox as a compact badge,
+same footprint/pattern as the existing CoL/WoRMS classification boxes
+(new #iucnStatus div in topic.html, loadIucnData() rewritten to render
+into it instead of appending a full .inat-panel card). Verified live.
+
+eBird "not showing anything" (also reported same session) turned out to
+be a timing artifact, not a bug: resolve-species now adds ~3.6s of
+sequential delay before any species panel starts firing, so a quick
+page check can catch it mid-flight. Re-tested with a longer wait and all
+5 species panels (iNaturalist, GBIF, eBird, Xeno-canto, IUCN) rendered
+correctly every time.
+
+-------------------------------------------------------
+FINDING — GBIF already aggregates iNaturalist + eBird (and others)
+-------------------------------------------------------
+
+User hypothesis, verified directly: checked GBIF's own dataset
+breakdown for the tūī (facet=datasetKey) and the two largest
+contributing sources are literally "EOD – eBird Observation Dataset"
+(241,679 of 273,849 total records) and "iNaturalist Research-grade
+Observations" (11,106 records), plus several NZ Garden Bird Survey
+datasets. GBIF is already the aggregator — our separate GBIF/
+iNaturalist/eBird panels are largely showing overlapping data through
+three different lenses, not three independent datasets.
+
+Discussed but NOT YET BUILT: a unified, GBIF-sourced interactive map
+with per-source layer toggles (using GBIF's datasetKey facet to isolate
+eBird vs iNaturalist vs museum specimens vs survey data) and click-
+through to individual real observations (GBIF's occurrence/search
+already returns individual records with coordinates, photos where
+available, and links back to the original source — this is the same
+endpoint already used for the auto-zoom fix above, just not yet
+rendered as real markers instead of density tiles). This is a genuinely
+larger feature (marker clustering for species with 100K+ records, a
+layer-toggle UI, popup-on-click) — scoped as a plan, not implemented
+this session. Also considered: eBird's own panel may be lower-value
+sitting alongside a proper unified map, since GBIF already contains the
+bulk of eBird's own data for most species; eBird's public API doesn't
+expose identification/ID-tips content (that's Merlin/internal, not in
+the public API), so "add identification tips" isn't achievable via
+eBird's API as originally asked — worth being upfront about that
+limitation before promising it.
