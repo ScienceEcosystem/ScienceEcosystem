@@ -2636,3 +2636,59 @@ Separately checked but NOT a bug: the iNaturalist photo (408 timeout in
 the original report) loads instantly and correctly via direct request
 (200 OK, valid JPEG, hosted on inaturalist-open-data's S3 bucket) — a
 one-off network hiccup on that specific load, not a code issue.
+
+-------------------------------------------------------
+IMPROVEMENT (2026-07-15) — species map: heatmap style + auto-zoom to range
+-------------------------------------------------------
+
+Requested directly: "would like the map to be as clear as inaturalist.org".
+Two changes, plus a real bug caught while building the second one.
+
+  1. Tile style: switched GBIF's occurrence-density layer from
+     classic.point (sparse individual dots — hard to read at the world/
+     continent zoom the map opens at) to orangeHeat.point (smooth density
+     blobs tracing the actual distribution shape, much closer to
+     iNaturalist's own grid-heatmap look). Compared classic.point,
+     purpleHeat.point, orangeHeat.point, and classic.poly side-by-side
+     first — classic.poly came back empty at low zoom (GBIF's poly styles
+     only render much closer in), orangeHeat read as the clearest/most
+     legible. Also switched the EOO boundary line color (WoC native-range
+     overlay) from orange to blue, since an orange boundary would now
+     blend into the new orange heatmap instead of standing out against it.
+
+  2. Auto-zoom: the map previously always opened on a fixed world view
+     regardless of species — fine for a globally-common species, but a
+     genuinely broken experience for a range-restricted one (a NZ-only
+     bird reads as a couple of barely-visible specks on the edge of a
+     world map). Now fetches up to 300 real occurrence coordinates and
+     calls fitBounds() so the map opens already zoomed to where the
+     species actually is, same as iNaturalist's own species maps do.
+
+  BUG CAUGHT while building #2, non-obvious enough to be worth recording
+  in detail: fitBounds() was being called with valid points (confirmed
+  via direct in-page instrumentation — pts.length was correct) but the
+  resulting zoom stayed at the world-view default every time. Root cause:
+  a naive min/max bounding box breaks for any species whose range crosses
+  the antimeridian (±180° longitude) — New Zealand is a real, live
+  example of this, not a contrived edge case: its main islands sit around
+  +166 to +179°, but its own Chatham Islands (a real NZ territory) are at
+  ~-176°, just past the dateline. A plain bbox spanning both reads as a
+  ~360°-wide span (from -176 to +179 the "long way" instead of the actual
+  short ~7° gap across the dateline) and zooms out to fit nearly the
+  whole planet. Confirmed via direct testing that curl/manual fetch of
+  the same coordinates "worked fine" in isolation — the bug only showed
+  up in fitBounds' own bounds computation, not in fetching the data,
+  which is why the first few rounds of debugging (checking CORS, checking
+  CSP connect-src, checking for silent exceptions) all came back clean.
+  Fixed by trimming to the 90% of points closest to the median center
+  (using a wraparound-aware longitude distance, not naive subtraction)
+  before computing bounds, rather than writing proper antimeridian-aware
+  bbox math for what's ultimately just a "pick a reasonable starting
+  view" heuristic — this also matches iNaturalist's own map behavior,
+  confirmed from the user's own reference screenshot: it doesn't force-
+  fit the Chathams into the main view either, it zooms to the main
+  archipelago and leaves the outlying cluster visible off to the side.
+
+  Verified live (local): map now opens zoomed to New Zealand with visible
+  orange density tracing the coastline, Chatham Islands cluster still
+  visible off to the side rather than forcing a world-view zoom-out.

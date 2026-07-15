@@ -524,9 +524,12 @@
 
   function addEooToMap(map, eooGeoJSON) {
     if (!map || !eooGeoJSON) return;
+    // Blue, not orange — the occurrence density layer is now an orange
+    // heatmap (orangeHeat.point), so an orange boundary line would blend
+    // straight into it instead of standing out.
     L.geoJSON(eooGeoJSON, {
       style: {
-        color: "#c05b00",
+        color: "#1d4ed8",
         weight: 2,
         fillColor: "transparent",
         fillOpacity: 0,
@@ -585,10 +588,16 @@
       }
     } catch (_) {}
 
-    // GBIF occurrence density tiles
+    // GBIF occurrence density tiles. orangeHeat renders smooth density
+    // blobs (closer to iNaturalist's own grid-heatmap look) instead of
+    // classic.point's sparse individual dots, which read as hard-to-see
+    // scattered specks at the world/continent zoom this map opens at —
+    // compared side-by-side against classic.point, purpleHeat.point, and
+    // classic.poly (empty at low zoom — GBIF's poly styles only kick in
+    // much closer in) before picking this one.
     if (taxonKey) {
       L.tileLayer(
-        `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=${taxonKey}&style=classic.point`,
+        `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@2x.png?taxonKey=${taxonKey}&style=orangeHeat.point`,
         {
           opacity: 0.85,
           maxZoom: 10,
@@ -606,6 +615,48 @@
 
     map.setView([20, 10], 2);
     map.invalidateSize(); // cheap safety net in case layout hadn't settled yet
+
+    // Auto-zoom to where the species actually occurs, same as iNaturalist's
+    // own species maps do — opening on a fixed world view made a range-
+    // restricted species (e.g. a NZ-only bird) look like a handful of
+    // barely-visible specks on the far edge of the map instead of a
+    // readable distribution.
+    if (taxonKey) {
+      try {
+        const occData = await fetchJSON(
+          `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&hasCoordinate=true&limit=300`
+        );
+        const pts = (occData?.results || [])
+          .map(r => [r.decimalLatitude, r.decimalLongitude])
+          .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+
+        if (pts.length) {
+          // A naive min/max bounding box breaks for any species whose range
+          // crosses the antimeridian (±180° longitude) — New Zealand is a
+          // real-world example: its main islands sit around +166 to +179°,
+          // but its own Chatham Islands are at ~-176°, just past the
+          // dateline. A plain bbox over both reads that as a ~360°-wide
+          // span and zooms out to fit nearly the whole planet, live-tested
+          // and reproduced exactly on the tūī page. iNaturalist's own map
+          // doesn't try to fit every last outlying point either — it zooms
+          // to the main cluster and leaves far-flung ones visible off to
+          // the side. Replicated that here: trim to the 90% of points
+          // closest to the median center before computing bounds, rather
+          // than attempting proper antimeridian-aware bbox math for what's
+          // ultimately just a "pick a reasonable starting view" heuristic.
+          const median = arr => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+          const medLat = median(pts.map(p => p[0]));
+          const medLon = median(pts.map(p => p[1]));
+          const withDist = pts.map(p => ({
+            p,
+            d: Math.hypot(p[0] - medLat, Math.min(Math.abs(p[1] - medLon), 360 - Math.abs(p[1] - medLon)))
+          })).sort((a, b) => a.d - b.d);
+          const kept = withDist.slice(0, Math.ceil(withDist.length * 0.9)).map(x => x.p);
+
+          map.fitBounds(kept, { padding: [20, 20], maxZoom: 6 });
+        }
+      } catch (_) {}
+    }
 
     return map;
   }
