@@ -2741,3 +2741,50 @@ expose identification/ID-tips content (that's Merlin/internal, not in
 the public API), so "add identification tips" isn't achievable via
 eBird's API as originally asked — worth being upfront about that
 limitation before promising it.
+
+-------------------------------------------------------
+BUILT (2026-07-16/17) — unified GBIF map: source toggle + clickable
+individual observations
+-------------------------------------------------------
+
+Scoped with the user first (kept existing iNaturalist/eBird panels
+as-is rather than removing them; markers load in only past a zoom
+threshold rather than clustering) before building, since this was a
+real feature addition, not a bug fix.
+
+  [X] Source toggle (All sources / eBird / iNaturalist) — filters BOTH
+      the density-heatmap tiles and the individual-observation markers
+      using GBIF's own datasetKey, via two well-known, GBIF-wide
+      constant dataset keys (not species-specific):
+        eBird:       4fa7b334-ce0d-4e88-aaae-2e0c138d049e
+        iNaturalist: 50c9509d-22c7-4a22-a47d-8c48425ef4a7
+      New #speciesMapSourceToggle row in topic.html, buttons built/wired
+      in initSpeciesMap() (scripts/topic.js). Verified live: toggling to
+      eBird visibly changed the in-view observation count (2,659 → 2,246
+      for the same map extent).
+
+  [X] Individual clickable observation markers — GBIF's occurrence/
+      search (same endpoint already used for auto-zoom bounds) now also
+      powers a live marker layer, refetched on every map moveend
+      (debounced 400ms) but ONLY once zoomed to level 8+ — below that,
+      only the existing density tiles show, exactly as scoped. Capped
+      at 200 results per fetch with a "showing N of TOTAL" hint when
+      there's more in view than that. Each marker is a small
+      L.circleMarker (no clustering library added, per the scoping
+      decision) with a popup: real photo when the record has one
+      (media[].identifier), event date, recordedBy, a source badge
+      (eBird/iNaturalist/institutionCode fallback), and a link to the
+      original record — r.references when GBIF has one (iNaturalist
+      records do), falling back to GBIF's own occurrence page
+      (eBird records via GBIF are privacy-anonymized with no direct
+      checklist link back, confirmed live — recordedBy comes through as
+      an opaque obsrNNNNNN ID, not a real name or profile link).
+      Verified live end-to-end: zoomed a real page in via the actual
+      Leaflet zoom control (not synthetic), got 200 real markers,
+      clicked one, got a real photo + date + observer + working
+      iNaturalist link in the popup.
+
+  Not built (out of scope per the scoping decision, not a limitation):
+  marker clustering for showing many points at low zoom — the zoom-
+  threshold approach was chosen specifically to avoid needing a
+  clustering dependency at all.

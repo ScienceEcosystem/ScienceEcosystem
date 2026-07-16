@@ -595,15 +595,122 @@
     // compared side-by-side against classic.point, purpleHeat.point, and
     // classic.poly (empty at low zoom — GBIF's poly styles only kick in
     // much closer in) before picking this one.
+    //
+    // GBIF is not a separate data source from iNaturalist/eBird — it's the
+    // aggregator. Live-checked the tūī's own dataset breakdown: its two
+    // largest contributing sources are literally "EOD – eBird Observation
+    // Dataset" (241,679 of 273,849 records) and "iNaturalist Research-grade
+    // Observations" (11,106). So instead of three separate, overlapping
+    // panels, this single map can filter to a specific source using GBIF's
+    // own datasetKey — these two keys are GBIF-wide constants, not specific
+    // to this species.
+    const SOURCE_DATASETS = {
+      ebird: { key: "4fa7b334-ce0d-4e88-aaae-2e0c138d049e", label: "eBird" },
+      inat:  { key: "50c9509d-22c7-4a22-a47d-8c48425ef4a7", label: "iNaturalist" },
+    };
+    let activeSource = "all";
+    let densityLayer = null;
+
+    function densityTileUrl(source) {
+      const dsFilter = source !== "all" && SOURCE_DATASETS[source] ? `&datasetKey=${SOURCE_DATASETS[source].key}` : "";
+      return `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@2x.png?taxonKey=${taxonKey}&style=orangeHeat.point${dsFilter}`;
+    }
+
     if (taxonKey) {
-      L.tileLayer(
-        `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@2x.png?taxonKey=${taxonKey}&style=orangeHeat.point`,
-        {
-          opacity: 0.85,
-          maxZoom: 10,
-          errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      densityLayer = L.tileLayer(densityTileUrl(activeSource), {
+        opacity: 0.85,
+        maxZoom: 10,
+        errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      }).addTo(map);
+    }
+
+    // Individual, clickable observation markers — only loaded in once
+    // zoomed in past a threshold, since a common species can have hundreds
+    // of thousands of occurrence points and there's no marker-clustering
+    // library in play here. Below the threshold this stays an empty layer
+    // and the density tiles above are the whole picture, same as before.
+    const MARKER_ZOOM_THRESHOLD = 8;
+    const markersLayer = L.layerGroup().addTo(map);
+    const hintEl = $("speciesMapHint");
+    let markerFetchToken = 0;
+
+    async function refreshMarkers() {
+      if (!taxonKey) return;
+      const zoom = map.getZoom();
+      if (zoom < MARKER_ZOOM_THRESHOLD) {
+        markersLayer.clearLayers();
+        if (hintEl) hintEl.textContent = "Zoom in to see individual observations — click one for details.";
+        return;
+      }
+      const myToken = ++markerFetchToken;
+      const b = map.getBounds();
+      const dsFilter = activeSource !== "all" && SOURCE_DATASETS[activeSource] ? `&datasetKey=${SOURCE_DATASETS[activeSource].key}` : "";
+      const url = `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxonKey}&hasCoordinate=true&limit=200${dsFilter}`
+        + `&decimalLatitude=${b.getSouth().toFixed(4)},${b.getNorth().toFixed(4)}`
+        + `&decimalLongitude=${b.getWest().toFixed(4)},${b.getEast().toFixed(4)}`;
+      try {
+        const data = await fetchJSON(url);
+        if (myToken !== markerFetchToken) return; // a newer request superseded this one
+        markersLayer.clearLayers();
+        const results = data?.results || [];
+        for (const r of results) {
+          const lat = r.decimalLatitude, lon = r.decimalLongitude;
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+          const marker = L.circleMarker([lat, lon], {
+            radius: 6, weight: 1, color: "#9a3412", fillColor: "#f97316", fillOpacity: 0.85,
+          });
+          const photo = (r.media || []).find(m => m.type === "StillImage");
+          const sourceLabel = r.datasetKey === SOURCE_DATASETS.ebird.key ? "eBird"
+            : r.datasetKey === SOURCE_DATASETS.inat.key ? "iNaturalist" : (r.institutionCode || "GBIF");
+          const link = r.references || `https://www.gbif.org/occurrence/${r.key}`;
+          marker.bindPopup(`
+            <div style="max-width:200px;font-size:.82rem;">
+              ${photo ? `<img src="${escapeHtml(photo.identifier)}" alt="" style="width:100%;border-radius:4px;margin-bottom:.35rem;display:block;">` : ""}
+              ${r.eventDate ? `<div>${escapeHtml(String(r.eventDate).slice(0, 10))}</div>` : ""}
+              ${r.recordedBy ? `<div class="muted" style="font-size:.75rem;">${escapeHtml(r.recordedBy)}</div>` : ""}
+              <div style="margin-top:.3rem;">
+                <span class="badge" style="font-size:.68rem;">${escapeHtml(sourceLabel)}</span>
+                <a href="${escapeHtml(link)}" target="_blank" rel="noopener" style="font-size:.75rem;margin-left:.3rem;">View record →</a>
+              </div>
+            </div>
+          `);
+          markersLayer.addLayer(marker);
         }
-      ).addTo(map);
+        if (hintEl) {
+          hintEl.textContent = data?.count > results.length
+            ? `Showing ${results.length} of ${data.count.toLocaleString()} observations in view — zoom in further to narrow it down.`
+            : `${results.length.toLocaleString()} observation${results.length !== 1 ? "s" : ""} in view — click one for details.`;
+        }
+      } catch (_) {}
+    }
+
+    let moveendTimer = null;
+    map.on("moveend", () => {
+      clearTimeout(moveendTimer);
+      moveendTimer = setTimeout(refreshMarkers, 400); // debounce rapid pan/zoom
+    });
+
+    // Source toggle — lets a reader isolate eBird vs iNaturalist vs
+    // everything else, filtering both the density tiles and the
+    // individual-observation markers together.
+    if (taxonKey) {
+      const toggleEl = $("speciesMapSourceToggle");
+      if (toggleEl) {
+        const sources = [{ id: "all", label: "All sources" }, { id: "ebird", label: "eBird" }, { id: "inat", label: "iNaturalist" }];
+        toggleEl.innerHTML = sources.map(s =>
+          `<button type="button" class="btn btn-secondary btn-xs species-source-btn" data-source="${s.id}" style="${s.id === activeSource ? "" : "opacity:.6;"}">${escapeHtml(s.label)}</button>`
+        ).join("");
+        toggleEl.querySelectorAll(".species-source-btn").forEach(btn => {
+          btn.addEventListener("click", () => {
+            activeSource = btn.getAttribute("data-source");
+            toggleEl.querySelectorAll(".species-source-btn").forEach(b => {
+              b.style.opacity = b.getAttribute("data-source") === activeSource ? "1" : ".6";
+            });
+            if (densityLayer) densityLayer.setUrl(densityTileUrl(activeSource));
+            refreshMarkers();
+          });
+        });
+      }
     }
 
     // Add any WoC EOO that arrived before the map was ready
