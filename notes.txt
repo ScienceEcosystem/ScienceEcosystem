@@ -2788,3 +2788,33 @@ real feature addition, not a bug fix.
   marker clustering for showing many points at low zoom — the zoom-
   threshold approach was chosen specifically to avoid needing a
   clustering dependency at all.
+
+-------------------------------------------------------
+FIX (2026-07-17) — search suggested-topics missing the obvious plain match
+-------------------------------------------------------
+
+Reported live: searching "gold" on search.html's "Suggested topics"
+returned Colloidal gold, Gold standard (test), Gold mining, Gold
+cluster, Gold alloys — five real, specific results, but never plain
+"Gold" (the element) itself.
+
+Same bug class already found and fixed once in topic.js's own concept
+resolver, just living in a sibling file (scripts/search.js's
+fetchTopics()) that never got the equivalent fix: it tried OpenAlex's
+raw concept search first, and only fell back to checking Wikipedia if
+OpenAlex returned ZERO results. Since OpenAlex DID return 5 (real, just
+overly-specific) results for "gold", Wikipedia was never consulted.
+Confirmed directly that OpenAlex genuinely has no plain "Gold" concept
+at all (checked all 25 results of a display_name:Gold search — every
+one is a specific sub-topic like "Gold rush" or "Gold Compounds", none
+is just "Gold").
+
+Fixed by always cross-checking Wikipedia's top search result regardless
+of whether OpenAlex already returned something, and prepending it (as
+the same Wikipedia-only stub entry the zero-results fallback already
+used, capped back to 5 total) when it isn't already covered by name.
+Verified live: "gold" now returns Gold (Wikipedia stub, real snippet
+about the element, badge shown) first, followed by the four most
+specific OpenAlex sub-topics. Re-checked "aspirin" (a case that already
+worked, since a real "Aspirin" OpenAlex concept exists) to confirm no
+regression — still resolves correctly without an extra prepended entry.

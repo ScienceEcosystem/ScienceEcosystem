@@ -274,7 +274,37 @@ async function fetchTopics(query, signal) {
     // 1. Direct OpenAlex concept search
     const url = `${API_BASE}/concepts?search=${encodeURIComponent(query)}&per_page=5`;
     const data = await fetchJSON(url, signal);
-    if (data.results?.length) return data.results;
+    let results = data.results || [];
+
+    // OpenAlex's concept search can return real but overly-specific results
+    // while missing the single most obvious match — live example: searching
+    // "gold" returns "Colloidal gold", "Gold mining", "Gold cluster", "Gold
+    // alloys", "Gold standard (test)"... but never plain "Gold" itself
+    // (confirmed directly: no exact "Gold" concept exists anywhere in
+    // OpenAlex's vocabulary, checked with a 25-result display_name search).
+    // Since OpenAlex DID return results here, the code used to stop and
+    // never even check Wikipedia — same bug already found and fixed once in
+    // topic.js's own concept resolver. Cross-check Wikipedia's canonical
+    // title and prepend it (as the same Wikipedia-only stub used in the
+    // zero-results fallback below) when it isn't already covered by name.
+    try {
+      const wpUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search"
+        + "&srsearch=" + encodeURIComponent(query)
+        + "&srlimit=1&format=json&origin=*&srprop=snippet";
+      const wpData = await fetchJSON(wpUrl, signal);
+      const top = wpData?.query?.search?.[0];
+      if (top?.title && !results.some(r => (r.display_name || "").toLowerCase() === top.title.toLowerCase())) {
+        results = [{
+          id: null,
+          display_name: top.title,
+          description: (top.snippet || "").replace(/<[^>]+>/g, "").slice(0, 120),
+          works_count: null,
+          _wikipedia_only: true,
+        }, ...results].slice(0, 5);
+      }
+    } catch (_) {}
+
+    if (results.length) return results;
 
     // 2. Wikipedia search — resolves common names, synonyms, species not in OpenAlex
     const wpUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search"
