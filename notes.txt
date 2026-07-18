@@ -2818,3 +2818,43 @@ about the element, badge shown) first, followed by the four most
 specific OpenAlex sub-topics. Re-checked "aspirin" (a case that already
 worked, since a real "Aspirin" OpenAlex concept exists) to confirm no
 regression — still resolves correctly without an extra prepended entry.
+
+-------------------------------------------------------
+FIX (2026-07-18) — species map showing giant "503" text over the tiles
+-------------------------------------------------------
+
+Reported live with a screenshot: selecting the eBird or iNaturalist
+source toggle made the distribution map show huge repeated "503" text
+across every tile instead of the heatmap.
+
+Root cause: GBIF's density-tile endpoint does NOT reliably support the
+datasetKey filter added for the source toggle. Live-tested directly —
+every single datasetKey-filtered tile request 503'd (3/3 for both
+eBird's and iNaturalist's dataset keys), while the unfiltered endpoint
+succeeded 3/3. Not a rate-limit flake, a consistent failure. The
+genuinely surprising part: GBIF's 503 response IS a valid PNG image
+(confirmed: real 512×512 PNG data, not an empty body or JSON error) —
+they bake "503" into the tile's own pixels as a visual error indicator.
+Since it's real image bytes just wrapped in a non-2xx HTTP status, the
+browser displays it exactly like any other successfully-loaded tile —
+Leaflet's errorTileUrl fallback only triggers on a genuine image load
+failure, which this isn't, so their error tile got tiled across the
+whole visible map instead of being caught and hidden.
+
+Fixed by never filtering the density-tile layer by datasetKey — it
+always shows all sources combined now, same as before the source
+toggle existed. Only the individual-observation marker layer (GBIF's
+occurrence/search JSON endpoint, confirmed reliable with datasetKey
+filtering — this was never the broken part) actually responds to the
+source toggle now. Added a title tooltip on the toggle buttons
+clarifying this, since the heatmap no longer visibly changing when you
+switch sources could otherwise look like the toggle doing nothing.
+Verified live: toggling to iNaturalist no longer requests any tile URL
+containing datasetKey, map renders clean with no "503" artifact.
+
+Also confirmed (same report) a ChEMBL 502 is a genuine upstream failure,
+not a bug — EBI's own ChEMBL server returns a real HTTP 500 "Something
+has gone wrong with our web server" error page for this specific query
+(Paranephrops planifrons), reproduced 3/3. Our code already converts
+that into a clean "unavailable" response rather than crashing — nothing
+to fix on our end.

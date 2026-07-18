@@ -609,19 +609,28 @@
       inat:  { key: "50c9509d-22c7-4a22-a47d-8c48425ef4a7", label: "iNaturalist" },
     };
     let activeSource = "all";
-    let densityLayer = null;
 
-    function densityTileUrl(source) {
-      const dsFilter = source !== "all" && SOURCE_DATASETS[source] ? `&datasetKey=${SOURCE_DATASETS[source].key}` : "";
-      return `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@2x.png?taxonKey=${taxonKey}&style=orangeHeat.point${dsFilter}`;
-    }
-
+    // GBIF's density-tile endpoint does NOT reliably support datasetKey
+    // filtering — live-tested and confirmed every single filtered tile
+    // request 503s (consistently, not a rate-limit flake: 3/3 attempts
+    // failed for both eBird's and iNaturalist's dataset keys, while the
+    // unfiltered endpoint succeeded 3/3). GBIF's 503 response is itself a
+    // valid PNG with "503" rendered into the pixels as their own visual
+    // error tile — since it's real image bytes just wrapped in a non-2xx
+    // status, the browser displays it like any other tile instead of
+    // triggering Leaflet's errorTileUrl fallback, tiling "503" text across
+    // the whole map. So the heatmap always shows all sources combined;
+    // only the marker layer below (which uses the JSON search API, already
+    // confirmed reliable with datasetKey) actually reflects the toggle.
     if (taxonKey) {
-      densityLayer = L.tileLayer(densityTileUrl(activeSource), {
-        opacity: 0.85,
-        maxZoom: 10,
-        errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
-      }).addTo(map);
+      L.tileLayer(
+        `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@2x.png?taxonKey=${taxonKey}&style=orangeHeat.point`,
+        {
+          opacity: 0.85,
+          maxZoom: 10,
+          errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+        }
+      ).addTo(map);
     }
 
     // Individual, clickable observation markers — only loaded in once
@@ -690,15 +699,14 @@
       moveendTimer = setTimeout(refreshMarkers, 400); // debounce rapid pan/zoom
     });
 
-    // Source toggle — lets a reader isolate eBird vs iNaturalist vs
-    // everything else, filtering both the density tiles and the
-    // individual-observation markers together.
+    // Source toggle — filters the individual-observation markers only (see
+    // note above on why the heatmap tiles can't be filtered the same way).
     if (taxonKey) {
       const toggleEl = $("speciesMapSourceToggle");
       if (toggleEl) {
         const sources = [{ id: "all", label: "All sources" }, { id: "ebird", label: "eBird" }, { id: "inat", label: "iNaturalist" }];
         toggleEl.innerHTML = sources.map(s =>
-          `<button type="button" class="btn btn-secondary btn-xs species-source-btn" data-source="${s.id}" style="${s.id === activeSource ? "" : "opacity:.6;"}">${escapeHtml(s.label)}</button>`
+          `<button type="button" class="btn btn-secondary btn-xs species-source-btn" data-source="${s.id}" style="${s.id === activeSource ? "" : "opacity:.6;"}" title="Filters individual observation markers (zoom in to see them) — the heatmap always shows all sources combined">${escapeHtml(s.label)}</button>`
         ).join("");
         toggleEl.querySelectorAll(".species-source-btn").forEach(btn => {
           btn.addEventListener("click", () => {
@@ -706,7 +714,6 @@
             toggleEl.querySelectorAll(".species-source-btn").forEach(b => {
               b.style.opacity = b.getAttribute("data-source") === activeSource ? "1" : ".6";
             });
-            if (densityLayer) densityLayer.setUrl(densityTileUrl(activeSource));
             refreshMarkers();
           });
         });
