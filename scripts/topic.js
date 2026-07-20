@@ -1067,7 +1067,15 @@
   // if nothing resolves.
   async function resolveSpeciesName(displayName) {
     const trimmed = displayName.trim();
-    if (/^[A-Z][a-z]+ [a-z]+/.test(trimmed)) return trimmed;
+    // Deliberately does NOT short-circuit on binomial shape alone — plenty
+    // of English common names accidentally fit "Capitalized word +
+    // lowercase word" too (live-tested: "Climbing galaxias", the
+    // vernacular name for Galaxias brevipinnis, matched that shape and
+    // skipped verification entirely, so every species panel queried GBIF/
+    // iNaturalist/eBird/etc. with the wrong name). The backend endpoint
+    // already fast-paths genuinely scientific names via GBIF's own
+    // species/match, so always deferring to it is barely slower for the
+    // common case and actually correct for the misleading one.
     try {
       const resp = await fetch("/api/field-data/resolve-species?name=" + encodeURIComponent(trimmed));
       if (!resp.ok) return trimmed;

@@ -1485,7 +1485,13 @@ app.use("/api/paper/",      rateLimiter(60_000, 60));   // 60 req/min per IP
 app.use("/api/profile/",    rateLimiter(60_000, 60));
 app.use("/api/topic/",      rateLimiter(60_000, 20));
 app.use("/api/journal/",    rateLimiter(60_000, 20));
-app.use("/api/field-data/", rateLimiter(60_000, 30));   // proxies GBIF/iNat/WoC — slower APIs
+// 20 distinct field-data sources now exist (GBIF/iNat/WoC/CoL/WoRMS/OBIS/
+// IUCN/eBird/Xeno-canto/ChEMBL/PDB/exoplanet/PANGAEA/materials/UniProt/
+// Wikidata/World Bank/GeoNames/earthquakes/resolve-species), and a single
+// species topic page load fires most of them at once — 30 req/min meant a
+// normal user could trip our OWN rate limit just by loading one page twice
+// (live-tested: reported live as spurious 429s on a real page load).
+app.use("/api/field-data/", rateLimiter(60_000, 120));
 
 // ── Write-surface rate limiting — these are auth-gated already, but a
 // compromised/buggy client (or XSS in a logged-in tab) shouldn't be able to
@@ -3754,13 +3760,32 @@ app.get("/api/field-data/resolve-species", async (req, res) => {
   const name = (req.query?.name || "").trim();
   if (!name) return res.status(400).json({ error: "name required" });
 
-  if (BINOMIAL_RE.test(name)) return res.json({ scientific_name: name });
-
   const cacheKey = `resolve-species:${name.toLowerCase()}`;
   const cached = cacheGet(cacheKey);
   if (cached) return res.json(cached);
 
   try {
+    // A binomial SHAPE isn't proof of a binomial NAME — plenty of English
+    // common names accidentally fit "Capitalized word + lowercase word"
+    // too (live-tested and reproduced: "Climbing galaxias", the vernacular
+    // name for Galaxias brevipinnis, matched this regex and skipped
+    // verification entirely, so every species panel queried GBIF/
+    // iNaturalist/eBird/etc. with the common name instead of the real
+    // scientific one and got 404s across the board). Verify via GBIF's
+    // own species/match (a strict, exact scientific-name matcher — not the
+    // fuzzy vernacular-name search below) before trusting the shape alone.
+    if (BINOMIAL_RE.test(name)) {
+      const matchData = await fetchJSONTimeout(
+        `https://api.gbif.org/v1/species/match?name=${encodeURIComponent(name)}&strict=true`, {}, 8000
+      ).catch(() => null);
+      if (matchData?.matchType && matchData.matchType !== "NONE" && matchData.rank === "SPECIES") {
+        const payload = { scientific_name: name };
+        cacheSet(cacheKey, payload);
+        return res.json(payload);
+      }
+      // Not real after all — fall through to the vernacular-name search.
+    }
+
     const searchData = await fetchJSONTimeout(
       `https://api.gbif.org/v1/species/search?q=${encodeURIComponent(name)}&rank=SPECIES&limit=3`,
       {}, 8000

@@ -2901,3 +2901,40 @@ rendering dependency, not a quick fix.
       and the first rotation "test" silently did nothing because the
       element was ~26,000px below the visible test viewport, not because
       OrbitControls was broken).
+
+2026-07-20
+  [X] Fixed species topic pages showing no distribution map and almost no
+      Field Data when the page title is a common/vernacular name (e.g.
+      "Climbing galaxias", reported live by user with a screenshot + full
+      console error log: 404s across gbif/col/obis/woc/ebird/iucn/worms,
+      plus 429s on chembl/exoplanet/uniprot/materials/wikidata). Root
+      cause: both resolveSpeciesName() (scripts/topic.js) and the backend
+      GET /api/field-data/resolve-species (server/index.js) used a
+      binomial-SHAPE regex (/^[A-Z][a-z]+ [a-z]+/) as a shortcut to skip
+      verification when a topic name "looked like" a real scientific
+      name — but plenty of English common names accidentally match that
+      same shape ("Climbing galaxias" = Capitalized word + lowercase
+      word). So the wrong (common) name got sent straight to every
+      species-gated panel loader, which all 404'd, and since
+      initSpeciesMap() only ever gets called from inside loadGbifData()'s
+      success path, GBIF's 404 meant the map never rendered either. Fix:
+      resolve-species now verifies binomial-shaped input against GBIF's
+      own species/match?strict=true (a real exact-match check, not shape
+      guessing) before trusting it, falling through to the existing
+      vernacular-name search otherwise; the frontend shortcut was removed
+      entirely so it always defers to the backend. Verified live:
+      /api/field-data/resolve-species?name=Climbing%20galaxias now
+      returns "Galaxias brevipinnis" (was returning the unverified input
+      before), and a full Playwright render of the Climbing galaxias
+      topic page now shows the distribution map, WoRMS/CoL classification,
+      IUCN status, and iNaturalist stats all populated.
+  [X] Also raised the /api/field-data/ rate limiter (server/index.js)
+      from 30 to 120 req/min per IP — it predated most of the ~20
+      field-data sources that now exist, so a single species page load
+      firing most of them in parallel could trip our OWN limiter (this
+      was the source of the 429s on chembl/exoplanet/uniprot/materials/
+      wikidata in the same user report). Investigated the xeno-canto 502
+      from the same report separately — reproduced it against production
+      with both the wrong and correct species names and got a clean 404
+      both times ("no recordings", correct for a fish); concluded it was
+      a one-off transient upstream hiccup, not a real bug.
