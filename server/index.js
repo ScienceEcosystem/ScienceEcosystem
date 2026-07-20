@@ -4212,7 +4212,7 @@ app.get("/api/field-data/materials", async (req, res) => {
   const formula = ELEMENT_SYMBOLS[name.toLowerCase()] || name;
 
   try {
-    const fields = "material_id,formula_pretty,symmetry,density,band_gap,is_stable,energy_above_hull,nsites";
+    const fields = "material_id,formula_pretty,symmetry,density,band_gap,is_stable,energy_above_hull,nsites,structure";
     const url = `https://api.materialsproject.org/materials/summary/?formula=${encodeURIComponent(formula)}&is_stable=true&_fields=${fields}`;
     const apiRes = await fetchWithTimeout(url, { headers: { "X-API-KEY": key, "Accept": "application/json" } }, 8000);
     // Materials Project returns 400 for anything that isn't valid chemical
@@ -4225,6 +4225,18 @@ app.get("/api/field-data/materials", async (req, res) => {
     const mat = (data?.data || [])[0];
     if (!mat?.material_id) return res.status(404).json({ error: "No stable Materials Project entry" });
 
+    // Reduced to just what the 3D viewer needs (lattice vectors + atom
+    // positions) rather than passing through pymatgen's full Structure
+    // object, which also carries internal bookkeeping fields (@module,
+    // @class, per-site "properties", etc.) the frontend has no use for.
+    const structure = mat.structure ? {
+      lattice: mat.structure.lattice?.matrix || null,
+      sites: (mat.structure.sites || []).map(s => ({
+        element: s.species?.[0]?.element || s.label || "?",
+        xyz: s.xyz,
+      })),
+    } : null;
+
     const payload = {
       material_id:        mat.material_id,
       formula:             mat.formula_pretty,
@@ -4232,6 +4244,7 @@ app.get("/api/field-data/materials", async (req, res) => {
       space_group:         mat.symmetry?.symbol || null,
       density:              mat.density != null ? Number(mat.density.toFixed(2)) : null,
       band_gap_ev:          mat.band_gap != null ? mat.band_gap : null,
+      structure,
       materials_project_url: `https://materialsproject.org/materials/${mat.material_id}`,
     };
 

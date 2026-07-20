@@ -1235,6 +1235,137 @@
     } catch (_) {}
   }
 
+  // Approximate CPK/Jmol-style element colors — covers the elements most
+  // likely to actually show up in a Materials Project structure; anything
+  // else falls back to a neutral grey rather than guessing.
+  const ELEMENT_COLORS = {
+    H:"#ffffff", He:"#d9ffff", Li:"#cc80ff", Be:"#c2ff00", B:"#ffb5b5", C:"#909090",
+    N:"#3050f8", O:"#ff0d0d", F:"#90e050", Ne:"#b3e3f5", Na:"#ab5cf2", Mg:"#8aff00",
+    Al:"#bfa6a6", Si:"#f0c8a0", P:"#ff8000", S:"#ffff30", Cl:"#1ff01f", Ar:"#80d1e3",
+    K:"#8f40d4", Ca:"#3dff00", Sc:"#e6e6e6", Ti:"#bfc2c7", V:"#a6a6ab", Cr:"#8a99c7",
+    Mn:"#9c7ac7", Fe:"#e06633", Co:"#f090a0", Ni:"#50d050", Cu:"#c88033", Zn:"#7d80b0",
+    Ga:"#c28f8f", Ge:"#668f8f", As:"#bd80e3", Se:"#ffa100", Br:"#a62929", Kr:"#5cb8d1",
+    Rb:"#702eb0", Sr:"#00ff00", Y:"#94ffff", Zr:"#94e0e0", Nb:"#73c2c9", Mo:"#54b5b5",
+    Ag:"#c0c0c0", Cd:"#ffd98f", In:"#a67573", Sn:"#668080", Sb:"#9e63b5", Te:"#d47a00",
+    I:"#940094", Cs:"#57178f", Ba:"#00c900", W:"#2194d6", Pt:"#d0d0e0", Au:"#ffd123",
+    Hg:"#b8b8d0", Pb:"#575961", Bi:"#9e4fb5",
+  };
+  const ELEMENT_COLOR_FALLBACK = "#94a3b8";
+
+  // Loads three.js + OrbitControls on demand, same lazy-load pattern used
+  // for Leaflet on the species map — no need to pay for a 3D engine on
+  // every topic page, only the ones that actually show a crystal structure.
+  async function ensureThree() {
+    if (typeof THREE !== "undefined" && THREE.OrbitControls) return;
+    if (typeof THREE === "undefined") {
+      await new Promise(resolve => {
+        const script = document.createElement("script");
+        script.src = "/assets/vendor/three.min.js";
+        script.onload = resolve;
+        document.head.appendChild(script);
+      });
+    }
+    if (!THREE.OrbitControls) {
+      await new Promise(resolve => {
+        const script = document.createElement("script");
+        script.src = "/assets/vendor/OrbitControls.js";
+        script.onload = resolve;
+        document.head.appendChild(script);
+      });
+    }
+  }
+
+  // Renders the unit cell (as a wireframe box from the lattice vectors) and
+  // a small supercell of atoms (as colored spheres) into `container`, with
+  // mouse rotate/zoom/pan via OrbitControls — a lightweight from-scratch
+  // renderer rather than pulling in a full molecular-viewer library, since
+  // Materials Project's own JSON already gives exactly the lattice +
+  // fractional/cartesian site data needed and nothing else (no bonds,
+  // secondary structure, etc. to worry about like a biomolecule viewer
+  // would need).
+  async function renderCrystalStructure(container, structure, formula) {
+    if (!structure?.lattice || !structure?.sites?.length) return;
+    await ensureThree();
+    if (typeof THREE === "undefined") return;
+
+    const width = container.clientWidth || 300;
+    const height = 260;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf8fafc);
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    container.innerHTML = "";
+    container.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    dirLight.position.set(3, 5, 4);
+    scene.add(dirLight);
+
+    const [a, b, c] = structure.lattice.map(v => new THREE.Vector3(v[0], v[1], v[2]));
+
+    // Unit cell wireframe — 12 edges of the parallelepiped defined by a/b/c.
+    const corners = [
+      new THREE.Vector3(0, 0, 0), a, b, c,
+      a.clone().add(b), a.clone().add(c), b.clone().add(c), a.clone().add(b).add(c),
+    ];
+    const edgeIdx = [[0,1],[0,2],[0,3],[1,4],[1,5],[2,4],[2,6],[3,5],[3,6],[4,7],[5,7],[6,7]];
+    const edgeGeom = new THREE.BufferGeometry().setFromPoints(edgeIdx.flatMap(([i, j]) => [corners[i], corners[j]]));
+    scene.add(new THREE.LineSegments(edgeGeom, new THREE.LineBasicMaterial({ color: 0x64748b })));
+
+    // Small supercell of atoms (up to 2 copies along each lattice vector)
+    // for a fuller view closer to how Materials Project's own explorer
+    // renders it, capped so an unusually complex structure can't stall the
+    // page with thousands of spheres.
+    const sphereGeom = new THREE.SphereGeometry(0.35, 20, 16);
+    const materialCache = {};
+    let atomCount = 0;
+    const MAX_ATOMS = 300;
+    outer:
+    for (let i = 0; i < 2 && atomCount < MAX_ATOMS; i++) {
+      for (let j = 0; j < 2 && atomCount < MAX_ATOMS; j++) {
+        for (let k = 0; k < 2 && atomCount < MAX_ATOMS; k++) {
+          for (const site of structure.sites) {
+            if (atomCount >= MAX_ATOMS) break outer;
+            const offset = a.clone().multiplyScalar(i).add(b.clone().multiplyScalar(j)).add(c.clone().multiplyScalar(k));
+            const color = ELEMENT_COLORS[site.element] || ELEMENT_COLOR_FALLBACK;
+            if (!materialCache[color]) materialCache[color] = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.15 });
+            const mesh = new THREE.Mesh(sphereGeom, materialCache[color]);
+            mesh.position.set(site.xyz[0] + offset.x, site.xyz[1] + offset.y, site.xyz[2] + offset.z);
+            scene.add(mesh);
+            atomCount++;
+          }
+        }
+      }
+    }
+
+    // Frame the camera to fit the whole cell regardless of how big/small
+    // the actual lattice constants are.
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z, 1);
+    camera.position.set(center.x + maxDim, center.y + maxDim * 0.8, center.z + maxDim);
+    camera.lookAt(center);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.copy(center);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.update();
+
+    let disposed = false;
+    container._crystalViewerDispose = () => { disposed = true; };
+    (function animate() {
+      if (disposed || !container.isConnected) return;
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    })();
+  }
+
   async function loadMaterialsData(displayName) {
     try {
       const resp = await fetch("/api/field-data/materials?name=" + encodeURIComponent(displayName));
@@ -1254,6 +1385,8 @@
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#4338ca"/><text x="10" y="14" text-anchor="middle" font-size="5.5" font-family="sans-serif" font-weight="bold" fill="white">MP</text></svg>
           <span class="inat-title">Materials Project · ${escapeHtml(d.formula)}</span>
         </div>
+        ${d.structure ? `<div id="crystalViewer-${d.material_id}" style="width:100%;height:260px;border-radius:6px;overflow:hidden;margin-bottom:.6rem;background:#f8fafc;border:1px solid #e5e7eb;"></div>
+        <p class="muted" style="font-size:.72rem;margin:-.3rem 0 .6rem;">Drag to rotate, scroll to zoom.</p>` : ""}
         <div class="woc-stats-grid">
           ${d.crystal_system ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.crystal_system)}</div><div class="woc-stat-label">Crystal system</div></div>` : ""}
           ${d.space_group ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.space_group)}</div><div class="woc-stat-label">Space group</div></div>` : ""}
@@ -1267,6 +1400,14 @@
         </div>
       `;
       container.appendChild(div);
+
+      // Only now that the div is actually attached to the DOM does the
+      // viewer container have a real, measurable size for Three.js to size
+      // its canvas against.
+      if (d.structure) {
+        const viewerEl = $(`crystalViewer-${d.material_id}`);
+        if (viewerEl) renderCrystalStructure(viewerEl, d.structure, d.formula);
+      }
     } catch (_) {}
   }
 

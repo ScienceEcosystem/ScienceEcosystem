@@ -2858,3 +2858,46 @@ has gone wrong with our web server" error page for this specific query
 (Paranephrops planifrons), reproduced 3/3. Our code already converts
 that into a clean "unavailable" response rather than crashing — nothing
 to fix on our end.
+
+-------------------------------------------------------
+BUILT (2026-07-19/20) — interactive 3D crystal structure viewer
+-------------------------------------------------------
+
+Requested directly, referencing Materials Project's own "Materials
+Explorer" 3D viewer. Scoped first (full interactive viewer, not a
+static image or just a link out) since this meant adding a new 3D
+rendering dependency, not a quick fix.
+
+  [X] Self-hosted three.js r128 + OrbitControls.js as vendor assets
+      (assets/vendor/three.min.js, OrbitControls.js) — same lazy-load-
+      on-demand pattern already used for Leaflet on the species map, so
+      topic pages that don't show a crystal structure don't pay for a 3D
+      engine at all. Deliberately used r128, not the current release —
+      three.js r150+ dropped the classic global/UMD build in favor of ES
+      modules only, which would've meant a different loading pattern
+      (import maps) than the rest of the site's plain <script src>
+      vendor files use; r128 still ships both a working three.min.js
+      global build and a matching non-module OrbitControls.js.
+
+  [X] Extended GET /api/field-data/materials (server/index.js) to also
+      request Materials Project's `structure` field and return a
+      trimmed-down version (just the lattice matrix + element/xyz per
+      site) — not the full pymatgen Structure object, which also carries
+      internal bookkeeping fields (@module, @class, per-site
+      "properties") the frontend has no use for. Verified live: Au (mp-
+      aaaaaadd, i.e. mp-81 under MP's newer material_id scheme) and NaCl
+      (mp-aaaabhvi) both return clean lattice+sites data.
+
+  [X] renderCrystalStructure() (scripts/topic.js) — draws the unit cell
+      as a wireframe box from the raw lattice vectors, atoms as colored
+      spheres (an ~70-element CPK/Jmol-style color table with a neutral
+      grey fallback for anything not in it) replicated across a small
+      2×2×2 supercell (capped at 300 spheres total) for a fuller view
+      closer to Materials Project's own explorer, with OrbitControls for
+      drag-to-rotate/scroll-to-zoom. Verified live end-to-end: real
+      camera rotation confirmed by screenshotting before and after a
+      simulated mouse drag (had to scroll the element into the test
+      viewport first — Playwright's mouse events are viewport-relative,
+      and the first rotation "test" silently did nothing because the
+      element was ~26,000px below the visible test viewport, not because
+      OrbitControls was broken).
