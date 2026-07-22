@@ -2938,3 +2938,23 @@ rendering dependency, not a quick fix.
       with both the wrong and correct species names and got a clean 404
       both times ("no recordings", correct for a fish); concluded it was
       a one-off transient upstream hiccup, not a real bug.
+
+2026-07-22
+  [X] Added a new Field Data source: NCBI Gene, for gene-symbol topic
+      pages (e.g. "TP53"). New GET /api/field-data/gene?symbol=X
+      (server/index.js) queries NCBI E-utils esearch db=gene with an
+      exact `[sym]` field match restricted to Homo sapiens (not a fuzzy
+      search — same precision guarantee as the other field-data sources,
+      live-tested "Climbing galaxias" and "Inflammation" both correctly
+      return zero hits), then esummary for the gene description, summary,
+      chromosome, map location, aliases, and OMIM ID. New
+      loadGeneData() panel in scripts/topic.js, wired into the Tier 3
+      (non-species-specific) loader group alongside UniProt/ChEMBL/PDB.
+      Verified live end-to-end: /api/field-data/gene?symbol=TP53 returns
+      full gene data, and a real Playwright render of the "TP53" topic
+      page (which Wikipedia canonically redirects to "P53") shows the
+      "Gene · TP53" panel with description, chromosome 17, map location
+      17p13.1, and alias badges (BCC7, BMFS5, LFS1, etc.) — confirms the
+      symbol search also correctly resolves aliases, not just primary
+      symbols, so the panel still fires even though the topic's resolved
+      display name is "P53" rather than "TP53".

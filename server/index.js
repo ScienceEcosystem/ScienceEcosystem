@@ -4340,6 +4340,58 @@ app.get("/api/field-data/uniprot", async (req, res) => {
   }
 });
 
+app.get("/api/field-data/gene", async (req, res) => {
+  const symbol = (req.query?.symbol || "").trim();
+  if (!symbol) return res.status(400).json({ error: "symbol required" });
+
+  const cacheKey = `gene:${symbol.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    // [sym] is an exact match against NCBI's curated gene-symbol field, not
+    // a fuzzy/full-text search — live-tested "Climbing galaxias" and
+    // "Inflammation" both correctly return zero hits rather than a loose
+    // match, same precision guarantee the other field-data endpoints rely
+    // on instead of a shape-based heuristic. Restricted to Homo sapiens
+    // since that's what's almost always meant by a bare gene symbol on a
+    // general research topic page.
+    const searchData = await fetchJSONTimeout(
+      `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=gene&term=${encodeURIComponent(symbol)}%5Bsym%5D+AND+Homo+sapiens%5Borgn%5D&retmode=json`,
+      {}, 8000
+    );
+    const geneId = searchData?.esearchresult?.idlist?.[0];
+    if (!geneId) return res.status(404).json({ error: "No gene match" });
+
+    const summaryData = await fetchJSONTimeout(
+      `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=gene&id=${geneId}&retmode=json`,
+      {}, 8000
+    );
+    const entry = summaryData?.result?.[geneId];
+    if (!entry) return res.status(404).json({ error: "No gene match" });
+
+    const summary = entry.summary || null;
+    const payload = {
+      gene_id:        geneId,
+      symbol:         entry.name || symbol,
+      full_name:      entry.description || null,
+      summary:        summary ? (summary.length > 500 ? summary.slice(0, 497) + "…" : summary) : null,
+      chromosome:     entry.chromosome || null,
+      map_location:   entry.maplocation || null,
+      aliases:        entry.otheraliases ? entry.otheraliases.split(", ").filter(Boolean) : [],
+      omim_id:        entry.mim?.[0] || null,
+      organism:       entry.organism?.scientificname || null,
+      ncbi_url:       `https://www.ncbi.nlm.nih.gov/gene/${geneId}`,
+    };
+
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/gene failed:", err.message);
+    res.status(502).json({ error: "NCBI Gene unavailable" });
+  }
+});
+
 // Curated external-ID properties worth surfacing — deliberately excludes
 // ones we already show from a dedicated integration (IUCN ID P141, WoRMS ID
 // P850, eBird taxon P3444) to avoid redundant panels for the same fact.

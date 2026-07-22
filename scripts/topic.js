@@ -1451,6 +1451,42 @@
     } catch (_) {}
   }
 
+  async function loadGeneData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/gene?symbol=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.gene_id) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const aliasBadges = (d.aliases || []).slice(0, 6).map(a => `<span class="badge" style="font-size:.72rem;">${escapeHtml(a)}</span>`).join(" ");
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#1e40af"/><text x="10" y="14" text-anchor="middle" font-size="5" font-family="sans-serif" font-weight="bold" fill="white">NCBI</text></svg>
+          <span class="inat-title">Gene · ${escapeHtml(d.symbol)}</span>
+        </div>
+        ${d.full_name ? `<p class="muted" style="font-size:.82rem;margin:.25rem 0 .4rem;">${escapeHtml(d.full_name)}${d.organism ? ` · ${escapeHtml(d.organism)}` : ""}</p>` : ""}
+        ${d.summary ? `<p style="font-size:.85rem;color:#374151;margin:0 0 .5rem;">${escapeHtml(d.summary)}</p>` : ""}
+        ${d.chromosome ? `<div class="woc-stats-grid"><div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.chromosome)}</div><div class="woc-stat-label">Chromosome</div></div>${d.map_location ? `<div class="woc-stat"><div class="woc-stat-value" style="font-size:1.1rem;">${escapeHtml(d.map_location)}</div><div class="woc-stat-label">Map location</div></div>` : ""}</div>` : ""}
+        ${aliasBadges ? `<p style="margin:.5rem 0 0;">${aliasBadges}</p>` : ""}
+        <div class="woc-footer" style="margin-top:.5rem;">
+          <a href="${escapeHtml(d.ncbi_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View on NCBI Gene →
+          </a>
+          ${d.omim_id ? `<a href="https://omim.org/entry/${escapeHtml(d.omim_id)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">View on OMIM →</a>` : ""}
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
   async function loadWikidataData(displayName) {
     try {
       const resp = await fetch("/api/field-data/wikidata?name=" + encodeURIComponent(displayName));
@@ -2422,6 +2458,7 @@
       loadPangaeaData(baseTopicName);
       loadMaterialsData(baseTopicName);
       loadUniprotData(baseTopicName);
+      loadGeneData(baseTopicName);
       loadWikidataData(baseTopicName); // also chains into loadEarthquakeData + loadGeonamesData when the entity has coordinates
       loadWorldBankData(baseTopicName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
