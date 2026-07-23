@@ -548,6 +548,132 @@
     if (bd) bd.hidden = true;
   }
 
+  // ---------- Save-to-folder popover ----------
+  // Lets a signed-in user file a paper straight into a library folder at
+  // save time, instead of always landing "unfiled" and having to go to the
+  // library page afterward to sort it. Single reusable element appended to
+  // <body> (not per-card, unlike the cite popover) since the Save button
+  // shows up on plain paper.js pages too, which don't have a per-card
+  // popover placeholder to hook into.
+  var _saveFolderPopover = null;
+  var _saveFolderOpener = null;
+
+  function closeSaveFolderPopover(){
+    if (_saveFolderPopover) { _saveFolderPopover.remove(); _saveFolderPopover = null; }
+    if (_saveFolderOpener) { _saveFolderOpener.setAttribute("aria-expanded","false"); _saveFolderOpener = null; }
+  }
+
+  async function openSaveFolderPopover(btn, paper){
+    // Close any open cite popovers too — inlined rather than calling the
+    // cite popover's own closeAllPopovers(), which is scoped inside
+    // enhancePaperCards() and not reachable from here.
+    document.querySelectorAll(".cite-popover:not([hidden])").forEach(function(p){ p.hidden = true; });
+    hideCiteBackdrop();
+    closeSaveFolderPopover();
+
+    // Only worth the extra click if we can positively confirm the user is
+    // signed in — otherwise fall straight back to the original one-click
+    // save (which already handles prompting for sign-in on its own).
+    var signedIn = false;
+    try { signedIn = !!(await globalThis.SE_SESSION_PROMISE); } catch(_){}
+    if (!signedIn || !globalThis.SE_LIB?.loadCollectionsOnce) {
+      globalThis.savePaper(paper, btn);
+      return;
+    }
+
+    var collections = await globalThis.SE_LIB.loadCollectionsOnce();
+
+    var pop = document.createElement("div");
+    pop.className = "save-folder-popover";
+    pop.setAttribute("role","dialog");
+    pop.setAttribute("aria-label","Save to folder");
+    pop.tabIndex = -1;
+    Object.assign(pop.style, {
+      position:"fixed", zIndex:"9999", background:"#fff", border:"1px solid #e5e7eb",
+      borderRadius:"10px", boxShadow:"0 8px 24px rgba(0,0,0,.18)", padding:"6px",
+      minWidth:"220px", maxWidth:"280px", maxHeight:"320px", overflowY:"auto", fontSize:".85rem"
+    });
+
+    function divider(){
+      var d = document.createElement("div");
+      Object.assign(d.style, { borderTop:"1px solid #f1f5f9", margin:"4px 2px" });
+      return d;
+    }
+    function optionRow(label, onClick){
+      var row = document.createElement("button");
+      row.type = "button";
+      row.textContent = label;
+      Object.assign(row.style, {
+        display:"block", width:"100%", textAlign:"left", padding:"7px 10px",
+        border:"none", background:"none", borderRadius:"6px", cursor:"pointer",
+        font:"inherit", color:"#1f2937"
+      });
+      row.addEventListener("mouseenter", function(){ row.style.background = "#f1f5f9"; });
+      row.addEventListener("mouseleave", function(){ row.style.background = "none"; });
+      row.addEventListener("click", onClick);
+      return row;
+    }
+
+    pop.appendChild(optionRow("Save to Library (no folder)", function(){
+      closeSaveFolderPopover();
+      globalThis.savePaper(paper, btn);
+    }));
+
+    if (collections.length){
+      pop.appendChild(divider());
+      collections.forEach(function(c){
+        pop.appendChild(optionRow(c.name, function(){
+          closeSaveFolderPopover();
+          globalThis.savePaper(paper, btn, c.id);
+        }));
+      });
+    }
+
+    pop.appendChild(divider());
+    var newRow = document.createElement("div");
+    newRow.style.padding = "6px 8px";
+    var input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "New folder…";
+    input.setAttribute("aria-label","New folder name");
+    Object.assign(input.style, {
+      width:"100%", boxSizing:"border-box", padding:"5px 7px", border:"1px solid #d1d5db",
+      borderRadius:"6px", font:"inherit"
+    });
+    input.addEventListener("keydown", async function(e){
+      if (e.key !== "Enter") return;
+      var name = input.value.trim();
+      if (!name) return;
+      input.disabled = true;
+      try {
+        var col = await globalThis.SE_LIB.createCollection(name);
+        closeSaveFolderPopover();
+        globalThis.savePaper(paper, btn, col.id);
+      } catch(err){
+        input.disabled = false;
+        alert("Could not create folder: " + (err && err.message || ""));
+      }
+    });
+    newRow.appendChild(input);
+    pop.appendChild(newRow);
+
+    document.body.appendChild(pop);
+    _saveFolderPopover = pop;
+    _saveFolderOpener = btn;
+    btn.setAttribute("aria-expanded","true");
+
+    var r = btn.getBoundingClientRect();
+    requestAnimationFrame(function(){
+      var pw = pop.offsetWidth, ph = pop.offsetHeight;
+      var left = Math.min(r.left, window.innerWidth - pw - 8);
+      var top = r.bottom + 6;
+      if (top + ph > window.innerHeight - 8) top = r.top - ph - 6;
+      pop.style.left = Math.max(8, left) + "px";
+      pop.style.top = Math.max(8, top) + "px";
+      input.focus();
+    });
+  }
+
   // ---------- Add-to-Library helpers ----------
   function markSavedButton(btn){
     if (!btn) return;
@@ -668,7 +794,7 @@
       }
 
       if (typeof globalThis.savePaper === "function") {
-        globalThis.savePaper({ id, title, doi }, btn);
+        openSaveFolderPopover(btn, { id, title, doi });
       } else {
         console.warn("savePaper() missing. Include scripts/library.js first.");
         alert("Please sign in to save papers.");
@@ -799,7 +925,7 @@
 
     // 6) Close cite popovers on Escape / outside click; trap Tab while open
     document.addEventListener("keydown", function(e){
-      if (e.key === "Escape") { closeAllPopovers(); return; }
+      if (e.key === "Escape") { closeAllPopovers(); closeSaveFolderPopover(); return; }
       if (e.key === "Tab"){
         var openPop = document.querySelector(".cite-popover:not([hidden])");
         if (openPop) trapFocus(openPop, e);
@@ -810,6 +936,12 @@
       var btn = e.target.closest('[data-action="open-cite"]');
       if (pop || btn) return;
       closeAllPopovers();
+    }, true);
+    document.addEventListener("click", function(e){
+      var pop = e.target.closest(".save-folder-popover");
+      var btn = e.target.closest('[data-action="save-paper"]');
+      if (pop || btn) return;
+      closeSaveFolderPopover();
     }, true);
   }
 

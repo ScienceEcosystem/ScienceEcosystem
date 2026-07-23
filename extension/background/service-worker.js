@@ -56,6 +56,24 @@ async function savePaper({ id, title, doi }) {
   });
 }
 
+async function listCollections() {
+  return seApi("/api/collections");
+}
+
+async function createCollection(name) {
+  return seApi("/api/collections", {
+    method: "POST",
+    body: JSON.stringify({ name, parent_id: null })
+  });
+}
+
+async function addToCollection(collectionId, paperId) {
+  return seApi(`/api/collections/${encodeURIComponent(collectionId)}/items`, {
+    method: "POST",
+    body: JSON.stringify({ id: paperId })
+  });
+}
+
 // ── OpenAlex lookup ───────────────────────────────────────────────────────────
 
 async function fetchSource(sourceId) {
@@ -252,8 +270,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.type === "SAVE_PAPER") {
-    savePaper(msg)
-      .then(() => sendResponse({ ok: true }))
+    savePaper(msg).then(async (result) => {
+      // File into a folder right at save time, same as the site's own
+      // save popover, so users don't have to open the library separately
+      // to sort papers the extension saved.
+      if (msg.collectionId) {
+        const paperId = result?.existing_id ? String(result.existing_id) : String(msg.id || msg.doi || "");
+        try { await addToCollection(msg.collectionId, paperId); } catch (_) {}
+      }
+      sendResponse({ ok: true });
+    }).catch(e => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
+
+  if (msg.type === "LIST_COLLECTIONS") {
+    listCollections()
+      .then(collections => sendResponse({ ok: true, collections }))
+      .catch(e => sendResponse({ ok: false, error: e.message, collections: [] }));
+    return true;
+  }
+
+  if (msg.type === "CREATE_COLLECTION") {
+    createCollection(msg.name)
+      .then(collection => sendResponse({ ok: true, collection }))
       .catch(e => sendResponse({ ok: false, error: e.message }));
     return true;
   }

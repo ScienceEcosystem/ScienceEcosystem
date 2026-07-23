@@ -213,6 +213,59 @@ function renderJTI(jti) {
   el.hidden = false;
 }
 
+// ── Folder picker ─────────────────────────────────────────────────────────────
+// Lets the user file a paper into a library folder right when they save it
+// from the extension, instead of always landing unfiled and having to open
+// the site's library separately to sort it — same idea as the folder
+// popover added on the site's own Save button.
+
+const NEW_FOLDER_VALUE = "__new_folder__";
+
+async function loadFolderPicker() {
+  const sel = $("saveFolderSelect");
+  if (!sel || _saved) return; // no point picking a folder for an already-saved paper
+  const result = await msg("LIST_COLLECTIONS");
+  const collections = (result?.ok && Array.isArray(result.collections)) ? result.collections : [];
+
+  sel.innerHTML = "";
+  const noneOpt = document.createElement("option");
+  noneOpt.value = "";
+  noneOpt.textContent = "No folder";
+  sel.appendChild(noneOpt);
+
+  collections.forEach((c) => {
+    const opt = document.createElement("option");
+    opt.value = String(c.id);
+    opt.textContent = c.name;
+    sel.appendChild(opt);
+  });
+
+  const newOpt = document.createElement("option");
+  newOpt.value = NEW_FOLDER_VALUE;
+  newOpt.textContent = "+ New folder…";
+  sel.appendChild(newOpt);
+
+  sel.hidden = false;
+}
+
+async function handleFolderSelectChange() {
+  const sel = $("saveFolderSelect");
+  if (!sel || sel.value !== NEW_FOLDER_VALUE) return;
+  const name = prompt("New folder name:");
+  if (!name || !name.trim()) { sel.value = ""; return; }
+  const result = await msg("CREATE_COLLECTION", { name: name.trim() });
+  if (!result?.ok || !result.collection) {
+    alert(`Could not create folder: ${result?.error || "unknown error"}`);
+    sel.value = "";
+    return;
+  }
+  const opt = document.createElement("option");
+  opt.value = String(result.collection.id);
+  opt.textContent = result.collection.name;
+  sel.insertBefore(opt, sel.lastElementChild); // keep "+ New folder…" last
+  sel.value = String(result.collection.id);
+}
+
 // ── Render the detected-paper state ──────────────────────────────────────────
 
 function renderPaperState() {
@@ -257,6 +310,7 @@ function renderPaperState() {
   }
 
   showState("statePaper");
+  loadFolderPicker().catch(() => {});
 }
 
 // ── Save paper ────────────────────────────────────────────────────────────────
@@ -266,8 +320,12 @@ async function handleSave() {
   btn.disabled = true;
   setSaveStatus("saving", "Saving…");
 
+  const folderSel = $("saveFolderSelect");
+  const collectionId = (folderSel && folderSel.value && folderSel.value !== NEW_FOLDER_VALUE) ? folderSel.value : null;
+
   const openAlexTail = _work?.id?.replace("https://openalex.org/", "");
   const result = await msg("SAVE_PAPER", {
+    collectionId,
     id: openAlexTail || _meta?.doi || "",
     title: _meta?.title || "Untitled",
     doi: _meta?.doi || null
@@ -279,6 +337,7 @@ async function handleSave() {
     setText("btnSaveIcon", "✓");
     setText("btnSaveLabel", "Saved");
     setSaveStatus("saved", "✓ Saved to your library");
+    hide("saveFolderSelect");
   } else {
     btn.disabled = false;
     setSaveStatus("error", `✗ ${result?.error || "Could not save — are you logged in?"}`);
@@ -392,6 +451,7 @@ function setFooter(user) {
 document.addEventListener("DOMContentLoaded", () => {
   // Save paper
   $("btnSave")?.addEventListener("click", handleSave);
+  $("saveFolderSelect")?.addEventListener("change", handleFolderSelectChange);
 
   // Save PDF
   $("btnSavePdf")?.addEventListener("click", handleSavePdf);

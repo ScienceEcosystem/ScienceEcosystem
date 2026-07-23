@@ -60,9 +60,32 @@ function markSavedButton(btn) {
   btn.disabled = true;
 }
 
+let SE_COLLECTIONS_CACHE = null; // null = not fetched, [] = fetched but empty/not-signed-in
+async function loadCollectionsOnce(force) {
+  if (SE_COLLECTIONS_CACHE && !force) return SE_COLLECTIONS_CACHE;
+  try {
+    const res = await fetch("/api/collections", { credentials: "include" });
+    if (!res.ok) { SE_COLLECTIONS_CACHE = []; return SE_COLLECTIONS_CACHE; }
+    const data = await res.json();
+    SE_COLLECTIONS_CACHE = (Array.isArray(data) ? data : []).filter(c => !c.deleted_at);
+  } catch (_) {
+    SE_COLLECTIONS_CACHE = [];
+  }
+  return SE_COLLECTIONS_CACHE;
+}
+
+async function createCollection(name, parentId) {
+  const col = await seApi("/api/collections", {
+    method: "POST",
+    body: JSON.stringify({ name, parent_id: parentId || null }),
+  });
+  if (SE_COLLECTIONS_CACHE) SE_COLLECTIONS_CACHE.push(col);
+  return col;
+}
+
 // Ensure we always attach the helpers onto SE_LIB (even if it existed already)
 (globalThis.SE_LIB ??= {});
-Object.assign(globalThis.SE_LIB, { loadLibraryOnce, isSaved, markSavedButton });
+Object.assign(globalThis.SE_LIB, { loadLibraryOnce, isSaved, markSavedButton, loadCollectionsOnce, createCollection });
 
 // After saving, sync any PDF annotations that were made before the paper was in the library
 async function syncLocalAnnotationsForPaper(paperId, pdfUrl) {
@@ -107,7 +130,7 @@ function showSavedToast(msg = "Saved to library") {
 }
 
 // Global save helper that can flip the clicked button
-globalThis.savePaper = async function savePaper(paper, btnEl) {
+globalThis.savePaper = async function savePaper(paper, btnEl, collectionId) {
   if (!paper || !paper.id || !paper.title) {
     alert("Missing paper id/title");
     return;
@@ -123,7 +146,22 @@ globalThis.savePaper = async function savePaper(paper, btnEl) {
     SE_LIB_MAP[savedId] = true;
     SE_LIB_MAP[String(paper.id)] = true;
     if (btnEl) markSavedButton(btnEl);
-    showSavedToast(result?.duplicate ? "Already in library" : "Saved to library");
+
+    let folderName = null;
+    if (collectionId) {
+      try {
+        await seApi(`/api/collections/${encodeURIComponent(collectionId)}/items`, {
+          method: "POST",
+          body: JSON.stringify({ id: savedId }),
+        });
+        folderName = (SE_COLLECTIONS_CACHE || []).find(c => String(c.id) === String(collectionId))?.name || null;
+      } catch (_) {}
+    }
+    showSavedToast(
+      result?.duplicate ? "Already in library"
+      : folderName ? `Saved to "${folderName}"`
+      : "Saved to library"
+    );
 
     // Hydrate full metadata (authors, year, venue, abstract) right away so the
     // item doesn't sit as "Untitled" until the library inspector is opened

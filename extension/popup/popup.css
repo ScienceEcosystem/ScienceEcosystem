@@ -115,6 +115,19 @@ main { flex: 1; padding: .75rem .9rem; }
 .save-status.saving   { background: #eff6ff; color: #1d4ed8; }
 .save-status.error    { background: #fef2f2; color: #991b1b; }
 
+/* ── Folder picker ──────────────────────────────────────────────────────────── */
+.folder-select {
+  width: 100%;
+  padding: .4rem .6rem;
+  margin-bottom: .5rem;
+  border-radius: 7px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #334155;
+  font-size: .8rem;
+  font-family: inherit;
+}
+
 /* ── Actions ────────────────────────────────────────────────────────────────── */
 .actions {
   display: flex;

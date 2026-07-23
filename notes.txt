@@ -3006,3 +3006,43 @@ rendering dependency, not a quick fix.
       real gap but a different, lower-severity bug; not fixed here.
       scripts/profile.nuclear.js has the identical split("/").pop() bug
       but isn't referenced from any .html file (dead code) — left as is.
+  [X] Added folder choice at save time — user asked to be able to pick a
+      library subfolder when saving a source (from the site or the
+      extension), rather than always landing unfiled and having to open
+      the library separately to sort it later. Site: new save-folder
+      popover (scripts/components.js, openSaveFolderPopover) opens on
+      the "Add to Library"/"Save" click (data-action="save-paper",
+      shared by paper.js/search.js/topic.js/institute.js/journal.js/
+      publisher.js cards) — lists the user's existing collections (via
+      new SE_LIB.loadCollectionsOnce()/createCollection() in
+      scripts/library.js), a "Save to Library (no folder)" default, and
+      a "+ New folder…" input. savePaper() (scripts/library.js) now
+      takes an optional collectionId and POSTs to
+      /api/collections/:id/items right after the /api/library save.
+      Only shown when SE_SESSION_PROMISE resolves truthy (signed in) —
+      signed-out users get the exact original one-click save-then-
+      sign-in-prompt flow, unchanged. Extension: same idea via a native
+      <select id="saveFolderSelect"> in the popup (extension/popup/
+      popup.html), populated from new LIST_COLLECTIONS/CREATE_COLLECTION
+      messages handled by extension/background/service-worker.js
+      (listCollections/createCollection/addToCollection hitting the same
+      /api/collections endpoints), with SAVE_PAPER now accepting a
+      collectionId and filing into it after saving.
+      Verified live (Playwright against paper.html, with window.fetch
+      monkey-patched via page.addInitScript to stand in for a signed-in
+      session + fake collections — real page.route() network mocking
+      didn't reliably intercept these same-origin calls, most likely
+      because of the site's registered Service Worker; addInitScript
+      fetch patching sidesteps that entirely since it's page-JS-level,
+      not network-layer): popover shows existing folders + new-folder
+      input; picking an existing folder POSTs to /api/library then
+      /api/collections/1/items and shows `Saved to "Cancer biology"`;
+      typing+Enter in the new-folder input POSTs /api/collections then
+      the matching /api/collections/:id/items and shows the new folder's
+      name in the toast; with zero existing folders the popover still
+      offers "Save to Library (no folder)" + the new-folder input; a
+      signed-out user gets the original no-popover flow (confirmed
+      popover never renders when /api/me isn't mocked). Extension side
+      verified only via node --check + code review (loading an unpacked
+      Chrome extension under Playwright wasn't attempted) — it reuses
+      the identical, already-verified /api/collections endpoints.
