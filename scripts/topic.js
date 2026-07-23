@@ -1451,6 +1451,54 @@
     } catch (_) {}
   }
 
+  async function loadClinicalTrialsData(displayName) {
+    try {
+      const resp = await fetch("/api/field-data/clinicaltrials?name=" + encodeURIComponent(displayName));
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.trials?.length) return;
+
+      const block = $("fieldDataBlock");
+      if (block) block.style.display = "";
+      const container = $("inatContent");
+      if (!container) return;
+
+      const STATUS_COLORS = {
+        RECRUITING: "#166534", COMPLETED: "#374151", TERMINATED: "#b91c1c",
+        ACTIVE_NOT_RECRUITING: "#a16207", WITHDRAWN: "#b91c1c", SUSPENDED: "#a16207",
+      };
+      const rows = d.trials.map(t => {
+        const statusLabel = (t.status || "").replace(/_/g, " ");
+        const color = STATUS_COLORS[t.status] || "#6b7280";
+        return `
+          <div style="padding:.5rem 0;border-bottom:1px solid #f1f5f9;">
+            <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener" style="font-size:.85rem;font-weight:500;color:#0f172a;text-decoration:none;">${escapeHtml(t.title)}</a>
+            <p class="muted" style="font-size:.75rem;margin:.2rem 0 0;">
+              <span style="color:${color};font-weight:600;">${escapeHtml(statusLabel || "Unknown")}</span>
+              ${t.phase ? ` · ${escapeHtml(t.phase.replace("PHASE", "Phase "))}` : ""}
+              ${t.start ? ` · Started ${escapeHtml(t.start)}` : ""}
+            </p>
+          </div>`;
+      }).join("");
+
+      const div = document.createElement("div");
+      div.className = "inat-panel";
+      div.innerHTML = `
+        <div class="inat-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;border-radius:3px;" aria-hidden="true"><rect width="20" height="20" rx="3" fill="#0e7490"/><text x="10" y="14" text-anchor="middle" font-size="4.5" font-family="sans-serif" font-weight="bold" fill="white">CT.gov</text></svg>
+          <span class="inat-title">Clinical Trials</span>
+        </div>
+        <div>${rows}</div>
+        <div class="woc-footer" style="margin-top:.5rem;">
+          <a href="https://clinicaltrials.gov/search?term=${encodeURIComponent(displayName)}" target="_blank" rel="noopener" class="btn btn-secondary" style="font-size:.82rem;">
+            View all on ClinicalTrials.gov →
+          </a>
+        </div>
+      `;
+      container.appendChild(div);
+    } catch (_) {}
+  }
+
   async function loadGeneData(displayName) {
     try {
       const resp = await fetch("/api/field-data/gene?symbol=" + encodeURIComponent(displayName));
@@ -2459,6 +2507,7 @@
       loadMaterialsData(baseTopicName);
       loadUniprotData(baseTopicName);
       loadGeneData(baseTopicName);
+      loadClinicalTrialsData(baseTopicName);
       loadWikidataData(baseTopicName); // also chains into loadEarthquakeData + loadGeonamesData when the entity has coordinates
       loadWorldBankData(baseTopicName);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)

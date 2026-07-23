@@ -4287,6 +4287,64 @@ app.get("/api/field-data/materials", async (req, res) => {
    Tier 3 sources (see notes.txt) before writing any of this.
 ----------------------------*/
 
+app.get("/api/field-data/clinicaltrials", async (req, res) => {
+  const name = (req.query?.name || "").trim();
+  if (!name) return res.status(400).json({ error: "name required" });
+
+  const cacheKey = `clinicaltrials:${name.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    // ClinicalTrials.gov's query.cond/query.intr params are thesaurus-
+    // expanded (Essie search), not exact-field matches — live-tested
+    // query.cond=Sociology returns 6 "hits" whose actual condition strings
+    // are things like "Psychosocial Problem" and "Social Functioning",
+    // none of which is literally "Sociology". Trusting the API's own
+    // match would misrepresent unrelated trials as being about the topic.
+    // So: fetch candidates from both condition and intervention search,
+    // then only keep studies whose OWN listed condition/intervention
+    // string exactly equals (case-insensitive) the topic name — the same
+    // "verify the exact string, don't trust the fuzzy search" pattern
+    // resolve-species uses against GBIF's vernacular names.
+    const fields = "NCTId,BriefTitle,OverallStatus,Phase,Condition,InterventionName,StartDateStruct";
+    const [condData, intrData] = await Promise.all([
+      fetchJSONTimeout(`https://clinicaltrials.gov/api/v2/studies?query.cond=${encodeURIComponent(name)}&pageSize=25&format=json&fields=${fields}`, {}, 8000).catch(() => null),
+      fetchJSONTimeout(`https://clinicaltrials.gov/api/v2/studies?query.intr=${encodeURIComponent(name)}&pageSize=25&format=json&fields=${fields}`, {}, 8000).catch(() => null),
+    ]);
+
+    const lower = name.toLowerCase();
+    const seen = new Map();
+    for (const study of [...(condData?.studies || []), ...(intrData?.studies || [])]) {
+      const p = study?.protocolSection;
+      const conditions = p?.conditionsModule?.conditions || [];
+      const interventions = (p?.armsInterventionsModule?.interventions || []).map(i => i.name).filter(Boolean);
+      const matched = conditions.some(c => c.toLowerCase() === lower) || interventions.some(i => i.toLowerCase() === lower);
+      if (!matched) continue;
+      const nctId = p?.identificationModule?.nctId;
+      if (!nctId || seen.has(nctId)) continue;
+      seen.set(nctId, {
+        nct_id:  nctId,
+        title:   p?.identificationModule?.briefTitle || nctId,
+        status:  p?.statusModule?.overallStatus || null,
+        phase:   (p?.designModule?.phases || [])[0] || null,
+        start:   p?.statusModule?.startDateStruct?.date || null,
+        url:     `https://clinicaltrials.gov/study/${nctId}`,
+      });
+    }
+
+    const trials = Array.from(seen.values()).slice(0, 8);
+    if (!trials.length) return res.status(404).json({ error: "No matching clinical trials" });
+
+    const payload = { total_matched: trials.length, trials };
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (err) {
+    console.error("GET /api/field-data/clinicaltrials failed:", err.message);
+    res.status(502).json({ error: "ClinicalTrials.gov unavailable" });
+  }
+});
+
 app.get("/api/field-data/uniprot", async (req, res) => {
   const name = (req.query?.name || "").trim();
   if (!name) return res.status(400).json({ error: "name required" });

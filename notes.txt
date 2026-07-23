@@ -2958,3 +2958,23 @@ rendering dependency, not a quick fix.
       symbol search also correctly resolves aliases, not just primary
       symbols, so the panel still fires even though the topic's resolved
       display name is "P53" rather than "TP53".
+  [X] Added a second new Field Data source: ClinicalTrials.gov, for
+      disease/condition and drug/intervention topic pages (e.g.
+      "Melanoma", "Aspirin"). New GET /api/field-data/clinicaltrials?
+      name=X (server/index.js) queries both query.cond and query.intr —
+      but live-tested first and found CT.gov's own search is thesaurus-
+      expanded, not an exact match (query.cond=Sociology returns 6 "hits"
+      whose real condition strings are things like "Psychosocial
+      Problem" — none of which is literally "Sociology"). So the backend
+      re-verifies every candidate itself: only keeps studies whose own
+      listed condition/intervention string exactly equals (case-
+      insensitive) the topic name, same "don't trust the fuzzy search,
+      verify the exact string" pattern used for resolve-species against
+      GBIF vernacular names. New loadClinicalTrialsData() panel in
+      scripts/topic.js (Tier 3 group) shows up to 8 verified trials with
+      status (color-coded), phase, start date, and links to
+      ClinicalTrials.gov. Verified live: Melanoma correctly returns 8
+      exact-condition-match trials, Aspirin correctly returns 8 exact-
+      intervention-match trials, Sociology correctly 404s despite CT.gov
+      itself returning 6 fuzzy hits for it; confirmed rendering via a
+      real Playwright render of the "Melanoma" topic page.
