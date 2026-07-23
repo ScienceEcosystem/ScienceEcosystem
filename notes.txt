@@ -2978,3 +2978,31 @@ rendering dependency, not a quick fix.
       intervention-match trials, Sociology correctly 404s despite CT.gov
       itself returning 6 fuzzy hits for it; confirmed rendering via a
       real Playwright render of the "Melanoma" topic page.
+
+2026-07-23
+  [X] Fixed researcher profile pages' top "topics" chips (tagsContainer,
+      built from the OpenAlex author record's x_concepts) linking to
+      broken topic pages — user reported clicking them "not bringing you
+      to any topic page." Root cause: scripts/profile.js built the topic
+      href with `c.id.split("/").pop()`, which assumed x_concepts[].id is
+      always a full URL like "https://openalex.org/C86803240". Live-
+      tested directly against /authors/A5067184382: OpenAlex now returns
+      x_concepts[].id as a bare numeric string with no "C" prefix at all
+      ("86803240"), so the built link was `topic.html?id=86803240` —
+      missing the required "C", which 404s against OpenAlex's concepts
+      API and (since it also fails the /^C\d+$/ check) gets misrouted
+      into topic.html's wiki-slug fallback path instead, resolving
+      nothing. Fix: added normalizeConceptTail() (scripts/profile.js) to
+      strip any URL prefix AND prepend "C" if what's left is bare
+      digits, used everywhere a topic href or _conceptNameMap entry is
+      built from x_concepts. Verified live: profile.html?id=A5067184382
+      (Jennifer Doudna) now emits topic.html?id=C86803240 etc.
+      (previously id=86803240), and navigating there resolves to the
+      real "Biology" topic page. Also checked scripts/journal.js's
+      similar x_concepts usage — live-tested /sources search and found
+      OpenAlex sources no longer return x_concepts AT ALL anymore
+      (replaced by topics/topic_share), so journal topic chips just
+      silently show "No topics listed" rather than a broken link — a
+      real gap but a different, lower-severity bug; not fixed here.
+      scripts/profile.nuclear.js has the identical split("/").pop() bug
+      but isn't referenced from any .html file (dead code) — left as is.

@@ -453,6 +453,18 @@
     return str.replace(/[&<>'"]/g, function(c){ return ({ "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]; });
   }
   function get(obj, path, fb){ try{ var p=path.split("."), cur=obj; for(var i=0;i<p.length;i++){ if(cur==null) return fb; cur=cur[p[i]]; } return cur==null?fb:cur; } catch(e){ return fb; } }
+  // OpenAlex's x_concepts[].id is sometimes a full URL ("https://openalex.org/C123"),
+  // sometimes just "C123" — and, live-tested against /authors/{id}, is now sometimes
+  // a bare numeric string with no "C" at all ("86803240"). That last form broke every
+  // topic-page link built from it (topic.html?id=86803240 with no "C" 404s against
+  // OpenAlex's concepts API, which requires the prefix), so researcher-profile topic
+  // chips silently went nowhere. Normalize all three shapes to "C<digits>".
+  function normalizeConceptTail(id){
+    if (!id) return "";
+    var tail = String(id).replace(/^https?:\/\/openalex\.org\/(concepts\/)?/i, "");
+    if (/^\d+$/.test(tail)) tail = "C" + tail;
+    return tail;
+  }
   function normalizeAuthorId(raw){
     if(!raw) return "";
     var s=raw; try{ s=decodeURIComponent(s);}catch(e){}
@@ -580,12 +592,12 @@
     concepts.sort(function(x,y){ return (y.score||0)-(x.score||0); });
     concepts.forEach(function(c){
       if (c.display_name && c.id) {
-        _conceptNameMap[c.display_name.toLowerCase()] = String(c.id).replace(/^https?:\/\/openalex\.org\//i,"");
+        _conceptNameMap[c.display_name.toLowerCase()] = normalizeConceptTail(c.id);
       }
     });
     if ($("tagsContainer")){
       $("tagsContainer").innerHTML = concepts.slice(0,12).map(function(c){
-        var tid = c.id ? c.id.split("/").pop() : "";
+        var tid = normalizeConceptTail(c.id);
         return '<a class="topic-card" href="topic.html?id='+encodeURIComponent(tid)+'" title="Open topic"><span class="topic-name">'+escapeHtml(c.display_name||"Topic")+'</span></a>';
       }).join("");
     }
