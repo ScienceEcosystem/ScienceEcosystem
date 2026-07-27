@@ -1,0 +1,247 @@
+// living-paper.js — mounts the real, already-rendered Quarto manuscript from
+// GitHub Pages inside an iframe (srcdoc, so it stays same-origin-scriptable
+// from this page) and overlays clickable evidence badges wherever
+// evidence.json's claim labels match an element id Quarto already assigns
+// to every numbered figure/table in its own output.
+
+const params = new URLSearchParams(window.location.search);
+const repoParam = params.get('repo');        // "owner/repo"
+const doi = params.get('doi');                // bare DOI, no https://doi.org/
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function bindSidebarTabs() {
+  const btns = document.querySelectorAll('.pdf-tab-btn');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      btns.forEach(b => { b.classList.remove('active'); b.style.borderBottomColor = 'transparent'; });
+      btn.classList.add('active');
+      btn.style.borderBottomColor = '#0284c7';
+      const tab = btn.getAttribute('data-tab');
+      document.querySelectorAll('.pdf-tab-panel').forEach(p => p.style.display = 'none');
+      const panel = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+      if (panel) panel.style.display = '';
+    });
+  });
+}
+
+function ownerRepoParts(repo) {
+  const [owner, name] = String(repo || '').split('/');
+  return { owner, name };
+}
+
+async function fetchManuscriptHtml(repo) {
+  const { owner, name } = ownerRepoParts(repo);
+  const pagesUrl = `https://${owner}.github.io/${name}/`;
+  const res = await fetch(pagesUrl);
+  if (!res.ok) throw new Error(`Could not fetch manuscript (${res.status})`);
+  const html = await res.text();
+  // Force relative asset URLs (css, images, site_libs) to resolve against
+  // the real GitHub Pages location instead of this page's origin.
+  return html.replace(/<head(\s[^>]*)?>/i, (m) => `${m}<base href="${pagesUrl}">`);
+}
+
+async function fetchEvidence(repo) {
+  const { owner, name } = ownerRepoParts(repo);
+  const res = await fetch(`https://raw.githubusercontent.com/${owner}/${name}/main/evidence.json`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+// ---- evidence badge + card, injected directly into the iframe document ----
+function evidenceCardHtml(claim) {
+  const reads = (claim.reads || []).map(r =>
+    `<div style="padding:.15rem 0;">⇣ <code style="font-size:.78rem;">${escapeHtml(r)}</code></div>`).join('');
+  const writes = (claim.writes || []).map(w =>
+    `<div style="padding:.15rem 0;">⇡ <code style="font-size:.78rem;">${escapeHtml(w)}</code></div>`).join('');
+  return `
+    <div class="lp-ev-card" style="display:none;margin:.5rem 0 1rem;border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:.9rem 1rem;font-family:'Inter',sans-serif;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <span style="font-family:ui-monospace,Menlo,monospace;font-size:.75rem;color:#b45309;font-weight:600;">#| label: ${escapeHtml(claim.label)}</span>
+        <a href="${escapeHtml(claim.githubPermalink)}" target="_blank" rel="noopener" style="font-size:.75rem;color:#94a3b8;text-decoration:none;">view source ↗</a>
+      </div>
+      ${claim.caption ? `<p style="font-size:.85rem;color:#334155;margin:.25rem 0 .6rem;">${escapeHtml(claim.caption)}</p>` : ''}
+      <div style="font-size:.8rem;color:#475569;">
+        ${reads}${writes}
+      </div>
+      <div style="margin-top:.6rem;font-size:.75rem;color:#16a34a;font-weight:600;">
+        ● CI verified reproducible · ${escapeHtml((claim._generatedAt || '').slice(0, 10))}
+      </div>
+    </div>`;
+}
+
+function injectEvidenceChips(doc, evidence) {
+  if (!evidence || !Array.isArray(evidence.claims)) return { linked: 0, total: 0 };
+  let linked = 0;
+  evidence.claims.forEach(claim => {
+    claim._generatedAt = evidence.generatedAt;
+    const el = doc.getElementById(claim.label);
+    if (!el) return; // Quarto didn't render this id in this build — skip rather than guess
+    linked++;
+
+    const badge = doc.createElement('button');
+    badge.textContent = '◆ Evidence';
+    badge.setAttribute('type', 'button');
+    badge.style.cssText = 'margin:.4rem 0 .2rem;display:inline-flex;align-items:center;gap:.3rem;'
+      + 'background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:999px;'
+      + 'padding:.2rem .65rem;font-size:.75rem;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;';
+
+    const card = doc.createElement('div');
+    card.innerHTML = evidenceCardHtml(claim);
+    const cardEl = card.firstElementChild;
+
+    badge.addEventListener('click', () => {
+      const open = cardEl.style.display === 'block';
+      doc.querySelectorAll('.lp-ev-card').forEach(c => c.style.display = 'none');
+      cardEl.style.display = open ? 'none' : 'block';
+    });
+
+    el.insertAdjacentElement('beforebegin', badge);
+    el.insertAdjacentElement('afterend', cardEl);
+  });
+  return { linked, total: evidence.claims.length };
+}
+
+// ---- sidebar: paper metadata (OpenAlex) ----
+async function loadPaperMetadata() {
+  const el = document.getElementById('lpMetadata');
+  if (!doi) { el.innerHTML = '<p class="muted">No DOI provided.</p>'; return; }
+  try {
+    const res = await fetch(`https://api.openalex.org/works/doi:${encodeURIComponent(doi)}?mailto=scienceecosystem@icloud.com`);
+    if (!res.ok) throw new Error('lookup failed');
+    const paper = await res.json();
+    const authors = (paper.authorships || []).slice(0, 3).map(a => a.author.display_name).join(', ') || 'Unknown authors';
+    const hasMore = (paper.authorships || []).length > 3;
+    el.innerHTML = `
+      <h4 style="line-height:1.4;">${escapeHtml(paper.title || 'Untitled')}</h4>
+      <p class="muted" style="font-size:.9rem;margin:.5rem 0;">${escapeHtml(authors)}${hasMore ? ' et al.' : ''}</p>
+      <p class="muted" style="font-size:.9rem;margin:.25rem 0;">${escapeHtml(String(paper.publication_year || ''))}</p>
+      <p style="margin:.5rem 0 0;font-size:.9rem;"><a href="https://doi.org/${escapeHtml(doi)}" target="_blank">doi.org/${escapeHtml(doi)}</a></p>
+    `;
+  } catch (e) {
+    el.innerHTML = '<p class="muted">Could not load paper information.</p>';
+  }
+}
+
+// ---- sidebar: references (OpenAlex referenced_works) ----
+async function loadReferences() {
+  const el = document.getElementById('lpReferences');
+  if (!doi) { el.innerHTML = '<p class="muted">No DOI provided.</p>'; return; }
+  try {
+    const res = await fetch(`https://api.openalex.org/works/doi:${encodeURIComponent(doi)}?mailto=scienceecosystem@icloud.com`);
+    const paper = await res.json();
+    const refs = paper.referenced_works || [];
+    if (!refs.length) { el.innerHTML = '<p class="muted">No references listed in OpenAlex.</p>'; return; }
+    el.innerHTML = `<p class="muted" style="font-size:.75rem;">${refs.length} references — see the manuscript's own reference list for full detail.</p>`;
+  } catch (e) {
+    el.innerHTML = '<p class="muted">Could not load references.</p>';
+  }
+}
+
+// ---- sidebar: research objects + repo/evidence links ----
+async function loadLinksAndResearchObjects(repo) {
+  const roEl = document.getElementById('lpResearchObjects');
+  const linksEl = document.getElementById('lpLinks');
+  const { owner, name } = ownerRepoParts(repo);
+
+  linksEl.innerHTML = `
+    <div class="reference-item" onclick="window.open('https://github.com/${escapeHtml(owner)}/${escapeHtml(name)}','_blank')">
+      <strong style="font-size:.85rem;">GitHub repository</strong>
+      <p class="muted small">${escapeHtml(repo)}</p>
+    </div>
+    <div class="reference-item" onclick="window.open('https://raw.githubusercontent.com/${escapeHtml(owner)}/${escapeHtml(name)}/main/evidence.json','_blank')">
+      <strong style="font-size:.85rem;">evidence.json</strong>
+      <p class="muted small">Raw claim → code/data manifest</p>
+    </div>
+  `;
+
+  if (!doi) { roEl.innerHTML = '<p class="muted">No DOI — cannot search Zenodo.</p>'; return; }
+  try {
+    const doiEsc = doi.replace(/"/g, '\\"');
+    const q = encodeURIComponent(`metadata.related_identifiers.identifier:"${doiEsc}"`);
+    const res = await fetch(`https://zenodo.org/api/records/?q=${q}&size=10`);
+    const data = await res.json();
+    const hits = data?.hits?.hits || [];
+    if (!hits.length) { roEl.innerHTML = '<p class="muted">No Zenodo records found for this DOI.</p>'; return; }
+    roEl.innerHTML = hits.map(h => {
+      const md = h.metadata || {};
+      const url = h.links?.html || `https://zenodo.org/records/${h.id}`;
+      return `<div class="reference-item" onclick="window.open('${escapeHtml(url)}','_blank')">
+        <strong style="font-size:.82rem;">${escapeHtml(md.title || 'Untitled')}</strong>
+        <p class="muted small">${escapeHtml(md.resource_type?.type || 'Record')}</p>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    roEl.innerHTML = '<p class="muted">Could not load research objects.</p>';
+  }
+}
+
+// ---- sidebar: outline from the mounted manuscript's own headings ----
+function buildOutline(doc) {
+  const host = document.getElementById('lpOutline');
+  const headings = doc.querySelectorAll('#quarto-document-content h1, #quarto-document-content h2');
+  if (!headings.length) { host.innerHTML = '<p class="muted" style="font-size:.85rem;">No headings found.</p>'; return; }
+  host.innerHTML = '';
+  headings.forEach(h => {
+    const a = document.createElement('a');
+    a.className = 'outline-item' + (h.tagName === 'H2' ? ' h2' : '');
+    a.textContent = h.textContent;
+    a.addEventListener('click', () => h.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    host.appendChild(a);
+  });
+}
+
+async function init() {
+  bindSidebarTabs();
+
+  if (!repoParam) {
+    document.querySelector('.pdf-main-body').innerHTML =
+      '<p style="padding:2rem;color:#c0392b;">No repository specified — open this page from a paper\'s "Living version" link.</p>';
+    return;
+  }
+
+  document.getElementById('lpPdfLink').href = doi ? `pdf-viewer.html?id=${encodeURIComponent('doi:' + doi)}` : '#';
+  document.getElementById('lpLivingLink').href = window.location.href;
+
+  loadPaperMetadata();
+  loadReferences();
+  loadLinksAndResearchObjects(repoParam);
+
+  const frame = document.getElementById('lpFrame');
+  const coverageEl = document.getElementById('lpCoverage');
+  const coverageInline = document.getElementById('lpCoverageInline');
+
+  try {
+    const [html, evidence] = await Promise.all([
+      fetchManuscriptHtml(repoParam),
+      fetchEvidence(repoParam)
+    ]);
+
+    frame.addEventListener('load', () => {
+      const doc = frame.contentDocument;
+      const { linked, total } = injectEvidenceChips(doc, evidence);
+      buildOutline(doc);
+
+      const pct = total ? Math.round((linked / total) * 100) : 0;
+      const summary = evidence
+        ? `<div class="lp-coverage"><strong>${linked}/${total}</strong>&nbsp;claims linked to code &amp; data (${pct}%)</div>`
+        : '<p class="muted" style="font-size:.85rem;">No evidence.json found for this repository.</p>';
+      coverageEl.innerHTML = summary;
+      coverageInline.innerHTML = evidence
+        ? `<strong>${linked}/${total}</strong>&nbsp;claims linked`
+        : 'No evidence manifest found';
+    }, { once: true });
+
+    frame.srcdoc = html;
+  } catch (e) {
+    document.querySelector('.pdf-main-body').innerHTML =
+      `<p style="padding:2rem;color:#c0392b;">Could not load the living manuscript: ${escapeHtml(e.message)}</p>`;
+    coverageEl.innerHTML = '<p class="muted">—</p>';
+  }
+}
+
+window.addEventListener('DOMContentLoaded', init);

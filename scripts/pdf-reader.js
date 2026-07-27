@@ -1097,6 +1097,7 @@ async function loadPaperMetadata(paperId) {
     // Chain into references and research objects (non-blocking)
     loadReferencesFromOpenAlex(paper);
     loadResearchObjects(paper);
+    if (rawDoi) checkLivingPaperAvailable(rawDoi, paper);
 
     return paper;
   } catch (e) {
@@ -1210,6 +1211,38 @@ async function loadResearchObjects(paper) {
   } catch(e) {
     el.innerHTML = '<p class="muted" style="font-size:.8rem;">Could not load research objects.</p>';
   }
+}
+
+// Living paper entry point: reuses the same artifact-discovery endpoint
+// paper.html already relies on, then confirms the discovered GitHub repo
+// actually publishes an evidence.json before showing the button — a repo
+// link alone isn't enough, since not every linked repo is a living paper.
+async function checkLivingPaperAvailable(rawDoi, paper) {
+  const btn = document.getElementById('livingPaperBtn');
+  if (!btn) return;
+  try {
+    // title/authors matter here — the resolver's GitHub-search path (which
+    // is what actually finds most repos) needs them; doi alone only
+    // catches repos with a Zenodo record explicitly cross-linked to the DOI.
+    const title = paper?.display_name || paper?.title || '';
+    const authors = (paper?.authorships || []).slice(0, 3)
+      .map(a => a?.author?.display_name).filter(Boolean).join(', ');
+    const qs = new URLSearchParams({ doi: rawDoi, title, authors });
+    const res = await fetch(`/api/paper/artifacts?${qs.toString()}`);
+    if (!res.ok) return;
+    const artifacts = await res.json();
+    const repoHit = (artifacts || []).find(a => a.repository === 'GitHub');
+    if (!repoHit || !repoHit.url) return;
+    const m = repoHit.url.match(/github\.com\/([^\/]+)\/([^\/#?]+)/i);
+    if (!m) return;
+    const repo = `${m[1]}/${m[2]}`;
+
+    const evRes = await fetch(`https://raw.githubusercontent.com/${repo}/main/evidence.json`);
+    if (!evRes.ok) return; // repo exists but isn't a living paper — no button
+
+    btn.href = `living-paper.html?repo=${encodeURIComponent(repo)}&doi=${encodeURIComponent(rawDoi)}`;
+    btn.style.display = '';
+  } catch (e) { /* silent — button just stays hidden */ }
 }
 
 async function extractPDFReferences(pdfUrl) {

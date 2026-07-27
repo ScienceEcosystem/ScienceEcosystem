@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Living Paper | ScienceEcosystem</title>
+  <link rel="stylesheet" href="assets/fonts/fonts.css" />
+  <link rel="stylesheet" href="style.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    body { margin: 0; font-family: 'Inter', sans-serif; display: flex; flex-direction: column; }
+
+    .pdf-container { display: flex; flex: 1; min-height: 0; }
+
+    .pdf-sidebar {
+      width: 300px;
+      background: #f8f9fa;
+      border-right: 1px solid #dee2e6;
+      overflow-y: auto;
+      padding: 0 1rem 1rem;
+      flex-shrink: 0;
+    }
+    .pdf-sidebar-tabs { position: sticky; top: 0; z-index: 2; background: #f8f9fa; padding-top: 1rem; }
+    .pdf-tab-btn { color: #555; }
+    .pdf-tab-btn.active { color: #0369a1; border-bottom-color: #0284c7 !important; }
+
+    .pdf-main { flex: 1; background: #e2e8f0; overflow: hidden; display: flex; flex-direction: column; }
+
+    .living-frame { width: 100%; height: 100%; border: none; background: #fff; }
+
+    .reference-item {
+      padding: 0.875rem;
+      margin-bottom: 0.75rem;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+    .reference-item:hover { border-left-color: #0284c7; background: #f0f9ff; }
+    .reference-number { font-size: .75rem; color: #94a3b8; font-weight: 700; margin-right: .35rem; }
+
+    .loading-spinner { color: #94a3b8; font-size: .85rem; padding: 1rem 0; }
+
+    .lp-toggle {
+      display: inline-flex; border: 1px solid #dee2e6; border-radius: 999px; overflow: hidden;
+      font-size: .82rem;
+    }
+    .lp-toggle a {
+      padding: .35rem .9rem; text-decoration: none; color: #475569; background: #fff;
+    }
+    .lp-toggle a.active { background: #0284c7; color: #fff; }
+
+    .lp-coverage {
+      display: flex; align-items: center; gap: .4rem; font-size: .82rem; color: #475569;
+    }
+    .lp-coverage strong { color: #0f172a; }
+
+    .outline-item {
+      display: block; padding: .35rem 0; font-size: .85rem; color: #334155; text-decoration: none;
+      cursor: pointer; border-bottom: 1px solid #eef1f6;
+    }
+    .outline-item:hover { color: #0284c7; }
+    .outline-item.h2 { padding-left: .9rem; font-size: .8rem; color: #64748b; }
+  </style>
+  <link rel="manifest" href="/manifest.json"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <link rel="apple-touch-icon" href="/assets/logos_se/logo.png"/>
+</head>
+<body data-page="living-paper">
+  <nav class="app-nav" role="navigation" aria-label="Primary">
+    <div class="nav-inner container">
+      <div class="logo">
+        <a href="index.html" aria-label="ScienceEcosystem Home">
+          <img src="assets/logos_se/logo_name.png" alt="ScienceEcosystem" />
+        </a>
+      </div>
+      <div class="nav-center">
+        <form class="nav-search" role="search" aria-label="Site search" onsubmit="handleSearch('searchInput'); return false;">
+          <label class="visually-hidden" for="searchInput">Search</label>
+          <input id="searchInput" class="input input-pill" type="text" placeholder="Search..." onkeydown="if(event.key==='Enter') handleSearch('searchInput')"/>
+        </form>
+      </div>
+      <div class="nav-right">
+        <a class="nav-link" href="about.html">About</a>
+        <a id="profileLink" class="nav-link" href="user-profile.html" style="display:none;"></a>
+        <a id="orcidLoginBtn" class="btn btn-orcid" href="/auth/orcid/login" aria-label="Login with ORCID" style="display:inline-flex;">
+          <span>Login with</span>
+          <img class="orcid-icon" src="assets/logos/orcid.png" alt="ORCID" />
+        </a>
+        <button id="logoutBtn" class="btn" style="display:none;">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="pdf-container">
+    <aside class="pdf-sidebar">
+      <div class="pdf-sidebar-tabs" style="display:flex;border-bottom:1px solid #e5e7eb;margin-bottom:.75rem;gap:0;">
+        <button class="pdf-tab-btn active" data-tab="info" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid #0284c7;cursor:pointer;font-weight:600;">Info</button>
+        <button class="pdf-tab-btn" data-tab="contents" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Contents</button>
+        <button class="pdf-tab-btn" data-tab="refs" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Refs</button>
+        <button class="pdf-tab-btn" data-tab="links" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Links</button>
+      </div>
+
+      <div id="tabInfo" class="pdf-tab-panel">
+        <div id="lpMetadata" class="paper-metadata"><div class="loading-spinner">Loading paper info…</div></div>
+
+        <h3 style="margin:1.5rem 0 .5rem;font-size:1rem;">Claim-level evidence</h3>
+        <div id="lpCoverage"><div class="loading-spinner">Reading evidence.json…</div></div>
+
+        <h3 style="margin:1.5rem 0 .5rem;font-size:1rem;">Research Objects</h3>
+        <div id="lpResearchObjects"><div class="loading-spinner">Loading…</div></div>
+      </div>
+
+      <div id="tabContents" class="pdf-tab-panel" style="display:none;">
+        <div id="lpOutline"><p class="muted" style="font-size:.85rem;">Loading outline…</p></div>
+      </div>
+
+      <div id="tabRefs" class="pdf-tab-panel" style="display:none;">
+        <div id="lpReferences"><div class="loading-spinner">Loading references…</div></div>
+      </div>
+
+      <div id="tabLinks" class="pdf-tab-panel" style="display:none;">
+        <div id="lpLinks"><div class="loading-spinner">Indexing links…</div></div>
+      </div>
+    </aside>
+
+    <main class="pdf-main">
+      <div class="pdf-annot-toolbar" style="display:flex;gap:.75rem;align-items:center;padding:.5rem .75rem;background:#f8f9fa;border-bottom:1px solid #dee2e6;flex-wrap:wrap;flex-shrink:0;">
+        <div class="lp-toggle" id="lpModeToggle">
+          <a id="lpPdfLink" href="#">Published PDF</a>
+          <a id="lpLivingLink" href="#" class="active">Living version</a>
+        </div>
+        <div style="width:1px;height:18px;background:#dee2e6;"></div>
+        <div class="lp-coverage" id="lpCoverageInline">
+          <span class="loading-spinner" style="padding:0;">Checking evidence…</span>
+        </div>
+        <div style="flex:1;"></div>
+        <span class="muted" style="font-size:.78rem;">Click a highlighted result in the manuscript for its code &amp; data.</span>
+      </div>
+      <div class="pdf-main-body" style="flex:1;min-height:0;overflow:hidden;">
+        <iframe id="lpFrame" class="living-frame" title="Living manuscript"></iframe>
+      </div>
+    </main>
+  </div>
+
+  <script src="scripts/search.js" defer></script>
+  <script src="scripts/living-paper.js" defer></script>
+  <script src="scripts/session.js" defer></script>
+</body>
+</html>
