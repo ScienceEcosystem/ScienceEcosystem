@@ -1220,6 +1220,11 @@ async function loadResearchObjects(paper) {
 async function checkLivingPaperAvailable(rawDoi, paper) {
   const btn = document.getElementById('livingPaperBtn');
   if (!btn) return;
+  // rawDoi comes straight from OpenAlex, which always returns the full
+  // https://doi.org/... URL — normalize to bare here so the generated link
+  // (and the artifacts lookup) don't end up with a doubly-wrapped DOI.
+  rawDoi = String(rawDoi || '').replace(/^doi:/i, '').replace(/^https?:\/\/(dx\.)?doi\.org\//i, '');
+  if (!rawDoi) return;
   try {
     // title/authors matter here — the resolver's GitHub-search path (which
     // is what actually finds most repos) needs them; doi alone only

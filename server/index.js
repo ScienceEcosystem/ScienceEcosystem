@@ -137,15 +137,15 @@ app.use((req, res, next) => {
   // CSP: lock down to known origins; 'unsafe-inline' needed for current inline scripts
   res.setHeader("Content-Security-Policy", [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://d1bxh8uas1mnw7.cloudfront.net https://embed.altmetric.com",
-    "style-src 'self' 'unsafe-inline'",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    "script-src 'self' 'unsafe-inline' https://d1bxh8uas1mnw7.cloudfront.net https://embed.altmetric.com https://*.github.io https://cdn.jsdelivr.net",
+    "style-src 'self' 'unsafe-inline' https://*.github.io https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com https://*.github.io data:",
     "img-src 'self' data: blob: https:",
-    "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk https://*.wikipedia.org https://api.inaturalist.org https://www.inaturalist.org https://api.gbif.org https://*.r2.cloudflarestorage.com",
+    "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk https://*.wikipedia.org https://api.inaturalist.org https://www.inaturalist.org https://api.gbif.org https://*.r2.cloudflarestorage.com https://raw.githubusercontent.com https://*.github.io https://api.github.com",
     "media-src https://upload.wikimedia.org https://xeno-canto.org",
-    "frame-src 'none'",
+    "frame-src 'self'",
     "object-src 'none'",
-    "base-uri 'self'"
+    "base-uri 'self' https://*.github.io"
   ].join("; "));
   next();
 });

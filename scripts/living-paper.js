@@ -6,7 +6,12 @@
 
 const params = new URLSearchParams(window.location.search);
 const repoParam = params.get('repo');        // "owner/repo"
-const doi = params.get('doi');                // bare DOI, no https://doi.org/
+// Accept whatever form the linking page passed (OpenAlex always returns the
+// full https://doi.org/... URL, not a bare DOI) and normalize once here,
+// rather than trust every caller to have stripped it already.
+const doi = (params.get('doi') || '')
+  .replace(/^doi:/i, '')
+  .replace(/^https?:\/\/(dx\.)?doi\.org\//i, '') || null;
 
 function escapeHtml(s) {
   return String(s == null ? "" : s)
