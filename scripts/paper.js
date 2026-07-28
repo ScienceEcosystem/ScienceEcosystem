@@ -651,7 +651,10 @@
     var chips = [
       badge(doiUrl,    "Publisher page"),
       badge(pdfViewer, "Read PDF", "badge-oa"),
-      badge(p.id,      "OpenAlex")
+      badge(p.id,      "OpenAlex"),
+      // Populated async by checkLivingPaperChip() once a linked repo is
+      // confirmed to actually publish an evidence.json — hidden until then.
+      '<a id="livingPaperChip" class="badge" href="#" style="display:none;background:#fffbeb;border-color:#fde68a;color:#92400e;font-weight:600;" title="Full text with claims linked to the code and data that produced them">◆ Living version</a>'
     ];
 
     var aList = authorLinksList(p.authorships);
@@ -668,6 +671,27 @@
       + (fundingRow || "")
       + '<p class="chips">'+chips.filter(Boolean).join(" ")+'</p>';
   }
+
+  // Reuses the research objects this page already fetched for the sidebar
+  // (harvestAndFilterResearchObjects) instead of re-querying — just checks
+  // whether the GitHub repo already found there also publishes an
+  // evidence.json, i.e. is actually a living paper and not just "has code".
+  async function checkLivingPaperChip(ros, bareDoi){
+    var chip = $("livingPaperChip");
+    if (!chip) return;
+    var repoHit = (ros || []).find(function(r){ return r && r.repository === "GitHub" && r.url; });
+    if (!repoHit) return;
+    var m = String(repoHit.url).match(/github\.com\/([^\/]+)\/([^\/#?]+)/i);
+    if (!m) return;
+    var repo = m[1] + "/" + m[2];
+    try{
+      var evRes = await fetch("https://raw.githubusercontent.com/" + repo + "/main/evidence.json");
+      if (!evRes.ok) return; // has a repo, but not a living paper — chip stays hidden
+      chip.href = "living-paper.html?repo=" + encodeURIComponent(repo) + "&doi=" + encodeURIComponent(bareDoi || "");
+      chip.style.display = "";
+    } catch(_) { /* silent — chip just stays hidden */ }
+  }
+
   function wireHeaderToggles(){
     var asMore = $("authorsShowMore"), asLess = $("authorsShowLess");
     if (asMore) asMore.onclick = function(){ $("authorsShort").style.display="none"; $("authorsFull").style.display="inline"; };
@@ -2020,6 +2044,7 @@
 
     renderJournalBlockSimple(p, source);
     renderReproducibilityScore(p, ros);
+    checkLivingPaperChip(ros, normalizeDOI(doiFromWork(p)));
 
     var pmcid = pmcidFromWork(p);
     if (pmcid) loadFigures(pmcid);
