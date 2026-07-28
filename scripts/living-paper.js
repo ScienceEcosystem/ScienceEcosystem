@@ -127,9 +127,44 @@ async function loadPaperMetadata() {
       <p class="muted" style="font-size:.9rem;margin:.25rem 0;">${escapeHtml(String(paper.publication_year || ''))}</p>
       <p style="margin:.5rem 0 0;font-size:.9rem;"><a href="https://doi.org/${escapeHtml(doi)}" target="_blank">doi.org/${escapeHtml(doi)}</a></p>
     `;
+
+    // pdf-viewer.html needs both id and pdf — a bare doi id with no pdf
+    // param makes it show "No PDF URL provided", so the toggle needs the
+    // actual OA PDF URL, not just this paper's identity.
+    const idTail = String(paper.id || '').replace(/^https?:\/\/openalex\.org\//i, '');
+    const oaPdf = getOpenAccessPdf(paper);
+    const pdfLink = document.getElementById('lpPdfLink');
+    if (pdfLink) {
+      pdfLink.href = oaPdf
+        ? `pdf-viewer.html?id=${encodeURIComponent(idTail)}&pdf=${encodeURIComponent(oaPdf)}`
+        : `pdf-viewer.html?id=${encodeURIComponent(idTail)}`;
+    }
   } catch (e) {
     el.innerHTML = '<p class="muted">Could not load paper information.</p>';
   }
+}
+
+function get(obj, path) {
+  return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+}
+
+// Matches getOpenAccessPdf() in paper.js exactly — best_oa_location and
+// primary_location don't always carry the pdf_url; for a lot of papers
+// (this one included) it's only in the broader locations[] array.
+function getOpenAccessPdf(p) {
+  const direct = get(p, 'best_oa_location.pdf_url')
+    || get(p, 'best_oa_location.url_for_pdf')
+    || get(p, 'primary_location.pdf_url')
+    || get(p, 'primary_location.url_for_pdf');
+  if (direct) return direct;
+  const locs = Array.isArray(p.locations) ? p.locations : [];
+  for (let i = 0; i < locs.length; i++) {
+    const u = locs[i].pdf_url || locs[i].url_for_pdf || null;
+    if (u) return u;
+  }
+  const oaUrl = get(p, 'open_access.oa_url');
+  if (oaUrl && /\.pdf(\?|$)/i.test(oaUrl)) return oaUrl;
+  return null;
 }
 
 // ---- sidebar: references (OpenAlex referenced_works) ----
@@ -209,7 +244,9 @@ async function init() {
     return;
   }
 
-  document.getElementById('lpPdfLink').href = doi ? `pdf-viewer.html?id=${encodeURIComponent('doi:' + doi)}` : '#';
+  // lpPdfLink gets its real href (id + actual OA pdf URL) inside
+  // loadPaperMetadata() once the OpenAlex lookup resolves — a bare doi
+  // id with no pdf param makes pdf-viewer.html show "No PDF URL provided".
   document.getElementById('lpLivingLink').href = window.location.href;
 
   loadPaperMetadata();
