@@ -63,6 +63,16 @@ function evidenceCardHtml(claim) {
     `<div style="padding:.15rem 0;">⇣ <code style="font-size:.78rem;">${escapeHtml(r)}</code></div>`).join('');
   const writes = (claim.writes || []).map(w =>
     `<div style="padding:.15rem 0;">⇡ <code style="font-size:.78rem;">${escapeHtml(w)}</code></div>`).join('');
+
+  // Many claim chunks are thin display wrappers (e.g. `x |> knitr::kable()`)
+  // — the reads/writes above may actually have come from an earlier chunk
+  // that did the real computation. Show that trail rather than silently
+  // presenting merged lineage as if this one chunk did all of it.
+  const computedIn = (claim.computedIn || []).map(c => {
+    const labelPart = c.label ? `<code style="font-size:.75rem;">${escapeHtml(c.label)}</code>` : 'an earlier unlabelled chunk';
+    return `<div style="padding:.15rem 0;">↖ ${labelPart} <a href="${escapeHtml(c.githubPermalink)}" target="_blank" rel="noopener" style="color:#b45309;text-decoration:none;">L${c.lineStart}-L${c.lineEnd} ↗</a></div>`;
+  }).join('');
+
   return `
     <div class="lp-ev-card" style="display:none;margin:.5rem 0 1rem;border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:.9rem 1rem;font-family:'Inter',sans-serif;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
@@ -73,6 +83,11 @@ function evidenceCardHtml(claim) {
       <div style="font-size:.8rem;color:#475569;">
         ${reads}${writes}
       </div>
+      ${computedIn ? `
+      <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px dashed #fde68a;font-size:.8rem;color:#92400e;">
+        <div style="font-weight:600;margin-bottom:.2rem;">Computed in:</div>
+        ${computedIn}
+      </div>` : ''}
       <div style="margin-top:.6rem;font-size:.75rem;color:#16a34a;font-weight:600;">
         ● CI verified reproducible · ${escapeHtml((claim._generatedAt || '').slice(0, 10))}
       </div>
