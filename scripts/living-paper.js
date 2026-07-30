@@ -64,14 +64,27 @@ function evidenceCardHtml(claim) {
   const writes = (claim.writes || []).map(w =>
     `<div style="padding:.15rem 0;">⇡ <code style="font-size:.78rem;">${escapeHtml(w)}</code></div>`).join('');
 
-  // Many claim chunks are thin display wrappers (e.g. `x |> knitr::kable()`)
-  // — the reads/writes above may actually have come from an earlier chunk
-  // that did the real computation. Show that trail rather than silently
-  // presenting merged lineage as if this one chunk did all of it.
-  const computedIn = (claim.computedIn || []).map(c => {
-    const labelPart = c.label ? `<code style="font-size:.75rem;">${escapeHtml(c.label)}</code>` : 'an earlier unlabelled chunk';
-    return `<div style="padding:.15rem 0;">↖ ${labelPart} <a href="${escapeHtml(c.githubPermalink)}" target="_blank" rel="noopener" style="color:#b45309;text-decoration:none;">L${c.lineStart}-L${c.lineEnd} ↗</a></div>`;
-  }).join('');
+  // Boilerplate every claim depends on (raw data load -> clean -> cache) —
+  // named, linked, but collapsed to one line since it's not what makes
+  // THIS claim's number what it is.
+  const pipeline = claim.dataPipeline || [];
+  const pipelineHtml = pipeline.length ? `
+      <div style="margin-top:.5rem;font-size:.76rem;color:#a37a3c;">
+        Data pipeline:
+        ${pipeline.map(p => `<a href="${escapeHtml(p.githubPermalink)}" target="_blank" rel="noopener" style="color:#a37a3c;text-decoration:none;border-bottom:1px dotted #d9b46a;">${escapeHtml(p.label || ('L' + p.lineStart))}</a>`).join(' → ')}
+      </div>` : '';
+
+  // The chunk(s) that actually did the interesting work when the claim's
+  // own citable chunk is a display wrapper — shown as real code, not just
+  // a link, so the reader doesn't have to leave the page to see the model.
+  const computedIn = (claim.computedIn || []).map(c => `
+    <div style="margin-top:.6rem;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.3rem;">
+        <code style="font-size:.75rem;color:#92400e;font-weight:600;">${escapeHtml(c.label || 'unlabelled chunk')}</code>
+        <a href="${escapeHtml(c.githubPermalink)}" target="_blank" rel="noopener" style="font-size:.72rem;color:#94a3b8;text-decoration:none;">L${c.lineStart}-L${c.lineEnd} ↗</a>
+      </div>
+      <pre style="margin:0;max-height:260px;overflow:auto;background:#1e1b16;color:#f2e9dc;border-radius:6px;padding:.6rem .7rem;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;"><code>${escapeHtml(c.code || '')}</code></pre>
+    </div>`).join('');
 
   return `
     <div class="lp-ev-card" style="display:none;margin:.5rem 0 1rem;border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:.9rem 1rem;font-family:'Inter',sans-serif;">
@@ -83,9 +96,9 @@ function evidenceCardHtml(claim) {
       <div style="font-size:.8rem;color:#475569;">
         ${reads}${writes}
       </div>
+      ${pipelineHtml}
       ${computedIn ? `
-      <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px dashed #fde68a;font-size:.8rem;color:#92400e;">
-        <div style="font-weight:600;margin-bottom:.2rem;">Computed in:</div>
+      <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px dashed #fde68a;">
         ${computedIn}
       </div>` : ''}
       <div style="margin-top:.6rem;font-size:.75rem;color:#16a34a;font-weight:600;">
