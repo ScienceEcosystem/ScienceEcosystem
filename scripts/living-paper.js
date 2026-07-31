@@ -74,17 +74,30 @@ function evidenceCardHtml(claim) {
         ${pipeline.map(p => `<a href="${escapeHtml(p.githubPermalink)}" target="_blank" rel="noopener" style="color:#a37a3c;text-decoration:none;border-bottom:1px dotted #d9b46a;">${escapeHtml(p.label || ('L' + p.lineStart))}</a>`).join(' → ')}
       </div>` : '';
 
-  // The chunk(s) that actually did the interesting work when the claim's
-  // own citable chunk is a display wrapper — shown as real code, not just
-  // a link, so the reader doesn't have to leave the page to see the model.
-  const computedIn = (claim.computedIn || []).map(c => `
+  const codeBlockHtml = (label, permalink, code) => `
     <div style="margin-top:.6rem;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.3rem;">
-        <code style="font-size:.75rem;color:#92400e;font-weight:600;">${escapeHtml(c.label || 'unlabelled chunk')}</code>
-        <a href="${escapeHtml(c.githubPermalink)}" target="_blank" rel="noopener" style="font-size:.72rem;color:#94a3b8;text-decoration:none;">L${c.lineStart}-L${c.lineEnd} ↗</a>
+        <code style="font-size:.75rem;color:#92400e;font-weight:600;">${escapeHtml(label || 'unlabelled chunk')}</code>
+        <a href="${escapeHtml(permalink)}" target="_blank" rel="noopener" style="font-size:.72rem;color:#94a3b8;text-decoration:none;">view ↗</a>
       </div>
-      <pre style="margin:0;max-height:260px;overflow:auto;background:#1e1b16;color:#f2e9dc;border-radius:6px;padding:.6rem .7rem;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;"><code>${escapeHtml(c.code || '')}</code></pre>
-    </div>`).join('');
+      <pre style="margin:0;max-height:260px;overflow:auto;background:#1e1b16;color:#f2e9dc;border-radius:6px;padding:.6rem .7rem;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;"><code>${escapeHtml(code || '')}</code></pre>
+    </div>`;
+
+  // This chunk's own code — the model/plot/test itself when the claim's
+  // citable chunk IS the interesting part (e.g. tbl-rf's own
+  // randomForest() call), which is the common case and was previously
+  // shown nowhere at all — only ancestor chunks ever got a code block.
+  // No separate label/link header here (unlike computedIn below) — the
+  // card's own header already names and links this exact chunk.
+  const ownCodeHtml = claim.code ? `
+    <pre style="margin:.6rem 0 0;max-height:260px;overflow:auto;background:#1e1b16;color:#f2e9dc;border-radius:6px;padding:.6rem .7rem;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.74rem;line-height:1.5;"><code>${escapeHtml(claim.code)}</code></pre>` : '';
+
+  // The chunk(s) that actually did the interesting work when the claim's
+  // own citable chunk is instead a display wrapper — shown as real code,
+  // not just a link, so the reader doesn't have to leave the page to see
+  // the model.
+  const computedIn = (claim.computedIn || [])
+    .map(c => codeBlockHtml(c.label, c.githubPermalink, c.code)).join('');
 
   return `
     <div class="lp-ev-card" style="display:none;margin:.5rem 0 1rem;border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:.9rem 1rem;font-family:'Inter',sans-serif;">
@@ -97,8 +110,10 @@ function evidenceCardHtml(claim) {
         ${reads}${writes}
       </div>
       ${pipelineHtml}
+      ${ownCodeHtml}
       ${computedIn ? `
       <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px dashed #fde68a;">
+        <div style="font-size:.72rem;color:#a37a3c;text-transform:uppercase;letter-spacing:.03em;margin-bottom:.2rem;">Computed in</div>
         ${computedIn}
       </div>` : ''}
       <div style="margin-top:.6rem;font-size:.75rem;color:#16a34a;font-weight:600;">
