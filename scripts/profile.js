@@ -781,15 +781,106 @@
     if (pag) pag.innerHTML = "";
   }
 
+  // A paper's own code/data archive (auto-published via GitHub->Zenodo)
+  // gets its own OpenAlex work — type "software"/"dataset" — authored by
+  // the same person. Left alone, that shows up as if it were a second,
+  // independent publication (same "Published in: X" / "Cited by" layout
+  // as a real article, sometimes with outright wrong venue metadata from
+  // OpenAlex's own crawl of Zenodo/DataCite). Nest it under the real
+  // article instead, using the Zenodo record's own related-identifier
+  // back-link — the same "Is supplement to <article DOI>" relation the
+  // living-paper feature already depends on — rather than hide or
+  // duplicate it.
+  var AUXILIARY_TYPES = { software: true, dataset: true };
+  var _zenodoParentCache = Object.create(null); // bare DOI -> parent bare DOI | null
+
+  function bareDoi(work){
+    var d = work && work.doi;
+    if (!d) return null;
+    return String(d).replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").replace(/^doi:/i, "").toLowerCase();
+  }
+
+  async function findZenodoParentDoi(doi){
+    if (!doi) return null;
+    if (doi in _zenodoParentCache) return _zenodoParentCache[doi];
+    var m = doi.match(/^10\.5281\/zenodo\.(\d+)$/i);
+    if (!m) { _zenodoParentCache[doi] = null; return null; }
+    try{
+      var res = await fetch("https://zenodo.org/api/records/" + m[1]);
+      if (!res.ok) { _zenodoParentCache[doi] = null; return null; }
+      var data = await res.json();
+      var rels = get(data, "metadata.related_identifiers", []) || [];
+      var hit = rels.find(function(r){
+        return r && String(r.scheme || "").toLowerCase() === "doi" &&
+          !/zenodo\.\d+$/i.test(r.identifier || "");
+      });
+      var parent = hit ? String(hit.identifier).replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").toLowerCase() : null;
+      _zenodoParentCache[doi] = parent;
+      return parent;
+    }catch(_){ _zenodoParentCache[doi] = null; return null; }
+  }
+
+  // Resolves in the background — pagination means the parent article card
+  // may not exist in the DOM yet (or ever, if it's on a later page the
+  // reader never loads), so falling back to a normal top-level card when
+  // no match is found is a safe default: nothing is ever silently hidden.
+  async function attachAuxiliaryWork(work, list){
+    var doi = bareDoi(work);
+    var parentDoi = await findZenodoParentDoi(doi);
+    // data-doi on rendered cards is whatever doiFrom(work) returned with only
+    // a "doi:" prefix stripped — in practice always the full
+    // "https://doi.org/10.xxxx/..." form OpenAlex uses, not a bare DOI — so
+    // this can't be an exact attribute-selector match against parentDoi.
+    // Normalize every rendered card's own data-doi the same way and look up
+    // in that map instead.
+    var parentCard = null;
+    if (parentDoi){
+      var cards = list.querySelectorAll("[data-doi]");
+      for (var k=0;k<cards.length;k++){
+        var cardDoi = String(cards[k].getAttribute("data-doi") || "")
+          .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").replace(/^doi:/i, "").toLowerCase();
+        if (cardDoi === parentDoi){ parentCard = cards[k]; break; }
+      }
+    }
+
+    if (!parentCard){
+      list.insertAdjacentHTML("beforeend", SE.components.renderPaperCard(work, { compact: true }));
+      SE.components.enhancePaperCards(list);
+      return;
+    }
+
+    var doiHref = doi ? ("https://doi.org/" + doi) : null;
+    var title = escapeHtml(work.display_name || work.title || "Code & data archive");
+    var typeLabel = work.type === "dataset" ? "Dataset" : "Software";
+    var line = document.createElement("p");
+    line.className = "muted";
+    line.style.cssText = "font-size:.82rem;margin:.5rem 0 0;padding-top:.5rem;border-top:1px dashed #e2e8f0;";
+    line.innerHTML = "↳ " + typeLabel + " archive: " +
+      (doiHref
+        ? '<a href="' + doiHref + '" target="_blank" rel="noopener">' + title + "</a>"
+        : title);
+    parentCard.appendChild(line);
+  }
+
   function renderWorksChunk(works){
     var list = $("publicationsList");
     if (!list) return;
     if (/Loading publications/i.test(list.textContent)) list.innerHTML = "";
 
+    var normalWorks = [];
+    var auxiliaryWorks = [];
     for (var i=0;i<works.length;i++){
-      list.insertAdjacentHTML("beforeend", SE.components.renderPaperCard(works[i], { compact: true }));
+      (AUXILIARY_TYPES[works[i].type] ? auxiliaryWorks : normalWorks).push(works[i]);
+    }
+
+    for (var j=0;j<normalWorks.length;j++){
+      list.insertAdjacentHTML("beforeend", SE.components.renderPaperCard(normalWorks[j], { compact: true }));
     }
     SE.components.enhancePaperCards(list);
+
+    // Non-blocking — normal works are already visible; auxiliary ones nest
+    // in (or fall back to a top-level card) as their Zenodo lookups resolve.
+    auxiliaryWorks.forEach(function(w){ attachAuxiliaryWork(w, list); });
 
     // After rendering, update sidebar derivations (co-authors + aff years) from these works
     processWorksForSidebar(works);
