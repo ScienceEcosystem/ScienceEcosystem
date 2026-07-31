@@ -77,6 +77,18 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   if (!url.protocol.startsWith("http")) return;
 
+  // Living papers: the manuscript itself (GitHub Pages) and its evidence
+  // manifest (raw.githubusercontent.com) are live third-party content, not
+  // app-shell assets. Falling through to the "everything else" branch below
+  // wraps them in fetch().catch(() => 408) — on a higher-latency connection
+  // (e.g. a corporate SSL-inspecting proxy) that's enough to turn a merely
+  // slow load into a hard failure, even though the exact same URL loads
+  // fine as a plain, un-intercepted navigation. Let the browser handle
+  // these natively instead of re-issuing them from inside the worker.
+  if (url.hostname.endsWith(".github.io") || url.hostname === "raw.githubusercontent.com") {
+    return;
+  }
+
   // ── 1. API calls (our own backend + OpenAlex + external APIs) ──
   //    Network First: try network, fall back to cache if offline
   const isApiCall =
