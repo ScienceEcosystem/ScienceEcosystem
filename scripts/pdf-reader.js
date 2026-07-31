@@ -1172,39 +1172,46 @@ async function loadResearchObjects(paper) {
   const el = document.getElementById('pdfResearchObjects');
   if (!el) return;
   const doi = paper.doi ? paper.doi.replace(/^https?:\/\/doi\.org\//i, '') : null;
-  if (!doi) {
-    el.innerHTML = '<p class="muted" style="font-size:.8rem;">No DOI — cannot search for research objects.</p>';
+  const title = paper.display_name || paper.title || '';
+  if (!doi && !title) {
+    el.innerHTML = '<p class="muted" style="font-size:.8rem;">No DOI or title — cannot search for research objects.</p>';
     return;
   }
-  el.innerHTML = '<p class="muted" style="font-size:.8rem;">Searching Zenodo…</p>';
+  el.innerHTML = '<p class="muted" style="font-size:.8rem;">Searching for code &amp; data…</p>';
   try {
-    // Use same two-query approach as paper.js fetchZenodoBacklinks
-    const doiEsc = doi.replace(/"/g, '\\"');
-    let hits = [];
-    const q1 = encodeURIComponent(`related.identifiers.identifier:"${doiEsc}"`);
-    const r1 = await fetch(`https://zenodo.org/api/records/?q=${q1}&size=20`);
-    if (r1.ok) { const d1 = await r1.json(); hits = d1?.hits?.hits || []; }
-    if (!hits.length) {
-      const q2 = encodeURIComponent(`metadata.related_identifiers.identifier:"${doiEsc}"`);
-      const r2 = await fetch(`https://zenodo.org/api/records/?q=${q2}&size=20`);
-      if (r2.ok) { const d2 = await r2.json(); hits = d2?.hits?.hits || []; }
-    }
-    if (!hits.length) {
-      el.innerHTML = '<p class="muted" style="font-size:.8rem;">No research objects found on Zenodo.</p>';
+    // Same backend endpoint paper.html uses (server/artifacts-resolver.js) —
+    // it cross-checks DataCite, Zenodo (by DOI and by title), CrossRef
+    // relations, OpenAlex-cited repos, Figshare, GitHub (title/author
+    // search), publisher DOI links, and EPMC. A plain client-side Zenodo
+    // API query (the previous approach here) only ever found a fraction of
+    // what paper.html shows, and often nothing at all — same paper, two
+    // different answers depending on which page you were on.
+    const authors = (paper.authorships || []).slice(0, 3)
+      .map(a => a?.author?.display_name).filter(Boolean).join(', ');
+    const qs = new URLSearchParams();
+    if (doi) qs.set('doi', doi);
+    if (title) qs.set('title', title);
+    if (authors) qs.set('authors', authors);
+    if (paper.id) qs.set('id', paper.id);
+    const res = await fetch(`/api/paper/artifacts?${qs.toString()}`);
+    if (!res.ok) throw new Error('artifacts lookup failed');
+    const items = await res.json();
+    if (!Array.isArray(items) || !items.length) {
+      el.innerHTML = '<p class="muted" style="font-size:.8rem;">No research objects found.</p>';
       return;
     }
-    el.innerHTML = hits.map(h => {
-      const md = h.metadata || {};
-      const title = md.title || 'Untitled';
-      const typeRaw = (md.resource_type?.type || '').toLowerCase();
-      const type = typeRaw.includes('software') ? 'Software' : typeRaw.includes('dataset') ? 'Dataset' : (md.resource_type?.type || 'Record');
-      const url = (h.links?.html) || `https://zenodo.org/records/${h.id}`;
-      const recDoi = md.doi || `10.5281/zenodo.${h.id}`;
+    el.innerHTML = items.map(x => {
+      const url = x.url || (x.doi ? `https://doi.org/${x.doi}` : '');
+      const conf = (typeof x.confidence === 'number' && x.confidence < 80)
+        ? `<span class="muted" style="font-size:.7rem;">${x.confidence}% match</span> ` : '';
+      const doiLink = x.doi
+        ? `<a href="https://doi.org/${escapeHtml(x.doi)}" target="_blank" class="badge badge-ok" style="margin-top:.2rem;font-size:.7rem;" onclick="event.stopPropagation()">DOI</a>`
+        : '';
       return `<div class="reference-item">
         <div>
-          <strong style="font-size:.82rem;"><a href="${url}" target="_blank" onclick="event.stopPropagation()">${escapeHtml(title)}</a></strong>
-          <p class="muted small">${escapeHtml(type)}</p>
-          <a href="https://doi.org/${escapeHtml(recDoi)}" target="_blank" class="badge badge-ok" style="margin-top:.2rem;font-size:.7rem;">DOI</a>
+          <strong style="font-size:.82rem;"><a href="${escapeHtml(url)}" target="_blank" onclick="event.stopPropagation()">${escapeHtml(x.title || x.doi || x.url || 'Untitled')}</a></strong>
+          <p class="muted small">${conf}${escapeHtml(x.type || 'Record')}${x.provenance ? ' · ' + escapeHtml(x.provenance) : ''}</p>
+          ${doiLink}
         </div>
       </div>`;
     }).join('');
