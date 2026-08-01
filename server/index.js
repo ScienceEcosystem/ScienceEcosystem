@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import pkg from "pg";
 import { resolveArtifacts } from "./artifacts-resolver.js";
+import { resolveLivingPaper } from "./living-paper-cache.js";
 import { checkJournalIntegrity, clearJournalIntegrityCache } from "./journal-integrity.js";
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -340,6 +341,22 @@ async function pgInit() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       PRIMARY KEY (orcid, primary_author_id, merged_author_id),
       CONSTRAINT fk_user3 FOREIGN KEY (orcid) REFERENCES users(orcid) ON DELETE CASCADE
+    );
+
+    -- Caches the living-paper resolution for a GitHub repo (see
+    -- server/living-paper-cache.js): whether it has an author-committed
+    -- evidence.json (optionally CI-verified) or one ScienceEcosystem
+    -- generated itself by parsing the repo. Keyed on repo, invalidated by
+    -- comparing the branch's current commit sha, not a fixed TTL.
+    CREATE TABLE IF NOT EXISTS living_paper_cache (
+      repo TEXT PRIMARY KEY,
+      tier TEXT NOT NULL,
+      sha TEXT,
+      branch TEXT,
+      evidence JSONB,
+      claim_count INTEGER,
+      sha_checked_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      generated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
 
@@ -3079,6 +3096,26 @@ app.get("/api/paper/artifacts", async (req, res) => {
     return res.json(results);
   } catch (err) {
     console.error("GET /api/paper/artifacts failed:", err);
+    return res.status(500).json({ error: String(err?.message || err) });
+  }
+});
+
+// Resolves whether a GitHub repo has a living paper, at one of three trust
+// tiers (ci-verified / author-published / auto-generated) — see
+// server/living-paper-cache.js for the full design. Used by both the "Living
+// version" chip on paper.html/pdf-viewer.html and living-paper.html itself,
+// so all three surfaces agree on the same answer instead of each re-deriving
+// it independently.
+app.get("/api/paper/living-evidence", async (req, res) => {
+  const repo = (req.query?.repo || "").trim();
+  if (!repo || !repo.includes("/")) return res.status(400).json({ error: "repo required, as owner/name" });
+
+  try {
+    const result = await resolveLivingPaper(pool, repo);
+    res.set("Cache-Control", "public, max-age=900");
+    return res.json(result);
+  } catch (err) {
+    console.error("GET /api/paper/living-evidence failed:", err);
     return res.status(500).json({ error: String(err?.message || err) });
   }
 });

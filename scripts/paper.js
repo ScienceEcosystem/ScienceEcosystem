@@ -685,8 +685,15 @@
     if (!m) return;
     var repo = m[1] + "/" + m[2];
     try{
-      var evRes = await fetch("https://raw.githubusercontent.com/" + repo + "/main/evidence.json");
-      if (!evRes.ok) return; // has a repo, but not a living paper — chip stays hidden
+      // /api/paper/living-evidence covers both a repo's own committed
+      // evidence.json (author-published or CI-verified) and one
+      // ScienceEcosystem generated itself by parsing the repo — see
+      // server/living-paper-cache.js. A plain raw.githubusercontent.com
+      // probe (the previous approach here) only ever caught the first case.
+      var evRes = await fetch("/api/paper/living-evidence?repo=" + encodeURIComponent(repo));
+      if (!evRes.ok) return;
+      var data = await evRes.json();
+      if (!data || !data.tier || data.tier === "none") return; // has a repo, but not a living paper — chip stays hidden
       chip.href = "living-paper.html?repo=" + encodeURIComponent(repo) + "&doi=" + encodeURIComponent(bareDoi || "");
       chip.style.display = "";
     } catch(_) { /* silent — chip just stays hidden */ }

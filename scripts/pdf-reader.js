@@ -1221,9 +1221,12 @@ async function loadResearchObjects(paper) {
 }
 
 // Living paper entry point: reuses the same artifact-discovery endpoint
-// paper.html already relies on, then confirms the discovered GitHub repo
-// actually publishes an evidence.json before showing the button — a repo
-// link alone isn't enough, since not every linked repo is a living paper.
+// paper.html already relies on to find the GitHub repo, then asks
+// /api/paper/living-evidence whether it's a living paper — that endpoint
+// covers repos with their own committed evidence.json (author-published or
+// CI-verified) AND repos ScienceEcosystem generated a manifest for itself
+// by parsing the repo's source, so a button shows up even when the author
+// never ran the generator — see server/living-paper-cache.js.
 async function checkLivingPaperAvailable(rawDoi, paper) {
   const btn = document.getElementById('livingPaperBtn');
   if (!btn) return;
@@ -1249,8 +1252,10 @@ async function checkLivingPaperAvailable(rawDoi, paper) {
     if (!m) return;
     const repo = `${m[1]}/${m[2]}`;
 
-    const evRes = await fetch(`https://raw.githubusercontent.com/${repo}/main/evidence.json`);
-    if (!evRes.ok) return; // repo exists but isn't a living paper — no button
+    const evRes = await fetch(`/api/paper/living-evidence?repo=${encodeURIComponent(repo)}`);
+    if (!evRes.ok) return;
+    const { tier } = await evRes.json();
+    if (!tier || tier === 'none') return; // repo exists but isn't a living paper — no button
 
     btn.href = `living-paper.html?repo=${encodeURIComponent(repo)}&doi=${encodeURIComponent(rawDoi)}`;
     btn.style.display = '';
