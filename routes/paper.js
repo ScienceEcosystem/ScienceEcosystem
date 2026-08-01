@@ -13,10 +13,12 @@ router.get('/api/paper/:doi(*)', async (req, res, next) => {
   if (raw.startsWith("links")) return next();
   if (raw.startsWith("citation-contexts")) return next();
   if (raw.startsWith("abstract")) return next();
+  if (raw.startsWith("living-evidence")) return next();
   if (raw.startsWith("artifacts?")) return next();
   if (raw.startsWith("oa?")) return next();
   if (raw.startsWith("links?")) return next();
   if (raw.startsWith("citation-contexts?")) return next();
+  if (raw.startsWith("living-evidence?")) return next();
   if (raw.endsWith("/author-note")) return next();
   const doi = decodeURIComponent(raw);
   
