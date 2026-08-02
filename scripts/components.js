@@ -1030,6 +1030,39 @@
       + '</span>';
   }
 
+  // ---------- per-entity SEO metadata ----------
+  // Every paper/profile/journal/topic/institute/publisher page ships with the
+  // same generic <title>/<meta description> in its static HTML (e.g. every
+  // single paper page says "Research Paper | ScienceEcosystem", regardless
+  // of which paper) since the real entity data only exists after an OpenAlex
+  // fetch resolves client-side. Google can't rank thousands of distinct
+  // pages that all report the same title. Call this once the entity's real
+  // data has loaded so the tab title, meta description, canonical link, and
+  // structured data actually describe the specific thing being shown.
+  function setPageMeta(opts){
+    opts = opts || {};
+    if (opts.title) document.title = opts.title;
+    if (opts.description){
+      var m = document.querySelector('meta[name="description"]');
+      if (!m){ m = document.createElement('meta'); m.setAttribute('name','description'); document.head.appendChild(m); }
+      m.setAttribute('content', opts.description);
+    }
+    if (opts.canonical){
+      var link = document.querySelector('link[rel="canonical"]');
+      if (!link){ link = document.createElement('link'); link.setAttribute('rel','canonical'); document.head.appendChild(link); }
+      link.setAttribute('href', opts.canonical);
+    }
+    if (opts.jsonLd){
+      var existing = document.getElementById('se-jsonld');
+      if (existing) existing.remove();
+      var script = document.createElement('script');
+      script.type = 'application/ld+json';
+      script.id = 'se-jsonld';
+      script.textContent = JSON.stringify(opts.jsonLd);
+      document.head.appendChild(script);
+    }
+  }
+
   // ---------- keyboard activation for role="button" elements ----------
   // Native buttons/links fire "click" on Enter/Space automatically; elements
   // like <li role="button" tabindex="0"> with an onclick handler do not.
@@ -1046,6 +1079,7 @@
     renderPaperCard: renderPaperCard,
     enhancePaperCards: enhancePaperCards,
     computeJournalTrustIndex: computeJournalTrustIndex,
-    journalTrustIndexBadgeHtml: journalTrustIndexBadgeHtml
+    journalTrustIndexBadgeHtml: journalTrustIndexBadgeHtml,
+    setPageMeta: setPageMeta
   };
 })();

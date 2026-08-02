@@ -1279,6 +1279,20 @@
     }
     return escapeHtml(words.join(" ") || "");
   }
+  // Same reconstruction as formatAbstract but unescaped — for meta tag
+  // attribute values / JSON-LD, which want the raw string (setAttribute and
+  // JSON.stringify each handle their own escaping; feeding them
+  // pre-HTML-escaped text like "&amp;" double-escapes it).
+  function plainAbstractText(idx){
+    if (!idx || typeof idx !== "object") return "";
+    var words = [];
+    var keys = Object.keys(idx);
+    for (var i=0;i<keys.length;i++){
+      var word = keys[i], positions = idx[word] || [];
+      for (var j=0;j<positions.length;j++) words[positions[j]] = word;
+    }
+    return words.join(" ") || "";
+  }
 
   async function loadAbstractFallback(doi){
     if (!doi) return;
@@ -1974,6 +1988,54 @@
   // ---------- Render pipeline ----------
   async function renderPaper(p, source){
     __CURRENT_PAPER__ = p;
+
+    // SEO: the static HTML ships the same generic title/description on
+    // every paper page ("Research Paper | ScienceEcosystem") since real
+    // data only exists after this fetch resolves — Google can't rank
+    // thousands of pages it can't tell apart. Replace with this paper's
+    // own title/description/canonical/structured-data now that we have it.
+    try {
+      var seoAuthorships = get(p,"authorships",[]) || [];
+      var seoAuthorNames = seoAuthorships.map(function(a){ return get(a,"author.display_name",""); }).filter(Boolean);
+      var seoVenue = get(p,"host_venue.display_name",null) || get(p,"primary_location.source.display_name",null) || "";
+      var seoYear = (p.publication_year != null) ? p.publication_year : "";
+      var seoTitleText = p.display_name || p.title || "Research Paper";
+      var seoAbstractRaw = plainAbstractText(p.abstract_inverted_index);
+
+      var seoDescParts = [];
+      if (seoAuthorNames.length) seoDescParts.push(seoAuthorNames.slice(0,3).join(", ") + (seoAuthorships.length > 3 ? " et al." : ""));
+      if (seoVenue) seoDescParts.push(seoVenue);
+      if (seoYear) seoDescParts.push(String(seoYear));
+      var seoDescPrefix = seoDescParts.join(" · ");
+      var seoDesc = seoAbstractRaw
+        ? (seoDescPrefix ? seoDescPrefix + " — " : "") + seoAbstractRaw
+        : (seoDescPrefix || "Paper details on ScienceEcosystem with abstract, authors, topics, journal quality signals, and related works.");
+      if (seoDesc.length > 300) seoDesc = seoDesc.slice(0, 297) + "…";
+
+      var seoId = idTailFrom(p.id);
+      var seoCanonical = "https://scienceecosystem.org/paper.html" + (seoId ? ("?id=" + encodeURIComponent(seoId)) : "");
+      var seoDoi = doiFromWork(p);
+      var seoDoiUrl = seoDoi ? ("https://doi.org/" + String(seoDoi).replace(/^doi:/i,"").replace(/^https?:\/\/(dx\.)?doi\.org\//i,"")) : null;
+
+      var seoJsonLd = {
+        "@context": "https://schema.org",
+        "@type": "ScholarlyArticle",
+        "name": seoTitleText,
+        "headline": seoTitleText,
+        "url": seoCanonical
+      };
+      if (p.publication_date) seoJsonLd.datePublished = p.publication_date;
+      else if (seoYear) seoJsonLd.datePublished = String(seoYear);
+      if (seoAuthorNames.length) seoJsonLd.author = seoAuthorNames.map(function(n){ return { "@type":"Person", "name": n }; });
+      if (seoVenue) { seoJsonLd.publisher = { "@type":"Organization", "name": seoVenue }; seoJsonLd.isPartOf = { "@type":"Periodical", "name": seoVenue }; }
+      if (seoDoi) seoJsonLd.identifier = seoDoi;
+      if (seoDoiUrl) seoJsonLd.sameAs = seoDoiUrl;
+      if (seoAbstractRaw) seoJsonLd.abstract = seoAbstractRaw;
+
+      if (window.SE && SE.components && typeof SE.components.setPageMeta === "function") {
+        SE.components.setPageMeta({ title: seoTitleText + " | ScienceEcosystem", description: seoDesc, canonical: seoCanonical, jsonLd: seoJsonLd });
+      }
+    } catch(e) { /* SEO metadata is additive — never let it block the real page render */ }
 
     $("paperHeaderMain").innerHTML = buildHeaderMain(p);
     $("paperActions").innerHTML   = buildActionsBar(p);

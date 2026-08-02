@@ -259,6 +259,28 @@
       if (!tail){ $("pubName").textContent = "No publisher specified."; return; }
 
       var pub = await getJSON(API + "/publishers/" + encodeURIComponent(tail));
+
+      // SEO: static HTML ships the same generic title/description on every
+      // publisher page — replace with this publisher's own now that we have
+      // real data, so individual pages are distinguishable to Google.
+      try {
+        var seoName = get(pub,"display_name",null) || "Publisher";
+        var seoWorks = get(pub,"works_count",null);
+        var seoDesc = (seoWorks != null)
+          ? (seoName + " — " + seoWorks.toLocaleString() + " works indexed. Journals, publications, and metrics on ScienceEcosystem.")
+          : "Publisher page with journals, publications, metrics, trends, and links from OpenAlex.";
+        var seoCanonical = "https://scienceecosystem.org/publisher.html?id=" + encodeURIComponent(tail);
+        var seoJsonLd = {
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": seoName,
+          "url": seoCanonical
+        };
+        if (window.SE && SE.components && typeof SE.components.setPageMeta === "function") {
+          SE.components.setPageMeta({ title: seoName + " | ScienceEcosystem", description: seoDesc, canonical: seoCanonical, jsonLd: seoJsonLd });
+        }
+      } catch(e) { /* SEO metadata is additive — never let it block the real page render */ }
+
       renderHeader(pub);
       renderTrends(pub);
 

@@ -284,6 +284,33 @@
       var url = API + "/institutions/" + encodeURIComponent(instId);
       var inst = await getJSON(url);
 
+      // SEO: static HTML ships the same generic title/description on every
+      // institution page — replace with this institution's own now that we
+      // have real data, so individual pages are distinguishable to Google.
+      try {
+        var seoName = get(inst,"display_name",null) || "Institution";
+        var seoCountry = get(inst,"geo.country",null) || get(inst,"country_code",null);
+        var seoWorks = get(inst,"works_count",null);
+        var seoDescParts = [];
+        if (seoCountry) seoDescParts.push(seoCountry);
+        if (seoWorks != null) seoDescParts.push(seoWorks.toLocaleString() + " works indexed");
+        var seoDesc = seoDescParts.length
+          ? (seoName + " — " + seoDescParts.join(" · ") + ". Metrics and publications on ScienceEcosystem.")
+          : "Institution profile on ScienceEcosystem with identity, location, metrics, and published works.";
+        var seoCanonical = "https://scienceecosystem.org/institute.html?id=" + encodeURIComponent(instId);
+        var seoJsonLd = {
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          "name": seoName,
+          "url": seoCanonical
+        };
+        var seoRor = get(inst,"ids.ror",null);
+        if (seoRor) seoJsonLd.sameAs = seoRor;
+        if (window.SE && SE.components && typeof SE.components.setPageMeta === "function") {
+          SE.components.setPageMeta({ title: seoName + " | ScienceEcosystem", description: seoDesc, canonical: seoCanonical, jsonLd: seoJsonLd });
+        }
+      } catch(e) { /* SEO metadata is additive — never let it block the real page render */ }
+
       $("instHeaderMain").innerHTML = buildHeaderLeft(inst);
       $("instStats").innerHTML = buildHeaderStats(inst);
       renderAbout(inst);

@@ -2437,6 +2437,28 @@
       topicTitle.textContent = topic.display_name || "Topic";
       topicMeta.textContent = "Loading article…";
 
+      // SEO: title was already set dynamically above; description/canonical/
+      // structured data were not — every topic page shipped with no meta
+      // description at all in the static HTML. Add them now that we have
+      // the real concept data.
+      try {
+        const seoName = topic.display_name || "Topic";
+        const seoDesc = topic.description
+          ? (seoName + " — " + topic.description + ". Overview, top papers, authors, and trends on ScienceEcosystem.")
+          : (seoName + " — overview, key papers, authors, and citation trends on ScienceEcosystem.");
+        const seoCanonical = "https://scienceecosystem.org/topic.html?id=" + encodeURIComponent(idTail || idParam);
+        const seoJsonLd = {
+          "@context": "https://schema.org",
+          "@type": "DefinedTerm",
+          "name": seoName,
+          "url": seoCanonical
+        };
+        if (topic.description) seoJsonLd.description = topic.description;
+        if (window.SE && SE.components && typeof SE.components.setPageMeta === "function") {
+          SE.components.setPageMeta({ description: seoDesc, canonical: seoCanonical, jsonLd: seoJsonLd });
+        }
+      } catch (e) { /* SEO metadata is additive — never let it block the real page render */ }
+
       // Wikipedia article & revision (language-aware)
       const wpTitle = (topic?.display_name || "").trim();
       let articleHTML = cacheRead(idTail, "wp_html");

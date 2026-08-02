@@ -416,6 +416,34 @@
         if ($("journalName")) $("journalName").textContent = "Journal not found.";
         return;
       }
+      // SEO: static HTML ships the same generic title/description on every
+      // journal page — replace with this journal's own now that we have
+      // real data, so individual journal pages are distinguishable to Google.
+      try {
+        var seoName = get(src,"display_name",null) || "Journal";
+        var seoPublisher = get(src,"host_organization_name",null);
+        var seoWorks = get(src,"works_count",null);
+        var seoDescParts = [];
+        if (seoPublisher) seoDescParts.push("Published by " + seoPublisher);
+        if (seoWorks != null) seoDescParts.push(seoWorks.toLocaleString() + " works indexed");
+        var seoDesc = seoDescParts.length
+          ? (seoName + " — " + seoDescParts.join(" · ") + ". Journal Trust Index, metrics, and publications on ScienceEcosystem.")
+          : "Journal page with publications, metrics, trends, topics, and metadata from OpenAlex.";
+        var seoCanonical = "https://scienceecosystem.org/journal.html?id=" + encodeURIComponent(tail);
+        var seoIssn = get(src,"issn_l",null) || (Array.isArray(get(src,"issn",null)) ? src.issn[0] : null);
+        var seoJsonLd = {
+          "@context": "https://schema.org",
+          "@type": "Periodical",
+          "name": seoName,
+          "url": seoCanonical
+        };
+        if (seoIssn) seoJsonLd.issn = seoIssn;
+        if (seoPublisher) seoJsonLd.publisher = { "@type":"Organization", "name": seoPublisher };
+        if (window.SE && SE.components && typeof SE.components.setPageMeta === "function") {
+          SE.components.setPageMeta({ title: seoName + " | ScienceEcosystem", description: seoDesc, canonical: seoCanonical, jsonLd: seoJsonLd });
+        }
+      } catch(e) { /* SEO metadata is additive — never let it block the real page render */ }
+
       renderHeader(src);
       populatePublisher(src);
       renderTrends(src);

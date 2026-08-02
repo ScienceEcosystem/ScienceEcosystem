@@ -1367,6 +1367,36 @@
       var seUser = opts.seUser || _seUser || null;
       var isOwner = !!(opts.enhanced);
 
+      // SEO: static HTML ships the same generic title/description on every
+      // profile page — replace with this researcher's own now that we have
+      // real data, so individual profiles are distinguishable to Google.
+      try {
+        var seoName = author.display_name || "Researcher";
+        var seoAff = get(author,"last_known_institution.display_name",null) || get(author,"last_known_institutions.0.display_name",null);
+        var seoWorks = get(author,"works_count",null);
+        var seoCites = get(author,"cited_by_count",null);
+        var seoDescParts = [];
+        if (seoAff) seoDescParts.push(seoAff);
+        if (seoWorks != null) seoDescParts.push(seoWorks.toLocaleString() + " publications");
+        if (seoCites != null) seoDescParts.push(seoCites.toLocaleString() + " citations");
+        var seoDesc = seoDescParts.length
+          ? (seoName + " — " + seoDescParts.join(" · ") + " on ScienceEcosystem.")
+          : "Researcher profile on ScienceEcosystem with publications, topics, metrics, trends, and affiliations.";
+        var seoCanonical = "https://scienceecosystem.org/profile.html?id=" + encodeURIComponent(authorTail);
+        var seoOrcid = get(author,"ids.orcid",null);
+        var seoJsonLd = {
+          "@context": "https://schema.org",
+          "@type": "Person",
+          "name": seoName,
+          "url": seoCanonical
+        };
+        if (seoAff) seoJsonLd.affiliation = { "@type":"Organization", "name": seoAff };
+        if (seoOrcid) seoJsonLd.sameAs = seoOrcid;
+        if (window.SE && SE.components && typeof SE.components.setPageMeta === "function") {
+          SE.components.setPageMeta({ title: seoName + " | ScienceEcosystem", description: seoDesc, canonical: seoCanonical, jsonLd: seoJsonLd });
+        }
+      } catch(e) { /* SEO metadata is additive — never let it block the real page render */ }
+
       renderAuthorHeader(author, seUser);
 
       // Bio: prefer user-written bio, fall back to auto-summary
