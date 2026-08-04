@@ -978,7 +978,24 @@ Why this is better than Semantic Scholar's intent classification:
   S2 classifies WHAT the citation is for (background/method/result)
   We classify the STANCE (agreement/disagreement/correction)
   These are orthogonal dimensions. A "result" citation can support or challenge.
-  Nobody does stance classification at scale on live literature. This is new.
+
+CORRECTION (2026-08-04): the line that used to be here — "Nobody does
+stance classification at scale on live literature. This is new." — was
+wrong, caught while researching an unrelated question (real comparable
+initiatives) rather than by deliberately checking this claim. scite.ai
+already does exactly this, at real scale: a deep-learning model classifies
+each citing sentence as Supporting/Contrasting/Mentioning across 880M+
+classified citation statements, and has for several years
+(https://scite.ai, verified via MIT Press academic writeup + scite's own
+published reports). The actual differentiation, not "nobody does this":
+  - scite is commercial/paywalled; this would be free and open
+  - scite's taxonomy is 3-way (Supporting/Contrasting/Mentioning); this
+    plan's 6-way taxonomy (Supports/Challenges/Corrects/Extends/Uses
+    method/Background) is finer-grained
+  - the author-response feature (2D) pairing a cited author's own reply
+    with the classification isn't something scite does, as far as checked
+Don't lean on "nobody does this" in the pitch — lean on the free/open +
+finer-grained + author-response combination instead, which is real.
 
 How to build:
   - For each context sentence already fetched in 2B, send to Claude API
