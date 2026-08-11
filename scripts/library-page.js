@@ -1121,13 +1121,23 @@
       tr.addEventListener("dragstart",(ev)=>{
         const id = tr.getAttribute("data-id");
         if(ev.dataTransfer && id){
-          ev.dataTransfer.setData("text/plain", id);
+          // Dragging one of several selected rows moves the whole selection,
+          // matching Zotero — previously this only ever moved the single row
+          // that happened to receive the dragstart event, silently leaving
+          // the rest of a multi-select behind.
+          const ids = (selectedIds.has(id) && selectedIds.size>1) ? [...selectedIds] : [id];
+          ev.dataTransfer.setData("text/plain", JSON.stringify(ids));
           ev.dataTransfer.effectAllowed = "copy";
         }
-        tr.classList.add("dragging");
+        // Mark every row being dragged, not just the one the event fired on.
+        const id2 = tr.getAttribute("data-id");
+        const draggingIds = (selectedIds.has(id2) && selectedIds.size>1) ? selectedIds : new Set([id2]);
+        $$("#itemsTbody tr").forEach(r=>{
+          if(draggingIds.has(r.getAttribute("data-id"))) r.classList.add("dragging");
+        });
       });
       tr.addEventListener("dragend",()=>{
-        tr.classList.remove("dragging");
+        $$("#itemsTbody tr.dragging").forEach(r=>r.classList.remove("dragging"));
       });
     });
 
@@ -1176,11 +1186,32 @@
       row.addEventListener("drop",async(ev)=>{
         ev.preventDefault();
         row.classList.remove("drag-over");
-        const itemId = ev.dataTransfer?.getData("text/plain");
+        const raw = ev.dataTransfer?.getData("text/plain");
         const cid = row.getAttribute("data-id");
-        if(!itemId || !cid) return;
-        await api(`/api/collections/${cid}/items`,{method:"POST",body:JSON.stringify({id:itemId})});
-        await safeRefreshItems(); renderTable();
+        if(!raw || !cid) return;
+        // dragstart always sends a JSON array now; the plain-string fallback
+        // just guards against a stray drag from something else on the page.
+        let itemIds;
+        try{ itemIds = JSON.parse(raw); if(!Array.isArray(itemIds)) itemIds=[raw]; }
+        catch{ itemIds = [raw]; }
+
+        await Promise.all(itemIds.map(id =>
+          api(`/api/collections/${cid}/items`,{method:"POST",body:JSON.stringify({id})})
+        ));
+
+        // Patch in-memory instead of re-fetching the whole library (which
+        // includes every item's full abstract/extra_fields) just to reflect
+        // one collection assignment — this is what made drag-and-drop feel
+        // slow next to Zotero's instant local moves.
+        const cidNum = Number(cid);
+        for(const id of itemIds){
+          const item = items.find(x=>String(x.id)===String(id));
+          if(item){
+            const existing = Array.isArray(item.collection_ids) ? item.collection_ids : [];
+            if(!existing.includes(cidNum)) item.collection_ids = [...existing, cidNum];
+          }
+        }
+        renderTree(); renderTable();
       });
     });
   }

@@ -1514,6 +1514,17 @@ body.annot-erase .pdf-annot { cursor: crosshair; }
 .tree .row button { visibility: hidden; }
 .tree li:hover .row button { visibility: visible; }
 
+/* Drag-and-drop feedback — the drag/drop handlers already worked, but with
+   no visual cue during the drag it looked and felt broken: no indication
+   an item was being dragged, no indication which collection would receive
+   it on drop. */
+.lib-table tbody tr.dragging { opacity: .4; }
+.tree .row.drag-over {
+  background: #eef2ff;
+  outline: 2px solid #6366f1;
+  outline-offset: -2px;
+}
+
 .lib-toolbar {
   display:flex; justify-content:space-between; align-items:center; gap:1rem;
   padding:.5rem; border-bottom:1px solid #e5e7eb;
