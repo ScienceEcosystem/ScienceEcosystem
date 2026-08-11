@@ -271,6 +271,10 @@
             <button id="addByDoiBtn" class="btn btn-secondary">Add</button>
             <button id="importPdfBtn" class="btn btn-secondary">Add PDF</button>
             <button id="exportLibBibBtn" class="btn btn-secondary" title="Export the items shown here as a .bib file">↓ .bib</button>
+            <div style="position:relative;">
+              <button id="columnsBtn" class="btn btn-secondary" title="Choose which columns to show" aria-haspopup="menu" aria-expanded="false">Columns ▾</button>
+              <div id="columnsPanel" class="columns-panel" style="display:none;" role="menu"></div>
+            </div>
             <button id="emptyTrashBtn" class="btn btn-secondary" style="display:none;color:#dc2626;border-color:#dc2626;" title="Permanently delete all items in Trash">Empty Trash</button>
           </div>
 
@@ -282,16 +286,14 @@
           <div class="lib-table-wrap">
             <table class="lib-table" id="itemsTable" aria-label="Library items">
               <thead>
-                <tr>
+                <tr id="itemsHeadRow">
                   <th class="col-icon" title="Item type"></th>
                   <th data-k="title">Title</th>
-                  <th data-k="authors">Authors</th>
-                  <th data-k="year">Year</th>
                   <th class="col-pdf" title="PDF attached"></th>
                 </tr>
               </thead>
               <tbody id="itemsTbody">
-                <tr><td colspan="5" class="muted">Loading…</td></tr>
+                <tr><td colspan="3" class="muted">Loading…</td></tr>
               </tbody>
             </table>
           </div>

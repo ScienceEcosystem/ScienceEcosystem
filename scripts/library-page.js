@@ -318,6 +318,34 @@
   let collapsedCollectionIds=new Set(
     JSON.parse(localStorage.getItem("se_lib_collapsed_cols")||"[]").map(String)
   ); // folders the user has collapsed, like Zotero's tree
+
+  // ---- Configurable columns (Zotero-style: Title is fixed, everything
+  // else is opt-in via the "Columns" picker, persisted per browser) ----
+  const OPTIONAL_COLUMNS = [
+    { key:"authors",    label:"Authors",    sortKey:"authors",    get:it=>esc(firstAuthorLastName(it.authors)) },
+    { key:"year",       label:"Year",       sortKey:"year",       get:it=>esc(it.year??"-") },
+    { key:"venue",      label:"Venue",      sortKey:"venue",      get:it=>esc(it.venue||"-") },
+    { key:"doi",        label:"DOI",        sortKey:"doi",        get:it=>esc(it.doi||"-") },
+    { key:"citedBy",    label:"Citations",  sortKey:"cited_by",   get:it=>esc(it.cited_by??"-") },
+    { key:"readStatus", label:"Status",     sortKey:"read_status",get:it=>esc(it.read_status||"-") },
+    { key:"tags",       label:"Tags",       sortKey:null,         get:it=>(Array.isArray(it.tags)?it.tags:[]).map(t=>`<span class="tag-chip-mini">${esc(t)}</span>`).join(" ")||"-" },
+  ];
+  const DEFAULT_VISIBLE_COLUMNS = ["authors","year"]; // matches the table's previous fixed shape
+  function loadVisibleColumns(){
+    try{
+      const saved = JSON.parse(localStorage.getItem("se_lib_visible_cols")||"null");
+      if(Array.isArray(saved)) return new Set(saved.filter(k=>OPTIONAL_COLUMNS.some(c=>c.key===k)));
+    }catch{}
+    return new Set(DEFAULT_VISIBLE_COLUMNS);
+  }
+  let visibleColsState = loadVisibleColumns();
+  function setVisibleColumns(nextSet){
+    visibleColsState = nextSet;
+    localStorage.setItem("se_lib_visible_cols", JSON.stringify([...nextSet]));
+    renderColumnsPanel();
+    renderTableHead();
+    renderTable();
+  }
   let openMenu=null;
   let tagFilterTerms=[];
   let _renderTagPanel=null; // set after init, called by renderTable
@@ -714,7 +742,7 @@
       items = Array.isArray(data)?data:(Array.isArray(data?.items)?data.items:[]);
     }catch(e){
       items=[]; console.error("items load failed",e);
-      const tbody=$("#itemsTbody"); if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="muted">Could not load items.</td></tr>`;
+      const tbody=$("#itemsTbody"); if(tbody) tbody.innerHTML = `<tr><td colspan="${2+visibleColumns().size+1}" class="muted">Could not load items.</td></tr>`;
     }
   }
 
@@ -845,7 +873,63 @@
   }
 
   function visibleColumns(){
-    return new Set(["title","authors","year"]);
+    return visibleColsState;
+  }
+
+  // Rebuilds the <thead>'s optional <th>s (between the fixed Title and PDF
+  // columns) to match the current visible-columns selection. Reuses the
+  // existing sort-header click binding in renderTable(), which queries
+  // th[data-k] fresh on every render, so nothing else needs to know these
+  // headers are dynamic.
+  function renderTableHead(){
+    const headRow=$("#itemsHeadRow"); if(!headRow) return;
+    headRow.querySelectorAll("th[data-optcol]").forEach(th=>th.remove());
+    const pdfTh=headRow.querySelector(".col-pdf");
+    const cols=visibleColumns();
+    for(const c of OPTIONAL_COLUMNS){
+      if(!cols.has(c.key)) continue;
+      const th=document.createElement("th");
+      th.setAttribute("data-optcol","1");
+      if(c.sortKey) th.setAttribute("data-k",c.sortKey);
+      th.textContent=c.label;
+      headRow.insertBefore(th, pdfTh);
+    }
+  }
+
+  function renderColumnsPanel(){
+    const panel=$("#columnsPanel"); if(!panel) return;
+    const cols=visibleColumns();
+    panel.innerHTML = OPTIONAL_COLUMNS.map(c=>`
+      <label class="columns-panel-row">
+        <input type="checkbox" data-col-key="${esc(c.key)}" ${cols.has(c.key)?"checked":""}/>
+        ${esc(c.label)}
+      </label>
+    `).join("");
+    panel.querySelectorAll("input[data-col-key]").forEach(cb=>{
+      cb.addEventListener("change",()=>{
+        const next=new Set(visibleColumns());
+        if(cb.checked) next.add(cb.dataset.colKey); else next.delete(cb.dataset.colKey);
+        setVisibleColumns(next);
+      });
+    });
+  }
+
+  function bindColumnsButton(){
+    const btn=$("#columnsBtn"), panel=$("#columnsPanel");
+    if(!btn || !panel) return;
+    renderColumnsPanel();
+    btn.addEventListener("click",(ev)=>{
+      ev.stopPropagation();
+      const open = panel.style.display==="none";
+      panel.style.display = open?"":"none";
+      btn.setAttribute("aria-expanded", open?"true":"false");
+    });
+    document.addEventListener("click",(ev)=>{
+      if(panel.style.display==="none") return;
+      if(ev.target===btn || panel.contains(ev.target)) return;
+      panel.style.display="none";
+      btn.setAttribute("aria-expanded","false");
+    });
   }
 
   function normTitle(s){ return (s||"").toLowerCase().replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim(); }
@@ -1063,20 +1147,20 @@
       return 0;
     });
 
-    if(!view.length){ tbody.innerHTML=`<tr><td colspan="5" class="muted" style="padding:.5rem .75rem;">No items</td></tr>`; return; }
+    const totalColCount = 2 + cols.size + 1; // icon + title (fixed) + optional + pdf (fixed)
+    if(!view.length){ tbody.innerHTML=`<tr><td colspan="${totalColCount}" class="muted" style="padding:.5rem .75rem;">No items</td></tr>`; return; }
 
     const READ_DOT={'to-read':'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3b82f6;margin:auto;"></span>','reading':'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#f59e0b;margin:auto;"></span>','read':'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;margin:auto;"></span>'};
+    const optionalCols = OPTIONAL_COLUMNS.filter(c=>cols.has(c.key));
     tbody.innerHTML=view.map(it=>{
-      const authorsDisplay = firstAuthorLastName(it.authors);
-      const authors = cols.has("authors")?`<td class="col-authors">${esc(authorsDisplay)}</td>`:"";
-      const year    = cols.has("year")   ?`<td class="col-year">${esc(it.year??"-")}</td>`:"";
+      const optionalTds = optionalCols.map(c=>`<td class="col-${c.key}">${c.get(it)}</td>`).join("");
       const zoteroBadge = it.zotero_key ? `<span class="badge badge-zotero" title="Synced from Zotero" style="font-size:.65rem;padding:.05rem .3rem;margin-right:3px;">Z</span>` : "";
       const isSel = selectedIds.has(String(it.id));
       const readDot = it.read_status ? `<span title="${it.read_status}">${READ_DOT[it.read_status]||''}</span>` : "";
       return `<tr data-id="${esc(it.id)}" draggable="true"${isSel?' class="selected"':''}>
         <td class="col-icon" title="${esc(ITEM_TYPES[getItemType(it)]?.label||'Article')}" style="position:relative;">${typeIcon(getItemType(it))}${it.read_status?`<span style="position:absolute;top:1px;right:1px;">${READ_DOT[it.read_status]||''}</span>`:""}</td>
         <td class="col-title" title="${esc(it.title||"-")}">${zoteroBadge}${titleHtml(it.title||"-")}</td>
-        ${authors}${year}
+        ${optionalTds}
         <td class="col-pdf" title="${it.local_pdf_path?'PDF stored in library':''}">${it.local_pdf_path?PDF_BADGE:''}</td>
       </tr>`;
     }).join("");
@@ -1969,6 +2053,8 @@
   function bindUI(){
 
     bindNewCollectionButtons();
+    bindColumnsButton();
+    renderTableHead();
 
     // Add-by-DOI / identifier bindings
     const addDoiInput = $("#addByDoiInput");
