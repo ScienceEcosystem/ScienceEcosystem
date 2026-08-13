@@ -1143,11 +1143,17 @@
     var _abstractMentionsCode = _absHas(["code","script","github","gitlab","software","analysis script"]);
     var _abstractMentionsData = _absHas(["data deposited","dataset","supplementary data","raw data","source data"]);
 
-    // Datasets: explicitly typed Dataset, OR "Other"/"Dataset" items on known data repositories
+    // Datasets: explicitly typed Dataset, OR "Other"/"Dataset" items on known data repositories.
+    // Excludes journal-hosted "Additional file"/"Supplementary" bundles (e.g. figshare records
+    // auto-created for a paper's Table S1/Figure S1) — those are supplementary materials, not
+    // an actual deposited research dataset, even though they live on a data-repo domain.
+    var _SUPPLEMENTARY_TITLE_RE = /^(additional file|supplementary)/i;
     var datasets = ros.filter(function(r){
       var t = String(r?.type || "").toLowerCase();
       var u = String(r?.url || "").toLowerCase();
       var d = String(r?.doi || "").toLowerCase();
+      var title = String(r?.title || "");
+      if (_SUPPLEMENTARY_TITLE_RE.test(title)) return false;
       if (t === "dataset") return true;
       if (t === "preprint") return false;  // preprints are not data deposits
       return _DATA_REPO_DOMAINS.some(function(x){ return u.includes(x) || d.includes(x); });
