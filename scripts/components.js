@@ -29,6 +29,15 @@
     return (d.indexOf("http")===0) ? d : ("https://doi.org/" + d);
   }
   function journalFrom(work){
+    // Software/dataset works (GitHub->Zenodo archives, etc.) resolve to
+    // OpenAlex "repository"-type sources, whose display_name is often the
+    // repository platform's own confusingly journal-sounding name (e.g. a
+    // repository literally named "Open MIND") rather than an actual venue.
+    // Label those by kind instead of repeating misleading upstream metadata.
+    var srcType = get(work,"host_venue.type",null) || get(work,"primary_location.source.type",null);
+    if ((work.type === "software" || work.type === "dataset") && srcType === "repository"){
+      return work.type === "software" ? "Code archive" : "Data archive";
+    }
     return get(work,"host_venue.display_name",null)
         || get(work,"primary_location.source.display_name","Unknown venue");
   }
