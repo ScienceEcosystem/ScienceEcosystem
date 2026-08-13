@@ -434,11 +434,15 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
     const dataG = await fetchJSON(urlG, signal);
     const generalWorks = dataG.results || [];
 
-    // Secondary: title-specific search — catches papers where keywords only appear in the title
+    // Secondary: title-specific search — catches papers where the query terms
+    // appear in the title itself, which OpenAlex's general `search=` full-text
+    // ranking under-weights relative to Google Scholar (it can rank a paper
+    // with loose abstract mentions above one whose title is an exact match).
     let titleWorks = [];
-    if (queryYear && querySearch) {
+    if (querySearch) {
       try {
-        const urlT = `${API_BASE}/works?filter=display_name.search:${encodeURIComponent(querySearch)},publication_year:${queryYear}&per_page=25&select=id,display_name,authorships,publication_year,doi,open_access,cited_by_count,primary_location,host_venue,type`;
+        const titleYearFilter = queryYear ? `,publication_year:${queryYear}` : '';
+        const urlT = `${API_BASE}/works?filter=display_name.search:${encodeURIComponent(querySearch)}${titleYearFilter}&per_page=25&select=id,display_name,authorships,publication_year,doi,open_access,cited_by_count,primary_location,host_venue,type`;
         const dataT = await fetchJSON(urlT, signal);
         titleWorks = dataT.results || [];
       } catch(_) {}
