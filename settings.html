@@ -90,7 +90,7 @@
 
   <footer class="site-footer">
     <div class="container">
-      <p>&copy; <span class="js-year">2026</span> ScienceEcosystem. All rights reserved.</p>
+      <p>&copy; <span class="js-year"></span> ScienceEcosystem. All rights reserved.</p>
       <p>
         <a class="footer-link" href="mailto:info@scienceecosystem.org">info@scienceecosystem.org</a>
         &nbsp;·&nbsp;
@@ -104,6 +104,7 @@
 
   <script src="scripts/search.js" defer></script>
   <script src="scripts/session.js" defer></script>
+  <script src="scripts/year.js" defer></script>
   <script>
     fetch("/api/me", { credentials:"include" })
       .then(function(r){ return r.ok ? r.json() : null; })
