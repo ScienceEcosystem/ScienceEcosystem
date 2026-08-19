@@ -107,10 +107,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ── 2. research-tools page + tools data — always network only, never cache
+  // ── 2. research-tools page — always network only, never cache
   //    This page embeds tool data inline; stale cache causes "missing elements" errors
   if (url.origin === self.location.origin &&
-      (url.pathname.includes("research-tools") || url.pathname.endsWith("tools.json"))) {
+      url.pathname.includes("research-tools")) {
     event.respondWith(fetch(request).catch(() =>
       new Response("<h1>Offline</h1><p>Please reconnect and reload.</p>",
         { headers: { "Content-Type": "text/html" } })));
