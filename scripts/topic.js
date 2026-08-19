@@ -3,7 +3,11 @@
   if (!document.body || document.body.dataset.page !== "topic") return;
 
   // ---------- Constants ----------
-  const API_OA = "https://api.openalex.org";
+  // Routed through our own server (not api.openalex.org directly) so the
+  // OpenAlex API key stays server-side instead of shipping to the browser.
+  // Absolute via location.origin — new URL(`${API_OA}/...`) below needs a
+  // real absolute string, a bare relative path won't parse.
+  const API_OA = location.origin + "/api/openalex";
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
   // ---------- DOM ----------

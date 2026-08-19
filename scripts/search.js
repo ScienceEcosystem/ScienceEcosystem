@@ -1,6 +1,14 @@
 // scripts/search.js
 const $ = (id) => document.getElementById(id);
-const API_BASE = "https://api.openalex.org";
+// Routed through our own server, not api.openalex.org directly, so the
+// OpenAlex API key (raises the anonymous rate-limit ceiling) can stay
+// server-side instead of being shipped to every browser. Server attaches
+// the key/mailto and passes the upstream status/Retry-After through
+// unchanged, so the retry logic below needs no further changes.
+// Absolute (via location.origin), not a bare relative path — fetchJSON()
+// below builds a real URL object out of this and a relative string isn't
+// a valid base/input for that.
+const API_BASE = location.origin + "/api/openalex";
 const OPENALEX_MAILTO = "info@scienceecosystem.org";
 
 /* --------------------------------------------------------------------------------

@@ -2,6 +2,10 @@ ScienceEcosystem — Development Notes
 Last updated: 2026-06-25
 =======================================================
 
+goal is that we can help with accomplishing what is happeing here also
+https://open-research-europe.ec.europa.eu/blog/how-open-peer-review-improves-scholarly-publication
+
+
 
 =======================================================
 BUGS / QUICK FIXES
@@ -3063,3 +3067,112 @@ rendering dependency, not a quick fix.
       verified only via node --check + code review (loading an unpacked
       Chrome extension under Playwright wasn't attempted) — it reuses
       the identical, already-verified /api/collections endpoints.
+
+-------------------------------------------------------
+CLEANUP — dead file removal (2026-08-16/19)
+-------------------------------------------------------
+
+2026-08-16
+  [X] Wired up scripts/year.js (already existed but was never
+      <script>-included anywhere) on all 22 pages, replacing the
+      hardcoded "2026" footer copyright text so it can't go stale again.
+  [X] Deleted 10 files verified to have zero live references anywhere in
+      the codebase: scripts/profile.nuclear.js, user-profile.js,
+      funders.js, tools-data.js, tools.js (superseded/orphaned client
+      scripts), routes/auth.js, library.js, profile.js, search.js
+      (pre-consolidation scaffolding using CommonJS require() under
+      "type": "module", would throw if ever imported), and
+      server/server.js (misplaced browser code, never required by
+      server/index.js). ~6,000 lines removed. Also dropped
+      tools-data.js/tools.js from the service worker's precache list.
+
+2026-08-19
+  [X] Found and removed one more dead file this cleanup pass missed:
+      assets/tools.json (121KB) — nothing fetches it anymore, since
+      research-tools.html moved to build-time static generation via
+      build-research-tools.js/tools-catalog-data.js back on 2026-06-13.
+      Its only remaining reference was a service-worker.js rule
+      excluding it from caching, which serves no purpose once the file
+      is gone — removed that rule too (kept the rest of the
+      research-tools-page-never-caches rule intact). Verified no other
+      references (server/, routes/, no fetch() calls anywhere) before
+      deleting; node --check passes on the edited service-worker.js.
+      Audited the rest of the tree for further candidates: archive/
+      (10 files) is deliberately kept — self-documented in its own
+      README as MVP-descoped features that may be re-added later, not
+      dead code. All scripts/*.js with zero HTML references
+      (build-research-tools.js, check-tool-links.js, extract-tools.js,
+      generate-sitemap.js, check-library-pdfs.js, tools-catalog-data.js)
+      are legitimate Node CLI/build-time tools, not dead browser code —
+      left alone. dist/scienceecosystem-firefox-0.1.2.zip is a stale
+      build artifact (extension is now v0.1.3) — flagged but not
+      removed, low stakes either way, left for a future pass.
+
+-------------------------------------------------------
+FIX (2026-08-19) — OpenAlex API key wired in via a server-side proxy,
+not shipped to the browser
+-------------------------------------------------------
+
+Live-tested via a full click-through of the site (headless Playwright,
+since chromium-cli wasn't available in this environment): tripped
+OpenAlex's anonymous rate limiter mid-session ("Anonymous search is
+temporarily rate-limited... use a free API key for uninterrupted
+access"). search.js/paper.js/topic.js all called api.openalex.org
+directly from the browser with only the public `mailto` param — no
+key, so no path to a higher ceiling, and every visitor independently
+competes for the same shared anonymous quota with no cross-user
+caching.
+
+Olivier registered a free OPENALEX_API_KEY (openalex.org/rest-api) and
+added it to .env + Render. Almost wired it directly into the three
+client files' fetch calls as a quick param add — caught before doing
+that: these are static files served as-is with no build/templating
+step, so the key would've been visible to anyone via devtools/Network
+tab, unlike `mailto` (public by design). Since it's tied to the
+account, a leaked key is copyable by anyone and risks the account's
+own standing/quota, not just a cosmetic issue.
+
+Fixed properly instead — new GET /api/openalex/* proxy in
+server/index.js:
+  - Forwards the path+query straight to the real OpenAlex API, adding
+    api_key (server-side only) + mailto if the client didn't send them.
+  - Passes the upstream status code, body, and Retry-After header
+    through unchanged, so search.js's existing client-side retry/
+    backoff logic (checks res.status, reads Retry-After) needed zero
+    changes beyond pointing API_BASE at the new path.
+  - 5-minute in-memory cache on successful responses (OPENALEX_PROXY_
+    CACHE) — short enough to keep search/citation-count freshness, long
+    enough that concurrent visitors querying the same paper/search term
+    share one upstream call instead of each spending their own slice of
+    the rate limit. Confirmed live: repeat identical request dropped
+    from ~1.0s to ~0.02s.
+  - Own rate limiter (240 req/min/IP, deliberately generous — a single
+    search page legitimately fires several OpenAlex calls at once) so
+    this can't be used as an open, keyed proxy to OpenAlex by anyone
+    other than our own frontend. Exempted from the existing "no DB →
+    503 every /api/* route" gate (server/index.js), since this proxy
+    has no DB dependency and shouldn't go down with it.
+  - CSP needed no change — same-origin calls are already covered by
+    `'self'` in connect-src. https://api.openalex.org stays in the CSP
+    allowlist since profile.js/institute.js/journal.js/publisher.js/
+    living-paper.js still call OpenAlex directly (out of scope for this
+    fix — only the three files identified as the fragility point were
+    changed).
+
+scripts/search.js, paper.js, topic.js: changed their OpenAlex base
+constant from "https://api.openalex.org" to
+`location.origin + "/api/openalex"`. Had to be absolute (via
+location.origin), not a bare relative path — each file builds a real
+URL object internally (`new URL(url)` in search.js,
+`new URL(u, API)` in paper.js, `new URL(\`${API_OA}/...\`)` in
+topic.js) and a relative string isn't a valid input/base for that;
+would have thrown "Invalid URL" at the first search on page load.
+
+Verified live end-to-end: curled the proxy directly (200 for both a
+search query and a single work lookup, cache-hit timing confirmed,
+key never appears in any response header/body); loaded search.html in
+a real headless browser and confirmed every OpenAlex-bound request now
+goes to localhost/api/openalex/... instead of api.openalex.org, no
+console/CSP errors, and real results render (204,417 results for
+"coral reef", sidebar researchers populated) exactly as before the
+change — just with the key applied server-side.

@@ -3,7 +3,11 @@
   if (!document.body || document.body.dataset.page !== "paper") return;
 
   // ---------- Constants ----------
-  var API = "https://api.openalex.org";
+  // Routed through our own server (not api.openalex.org directly) so the
+  // OpenAlex API key stays server-side instead of shipping to the browser.
+  // Absolute via location.origin — new URL(u, API) below needs API itself
+  // to be a valid absolute base, a bare relative path won't parse.
+  var API = location.origin + "/api/openalex";
   var MAILTO = "info@scienceecosystem.org";
 
   var OPEN_PEER_REVIEW_JOURNALS = [

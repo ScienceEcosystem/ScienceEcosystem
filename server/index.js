@@ -270,8 +270,10 @@ app.use((req, res, next) => {
 });
 
 // If DB is unavailable, short-circuit API/auth routes with a clear error.
+// /api/openalex is a stateless proxy with no DB dependency, so it's exempt.
 app.use((req, res, next) => {
-  if (!pool && (req.path.startsWith("/api") || req.path.startsWith("/auth"))) {
+  if (!pool && !req.path.startsWith("/api/openalex") &&
+      (req.path.startsWith("/api") || req.path.startsWith("/auth"))) {
     return res.status(503).json({ error: "Database unavailable" });
   }
   return next();
@@ -1012,7 +1014,10 @@ async function ownedMaterial(orcid, materialId) {
 /* -----------------------------
    External APIs (OpenAlex/OA)
 ------------------------------*/
-const OPENALEX = "https://api.openalex.org";
+const OPENALEX = process.env.OPENALEX_BASE || "https://api.openalex.org";
+const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY || "";
+const OPENALEX_MAILTO = process.env.OPENALEX_MAILTO || "info@scienceecosystem.org";
+const OPENALEX_TIMEOUT_MS = Number(process.env.OPENALEX_TIMEOUT_MS) || 10000;
 const UNPAYWALL_EMAIL = "scienceecosystem@icloud.com";
 const OA_CACHE = new Map();
 const OA_TTL_MS = 24 * 60 * 60 * 1000;
@@ -1510,14 +1515,77 @@ app.use("/api/journal/",    rateLimiter(60_000, 20));
 // (live-tested: reported live as spurious 429s on a real page load).
 app.use("/api/field-data/", rateLimiter(60_000, 120));
 
+// search.js/paper.js/topic.js now call OpenAlex through our own /api/openalex
+// proxy (added so the OPENALEX_API_KEY can be attached server-side instead of
+// shipping it to the browser) instead of api.openalex.org directly. A single
+// search page can legitimately fire several calls (general + title-boost +
+// author search), so this is deliberately generous — it exists to stop this
+// endpoint being used as an open, keyed proxy to OpenAlex by someone other
+// than our own frontend, not to throttle normal browsing.
+app.use("/api/openalex/",   rateLimiter(60_000, 240));
+
 // ── Write-surface rate limiting — these are auth-gated already, but a
 // compromised/buggy client (or XSS in a logged-in tab) shouldn't be able to
 // hammer the DB unbounded. Limits are generous enough for legitimate bulk
 // use (importing/syncing many papers) while still capping runaway abuse.
-// (There is no server-side search endpoint — search.js queries OpenAlex
-// directly from the browser, so there's nothing of ours to rate-limit there.)
 app.use("/api/library",     rateLimiter(60_000, 120));
 app.use("/api/collections", rateLimiter(60_000, 120));
+
+// ── OpenAlex proxy ──────────────────────────────────────────────────────────
+// search.js/paper.js/topic.js call this instead of api.openalex.org directly,
+// so OPENALEX_API_KEY (raises the anonymous rate-limit ceiling) can be
+// attached server-side and never shipped to the browser — an API key visible
+// in client JS would be trivially copyable and tied to this account, unlike
+// the public `mailto` param already in use everywhere. Upstream status code,
+// body, and Retry-After header are passed through unchanged so the existing
+// client-side retry/backoff logic (which reads res.status and Retry-After)
+// keeps working without needing to know a proxy is involved. Short-TTL cache
+// on successful responses also means concurrent visitors hitting the same
+// query (e.g. two people loading the same popular paper) share one upstream
+// call instead of each spending their own slice of the rate limit.
+const OPENALEX_PROXY_CACHE = new Map();
+const OPENALEX_PROXY_TTL_MS = 5 * 60 * 1000; // short — citation counts etc. do shift
+
+app.get(/^\/api\/openalex\/(.*)$/, async (req, res) => {
+  const upstreamPath = req.params[0];
+  const qs = new URLSearchParams(req.query);
+  if (!qs.has("mailto")) qs.set("mailto", OPENALEX_MAILTO);
+  if (OPENALEX_API_KEY && !qs.has("api_key")) qs.set("api_key", OPENALEX_API_KEY);
+  const upstreamUrl = `${OPENALEX}/${upstreamPath}?${qs.toString()}`;
+
+  const cacheKey = upstreamUrl;
+  const cached = OPENALEX_PROXY_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    if (cached.retryAfter) res.setHeader("Retry-After", cached.retryAfter);
+    return res.status(cached.status).type(cached.contentType).send(cached.body);
+  }
+
+  try {
+    const upstream = await fetchWithTimeout(upstreamUrl, { headers: { Accept: "application/json" } }, OPENALEX_TIMEOUT_MS);
+    const body = await upstream.text();
+    const contentType = upstream.headers.get("content-type") || "application/json";
+    const retryAfter = upstream.headers.get("retry-after");
+
+    if (upstream.ok) {
+      OPENALEX_PROXY_CACHE.set(cacheKey, {
+        status: upstream.status, contentType, body, retryAfter,
+        expiresAt: Date.now() + OPENALEX_PROXY_TTL_MS,
+      });
+    }
+    if (retryAfter) res.setHeader("Retry-After", retryAfter);
+    res.status(upstream.status).type(contentType).send(body);
+  } catch (e) {
+    res.status(502).json({ error: "OpenAlex upstream request failed" });
+  }
+});
+
+// Purge stale proxy-cache entries every 10 min so it can't grow unbounded.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of OPENALEX_PROXY_CACHE.entries()) {
+    if (v.expiresAt <= now) OPENALEX_PROXY_CACHE.delete(k);
+  }
+}, 10 * 60 * 1000);
 
 app.use(paperRoutes);
 
