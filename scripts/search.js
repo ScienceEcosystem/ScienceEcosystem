@@ -683,6 +683,26 @@ function skeletonBlock(){
     </div>`;
 }
 
+// Shows the skeleton immediately, same as before, but if it's still sitting
+// there 5s later — e.g. mid OpenAlex retry/backoff under real rate-limiting —
+// adds one muted line saying so. A bare skeleton reads as "loading" for a
+// couple seconds and "broken" past that; this is the difference between the
+// two without needing the caller to know anything retried. Self-cleans:
+// renderPapers() below replaces `el`'s entire innerHTML once results are in,
+// which removes the hint along with the skeleton — no manual clearing needed
+// on the success path, only guarded here against a stale timer firing late.
+function showSkeleton(el) {
+  el.innerHTML = skeletonBlock();
+  clearTimeout(el._skelHintTimer);
+  el._skelHintTimer = setTimeout(() => {
+    if (!el.querySelector(".skel")) return; // real content already rendered
+    const hint = document.createElement("p");
+    hint.className = "muted skel-retry-hint";
+    hint.textContent = "Taking longer than usual — retrying…";
+    el.appendChild(hint);
+  }, 5000);
+}
+
 /* ----------- SAFE paper rendering ----------- */
 function renderPapers(works, append = false) {
   const results = $("unifiedSearchResults");
@@ -851,7 +871,7 @@ async function runUnifiedSearch(){
   const pList = $("publisherList");
   const fList = $("funders-list");
 
-  if (results) results.innerHTML = skeletonBlock();
+  if (results) showSkeleton(results);
   if (rList) rList.innerHTML = `<li class="muted">Loading authors...</li>`;
   if (tList) tList.innerHTML = `<li class="muted">Loading topics...</li>`;
   if (iList) iList.innerHTML = `<li class="muted">Loading institutions...</li>`;

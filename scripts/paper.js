@@ -2694,8 +2694,22 @@
       return;
     }
 
+    // The static "Loading paper…" text never updates on its own, so under
+    // real OpenAlex retry/backoff (rate-limited, slow network) the page can
+    // sit there for 10-20+ seconds looking identical to a fresh page load.
+    // One delayed, self-guarding hint — only fires if still on the plain
+    // loading text 5s in, and the next line naturally stops it mattering
+    // once real content (or an error) replaces this element's innerHTML.
+    var headerEl = $("paperHeaderMain");
+    var slowHintTimer = setTimeout(function () {
+      if (headerEl && headerEl.textContent.trim() === "Loading paper…") {
+        headerEl.innerHTML = "Loading paper…<p class=\"muted\" style=\"margin-top:.5rem;font-size:.85rem;\">Taking longer than usual — retrying…</p>";
+      }
+    }, 5000);
+
     try {
       var paper = await fetchPaperData(rawId);
+      clearTimeout(slowHintTimer);
       var source = await fetchSourceFromPaper(paper);
       await renderPaper(paper, source);
 
@@ -2709,6 +2723,7 @@
       fetchRelatedPapers(paper).then(function(related){ renderRelatedPapersSection(related); }).catch(function(){});
 
     } catch (e) {
+      clearTimeout(slowHintTimer);
       console.error(e);
       $("paperHeaderMain").innerHTML = "<p class='muted'>Error loading paper details.</p>";
       restoreHeaderIfNeeded();

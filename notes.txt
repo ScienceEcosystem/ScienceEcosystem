@@ -3176,3 +3176,69 @@ goes to localhost/api/openalex/... instead of api.openalex.org, no
 console/CSP errors, and real results render (204,417 results for
 "coral reef", sidebar researchers populated) exactly as before the
 change — just with the key applied server-side.
+
+-------------------------------------------------------
+IMPROVEMENT (2026-08-19) — "taking longer than usual" hints for
+search/paper/topic, so real retries under load don't look identical to
+a broken page
+-------------------------------------------------------
+
+Follow-up to the OpenAlex proxy fix above. That fix raised the rate-
+limit ceiling but didn't change what a user sees DURING a retry — a
+bare skeleton or "Loading paper…" with zero feedback, indistinguishable
+from a hung page once it stretches past a few seconds (confirmed live
+during the click-through session: a real rate-limit event can leave
+this stretching 20-30s+ across a page's several sequential OpenAlex
+calls). Added a delayed, self-clearing hint per page instead of a
+generic spinner:
+
+  - scripts/search.js: new showSkeleton(el) wraps the existing
+    skeletonBlock() — if the skeleton is still showing 5s later, appends
+    "Taking longer than usual — retrying…" via a timer stored on the
+    element (el._skelHintTimer). No manual cleanup needed on the success
+    path — renderPapers() already replaces the whole innerHTML once
+    results are in, which removes the hint along with the skeleton; the
+    timer callback itself also checks `.skel` is still present before
+    doing anything, guarding against a late-firing stale timer.
+  - scripts/paper.js: boot() — the static "Loading paper…" text in
+    paper.html never updated on its own. Added the same 5s-delayed
+    check (only fires if #paperHeaderMain's text is still exactly
+    "Loading paper…"), cleared explicitly on both the success and error
+    paths since this one isn't self-guarded by an innerHTML replace at
+    the same call site.
+  - scripts/topic.js: the ~19 Field Data panels (GBIF/IUCN/ChEMBL/
+    Wikidata/etc.) render silently while loading — #fieldDataBlock
+    starts hidden and each panel only reveals it once it has real
+    content, so there was never any loading indicator at all, not even
+    a stuck skeleton. New showFieldDataHintIfSlow(loaderPromises) fired
+    once after all 19 are kicked off (not per-panel — would've been
+    noisier than helpful): if the block is still hidden 5s later, shows
+    one muted line ("Checking external data sources... — taking longer
+    than usual…") and marks the block dataset.hintOnly; once
+    Promise.allSettled resolves for all 19, removes the hint and
+    re-hides the block if nothing real ever landed (checks
+    #fieldDataContent/#inatContent childElementCount) — same visible
+    end-state as before this change on both the "found nothing" and
+    "found data fast" paths, only the slow-path in between changed.
+
+Verified live via Playwright with artificial delay injected on the
+relevant endpoints (page.route intercepting /api/openalex/** or
+/api/field-data/** with a 7s async delay before continuing):
+  - search.html: hint appeared at t=6s, cleared by t=21s once the
+    (deliberately slowed) sequential calls finished, 119 real result
+    cards rendered.
+  - paper.html: header text included "retrying" at t=6s, showed the
+    real paper title by t=14s.
+  - topic.html (Tūī): confirmed the hint correctly does NOT appear when
+    data arrives before the 5s mark (fast-path regression check), and
+    the block ends up visible with real content and no lingering hint
+    once settled — same mechanism verified on the slow path via the
+    paper/search tests above.
+All three: node --check passes; no new console errors introduced.
+
+Also written this session: .claude/skills/run/SKILL.md — captures the
+dev-server start command, port-polling pattern, and the node_modules-
+hang gotcha hit while setting up this click-through session (importing
+pg/@aws-sdk/* silently hung after the folder move; `rm -rf
+node_modules && npm install` fixed it, root cause not fully pinned
+down). Saves re-discovering this from scratch next time.

@@ -1888,6 +1888,42 @@
     } catch (_) {}
   }
 
+  // Shared "still checking" hint for the whole Field Data section. #fieldDataBlock
+  // starts hidden and every individual panel below reveals it only once it has
+  // real content to show (`block.style.display = ""`) — fine on a fast
+  // connection, but on a slow one there's nothing on screen for several
+  // seconds with no sign anything is happening. If the block is still hidden
+  // 5s after all ~19 loaders were kicked off, show one muted line saying so;
+  // remove it (and re-hide the block if nothing ever came in) once every
+  // loader has settled either way.
+  function showFieldDataHintIfSlow(loaderPromises) {
+    const timer = setTimeout(() => {
+      const block = $("fieldDataBlock");
+      if (!block || block.style.display !== "none") return; // already has real content
+      block.style.display = "";
+      block.dataset.hintOnly = "1";
+      const hint = document.createElement("p");
+      hint.id = "fieldDataHint";
+      hint.className = "muted";
+      hint.textContent = "Checking external data sources (GBIF, IUCN, Wikidata, and others) — taking longer than usual…";
+      const h2 = block.querySelector("h2");
+      if (h2) h2.after(hint); else block.prepend(hint);
+    }, 5000);
+
+    Promise.allSettled(loaderPromises).then(() => {
+      clearTimeout(timer);
+      const hint = $("fieldDataHint");
+      if (hint) hint.remove();
+      const block = $("fieldDataBlock");
+      if (block && block.dataset.hintOnly === "1") {
+        const hasRealContent = ($("fieldDataContent")?.childElementCount || 0) > 0 ||
+                                ($("inatContent")?.childElementCount || 0) > 0;
+        if (!hasRealContent) block.style.display = "none";
+        delete block.dataset.hintOnly;
+      }
+    });
+  }
+
   // ── World of Crayfish field data integration ─────────────────────────────────
   async function loadFieldData(displayName) {
     // Only try for binomial species names (two words, first capitalised)
@@ -2514,28 +2550,36 @@
       // skipped just because the page title happens to use the common name.
       const baseTopicName = topic.display_name || humanName;
       const speciesName = await resolveSpeciesName(baseTopicName);
-      loadFieldData(speciesName);
-      loadGbifData(speciesName);
-      loadInatData(speciesName);
-      loadColData(speciesName);
-      loadWormsData(speciesName);
-      loadObisData(speciesName);
-      loadIucnData(speciesName);
-      loadEbirdData(speciesName);
-      loadXenoCantoData(speciesName);
-      // Tier 3 — beyond species pages (compounds, structures, exoplanets,
-      // datasets) — these key off the page's own title, not the resolved
-      // scientific name, since they're not species-specific.
-      loadChemblData(baseTopicName);
-      loadPdbData(baseTopicName);
-      loadExoplanetData(baseTopicName);
-      loadPangaeaData(baseTopicName);
-      loadMaterialsData(baseTopicName);
-      loadUniprotData(baseTopicName);
-      loadGeneData(baseTopicName);
-      loadClinicalTrialsData(baseTopicName);
-      loadWikidataData(baseTopicName); // also chains into loadEarthquakeData + loadGeonamesData when the entity has coordinates
-      loadWorldBankData(baseTopicName);
+      // These ~19 panels render silently while loading — nothing is shown
+      // until each one either populates itself or gives up, so on a slow
+      // connection there's no sign anything is happening for several
+      // seconds. Tracked below so a single shared, delayed hint can appear
+      // if that stretches on, instead of adding a spinner to each one.
+      const fieldDataPromises = [
+        loadFieldData(speciesName),
+        loadGbifData(speciesName),
+        loadInatData(speciesName),
+        loadColData(speciesName),
+        loadWormsData(speciesName),
+        loadObisData(speciesName),
+        loadIucnData(speciesName),
+        loadEbirdData(speciesName),
+        loadXenoCantoData(speciesName),
+        // Tier 3 — beyond species pages (compounds, structures, exoplanets,
+        // datasets) — these key off the page's own title, not the resolved
+        // scientific name, since they're not species-specific.
+        loadChemblData(baseTopicName),
+        loadPdbData(baseTopicName),
+        loadExoplanetData(baseTopicName),
+        loadPangaeaData(baseTopicName),
+        loadMaterialsData(baseTopicName),
+        loadUniprotData(baseTopicName),
+        loadGeneData(baseTopicName),
+        loadClinicalTrialsData(baseTopicName),
+        loadWikidataData(baseTopicName), // also chains into loadEarthquakeData + loadGeonamesData when the entity has coordinates
+        loadWorldBankData(baseTopicName),
+      ];
+      showFieldDataHintIfSlow(fieldDataPromises);
       // Topic synthesis (non-blocking — only fires when Anthropic key is configured)
       loadTopicSynthesis(idTail);
 
