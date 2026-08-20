@@ -916,11 +916,16 @@
     if (get(p, "open_access.is_oa", false)) indicators.push({ icon: "✅ ", label: "Open access", status: "yes" });
     else indicators.push({ icon: "~", label: "Behind paywall", status: "partial" });
 
-    var indicatorsHtml = indicators.map(function(ind){
+    var indicatorsHtml = indicators.map(function(ind, i){
+      // indicators[0] is always the peer-review row (built above) — tagged so
+      // loadCitationContexts() can turn it into a link to the real Crossref
+      // review reports once/if that data comes back, without recomputing any
+      // of the scoring logic above.
+      var idAttr = i === 0 ? ' id="peerReviewIndicatorLabel"' : '';
       return '' +
         '<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">' +
           '<span style="font-size:1.2rem;">'+ind.icon+'</span>' +
-          '<span style="flex:1; color:'+(ind.status === "yes" ? "#333" : "#6b7280")+';">'+escapeHtml(ind.label)+'</span>' +
+          '<span'+idAttr+' style="flex:1; color:'+(ind.status === "yes" ? "#333" : "#6b7280")+';">'+escapeHtml(ind.label)+'</span>' +
         '</div>';
     }).join('');
 
@@ -2363,9 +2368,10 @@
       // at all. Filter it out rather than show it with a caveat.
       const contexts = (data.citationContexts || []).filter(c => c.source !== "openalex_abstract");
       const hasPeerReviews = data.peerReviews && data.peerReviews.length > 0;
+      const hasCrossrefReviews = data.crossrefPeerReviews && data.crossrefPeerReviews.length > 0;
       const hasImpact = data.impact && (data.impact.patentCitations > 0 || (data.impact.clinicalTrials && data.impact.clinicalTrials.length > 0));
 
-      if (!contexts.length && !hasPeerReviews && !hasImpact) {
+      if (!contexts.length && !hasPeerReviews && !hasCrossrefReviews && !hasImpact) {
         section.style.display = "none";
         return;
       }
@@ -2394,6 +2400,19 @@
           renderCitationContexts(contexts, filter);
         });
       });
+
+      if (hasCrossrefReviews) {
+        renderCrossrefPeerReviews(data.crossrefPeerReviews);
+        // Upgrade the sidebar's plain peer-review text into a link down to
+        // the real reports, now that we know they exist. Doesn't touch
+        // renderJournalBlockSimple()'s scoring logic — this fires after that
+        // already ran, since Crossref data isn't known until this fetch
+        // resolves.
+        var peerLabel = document.getElementById("peerReviewIndicatorLabel");
+        if (peerLabel) {
+          peerLabel.innerHTML = '<a href="#crossrefPeerReviewsSection" style="color:inherit;">' + escapeHtml(peerLabel.textContent) + '</a>';
+        }
+      }
 
       if (hasPeerReviews) {
         renderPeerReviews(data.peerReviews);
@@ -2592,6 +2611,34 @@
         renderAuthorNoteView(workId, null, true);
       } catch(_) { alert("Failed to delete note"); }
     });
+  }
+
+  // Formal review reports (Crossref relation.has-review) — distinct from
+  // renderPeerReviews() below, which is ScienceOpen's informal community
+  // reviews. Reuses the same .peer-review* classes for a consistent look.
+  function renderCrossrefPeerReviews(reviews) {
+    const section = document.getElementById("crossrefPeerReviewsSection");
+    const list = document.getElementById("crossrefPeerReviewsList");
+    if (!section || !list) return;
+
+    section.style.display = "block";
+    list.innerHTML = reviews.map(r => {
+      const meta = [];
+      if (r.date) meta.push(new Date(r.date).toLocaleDateString());
+      if (r.stage) meta.push(r.stage === "pre-publication" ? "pre-publication review" : "post-publication review");
+      return `
+      <article class="peer-review">
+        <div class="peer-review-head">
+          <strong>${escapeHtml(r.reviewer || "Reviewer")}</strong>
+          ${r.articleStatus ? `<span class="badge">${escapeHtml(r.articleStatus)}</span>` : ""}
+        </div>
+        ${r.affiliation ? `<div class="muted" style="font-size:.85rem;">${escapeHtml(r.affiliation)}</div>` : ""}
+        <p class="peer-review-text">${escapeHtml(r.competingInterests || "No competing-interest statement provided.")}</p>
+        <small class="muted">${escapeHtml(meta.join(" · "))}</small>
+        ${r.reportUrl ? ` · <a href="${escapeHtml(r.reportUrl)}" target="_blank" rel="noopener">Read full report →</a>` : ""}
+      </article>
+    `;
+    }).join("");
   }
 
   function renderPeerReviews(reviews) {

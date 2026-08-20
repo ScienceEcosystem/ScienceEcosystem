@@ -105,6 +105,16 @@
 
           <div id="citationContextsList"></div>
 
+          <!-- Formal review reports from the journal/venue itself (Crossref
+               relation.has-review), distinct from the informal community
+               reviews below — placed above them as the more authoritative
+               signal when both exist. -->
+          <div id="crossrefPeerReviewsSection" style="display:none; margin-top:1.5rem; padding-top:1.5rem; border-top:1px solid #eee;">
+            <h3>Peer review reports</h3>
+            <p class="muted" style="font-size:.8rem;">Showing reviews for this version of the paper. Versioned papers (e.g. F1000Research/Open Research Europe) may have reviews attached to other versions not shown here.</p>
+            <div id="crossrefPeerReviewsList"></div>
+          </div>
+
           <div id="peerReviewsSection" style="display:none; margin-top:1.5rem; padding-top:1.5rem; border-top:1px solid #eee;">
             <h3>Post-publication peer reviews</h3>
             <div id="peerReviewsList"></div>

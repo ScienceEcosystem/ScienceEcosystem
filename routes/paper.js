@@ -629,6 +629,65 @@ async function getScienceOpenReviews(doi) {
   }
 }
 
+// Crossref peer-review records — the journal/venue's own formal review
+// reports, distinct from ScienceOpen's informal community reviews above.
+// Crossref links an article DOI to its review-report DOIs via
+// relation['has-review'] (type:peer-review works, deposited by Wiley,
+// Copernicus, RSC, eLife, F1000/Open Research Europe, PeerJ, and others —
+// verified live against real ORE/PeerJ DOIs before building this). Only
+// covers a paper if its publisher actually deposits this relation — most
+// of the literature still won't have it, same as every other field-data
+// source in this codebase; absence isn't an error.
+async function getCrossrefPeerReviews(doi) {
+  try {
+    const cleanDoi = doi.replace(/^doi:/i, '');
+    const workRes = await fetch(`https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}?mailto=info@scienceecosystem.org`);
+    if (!workRes.ok) return null;
+    const work = (await workRes.json()).message;
+    // Crossref lists each has-review relation twice — once asserted-by
+    // "subject" (the article), once asserted-by "object" (the review) —
+    // same DOI both times. Dedupe or every review renders twice. Confirmed
+    // live: a 2-reviewer ORE paper otherwise came back with 4 entries.
+    const reviewDois = [...new Set(
+      (work.relation?.['has-review'] || [])
+        .filter(r => r['id-type'] === 'doi')
+        .map(r => r.id)
+    )].slice(0, 10); // cap — a handful of publishers run many revision rounds
+    if (!reviewDois.length) return null;
+
+    const reviews = await Promise.all(reviewDois.map(async (rDoi) => {
+      try {
+        const rRes = await fetch(`https://api.crossref.org/works/${encodeURIComponent(rDoi)}?mailto=info@scienceecosystem.org`);
+        if (!rRes.ok) return null;
+        const r = (await rRes.json()).message;
+        const reviewer = r.contributor?.find(c => c.role?.some(x => x.role === 'reviewer'));
+        // Best-effort only — F1000/ORE embed an aggregate status in the
+        // title string ("...[version 1; peer review: 2 approved]"); not
+        // present or reliable across every publisher, so this is
+        // decorative, never load-bearing. Omit rather than guess if it
+        // doesn't match.
+        const statusMatch = (r.title?.[0] || '').match(/peer review:\s*([^\]]+)\]/i);
+        return {
+          source: 'crossref',
+          reviewDoi: rDoi,
+          reviewer: reviewer ? [reviewer.given, reviewer.family].filter(Boolean).join(' ') || null : null,
+          affiliation: reviewer?.affiliation?.[0]?.name || null,
+          date: r.issued?.['date-parts']?.[0]?.join('-') || null,
+          stage: r.review?.stage || null,
+          competingInterests: r.review?.['competing-interest-statement'] || null,
+          reportUrl: r.resource?.primary?.URL || `https://doi.org/${rDoi}`,
+          articleStatus: statusMatch ? statusMatch[1].trim() : null,
+        };
+      } catch (e) { return null; }
+    }));
+    const clean = reviews.filter(Boolean);
+    return clean.length ? clean : null;
+  } catch (e) {
+    console.error('Crossref peer review error:', e);
+    return null;
+  }
+}
+
 // Lens.org API (optional)
 async function getLensImpact(doi, apiKey) {
   if (!apiKey) return null;
@@ -672,7 +731,18 @@ const CITATION_CONTEXTS_TTL_MS = 6 * 60 * 60 * 1000;
 
 // GET /api/paper/citation-contexts?doi=10.xxxx
 router.get('/api/paper/citation-contexts', async (req, res) => {
-  const doi = req.query?.doi;
+  // scripts/paper.js's doiFromWork(p) only strips a "doi:" prefix, not the
+  // "https://doi.org/" one OpenAlex's own doi field always carries — so this
+  // param regularly arrives as a full URL, not a bare DOI. Every helper below
+  // (getOpenCitations, getScienceOpenReviews, getCrossrefPeerReviews, and
+  // Crossref/OpenCitations generally) expects a bare DOI and fails silently
+  // (their own try/catch just returns null) on a full URL — this was
+  // discovered live while verifying the new Crossref peer-review feature
+  // against a real DOI: reviews genuinely existed but nothing rendered until
+  // this was traced back to the un-normalized param. Semantic Scholar's own
+  // lookup happens to tolerate the URL form, which is why this went unnoticed
+  // for the sources already in this endpoint before today.
+  const doi = req.query?.doi ? String(req.query.doi).replace(/^doi:/i, "").replace(/^https?:\/\/(dx\.)?doi\.org\//i, "") : req.query?.doi;
   const s2id = req.query?.s2id;
   const s2url = req.query?.s2url;
   const title = req.query?.title;
@@ -699,10 +769,11 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
       }
     }
 
-    const [openCitations, core, scienceOpen, lensImpact, openAlexSnippets] = await Promise.all([
+    const [openCitations, core, scienceOpen, crossrefReviews, lensImpact, openAlexSnippets] = await Promise.all([
       doi ? getOpenCitations(doi) : null,
       doi ? getCORECitations(doi, process.env.CORE_API_KEY) : null,
       doi ? getScienceOpenReviews(doi) : null,
+      doi ? getCrossrefPeerReviews(doi) : null,
       doi ? getLensImpact(doi, process.env.LENS_API_KEY) : null,
       // OpenAlex-only fallback/supplement — same reliable cites: filter the
       // "Recently cited you" feed on user-profile.html already depends on,
@@ -726,6 +797,7 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
       citationLinks: openCitations || [],
       coreResults: core || [],
       peerReviews: scienceOpen || [],
+      crossrefPeerReviews: crossrefReviews || [],
       impact: lensImpact || null,
       sources: {
         semanticScholar: Array.isArray(semanticScholar) && semanticScholar.length > 0,
@@ -733,6 +805,7 @@ router.get('/api/paper/citation-contexts', async (req, res) => {
         openCitations: Array.isArray(openCitations) && openCitations.length > 0,
         core: Array.isArray(core) && core.length > 0,
         scienceOpen: Array.isArray(scienceOpen) && scienceOpen.length > 0,
+        crossrefPeerReviews: Array.isArray(crossrefReviews) && crossrefReviews.length > 0,
         lens: !!lensImpact
       }
     };

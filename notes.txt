@@ -3242,3 +3242,110 @@ hang gotcha hit while setting up this click-through session (importing
 pg/@aws-sdk/* silently hung after the folder move; `rm -rf
 node_modules && npm install` fixed it, root cause not fully pinned
 down). Saves re-discovering this from scratch next time.
+
+-------------------------------------------------------
+BUILT (2026-08-21) — real open peer review reports on paper.html,
+sourced from Crossref
+-------------------------------------------------------
+
+Prompted directly: business_plan/main.tex §4 names "transparent peer
+review" as a Longer-Term Development goal, and the only thing on the
+site that gestured at this was scripts/paper.js's OPEN_PEER_REVIEW_
+JOURNALS — a 9-journal-name allowlist that just swaps one line of
+sidebar text ("Peer reviewed (open/transparent)" vs "Peer reviewed"),
+never showing an actual reviewer, report, or process.
+
+Verified live before building anything (same discipline as every other
+field-data source here): Crossref carries over 1 million real
+type:peer-review records — reviewer name, affiliation, competing-
+interest statement, review stage, and a link to the full report —
+linked to the article DOI via relation.has-review / is-review-of.
+Coverage spans Wiley, Copernicus, RSC, eLife, F1000/Open Research
+Europe, PeerJ, Royal Society, OUP, SAGE, IOP and more — this is per-
+paper ground truth, not a journal-level guess, and a strict upgrade
+over the existing allowlist.
+
+  [X] routes/paper.js: new getCrossrefPeerReviews(doi), added to the
+      existing citation-contexts endpoint's Promise.all fan-out
+      (alongside getOpenCitations/getCORECitations/getScienceOpenReviews/
+      getLensImpact) — rides the same 6h CITATION_CONTEXTS_CACHE, no new
+      route needed. Fetches the article's own Crossref record, reads
+      relation['has-review'], fetches each review DOI (capped at 10),
+      returns reviewer/affiliation/date/stage/competing-interests/
+      reportUrl/a best-effort articleStatus parsed from the review
+      title's "[version 1; peer review: 2 approved]" suffix (F1000/ORE
+      house style — omitted, not guessed, when it doesn't match).
+      New crossrefPeerReviews field in the response, kept deliberately
+      separate from the existing peerReviews field (ScienceOpen informal
+      community reviews — a different concept from a journal's own
+      formal review reports; conflating them would misrepresent both).
+  [X] BUG CAUGHT while testing: Crossref lists each has-review relation
+      TWICE (once asserted-by "subject", once asserted-by "object", same
+      DOI both times) — a 2-reviewer ORE paper came back with 4 entries
+      before adding a Set-based dedupe on the review DOI list.
+  [X] BUG CAUGHT, pre-existing, not introduced by this change: the doi
+      query param this whole endpoint receives is regularly a full
+      "https://doi.org/10.xxxx" URL, not a bare DOI — scripts/paper.js's
+      doiFromWork(p) only ever strips a "doi:" prefix, never the URL
+      one, and OpenAlex's own `doi` field is always the full-URL form.
+      Crossref/OpenCitations reject that and every helper's own try/
+      catch silently swallows the failure and returns null — so
+      getOpenCitations and getScienceOpenReviews have likely been
+      silently non-functional this whole time for exactly this reason,
+      invisible because "no data" and "broken" look identical here.
+      Semantic Scholar happens to tolerate the URL form, which is why
+      the endpoint as a whole still appeared to work. Found by chasing
+      why a paper CONFIRMED to have real Crossref review data rendered
+      nothing — traced with bracketing debug console.errors through
+      client and server until the exact param mismatch was caught red-
+      handed. Fixed once, at the route's entry point (normalize doi to
+      strip both doi: and https://doi.org/ before anything downstream
+      touches it) — benefits every source in this endpoint, not just
+      the new one.
+  [X] paper.html: new #crossrefPeerReviewsSection ("Peer review
+      reports"), placed above the existing #peerReviewsSection
+      (ScienceOpen) inside #citationContextsSection — a journal's own
+      formal reports are the more authoritative signal when both exist.
+      Includes a muted note documenting a real, known limitation:
+      versioned papers (F1000Research/ORE-style v1/v2) have has-review
+      relations per-version-DOI, and there is no version-chain concept
+      anywhere in this codebase (checked — genuinely doesn't exist), so
+      a review attached to a sibling version won't surface. Flagged
+      plainly rather than silently under-reporting; real fix would need
+      new OpenAlex/Crossref version-resolution logic, out of scope here.
+  [X] scripts/paper.js: new renderCrossrefPeerReviews(), mirrors
+      renderPeerReviews()/renderImpactData()'s existing show-section +
+      template-map-join + escapeHtml() pattern, reuses the same
+      .peer-review CSS classes (no new CSS). loadCitationContexts()'s
+      show/hide gate extended with hasCrossrefReviews. Sidebar upgrade:
+      the "Journal & Quality" panel's peer-review indicator row (was
+      plain text) gets a new id (peerReviewIndicatorLabel) purely so
+      loadCitationContexts() can turn it into a link down to the new
+      section once real data comes back — renderJournalBlockSimple()'s
+      own scoring/allowlist logic untouched, since Crossref data isn't
+      known until after that function has already run.
+  Verified live end-to-end against real DOIs (not just code review):
+    - 10.12688/openreseurope.20775.1 (ORE, "Giving voice") — 2 reviewers
+      (Matteo Nicolini, A. Arun Daves), correct dates, "2 approved"
+      status, working report links, section + sidebar link render
+      correctly in a real headless-browser load.
+    - 10.12688/openreseurope.19736.1 (ORE) — 3 reviewers, "3 approved
+      with reservations", same status string correctly shared across
+      all 3 (it's the article's aggregate status embedded in each
+      review's own title, not a per-reviewer verdict — confirmed by
+      comparing raw Crossref records directly).
+    - 10.7554/elife.52646 (eLife Reviewed Preprint) — 3 reviews, messier
+      real-world data (one entry with no parseable reviewer name, one
+      with no stage) — confirmed the "Reviewer"/blank fallbacks handle
+      this cleanly, no crash, no garbage rendered.
+    - 10.7554/elife.110392 (eLife, no has-review relation) and
+      10.1016/j.scitotenv.2020.143826 (mangrove paper, no Crossref
+      review data) — both correctly render with the new section hidden,
+      no errors.
+  Observed real latency: the endpoint's cold response time for a paper
+  with reviews varied 3-17s in testing (1 article lookup + N parallel
+  review lookups against Crossref, on top of the other 5 existing
+  sources already in this same Promise.all) — cached at 6h after the
+  first hit, same as the rest of this endpoint, but worth knowing this
+  section can legitimately take longer to appear than the citation-
+  contexts list itself on a cold cache.
