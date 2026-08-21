@@ -254,6 +254,28 @@
               + (year ? year + ";" : "") + (vi ? vi : "") + pages + "." + (doiPart ? doiPart : "");
     return out.replace(/\s+\./g,".");
   }
+  // Real, publisher-authoritative BibTeX (via /api/paper/bibtex, which does
+  // DOI content negotiation against Crossref) — used as a progressive
+  // upgrade over fmtBibTeX()'s own OpenAlex-derived guess below, not a
+  // replacement for it: the local version renders instantly from data
+  // already on the card, this one is strictly more accurate but needs a
+  // network round trip. Returns null (never throws) on any failure — every
+  // caller already has a synchronous local fallback.
+  var _bibtexCache = {};
+  async function fetchRealBibTeX(doi){
+    if (!doi) return null;
+    if (doi in _bibtexCache) return _bibtexCache[doi];
+    try {
+      var res = await fetch("/api/paper/bibtex?doi=" + encodeURIComponent(doi));
+      if (!res.ok) { _bibtexCache[doi] = null; return null; }
+      var data = await res.json();
+      _bibtexCache[doi] = data.bibtex || null;
+      return _bibtexCache[doi];
+    } catch (e) {
+      return null;
+    }
+  }
+
   function bibtexKey(d){
     var first = d.authors && d.authors.length ? splitName(d.authors[0]).family || d.authors[0] : "key";
     var year = d.year && /^\d{4}$/.test(d.year) ? d.year : "n.d.";
@@ -522,6 +544,20 @@
         '</div>';
     }
 
+    // Upgrade the BibTeX row with the real, publisher-deposited version once
+    // it arrives — fired as a microtask so it runs after the caller (below)
+    // has synchronously set `pop.innerHTML = tpl`; querying for the textarea
+    // any earlier would find nothing to update yet.
+    if (d.doi){
+      Promise.resolve().then(function(){
+        fetchRealBibTeX(d.doi).then(function(real){
+          if (!real) return;
+          var ta = card.querySelector(".cite-row-bibtex textarea");
+          if (ta) ta.value = real;
+        });
+      });
+    }
+
     return tpl;
   }
 
@@ -706,8 +742,17 @@
       if (globalThis.SE_SESSION_PROMISE) {
         await globalThis.SE_SESSION_PROMISE;
       }
-      if (!globalThis.SE_SESSION) return;
-      await globalThis.SE_LIB?.loadLibraryOnce?.();
+      // Only the library-cache preload below needs a session — everything
+      // else in this function (PDF chips, abstract toggle, save button,
+      // cite popover) works for anonymous visitors too. This used to
+      // `return` here on no session, which silently skipped ALL of that —
+      // including wiring up "Cite" — for every signed-out visitor on every
+      // paper card sitewide. Caught live while verifying the new real-
+      // BibTeX feature: the Cite popover never opened at all in a fresh
+      // (signed-out) browser session, traced back to this early exit.
+      if (globalThis.SE_SESSION) {
+        await globalThis.SE_LIB?.loadLibraryOnce?.();
+      }
     } catch(e){ console.warn("SE_LIB preload:", e); }
 
     // 1) Add Unpaywall PDF chips asynchronously
@@ -1089,6 +1134,7 @@
     enhancePaperCards: enhancePaperCards,
     computeJournalTrustIndex: computeJournalTrustIndex,
     journalTrustIndexBadgeHtml: journalTrustIndexBadgeHtml,
-    setPageMeta: setPageMeta
+    setPageMeta: setPageMeta,
+    fetchRealBibTeX: fetchRealBibTeX
   };
 })();

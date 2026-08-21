@@ -14,11 +14,13 @@ router.get('/api/paper/:doi(*)', async (req, res, next) => {
   if (raw.startsWith("citation-contexts")) return next();
   if (raw.startsWith("abstract")) return next();
   if (raw.startsWith("living-evidence")) return next();
+  if (raw.startsWith("bibtex")) return next();
   if (raw.startsWith("artifacts?")) return next();
   if (raw.startsWith("oa?")) return next();
   if (raw.startsWith("links?")) return next();
   if (raw.startsWith("citation-contexts?")) return next();
   if (raw.startsWith("living-evidence?")) return next();
+  if (raw.startsWith("bibtex?")) return next();
   if (raw.endsWith("/author-note")) return next();
   const doi = decodeURIComponent(raw);
   
@@ -932,5 +934,42 @@ function calculateReproducibilityScore(resources) {
     breakdown
   };
 }
+
+// Real, publisher-authoritative BibTeX via DOI content negotiation — the
+// same mechanism Zotero/Mendeley/doi2bib use (a GET to Crossref's own
+// transform endpoint, equivalent to `curl -H "Accept: application/x-bibtex"
+// https://doi.org/{doi}`). Strictly better than generating BibTeX ourselves
+// from OpenAlex fields (frequently missing volume/pages/ISSN) with our own
+// name-splitting heuristics (breaks on names like "van Bijsterveldt" —
+// confirmed live: Crossref correctly keeps "van" as part of the surname,
+// our own splitName()-based generator does not). Long TTL cache — a
+// published DOI's deposited BibTeX essentially never changes.
+const BIBTEX_CACHE = new Map();
+const BIBTEX_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+router.get('/api/paper/bibtex', async (req, res) => {
+  const raw = req.query?.doi;
+  if (!raw) return res.status(400).json({ error: 'doi required' });
+  // Same normalization as citation-contexts above — doiFromWork(p) on the
+  // client only strips a "doi:" prefix, not "https://doi.org/", which
+  // Crossref's transform endpoint rejects outright.
+  const doi = String(raw).replace(/^doi:/i, "").replace(/^https?:\/\/(dx\.)?doi\.org\//i, "");
+
+  const cached = BIBTEX_CACHE.get(doi);
+  if (cached && cached.expiresAt > Date.now()) return res.json(cached.value);
+
+  try {
+    const r = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}/transform/application/x-bibtex?mailto=info@scienceecosystem.org`);
+    if (!r.ok) return res.status(404).json({ error: 'No real BibTeX available for this DOI' });
+    const bibtex = (await r.text()).trim();
+    if (!bibtex.startsWith('@')) return res.status(404).json({ error: 'Unexpected response' });
+    const value = { bibtex };
+    BIBTEX_CACHE.set(doi, { value, expiresAt: Date.now() + BIBTEX_TTL_MS });
+    res.json(value);
+  } catch (e) {
+    console.error('BibTeX fetch error:', e);
+    res.status(502).json({ error: 'Failed to fetch BibTeX' });
+  }
+});
 
 export default router;

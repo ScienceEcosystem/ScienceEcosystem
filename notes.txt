@@ -3349,3 +3349,88 @@ over the existing allowlist.
   first hit, same as the rest of this endpoint, but worth knowing this
   section can legitimately take longer to appear than the citation-
   contexts list itself on a cold cache.
+
+-------------------------------------------------------
+BUILT (2026-08-21) — real, publisher-authoritative BibTeX via DOI
+content negotiation, instead of generating it ourselves
+-------------------------------------------------------
+
+Prompted directly, referencing github.com/davidagraf/doi2bib2 as an
+example: "in the library and other places the bibtex is not always
+good, can we not use something similar to what they do here?" Checked
+their actual source (server/doi2bib.js) — it's nothing exotic, just a
+GET to https://doi.org/{doi} with Accept: application/x-bibtex, i.e.
+DOI content negotiation, the same official DOI-system feature Zotero/
+Mendeley use. Verified live against our own real papers before
+building anything: the real, publisher-deposited BibTeX for the
+mangrove paper correctly reads "author={van Bijsterveldt, Celine E.J.
+and van Wesenbeeck, Bregje K. and ...}" — "van" correctly kept as part
+of the surname — plus real volume/ISSN/publisher/month, none of which
+our own generator can guarantee since it's built from whatever fields
+happen to be in our own DB, using our own splitName() heuristic (which
+DOES put "van" in the wrong place — confirmed side by side).
+
+  [X] routes/paper.js: new GET /api/paper/bibtex?doi=... — calls
+      Crossref's own transform endpoint (api.crossref.org/works/{doi}/
+      transform/application/x-bibtex?mailto=...), which is equivalent
+      to the doi.org content-negotiation approach but supports our
+      existing mailto polite-pool convention and returns real CORS
+      headers (confirmed live: access-control-allow-origin: *) —
+      chosen over hitting doi.org directly for that reason, though
+      proxied through our own server anyway for caching (30-day TTL —
+      published BibTeX doesn't change) and consistency with how every
+      other external source in this codebase is handled. Same doi
+      normalization (strip doi: and https://doi.org/) as the citation-
+      contexts/peer-review endpoints, added just yesterday for the same
+      root-cause reason.
+  [X] scripts/components.js: new fetchRealBibTeX(doi), exported via
+      SE.components (so scripts/library-page.js, a separate IIFE, can
+      call it too — same cross-file pattern already used for
+      renderPaperCard/enhancePaperCards). buildCitePopover() keeps
+      rendering the LOCAL fmtBibTeX() instantly (unchanged — the other
+      5 citation formats it builds have no real-data upgrade path and
+      shouldn't have to wait on one), then upgrades just the BibTeX
+      textarea in place once the real version lands — same progressive-
+      enhancement pattern as this week's "taking longer than usual"
+      retry hints, applied here to accuracy rather than latency
+      tolerance. Copy/Download buttons already read the textarea's live
+      value at click time (pre-existing behavior), so they pick up the
+      upgrade automatically with no changes needed there.
+  [X] scripts/library-page.js: new realOrLocalBibTeX(item) — tries
+      SE.components.fetchRealBibTeX(item.doi) when the item has one,
+      falls back to the existing local fmtBibTeX() otherwise or on
+      failure. Wired into all 3 existing BibTeX export call sites
+      (single-item download, bulk-selection download, whole-library/
+      collection .bib export) — the whole-library export's existing
+      key-collision-dedup logic (disambiguates repeated
+      @article{name2020,...} keys across many items) runs unchanged on
+      top of whichever source produced each entry.
+  [X] BUG CAUGHT while verifying, unrelated to BibTeX but found because
+      of it: scripts/components.js's enhancePaperCards() — the function
+      that wires up EVERY delegated click handler on a paper card
+      (Cite, Save, abstract expand/collapse, not just the new BibTeX
+      upgrade) — had `if (!globalThis.SE_SESSION) return;` sitting
+      before the click-listener setup code, intended only to skip the
+      signed-in-only library-cache preload just above it. The early
+      return instead skipped the ENTIRE rest of the function for every
+      signed-out visitor, meaning the Cite popover has never opened at
+      all (button click did nothing, no error) for anyone not logged
+      in, on every paper card sitewide — since Save already has its own
+      documented signed-out fallback flow, this was clearly a scoping
+      mistake, not an intentional gate. Caught because a fresh
+      Playwright session (always signed-out) is exactly the condition
+      that triggers it — my own new BibTeX upgrade fetch was correctly
+      wired but silently never ran because the popover itself never
+      opened. Fixed by narrowing the gate to just the loadLibraryOnce()
+      call it was meant to guard.
+  Verified live end-to-end (real headless browser, not just the API in
+  isolation): opened the Cite popover for the mangrove paper in a fresh
+  signed-out session — instant local BibTeX renders first (own key
+  format), then upgrades in place ~seconds later to the real Crossref
+  version (van_Bijsterveldt_2021 key, ISSN, volume, month — none of
+  which the local version has), confirmed via the actual /api/paper/
+  bibtex network request and the textarea's final content. Separately
+  confirmed SE.components.fetchRealBibTeX is correctly reachable and
+  returns real data from library.html's own script context (cross-file
+  wiring proven), which is what all 3 library-page.js call sites
+  depend on.

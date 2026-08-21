@@ -153,6 +153,21 @@
       item.doi?`  doi={${item.doi}},`:"",
       "}"].filter(Boolean).join("\n");
   }
+  // Real, publisher-authoritative BibTeX when the item has a DOI (via
+  // components.js's fetchRealBibTeX, which does DOI content negotiation
+  // against Crossref) — correct entry type, complete venue/volume/pages,
+  // proper name handling ("van Bijsterveldt" etc.), none of which our own
+  // fmtBibTeX() above can guarantee since it's built from whatever fields
+  // happen to be in our own DB. Falls back to fmtBibTeX() for DOI-less
+  // items or if the fetch fails — every call site already handles a
+  // synchronous fmtBibTeX() result, so this only changes what feeds it.
+  async function realOrLocalBibTeX(item){
+    if (item.doi && globalThis.SE?.components?.fetchRealBibTeX){
+      const real = await globalThis.SE.components.fetchRealBibTeX(item.doi);
+      if (real) return real;
+    }
+    return fmtBibTeX(item);
+  }
   function authorInitials(given){
     return given.split(/\s+/).filter(Boolean).map(n=>n[0].toUpperCase()+".").join(" ");
   }
@@ -1414,9 +1429,9 @@
         toast(`${fmt.toUpperCase()} bibliography copied (${ids.length} items)`,"success");
       }catch(_e){ toast("Could not copy citations","error"); }
     });
-    $("#bulkExportBibBtn")?.addEventListener("click",()=>{
-      const text=selectedItems().map(it=>fmtBibTeX(it)).join("\n\n");
-      downloadText("bibliography.bib", text);
+    $("#bulkExportBibBtn")?.addEventListener("click", async()=>{
+      const entries = await Promise.all(selectedItems().map(it=>realOrLocalBibTeX(it)));
+      downloadText("bibliography.bib", entries.join("\n\n"));
       toast("BibTeX downloaded","success");
     });
     $("#bulkExportRisBtn")?.addEventListener("click",()=>{
@@ -1708,9 +1723,9 @@
     $("#addToCollectionBtn").onclick=()=>addItemToCollection(id);
 
     // Citation export
-    $("#exportBibBtn")?.addEventListener("click",()=>{
+    $("#exportBibBtn")?.addEventListener("click", async()=>{
       const safe=(item.title||"citation").replace(/[^a-z0-9]/gi,"_").slice(0,40);
-      downloadText(safe+".bib", fmtBibTeX(item));
+      downloadText(safe+".bib", await realOrLocalBibTeX(item));
       toast("BibTeX downloaded","success");
     });
     $("#exportRisBtn")?.addEventListener("click",()=>{
@@ -2080,12 +2095,12 @@
     }
 
     // Export the currently visible items (selected collection + filters) as one .bib file
-    $("#exportLibBibBtn")?.addEventListener("click",()=>{
+    $("#exportLibBibBtn")?.addEventListener("click", async()=>{
       const list = applyFilters(currentViewItems());
       if(!list.length){ toast("Nothing to export","error"); return; }
       const usedKeys = new Set();
-      const entries = list.map(item=>{
-        let entry = fmtBibTeX(item);
+      const rawEntries = await Promise.all(list.map(item=>realOrLocalBibTeX(item)));
+      const entries = rawEntries.map(entry=>{
         const m = entry.match(/^@\w+\{([^,]*),/);
         if(m){
           let key = m[1], n = 2, base = m[1];
