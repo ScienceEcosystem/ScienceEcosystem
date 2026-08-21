@@ -1346,7 +1346,13 @@
     try{
       // Auth + follows
       try{
-        await fetch("/api/me", { credentials: "include" });
+        // fetch() only rejects on network-level failure, not on a 401 HTTP
+        // response — must check .ok explicitly or a signed-out visitor gets
+        // treated as signed in (caught live while building the analogous
+        // journal-follow feature in scripts/journal.js, which copied this
+        // exact pattern — same bug existed here too).
+        var meRes = await fetch("/api/me", { credentials: "include" });
+        if (!meRes.ok) throw new Error("not signed in");
         isAuthed = true;
         try{
           var fl = await fetch("/api/follows", { credentials: "include" });

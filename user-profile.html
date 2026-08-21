@@ -155,6 +155,12 @@
         <div id="followFeed"><p class="empty">Loading…</p></div>
       </section>
 
+      <!-- Journal follow feed -->
+      <section class="panel" style="margin-top:1rem;" id="journalFeedSection" hidden>
+        <div class="sec-head"><h2>New from journals you follow</h2></div>
+        <div id="journalFollowFeed"><p class="empty">Loading…</p></div>
+      </section>
+
     </div>
   </main>
 
@@ -307,6 +313,41 @@
         .catch(function(){ box.innerHTML='<p class="empty">Could not load feed.</p>'; });
     }
 
+    function renderJournalFollowFeed(sources) {
+      if (!sources || !sources.length) return;
+      var section = document.getElementById("journalFeedSection");
+      var box     = document.getElementById("journalFollowFeed");
+      section.hidden = false;
+
+      var ids = sources.slice(0,5).map(function(f){
+        var id = f.source_id || f.id;
+        return id.indexOf("http")===0 ? id : "https://openalex.org/"+id;
+      }).join("|");
+
+      // Routed through our own /api/openalex proxy (not api.openalex.org
+      // directly) so this new code benefits from the server-side cache and
+      // OPENALEX_API_KEY the way this week's other new call sites do —
+      // the older renderFollowFeed() above predates that and is left as is.
+      fetch("/api/openalex/works?filter=host_venue.id:"+encodeURIComponent(ids)+"&sort=publication_date:desc&per_page=10&mailto=info@scienceecosystem.org")
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+          var works = (data && data.results) || [];
+          if (!works.length){ box.innerHTML='<p class="empty">No recent papers found.</p>'; return; }
+          box.innerHTML = works.map(function(w){
+            var tail = String(w.id||"").replace(/^https?:\/\/openalex\.org\//i,"");
+            var authors = (w.authorships||[]).slice(0,3).map(function(a){
+              return a.author && a.author.display_name || "";
+            }).filter(Boolean).join(", ");
+            var venue = (w.host_venue && w.host_venue.display_name) || (w.primary_location && w.primary_location.source && w.primary_location.source.display_name) || "";
+            return '<div class="paper-row">'
+              + '<div class="paper-row-title"><a href="paper.html?id='+esc(tail)+'">'+esc(w.display_name||"Untitled")+'</a></div>'
+              + '<div class="paper-row-meta">'+esc([authors, venue, w.publication_year].filter(Boolean).join(" · "))+'</div>'
+            + '</div>';
+          }).join("");
+        })
+        .catch(function(){ box.innerHTML='<p class="empty">Could not load feed.</p>'; });
+    }
+
     function workTail(id) {
       return String(id||"").replace(/^https?:\/\/openalex\.org\//i,"");
     }
@@ -411,6 +452,11 @@
           document.getElementById("kpiFollowing").textContent = "—";
           document.getElementById("followingList").innerHTML = '<p class="empty">Could not load following list.</p>';
         });
+
+      // Followed journals
+      api("/api/followed-sources")
+        .then(function(sources){ renderJournalFollowFeed(sources); })
+        .catch(function(){});
     }
 
     document.addEventListener("DOMContentLoaded", boot);

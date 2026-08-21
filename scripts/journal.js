@@ -17,6 +17,8 @@
   var currentYearMin = "";
   var currentYearMax = "";
   var abortCtrl = null;
+  var isAuthed = false;
+  var serverFollowedSources = [];
 
   // ---- Utils ----
   function $(id){ return document.getElementById(id); }
@@ -174,6 +176,51 @@
 
     // Last resort
     el.textContent = pubString || "Unknown publisher";
+  }
+
+  // ---- Follow ---- (mirrors scripts/profile.js's author-follow pattern,
+  // same /api/follow* shape, just source_id instead of author_id)
+  function isFollowingSource(id){
+    return serverFollowedSources.some(function(f){ return f.id === id || f.source_id === id; });
+  }
+  function wireFollowJournalButton(src, tail){
+    var btn = $("followJournalBtn");
+    var status = $("followJournalStatus");
+    if (!btn || !tail) return;
+    function refresh(){
+      var following = isFollowingSource(tail);
+      btn.textContent = following ? "Following" : "Follow";
+      btn.classList.toggle("btn-secondary", !following);
+      btn.classList.toggle("btn-success", following);
+      if (status) status.textContent = following ? "New papers will show on your Home page." : (isAuthed ? "" : "Sign in to follow.");
+    }
+    refresh();
+    btn.onclick = async function(){
+      if (!isAuthed){
+        if (status) status.textContent = "Sign in with ORCID to follow.";
+        location.href = "/auth/orcid/login";
+        return;
+      }
+      var following = isFollowingSource(tail);
+      try{
+        if (following){
+          await fetch("/api/followed-sources/"+encodeURIComponent(tail), { method:"DELETE", credentials:"include" });
+          serverFollowedSources = serverFollowedSources.filter(function(f){ return (f.id||f.source_id) !== tail; });
+        } else {
+          await fetch("/api/followed-sources", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type":"application/json" },
+            body: JSON.stringify({ source_id: tail, name: src.display_name || tail })
+          });
+          serverFollowedSources.push({ id: tail, name: src.display_name || tail });
+        }
+        refresh();
+      } catch(e){
+        if (status) status.textContent = "Could not update follow. Try again.";
+        console.error(e);
+      }
+    };
   }
 
   function renderHeader(src){
@@ -384,6 +431,23 @@
 
   async function boot(){
     try{
+      try{
+        // fetch() only rejects on network-level failure, not on a 401 HTTP
+        // response — must check .ok explicitly or an unauthenticated visitor
+        // gets treated as signed in (caught live: the Follow button's status
+        // text and click behavior were both wrong for a signed-out visitor).
+        var meRes = await fetch("/api/me", { credentials: "include" });
+        if (!meRes.ok) throw new Error("not signed in");
+        isAuthed = true;
+        try{
+          var fs = await fetch("/api/followed-sources", { credentials: "include" });
+          if (fs.ok){
+            var flist = await fs.json();
+            serverFollowedSources = Array.isArray(flist) ? flist.map(function(f){ return ({ id: f.source_id || f.id, name: f.name || f.source_id }); }) : [];
+          }
+        }catch(_){}
+      }catch(_){ isAuthed = false; serverFollowedSources = []; }
+
       var raw = getParam("id");
       var nameParam = getParam("name");
       var tail = (raw||"").trim();
@@ -445,6 +509,7 @@
       } catch(e) { /* SEO metadata is additive — never let it block the real page render */ }
 
       renderHeader(src);
+      wireFollowJournalButton(src, tail);
       populatePublisher(src);
       renderTrends(src);
       checkPredatoryAndUpdate(src);

@@ -404,6 +404,22 @@ async function pgInit() {
     );
   `);
 
+  // Followed journals/sources — same shape as followed_authors, mirrored
+  // deliberately so it can reuse the exact same "recent works from
+  // followed X" client-side aggregation pattern already proven for authors
+  // (renderFollowFeed in user-profile.html), just filtered by
+  // host_venue.id instead of author.id.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS followed_sources (
+      orcid TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (orcid, source_id),
+      CONSTRAINT fk_user_follow_source FOREIGN KEY (orcid) REFERENCES users(orcid) ON DELETE CASCADE
+    );
+  `);
+
   // New: collections + collection_items
   await pool.query(`
     CREATE TABLE IF NOT EXISTS collections (
@@ -918,6 +934,28 @@ async function followAdd(orcid, author_id, name) {
 }
 async function followDel(orcid, author_id) {
   await pool.query(`DELETE FROM followed_authors WHERE orcid=$1 AND author_id=$2`, [orcid, author_id]);
+}
+
+// Followed journals/sources — same shape and same ON CONFLICT upsert
+// pattern as the author-follow functions above.
+async function followedSourcesList(orcid) {
+  const { rows } = await pool.query(
+    `SELECT source_id, name, EXTRACT(EPOCH FROM created_at)::bigint AS created_at
+     FROM followed_sources WHERE orcid=$1 ORDER BY created_at DESC`,
+    [orcid]
+  );
+  return rows;
+}
+async function followedSourceAdd(orcid, source_id, name) {
+  await pool.query(
+    `INSERT INTO followed_sources (orcid, source_id, name)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (orcid, source_id) DO UPDATE SET name = EXCLUDED.name`,
+    [orcid, source_id, name]
+  );
+}
+async function followedSourceDel(orcid, source_id) {
+  await pool.query(`DELETE FROM followed_sources WHERE orcid=$1 AND source_id=$2`, [orcid, source_id]);
 }
 async function mergeAdd(orcid, primary_id, merged_id) {
   await pool.query(
@@ -4999,6 +5037,40 @@ app.delete("/api/follows/:authorId", async (req, res) => {
   } catch (e) {
     console.error("DELETE /api/follows/:authorId failed:", e);
     res.status(500).json({ error: "Failed to remove follow" });
+  }
+});
+
+app.get("/api/followed-sources", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    res.json(await followedSourcesList(sess.orcid));
+  } catch (e) {
+    console.error("GET /api/followed-sources failed:", e);
+    res.status(500).json({ error: "Failed to load followed sources" });
+  }
+});
+
+app.post("/api/followed-sources", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { source_id, name } = req.body || {};
+  if (!source_id) return res.status(400).json({ error: "source_id required" });
+  try {
+    await followedSourceAdd(sess.orcid, String(source_id), String(name || source_id));
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /api/followed-sources failed:", e);
+    res.status(500).json({ error: "Failed to save followed source" });
+  }
+});
+
+app.delete("/api/followed-sources/:sourceId", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    await followedSourceDel(sess.orcid, String(req.params.sourceId));
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE /api/followed-sources/:sourceId failed:", e);
+    res.status(500).json({ error: "Failed to remove followed source" });
   }
 });
 

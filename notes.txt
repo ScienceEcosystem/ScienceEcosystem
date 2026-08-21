@@ -3434,3 +3434,84 @@ DOES put "van" in the wrong place — confirmed side by side).
   returns real data from library.html's own script context (cross-file
   wiring proven), which is what all 3 library-page.js call sites
   depend on.
+
+-------------------------------------------------------
+ZOTERO-PARITY ROADMAP (2026-08-21) — full plan for the 7 real gaps found
+-------------------------------------------------------
+
+Prompted directly: "what features does zotero have that we dont have in
+the library" → verified against the actual codebase rather than general
+knowledge (found we already have tags/duplicate-detection/related-items,
+better than expected). 7 real gaps identified. Two (native desktop/
+mobile apps, a live Word/Google Docs plugin) confirmed deliberately
+deferred — about.html already ships a free real equivalent to the Word
+plugin (Quarto+Pandoc+citeproc), and both are multi-month ongoing-
+platform commitments disproportionate to a solo-maintained project.
+Full phased plan for the other 5 (full-text PDF search, standalone
+notes, real CSL citation styles, shared/group libraries, journal-feed
+tracking) written to a plan file and approved. First item built this
+session: journal following (below). Remaining 4 not yet started —
+revisit this plan when picking the next one up.
+
+-------------------------------------------------------
+BUILT (2026-08-21) — journal/source following ("New from journals you
+follow")
+-------------------------------------------------------
+
+First (cheapest) item from the Zotero-parity roadmap above — reuses two
+existing, already-proven patterns almost entirely rather than inventing
+anything new: the followed_authors table/route shape, and the client-
+side aggregation technique already live for "New from people you
+follow" on user-profile.html (built 2026-06-13, no new backend needed
+then either).
+
+  [X] server/index.js: new followed_sources table, exact same shape as
+      followed_authors (orcid, source_id, name, created_at, PK on
+      orcid+source_id, FK cascade to users). New followedSourcesList/
+      followedSourceAdd/followedSourceDel helpers and GET/POST/DELETE
+      /api/followed-sources routes — line-for-line mirrors of the
+      existing /api/follows implementation, just source_id instead of
+      author_id.
+  [X] journal.html: new "Follow" button + status line next to the
+      journal name, same placement/markup pattern as profile.html's
+      existing followAuthorBtn.
+  [X] scripts/journal.js: new isFollowingSource()/wireFollowJournalButton(),
+      mirrors scripts/profile.js's wireFollowButton() exactly (same
+      optimistic local-state-update-then-API-call shape). Wired into
+      boot() right after renderHeader(src) — fetches /api/me +
+      /api/followed-sources up front, same sequencing as profile.js.
+  [X] user-profile.html: new "New from journals you follow" panel
+      (#journalFeedSection/#journalFollowFeed), new
+      renderJournalFollowFeed() mirroring the existing renderFollowFeed()
+      almost exactly — same shape, filter=host_venue.id:... instead of
+      author.id:..., capped at 5 followed sources / 10 results, same
+      empty-state handling. Deliberately routed through this week's new
+      /api/openalex proxy (not api.openalex.org directly) since this is
+      new code written today — the older renderFollowFeed() it's
+      modeled on predates the proxy and was left untouched, out of
+      scope for this change.
+  [X] BUG CAUGHT while verifying, inherited from the exact pattern being
+      mirrored: `await fetch("/api/me", {...})` doesn't throw on a 401 —
+      fetch() only rejects on network-level failure, never on HTTP error
+      status — so `isAuthed = true` was being set unconditionally right
+      after that line, regardless of whether the visitor was actually
+      signed in. Caught live: a fresh, signed-out browser session showed
+      an empty status line instead of "Sign in to follow.", and clicking
+      Follow silently did nothing instead of redirecting to ORCID login.
+      Checked the original this was copied from — scripts/profile.js's
+      own wireFollowButton auth check (line ~1349) has the identical
+      bug, predating this session entirely. Fixed both: check `.ok` on
+      the /api/me response before trusting it, matching the (already-
+      correct) pattern used by the OTHER /api/me call site in profile.js
+      (line ~231, which already did `.then(r => r.ok ? r.json() : null)`).
+  Verified live: unauthenticated GET /api/followed-sources → 401,
+  unauthenticated POST → 403 (CSRF gate, correct); real headless-browser
+  load of journal.html confirmed the Follow button now correctly shows
+  "Sign in to follow." at rest and redirects to the real ORCID OAuth
+  authorize URL on click, for a genuinely signed-out session (only after
+  the fetch.ok fix — before it, neither of those worked). Full signed-
+  in round-trip (follow persists, feed shows real papers from a
+  followed journal) not tested live — would need a real ORCID login,
+  not practical to simulate here; it runs through the same already-
+  proven /api/follows-shaped code path, so this is lower risk than a
+  from-scratch feature.
