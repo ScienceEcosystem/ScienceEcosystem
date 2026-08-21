@@ -363,6 +363,15 @@
   }
   let openMenu=null;
   let tagFilterTerms=[];
+  // Full-text-inside-PDF search state. Kept separate from the instant,
+  // in-memory title/author/venue/abstract filter in applyFilters() below —
+  // PDF body text isn't loaded into `items` client-side (could be large
+  // per file), so this is queried from a server endpoint on a debounce and
+  // unioned in. pdfSearchQuery guards against a slow response for query N
+  // still being applied after the user has already typed query N+1.
+  let pdfSearchMatchIds=new Set();
+  let pdfSearchQuery="";
+  let pdfSearchDebounceTimer=null;
   let _renderTagPanel=null; // set after init, called by renderTable
   let zoteroStatus=null;
   let zoteroUserId=null;
@@ -1034,11 +1043,35 @@
   function applyFilters(list){
     const q=($("#libFilter")?.value||"").trim().toLowerCase();
     const tags=tagFilterTerms;
+    // Only trust pdfSearchMatchIds when it was populated for THIS exact
+    // query — stale matches from a previous, since-edited query would
+    // otherwise linger and show wrong results until the next debounce fires.
+    const pdfMatches = (q && pdfSearchQuery===q) ? pdfSearchMatchIds : null;
     return list.filter(it=>{
-      const matchesQ = !q || `${it.title} ${it.authors||""} ${it.venue||""} ${it.abstract||""}`.toLowerCase().includes(q);
+      const matchesQ = !q
+        || `${it.title} ${it.authors||""} ${it.venue||""} ${it.abstract||""}`.toLowerCase().includes(q)
+        || (pdfMatches && pdfMatches.has(String(it.id)));
       const hasTags = !tags.length || (Array.isArray(it.tags) && tags.every(t=>it.tags.map(s=>s.toLowerCase()).includes(t)));
       return matchesQ && hasTags;
     });
+  }
+
+  // Debounced — searches the caller's own saved PDF text via the server
+  // (see /api/library/search-pdfs) and re-renders once results land.
+  function triggerPdfSearch(rawQuery){
+    const q=(rawQuery||"").trim().toLowerCase();
+    clearTimeout(pdfSearchDebounceTimer);
+    if(!q){ pdfSearchMatchIds=new Set(); pdfSearchQuery=""; return; }
+    pdfSearchDebounceTimer=setTimeout(async ()=>{
+      try{
+        const res=await fetch("/api/library/search-pdfs?q="+encodeURIComponent(q), { credentials:"include" });
+        if(!res.ok) return;
+        const rows=await res.json();
+        pdfSearchMatchIds=new Set((rows||[]).map(r=>String(r.paper_id)));
+        pdfSearchQuery=q;
+        renderTable();
+      }catch(_e){ /* full-text search is additive — a failure here shouldn't disrupt the instant local filter */ }
+    }, 400);
   }
 
   // Only show first author's last name in main table
@@ -1170,11 +1203,18 @@
     tbody.innerHTML=view.map(it=>{
       const optionalTds = optionalCols.map(c=>`<td class="col-${c.key}">${c.get(it)}</td>`).join("");
       const zoteroBadge = it.zotero_key ? `<span class="badge badge-zotero" title="Synced from Zotero" style="font-size:.65rem;padding:.05rem .3rem;margin-right:3px;">Z</span>` : "";
+      // Only badge items that matched INSIDE the PDF and not already via
+      // the visible title/author/venue/abstract fields — avoids a
+      // redundant badge on every row when the query is something generic.
+      const q=($("#libFilter")?.value||"").trim().toLowerCase();
+      const matchedVisibleFields = q && `${it.title} ${it.authors||""} ${it.venue||""} ${it.abstract||""}`.toLowerCase().includes(q);
+      const pdfMatchBadge = (q && pdfSearchQuery===q && !matchedVisibleFields && pdfSearchMatchIds.has(String(it.id)))
+        ? `<span class="badge" title="Matched inside the PDF text, not the title/author/abstract" style="font-size:.65rem;padding:.05rem .3rem;margin-right:3px;">PDF match</span>` : "";
       const isSel = selectedIds.has(String(it.id));
       const readDot = it.read_status ? `<span title="${it.read_status}">${READ_DOT[it.read_status]||''}</span>` : "";
       return `<tr data-id="${esc(it.id)}" draggable="true"${isSel?' class="selected"':''}>
         <td class="col-icon" title="${esc(ITEM_TYPES[getItemType(it)]?.label||'Article')}" style="position:relative;">${typeIcon(getItemType(it))}${it.read_status?`<span style="position:absolute;top:1px;right:1px;">${READ_DOT[it.read_status]||''}</span>`:""}</td>
-        <td class="col-title" title="${esc(it.title||"-")}">${zoteroBadge}${titleHtml(it.title||"-")}</td>
+        <td class="col-title" title="${esc(it.title||"-")}">${zoteroBadge}${pdfMatchBadge}${titleHtml(it.title||"-")}</td>
         ${optionalTds}
         <td class="col-pdf" title="${it.local_pdf_path?'PDF stored in library':''}">${it.local_pdf_path?PDF_BADGE:''}</td>
       </tr>`;
@@ -1316,7 +1356,10 @@
   }
 
   // Filters + controls
-  $("#libFilter")?.addEventListener("input", renderTable);
+  $("#libFilter")?.addEventListener("input", (e)=>{
+    renderTable();
+    triggerPdfSearch(e.target.value);
+  });
   $("#sortBy")?.addEventListener("change", renderTable);
   $("#sortDir")?.addEventListener("change", renderTable);
   $("#tagFilter")?.addEventListener("input", ()=>{

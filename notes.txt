@@ -3515,3 +3515,70 @@ then either).
   not practical to simulate here; it runs through the same already-
   proven /api/follows-shaped code path, so this is lower risk than a
   from-scratch feature.
+
+-------------------------------------------------------
+BUILT (2026-08-22) — full-text PDF search (second item from the
+Zotero-parity roadmap)
+-------------------------------------------------------
+
+Search now covers what's actually written inside a user's saved PDFs,
+not just title/author/venue/abstract/tags. Confirmed before building
+that nothing in this codebase did any of this: no server-side PDF-
+parsing library existed, and no Postgres full-text search (tsvector/
+GIN) was used anywhere.
+
+  [X] Added pdf-parse (v2 — new API is `new PDFParse({data:buffer})
+      .getText()`, not the old v1 `pdf(buffer)` function signature;
+      confirmed against the installed version's own README before
+      writing any code, since a version mismatch would have silently
+      failed). Smoke-tested against a real downloaded PDF (bitcoin.org/
+      bitcoin.pdf) before wiring it into the server at all.
+  [X] server/index.js: library_pdfs gets full_text TEXT + a GENERATED
+      search_vector TSVECTOR column (auto-stays-in-sync with full_text,
+      nothing has to remember to update it separately) + a GIN index.
+      New extractAndStorePdfText(orcid, paperId, buffer) — fire-and-
+      forget, called right after both existing PDF-upload paths
+      (/api/library/pdf, /api/library/import-pdf) finish storing the
+      file. Never awaited by the request handler (parsing can take a
+      couple seconds; the upload response shouldn't wait on it).
+      Scanned-image PDFs with no real text layer are an expected empty
+      result, not an error — logged at most, never surfaced to the user.
+  [X] New GET /api/library/search-pdfs?q=... — auth-gated, scoped to
+      the caller's own orcid, ts_headline() returns a real snippet
+      showing WHERE the match came from (not just a yes/no hit).
+  [X] scripts/library-page.js: the existing instant, synchronous,
+      in-memory title/author/venue/abstract filter (applyFilters) is
+      untouched for that data — it's already loaded client-side. Added
+      a parallel, debounced (400ms) call to the new endpoint that unions
+      matching paper_ids in. Guarded with a pdfSearchQuery===q check so
+      a slow response for an old query can't apply itself after the
+      user has already typed something else. Matches found ONLY inside
+      the PDF (not already visible via title/author/venue/abstract) get
+      a small "PDF match" badge in the table — same transparency
+      principle already applied to citation-context sourcing (be clear
+      about *why* something matched).
+  [X] scripts/backfill-pdf-text.js — one-off script for PDFs uploaded
+      before this shipped (extraction is otherwise upload-time-only).
+      Mirrors scripts/check-library-pdfs.js's existing style/structure.
+      Fetches from R2 or local filesystem depending on storage_path's
+      prefix, same two shapes storePdfFile() already produces.
+  Verified live: real end-to-end test against the actual dev database —
+  extracted real text from the bitcoin.org PDF via pdf-parse, inserted
+  it into a temporary test row, ran the EXACT query the new endpoint
+  uses, got back a correct, real ts_headline snippet with matched terms
+  highlighted; confirmed the GIN index exists (EXPLAIN showed a Seq Scan
+  instead of using it, which is Postgres correctly choosing the cheaper
+  plan for a 1-row test table, not a problem — it'll use the index once
+  there's real volume); test row cleaned up after. Ran the backfill
+  script against the real database: 103 existing PDFs found needing
+  backfill, all failed cleanly at the fetch step (this local .env has
+  no R2 credentials configured) with clear per-row error messages and
+  ZERO writes to the DB (the UPDATE only runs after a successful
+  extraction) — confirmed safe to have run, but the actual backfill
+  still needs to happen somewhere WITH R2 credentials (Render/
+  production), not from here. Flagging this as a real follow-up action,
+  not done yet. Library page itself confirmed loading cleanly with the
+  new debounced search wiring active (typed into the search box live,
+  zero console errors) — the authenticated round-trip (upload a PDF,
+  confirm it's actually searchable) not tested live, same practical
+  constraint as other auth-gated features this session.

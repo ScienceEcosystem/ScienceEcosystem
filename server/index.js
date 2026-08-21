@@ -13,6 +13,7 @@ import { resolveLivingPaper } from "./living-paper-cache.js";
 import { checkJournalIntegrity, clearJournalIntegrityCache } from "./journal-integrity.js";
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { PDFParse } from "pdf-parse";
 const { Pool } = pkg;
 const fsp = fs.promises;
 import paperRoutes from "../routes/paper.js";
@@ -477,6 +478,17 @@ async function pgInit() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS library_pdfs_orcid_idx ON library_pdfs(orcid)`);
+
+  // Full-text PDF search — extracted at upload time (see extractAndStorePdfText
+  // below), native Postgres FTS rather than a new external service. A
+  // GENERATED column keeps search_vector automatically in sync with
+  // full_text; nothing has to remember to update it separately.
+  await pool.query(`ALTER TABLE library_pdfs ADD COLUMN IF NOT EXISTS full_text TEXT`);
+  await pool.query(`
+    ALTER TABLE library_pdfs ADD COLUMN IF NOT EXISTS search_vector TSVECTOR
+      GENERATED ALWAYS AS (to_tsvector('english', coalesce(full_text, ''))) STORED
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS library_pdfs_search_idx ON library_pdfs USING GIN(search_vector)`);
 
   // Identity linking status
   await pool.query(`
@@ -1683,6 +1695,28 @@ async function storePdfFile(orcid, paperId, buffer, contentType) {
   const safePath = ensureSafePath(pdfUploadDir, fullPath);
   return { storagePath: safePath, filename: fname, urlPath: `/uploads/pdfs/${orcid}/${fname}` };
 }
+
+// Full-text extraction — fire-and-forget, called right after a PDF is
+// stored (both upload paths below). Never awaited by the request handler:
+// parsing a large PDF can take a couple seconds and the upload response
+// shouldn't wait on it. Scanned-image PDFs with no real text layer are
+// expected to yield empty/near-empty text, not an error — that's a
+// legitimate outcome, not a failure, so it's logged at most, never
+// surfaced to the user.
+async function extractAndStorePdfText(orcid, paperId, buffer) {
+  try {
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    const text = (result?.text || "").slice(0, 2_000_000); // guard against pathological outliers
+    await pool.query(
+      `UPDATE library_pdfs SET full_text=$1 WHERE orcid=$2 AND paper_id=$3`,
+      [text, orcid, paperId]
+    );
+  } catch (e) {
+    console.warn(`PDF text extraction failed for ${orcid}/${paperId}:`, e?.message || e);
+  }
+}
+
 app.use(express.static(staticRoot, {
   extensions: ["html"],
   setHeaders(res, filePath) {
@@ -2651,6 +2685,7 @@ app.post("/api/library/pdf", async (req, res) => {
       `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
       [urlPath || storagePath, sess.orcid, paperId]
     );
+    extractAndStorePdfText(sess.orcid, paperId, file.buffer); // fire-and-forget
     res.json({ ok: true, paper_id: paperId });
   } catch (e) {
     console.error("POST /api/library/pdf failed:", e);
@@ -2753,6 +2788,33 @@ app.get("/api/library/pdf/:paperId", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   const paperId = String(req.params.paperId || "");
   return sendLibraryPdf(res, sess.orcid, paperId);
+});
+
+// Full-text search inside the caller's own saved PDFs — a separate,
+// server-backed complement to library-page.js's existing instant,
+// in-memory title/author/venue/abstract/tags filter (that data's already
+// loaded client-side; PDF body text isn't, and could be large, so this
+// stays server-side and is queried on demand). ts_headline gives a real
+// snippet showing WHERE the match came from, not just a yes/no hit.
+app.get("/api/library/search-pdfs", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const q = String(req.query?.q || "").trim();
+  if (!q) return res.json([]);
+  try {
+    const { rows } = await pool.query(
+      `SELECT paper_id,
+              ts_headline('english', full_text, plainto_tsquery('english', $2),
+                'MaxFragments=1, MaxWords=25, MinWords=10') AS snippet
+       FROM library_pdfs
+       WHERE orcid=$1 AND search_vector @@ plainto_tsquery('english', $2)
+       LIMIT 50`,
+      [sess.orcid, q]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error("GET /api/library/search-pdfs failed:", e);
+    res.status(500).json({ error: "Search failed" });
+  }
 });
 
 app.delete("/api/library/pdf", async (req, res) => {
@@ -2971,6 +3033,7 @@ app.post("/api/library/import-pdf", async (req, res) => {
       `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
       [urlPath || storagePath, sess.orcid, item.id]
     );
+    extractAndStorePdfText(sess.orcid, item.id, file.buffer); // fire-and-forget
 
     res.json({ item: { ...item, local_pdf_path: urlPath || storagePath }, pdf_url: urlPath || storagePath });
   } catch (e) {
