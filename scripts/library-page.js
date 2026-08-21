@@ -22,7 +22,8 @@
   const _T_PRE=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><rect x=".5" y=".5" width="10" height="12" rx="1" stroke="#7c3aed"/><line x1="2" y1="4" x2="9" y2="4" stroke="#7c3aed"/><line x1="2" y1="6.5" x2="9" y2="6.5" stroke="#7c3aed"/><line x1="2" y1="9" x2="6.5" y2="9" stroke="#7c3aed"/></svg>`;
   const _T_DISS=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><rect x=".5" y=".5" width="10" height="12" rx="1" stroke="#b45309"/><circle cx="5.5" cy="7" r="2" stroke="#b45309"/></svg>`;
   const _T_DATA=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><ellipse cx="5.5" cy="3" rx="4.5" ry="2" stroke="#6b7280"/><path d="M1 3v7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V3" stroke="#6b7280"/><path d="M1 7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2" stroke="#6b7280"/></svg>`;
-  const TYPE_ICON_MAP={'journal-article':_T_DOC,'review':_T_DOC,'letter':_T_DOC,'editorial':_T_DOC,'other':_T_DOC,'book':_T_BOOK,'book-chapter':_T_BOOK,'conference-paper':_T_CONF,'preprint':_T_PRE,'dissertation':_T_DISS,'dataset':_T_DATA,'report':_T_DOC};
+  const _T_NOTE=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><path d="M.5 1.5a1 1 0 0 1 1-1h6l3 3v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10z" stroke="#c2861a"/><path d="M7.5.7V4h3.3" stroke="#c2861a"/></svg>`;
+  const TYPE_ICON_MAP={'journal-article':_T_DOC,'review':_T_DOC,'letter':_T_DOC,'editorial':_T_DOC,'other':_T_DOC,'book':_T_BOOK,'book-chapter':_T_BOOK,'conference-paper':_T_CONF,'preprint':_T_PRE,'dissertation':_T_DISS,'dataset':_T_DATA,'report':_T_DOC,'note':_T_NOTE};
   function typeIcon(t){ return TYPE_ICON_MAP[t]||_T_DOC; }
 
   // Small PDF badge SVG
@@ -93,6 +94,7 @@
     "letter":          { label: "Letter",           bibtex: "article",   fields: ["volume","issue","pages"] },
     "editorial":       { label: "Editorial",        bibtex: "article",   fields: ["volume","issue","pages"] },
     "other":           { label: "Other",            bibtex: "misc",      fields: [] },
+    "note":            { label: "Note",              bibtex: "misc",      fields: [] },
   };
   const EXTRA_LABELS = {
     volume:"Volume", issue:"Issue", pages:"Pages", issn:"ISSN",
@@ -1463,7 +1465,9 @@
       toast(`${ids.length} item${ids.length===1?"":"s"} deleted permanently`);
     });
 
-    const selectedItems=()=>ids.map(i=>items.find(x=>String(x.id)===String(i))).filter(Boolean);
+    // Notes have no citation to export — excluded here since this helper's
+    // only consumers are the citation-export buttons just below.
+    const selectedItems=()=>ids.map(i=>items.find(x=>String(x.id)===String(i))).filter(it=>it && getItemType(it)!=="note");
     $("#bulkCopyCiteBtn")?.addEventListener("click", async()=>{
       const fmt=$("#bulkCiteFormatSelect")?.value||"apa";
       const text=buildBibliography(selectedItems(), fmt);
@@ -1484,10 +1488,51 @@
     });
   }
 
+  // Standalone notes get a dedicated, much simpler inspector — none of the
+  // paper metadata fields, citation export, or OpenAlex refresh below make
+  // sense for a plain note. Returns true if it handled rendering (caller
+  // should stop), false for a normal paper item.
+  function renderNoteInspector(host, item){
+    if(getItemType(item) !== "note") return false;
+    host.innerHTML = `
+      <div class="insp-hdr">
+        <span class="type-badge">Note</span>
+        <h2 style="margin:.3rem 0;">${esc(item.title||"Untitled note")}</h2>
+      </div>
+      <textarea id="noteBodyText" class="input" style="width:100%;min-height:16rem;font-family:inherit;" placeholder="Write your note…">${esc(item.notes_raw||"")}</textarea>
+      <div style="display:flex;justify-content:space-between;margin-top:.5rem;">
+        <button id="deleteNoteBtn" class="btn btn-secondary" style="color:#dc2626;border-color:#dc2626;">Delete note</button>
+        <button id="saveNoteBtn" class="btn btn-secondary">Save</button>
+      </div>
+      <p id="noteSaveStatus" class="muted" style="font-size:.8rem;margin-top:.3rem;"></p>
+    `;
+    $("#saveNoteBtn").addEventListener("click", async()=>{
+      const text = $("#noteBodyText").value;
+      const status = $("#noteSaveStatus");
+      try{
+        await fetch("/api/library/"+encodeURIComponent(item.id), {
+          method:"PATCH", credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ notes_raw: text })
+        });
+        item.notes_raw = text;
+        if(status) status.textContent = "Saved.";
+      }catch(e){ if(status) status.textContent = "Could not save."; }
+    });
+    $("#deleteNoteBtn").addEventListener("click", async()=>{
+      if(!confirm("Delete this note? This can't be undone.")) return;
+      await fetch("/api/library/"+encodeURIComponent(item.id), { method:"DELETE", credentials:"include" });
+      await safeRefreshItems(); renderTable();
+      host.innerHTML = `<p class="muted">Note deleted.</p>`;
+    });
+    return true;
+  }
+
   async function renderInspector(id){
     const host=$("#inspectorBody");
     const item=items.find(x=>String(x.id)===String(id));
     if(!item){ host.innerHTML=`<p class="muted">Not found.</p>`; return; }
+    if(renderNoteInspector(host, item)) return;
 
     // refresh metadata (best-effort)
     if(!item.meta_fresh){
@@ -2124,6 +2169,35 @@
       });
     }
 
+    // Standalone notes — a note that's its own library item, not tied to a
+    // paper (distinct from the existing per-paper Notes tab in the
+    // inspector, backed by the `notes` table with paper_id NOT NULL).
+    // Deliberately reuses library_items instead of a parallel note system:
+    // item_type='note', body in the already-existing-but-unused-for-this
+    // notes_raw column — search/tags/collections/export all already work
+    // on library_items for free. No new server endpoints needed: POST
+    // /api/library already accepts a bare {id,title} with no doi, and
+    // PATCH /api/library/:id already accepts both item_type and notes_raw.
+    $("#newNoteBtn")?.addEventListener("click", async()=>{
+      const title = (prompt("Note title:") || "").trim();
+      if(!title) return;
+      const id = "note:" + Date.now();
+      try{
+        await fetch("/api/library", {
+          method:"POST", credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ id, title })
+        });
+        await fetch("/api/library/"+encodeURIComponent(id), {
+          method:"PATCH", credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ item_type:"note", notes_raw:"" })
+        });
+        await safeRefreshItems(); renderTable(); await renderInspector(id);
+        toast("Note created","success");
+      }catch(e){ toast("Could not create note","error"); }
+    });
+
     // PDF import bindings
     const importBtn   = $("#importPdfBtn");
     const importInput = $("#importPdfInput");
@@ -2139,7 +2213,7 @@
 
     // Export the currently visible items (selected collection + filters) as one .bib file
     $("#exportLibBibBtn")?.addEventListener("click", async()=>{
-      const list = applyFilters(currentViewItems());
+      const list = applyFilters(currentViewItems()).filter(it=>getItemType(it)!=="note");
       if(!list.length){ toast("Nothing to export","error"); return; }
       const usedKeys = new Set();
       const rawEntries = await Promise.all(list.map(item=>realOrLocalBibTeX(item)));

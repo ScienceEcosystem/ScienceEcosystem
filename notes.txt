@@ -3582,3 +3582,50 @@ GIN) was used anywhere.
   zero console errors) — the authenticated round-trip (upload a PDF,
   confirm it's actually searchable) not tested live, same practical
   constraint as other auth-gated features this session.
+
+-------------------------------------------------------
+BUILT (2026-08-22) — standalone freeform notes (third item from the
+Zotero-parity roadmap)
+-------------------------------------------------------
+
+A note that's its own library item, not tied to a paper — distinct
+from the existing per-paper Notes tab (backed by the `notes` table,
+paper_id NOT NULL, unchanged). Turned out cheaper than planned: zero
+new server endpoints needed. library_items already had item_type and
+an unused-for-this-purpose notes_raw column; POST /api/library already
+accepted a bare {id,title} with no doi; PATCH /api/library/:id already
+accepted both item_type and notes_raw as editable fields. So this
+shipped as a pure client change reusing infrastructure that was
+already there — search, tags, collections all work on standalone
+notes for free since they're just library_items rows.
+
+  [X] scripts/library-page.js: "note" added to ITEM_TYPES + a new SVG
+      icon in TYPE_ICON_MAP. New "New note" toolbar button (library.html)
+      → prompts for a title → POST /api/library (bare id/title, no doi)
+      → PATCH item_type:"note" → opens it in the inspector.
+  [X] New renderNoteInspector(host, item) — standalone notes get a much
+      simpler dedicated inspector (title + one big textarea + Save/
+      Delete) instead of the full paper-metadata view; returns early
+      from renderInspector() before it would otherwise try to refresh
+      the item against OpenAlex (pointless and wasteful for something
+      with no DOI).
+  [X] Notes excluded from citation export: selectedItems() (feeds the
+      bulk Copy citations/BibTeX/RIS buttons) and the whole-library
+      .bib export both filter out item_type==='note' — a note has
+      nothing to cite. Single-item export buttons don't need a guard;
+      they're part of the normal paper inspector, which notes never
+      render in the first place.
+  Verified live end-to-end against the REAL server with a REAL signed
+  session (not mocked) — fabricated a genuine sid cookie the same way
+  cookie-parser signs one (same SESSION_SECRET, cookie-signature
+  package) against a temporary test user/session row, so every request
+  went through actual auth + CSRF middleware, not a bypass. Confirmed
+  via curl: POST creates the item, PATCH sets item_type/notes_raw
+  correctly, GET /api/library lists it, DELETE removes it — full round
+  trip at the API level. Then confirmed the same flow through the real
+  browser UI (Playwright with that session cookie injected): New note
+  button → prompt → note inspector renders with correct "Note" badge,
+  editable body, table row shows the new note icon; typed real text,
+  clicked Save, confirmed "Saved." and a real PATCH request; clicked
+  Delete, confirmed the real DELETE request and "Note deleted." All
+  test data (session/user/items) cleaned up from the database after.
