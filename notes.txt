@@ -3629,3 +3629,111 @@ notes for free since they're just library_items rows.
   clicked Save, confirmed "Saved." and a real PATCH request; clicked
   Delete, confirmed the real DELETE request and "Note deleted." All
   test data (session/user/items) cleaned up from the database after.
+
+-------------------------------------------------------
+BUILT (2026-08-22) — real, citeproc-rendered citation styles (fourth
+item from the Zotero-parity roadmap)
+-------------------------------------------------------
+
+Replaces the 14 hand-written per-style template functions across
+scripts/components.js and scripts/library-page.js's Cite popover rows
+with real CSL rendering — the same engine (citeproc-js, on npm as
+"citeproc") and the same style files Zotero itself uses, plus support
+for any of Zotero's ~9,000 styles via a pasted URL, not just the 7
+bundled ones.
+
+DEVIATION FROM THE ORIGINAL PLAN, decided while actually building it:
+the plan called for running citeproc client-side as a lazy-loaded
+vendor asset (matching the three.js/Leaflet pattern). Reconsidered once
+implementation started — citeproc needs a style XML file AND a locale
+XML file AND the item's CSL-JSON, and the "paste any .csl URL" power-
+user path needs a CORS proxy regardless of where rendering happens
+(arbitrary third-party style URLs won't have CORS headers for us).
+Since a proxy was unavoidable either way, there was no real benefit to
+shipping the ~1MB processor to every browser that opens the Cite
+popover versus rendering once server-side and caching the resulting
+plain text. Server-side also made the "any of 9000 styles" feature
+trivial (fetch once, cache, done) instead of needing an in-browser CSL
+style loader.
+
+  [X] Verified the whole pipeline end-to-end BEFORE writing any server
+      code: citeproc + a real downloaded APA style + a real locale file
+      + the real Crossref CSL-JSON for the mangrove paper correctly
+      rendered "van Bijsterveldt, C. E. J." — "van" kept as part of the
+      surname, the exact case our own splitName()-based generator gets
+      wrong.
+  [X] Bundled 7 styles (apa, mla, chicago-author-date, harvard-cite-
+      them-right, vancouver, ieee, nature) + the en-US locale as static
+      assets under assets/csl/ — sourced from citation-style-language/
+      styles-distribution (the same repo Zotero's own style picker
+      indexes, confirmed by each style's self-link pointing at
+      zotero.org/styles/<id>). Note: "vancouver.csl" doesn't exist as a
+      standalone file in the plain citation-style-language/styles repo
+      (only publisher-specific variants like elsevier-vancouver.csl) —
+      had to switch to styles-distribution, which merges in the
+      dependent styles too, to get the real generic Vancouver style.
+  [X] routes/paper.js: new GET /api/paper/cite?doi=...&style=apa|mla|
+      chicago|harvard|vancouver|ieee|nature|<zotero.org/styles/... or
+      raw .csl URL>. Fetches CSL-JSON via Crossref content negotiation
+      (same mechanism as the BibTeX endpoint, different Accept-
+      equivalent media type), loads the style (bundled file from disk,
+      or fetches+caches an arbitrary URL), runs citeproc, strips the
+      HTML citeproc returns down to plain text (the existing Cite
+      popover rows render every format as escaped plain text — an
+      italicized venue name would otherwise show up as literal
+      "<i>...</i>" — a deliberate simplification, not an oversight).
+      30-day cache keyed by doi+style, matching the BibTeX endpoint.
+  [X] BUG CAUGHT while testing the custom-style-URL path: fetching
+      zotero.org/styles/<id> with an explicit Accept header
+      ("application/vnd.citationstyles.style+xml, text/xml") got a 406
+      from their server every time, while curl (which sends
+      Accept: */*) succeeded instantly. Fixed by dropping the custom
+      Accept header entirely — not needed since the URL itself is
+      already style-specific, content negotiation on top of that was
+      never doing anything useful.
+  [X] scripts/components.js: new fetchCslCitation(doi, style), exported
+      via SE.components. buildCitePopover()'s APA/MLA/Chicago/Harvard/
+      Vancouver rows now carry a data-format attribute; the same
+      microtask that upgrades BibTeX (built earlier this week) now also
+      fires one fetch per style and swaps in the real citeproc text in
+      place once each lands — same progressive-enhancement pattern,
+      local hand-rolled version renders instantly, real version
+      replaces it a moment later. Copy/Copy All already read from each
+      row's data-cite-text attribute at click time, so they pick up the
+      upgrade automatically.
+  [X] New "Any other citation style" row in the popover (only shown
+      when the paper has a DOI) — paste a zotero.org/styles/<id> or raw
+      .csl URL, click Go, get a real citeproc-rendered result in that
+      exact style. Wired as a genuine .cite-row (same Copy button,
+      same data-cite-text attribute) so it participates correctly in
+      Copy All once a style has actually been applied — starts with an
+      empty data-cite-text so an unfilled custom-style row is correctly
+      excluded from Copy All until used.
+  [X] Deliberately NOT wired into scripts/library-page.js's bulk
+      bibliography panel this pass (CITE_FMT_MAP/buildBibliography) —
+      that path is synchronous today and feeds instant clipboard copy
+      for potentially many selected items at once; upgrading it needs a
+      real batching/performance decision (N parallel requests for a
+      50-item selection) that's out of scope for this change. Flagged
+      as a follow-up, not done.
+  [X] about.html's existing "Cite anywhere" Quarto/Pandoc/CSL section
+      needs no changes — it's for full-manuscript writing (a different
+      use case from copying one citation in-app) and already tells
+      users to pull styles from zotero.org/styles, which is the exact
+      same source this feature uses.
+  Verified live end-to-end against the real dev server: curled the new
+  endpoint directly across all 7 bundled styles against the real
+  mangrove-paper DOI — all correct, professional-quality output,
+  correct "et al." truncation per style's own rules (something none of
+  the hand-rolled formatters did). Verified the arbitrary-URL path
+  against two real external styles (Cell, PLOS) fetched live from
+  zotero.org and raw.githubusercontent.com. Verified cache timing
+  (repeat request ~1s → ~20ms). Full real-browser test of the Cite
+  popover: local citation renders instantly, upgrades in place to the
+  real citeproc version ~seconds later (confirmed Vancouver specifically
+  differs from the local version — real "et al." truncation, [Internet]
+  tag, numbered prefix — proving it's genuinely using citeproc's output,
+  not coincidentally identical), confirmed data-cite-text updates so
+  Copy/Copy All pick up the real version, confirmed the custom-style
+  input/Go button/result flow works end-to-end through the real UI, and
+  no console errors on any of it.

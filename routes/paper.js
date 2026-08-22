@@ -1,5 +1,12 @@
 import express from 'express';
 import fetch from 'node-fetch';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import CSL from 'citeproc';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 const OPENALEX_BASE = "https://api.openalex.org";
@@ -15,12 +22,14 @@ router.get('/api/paper/:doi(*)', async (req, res, next) => {
   if (raw.startsWith("abstract")) return next();
   if (raw.startsWith("living-evidence")) return next();
   if (raw.startsWith("bibtex")) return next();
+  if (raw.startsWith("cite")) return next();
   if (raw.startsWith("artifacts?")) return next();
   if (raw.startsWith("oa?")) return next();
   if (raw.startsWith("links?")) return next();
   if (raw.startsWith("citation-contexts?")) return next();
   if (raw.startsWith("living-evidence?")) return next();
   if (raw.startsWith("bibtex?")) return next();
+  if (raw.startsWith("cite?")) return next();
   if (raw.endsWith("/author-note")) return next();
   const doi = decodeURIComponent(raw);
   
@@ -969,6 +978,109 @@ router.get('/api/paper/bibtex', async (req, res) => {
   } catch (e) {
     console.error('BibTeX fetch error:', e);
     res.status(502).json({ error: 'Failed to fetch BibTeX' });
+  }
+});
+
+// Real CSL-rendered citations — the same engine (citeproc-js, published to
+// npm as "citeproc") and the same style files Zotero itself uses, instead
+// of the 14 hand-written per-style template functions in scripts/
+// components.js and scripts/library-page.js. Verified end-to-end before
+// wiring this up: citeproc + a real style + the real Crossref CSL-JSON for
+// the mangrove paper correctly renders "van Bijsterveldt, C. E. J." with
+// "van" kept as part of the surname — the exact case our own splitName()
+// heuristic gets wrong.
+//
+// Runs server-side, not as a client vendor asset (the plan's original
+// idea) — reconsidered once actually building this: citeproc needs a style
+// XML file AND a locale XML file AND the CSL-JSON item, and an arbitrary
+// "paste a .csl URL" style needs a CORS proxy either way, so there was no
+// real benefit to shipping the ~1MB processor to every browser that opens
+// the Cite popover versus rendering once here and caching the plain text.
+const CSL_BUNDLED_STYLES = {
+  apa: 'apa', mla: 'modern-language-association', chicago: 'chicago-author-date',
+  harvard: 'harvard-cite-them-right', vancouver: 'vancouver', ieee: 'ieee', nature: 'nature',
+};
+const CSL_LOCALE = fs.readFileSync(path.join(__dirname, '../assets/csl/locales/locales-en-US.xml'), 'utf8');
+const CSL_STYLE_CACHE = new Map(); // styleKeyOrUrl -> style XML text (bundled ones loaded once, fetched ones cached)
+const CSL_JSON_CACHE = new Map(); // doi -> { value, expiresAt }
+const CSL_RESULT_CACHE = new Map(); // `${doi}|${style}` -> { value, expiresAt }
+const CSL_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — same reasoning as BIBTEX_CACHE
+
+async function getCslStyle(styleParam) {
+  const bundledFile = CSL_BUNDLED_STYLES[styleParam];
+  if (bundledFile) {
+    if (!CSL_STYLE_CACHE.has(bundledFile)) {
+      CSL_STYLE_CACHE.set(bundledFile, fs.readFileSync(path.join(__dirname, `../assets/csl/styles/${bundledFile}.csl`), 'utf8'));
+    }
+    return CSL_STYLE_CACHE.get(bundledFile);
+  }
+  // Power-user path: any of Zotero's ~9000 styles, pasted as a
+  // zotero.org/styles/<id> or raw .csl URL. Only fetch something that
+  // actually looks like a CSL style before handing it to citeproc.
+  if (!/^https?:\/\//i.test(styleParam)) return null;
+  if (CSL_STYLE_CACHE.has(styleParam)) return CSL_STYLE_CACHE.get(styleParam);
+  const url = styleParam.includes('zotero.org/styles/')
+    ? `https://www.zotero.org/styles/${styleParam.split('zotero.org/styles/')[1].split(/[?#]/)[0]}`
+    : styleParam;
+  // No custom Accept header — live-tested and zotero.org's server returns
+  // 406 Not Acceptable for the CSL-specific media type some servers expect;
+  // the default (Accept: */*, what curl also sends) works everywhere tried.
+  const r = await fetch(url, { headers: { 'User-Agent': 'ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)' } });
+  if (!r.ok) return null;
+  const text = await r.text();
+  if (!text.includes('<style') || text.length > 2_000_000) return null;
+  CSL_STYLE_CACHE.set(styleParam, text);
+  return text;
+}
+
+async function getCslJson(doi) {
+  const cached = CSL_JSON_CACHE.get(doi);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const r = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}/transform/application/vnd.citationstyles.csl+json?mailto=info@scienceecosystem.org`);
+  if (!r.ok) return null;
+  const json = await r.json();
+  CSL_JSON_CACHE.set(doi, { value: json, expiresAt: Date.now() + CSL_TTL_MS });
+  return json;
+}
+
+// GET /api/paper/cite?doi=10.xxxx&style=apa|mla|chicago|harvard|vancouver|ieee|nature|<zotero.org/styles/... or raw .csl URL>
+router.get('/api/paper/cite', async (req, res) => {
+  const rawDoi = req.query?.doi;
+  const style = String(req.query?.style || 'apa');
+  if (!rawDoi) return res.status(400).json({ error: 'doi required' });
+  const doi = String(rawDoi).replace(/^doi:/i, '').replace(/^https?:\/\/(dx\.)?doi\.org\//i, '');
+
+  const cacheKey = `${doi}|${style}`;
+  const cachedResult = CSL_RESULT_CACHE.get(cacheKey);
+  if (cachedResult && cachedResult.expiresAt > Date.now()) return res.json(cachedResult.value);
+
+  try {
+    const [cslJson, styleXml] = await Promise.all([getCslJson(doi), getCslStyle(style)]);
+    if (!cslJson) return res.status(404).json({ error: 'No CSL-JSON available for this DOI' });
+    if (!styleXml) return res.status(404).json({ error: 'Unknown or unreachable citation style' });
+
+    cslJson.id = 'ITEM-1';
+    const engine = new CSL.Engine({
+      retrieveLocale: () => CSL_LOCALE,
+      retrieveItem: () => cslJson,
+    }, styleXml);
+    engine.updateItems(['ITEM-1']);
+    const bibliography = engine.makeBibliography();
+    const html = (bibliography?.[1]?.[0] || '').trim();
+    if (!html) return res.status(500).json({ error: 'Citeproc produced no output' });
+    // Strip to plain text — the existing Cite popover rows (scripts/
+    // components.js) render every format as escaped plain text, e.g. an
+    // italicized journal name from citeproc's HTML would otherwise show up
+    // as literal "<i>...</i>". Losing the italics is a real, deliberate
+    // simplification for this pass, not an oversight.
+    const text = html.replace(/<[^>]+>/g, '').replace(/&#38;/g, '&').replace(/&amp;/g, '&').trim();
+
+    const value = { citation: text, style };
+    CSL_RESULT_CACHE.set(cacheKey, { value, expiresAt: Date.now() + CSL_TTL_MS });
+    res.json(value);
+  } catch (e) {
+    console.error('CSL citation render error:', e);
+    res.status(500).json({ error: 'Failed to render citation' });
   }
 });
 

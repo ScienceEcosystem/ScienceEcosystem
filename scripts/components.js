@@ -276,6 +276,26 @@
     }
   }
 
+  // Real, citeproc-rendered citation (via /api/paper/cite, which runs the
+  // same CSL engine and style files Zotero uses) — same progressive-
+  // upgrade role as fetchRealBibTeX above, just for the formatted-text
+  // rows instead of BibTeX.
+  var _cslCache = {};
+  async function fetchCslCitation(doi, style){
+    if (!doi) return null;
+    var key = doi + "|" + style;
+    if (key in _cslCache) return _cslCache[key];
+    try {
+      var res = await fetch("/api/paper/cite?doi=" + encodeURIComponent(doi) + "&style=" + encodeURIComponent(style));
+      if (!res.ok) { _cslCache[key] = null; return null; }
+      var data = await res.json();
+      _cslCache[key] = data.citation || null;
+      return _cslCache[key];
+    } catch (e) {
+      return null;
+    }
+  }
+
   function bibtexKey(d){
     var first = d.authors && d.authors.length ? splitName(d.authors[0]).family || d.authors[0] : "key";
     var year = d.year && /^\d{4}$/.test(d.year) ? d.year : "n.d.";
@@ -511,22 +531,34 @@
       '</div>' +
       '<div style="display:grid; grid-template-columns: 1fr; gap:10px; max-height:55vh; overflow:auto;"' +
         ' data-ris="'+escapeHtml(ris)+'" data-filename="'+escapeHtml(safeName)+'">' +
-        citeRow("APA (7th)", apa) +
-        citeRow("MLA (9th)", mla) +
-        citeRow("Chicago (Notes & Bib)", chi) +
-        citeRow("Harvard", har) +
-        citeRow("Vancouver", van) +
+        citeRow("APA (7th)", apa, "apa") +
+        citeRow("MLA (9th)", mla, "mla") +
+        citeRow("Chicago (Notes & Bib)", chi, "chicago") +
+        citeRow("Harvard", har, "harvard") +
+        citeRow("Vancouver", van, "vancouver") +
         citeRowTextarea("BibTeX", bib) +
+        (d.doi ? '' +
+          '<div class="cite-row" data-format="custom" data-cite-text="" style="border-top:1px solid #eee; padding-top:10px;">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">' +
+              '<span class="muted" style="font-weight:600;">Any other citation style</span>' +
+              '<button class="btn btn-secondary" data-role="copy-cite" aria-label="Copy custom style">Copy</button>' +
+            '</div>' +
+            '<div style="display:flex; gap:6px;">' +
+              '<input type="text" class="input" data-role="custom-style-input" placeholder="Paste a zotero.org/styles/... or .csl URL" style="flex:1; font-size:.85rem;">' +
+              '<button class="btn btn-secondary" data-role="apply-custom-style">Go</button>' +
+            '</div>' +
+            '<div class="cite-row-text" data-role="custom-style-result" style="font-size:.95rem; line-height:1.4; margin-top:6px;"></div>' +
+          '</div>' : '') +
       '</div>';
 
-    function citeRow(label, text){
+    function citeRow(label, text, formatKey){
       return '' +
-        '<div class="cite-row" data-cite-text="'+escapeHtml(text)+'">' +
+        '<div class="cite-row"'+(formatKey?' data-format="'+formatKey+'"':'')+' data-cite-text="'+escapeHtml(text)+'">' +
           '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">' +
             '<span class="muted" style="font-weight:600;">'+escapeHtml(label)+'</span>' +
             '<button class="btn btn-secondary" data-role="copy-cite" aria-label="Copy '+escapeHtml(label)+'">Copy</button>' +
           '</div>' +
-          '<div style="font-size:.95rem; line-height:1.4;">'+escapeHtml(text)+'</div>' +
+          '<div class="cite-row-text" style="font-size:.95rem; line-height:1.4;">'+escapeHtml(text)+'</div>' +
         '</div>';
     }
     function citeRowTextarea(label, text){
@@ -554,6 +586,18 @@
           if (!real) return;
           var ta = card.querySelector(".cite-row-bibtex textarea");
           if (ta) ta.value = real;
+        });
+        // Same upgrade, for the formatted-text rows — real citeproc
+        // rendering instead of the hand-written fmtAPA/fmtMLA/etc. above.
+        ["apa","mla","chicago","harvard","vancouver"].forEach(function(styleKey){
+          fetchCslCitation(d.doi, styleKey).then(function(real){
+            if (!real) return;
+            var row = card.querySelector('.cite-row[data-format="'+styleKey+'"]');
+            if (!row) return;
+            row.setAttribute("data-cite-text", real);
+            var textEl = row.querySelector(".cite-row-text");
+            if (textEl) textEl.textContent = real;
+          });
         });
       });
     }
@@ -953,6 +997,24 @@
         return;
       }
 
+      var applyStyle = e.target.closest('[data-role="apply-custom-style"]');
+      if (applyStyle){
+        var styleRow = applyStyle.closest(".cite-row");
+        var cardS = applyStyle.closest(".paper-card, .header-card, .result-card, article");
+        var doiS = cardS ? cardS.getAttribute("data-cite-doi") : null;
+        var input = styleRow && styleRow.querySelector('[data-role="custom-style-input"]');
+        var resultEl = styleRow && styleRow.querySelector('[data-role="custom-style-result"]');
+        var styleUrl = input ? input.value.trim() : "";
+        if (!styleUrl || !doiS || !resultEl) return;
+        resultEl.textContent = "Loading…";
+        fetchCslCitation(doiS, styleUrl).then(function(real){
+          if (!real){ resultEl.textContent = "Could not load that style — check the URL and try again."; return; }
+          resultEl.textContent = real;
+          styleRow.setAttribute("data-cite-text", real);
+        });
+        return;
+      }
+
       var copyAll = e.target.closest('[data-action="copy-all"]');
       if (copyAll){
         var cardA = copyAll.closest(".paper-card, .header-card, .result-card, article");
@@ -1135,6 +1197,7 @@
     computeJournalTrustIndex: computeJournalTrustIndex,
     journalTrustIndexBadgeHtml: journalTrustIndexBadgeHtml,
     setPageMeta: setPageMeta,
-    fetchRealBibTeX: fetchRealBibTeX
+    fetchRealBibTeX: fetchRealBibTeX,
+    fetchCslCitation: fetchCslCitation
   };
 })();
