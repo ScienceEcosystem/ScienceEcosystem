@@ -3865,3 +3865,57 @@ notes, real CSL citation styles, shared libraries) now built and
 verified. The 2 deliberately-deferred items (native desktop/mobile
 apps, a live Word/Google Docs plugin) remain documented, not built,
 per the reasoning recorded when the roadmap was first planned.
+
+2026-08-22 — Browser extension: real PDF identification, not just a
+raw-byte guess
+
+Context: user reported the extension said "PDF saved" for two real
+papers but the PDFs never actually showed up in the library. Traced
+to a stale installed extension (Chrome Web Store had v0.1.1, repo was
+at v0.1.3 — single-candidate download only, no remembered-tab-state
+fallback). Built and handed over extension_v0.1.3.zip for the user to
+publish. But pushing further ("but zotero does know it") surfaced two
+real, separate gaps beyond the stale-version issue:
+
+1. Server-side DOI/title sniffing in POST /api/library/import-pdf
+   (server/index.js) only ever scanned the PDF's raw bytes as latin1
+   text (head 64KB + tail 32KB). That only reaches uncompressed PDF
+   sections (e.g. XMP metadata blocks) — the actual visible page text
+   of most modern publisher PDFs lives in FlateDecode-compressed
+   content streams and is invisible to a raw byte scan. Confirmed with
+   a real PLOS ONE PDF: raw-byte scan found NO DOI at all; real
+   decompressed text (via pdf-parse's getText(), already a dependency
+   from the full-text-search feature) found 10.1371/journal.pone.0000308
+   immediately. Fixed by adding extractPdfSignals() — runs pdf-parse's
+   getText() + getInfo() once, feeds the decompressed text into the DOI/
+   arXiv regex alongside the existing raw-byte text, and uses the PDF's
+   embedded Info-dict Title (when publishers set it) as a better title
+   fallback than the uploaded filename. The already-parsed text is
+   reused for the full-text-search extraction too (extractAndStorePdfText
+   now accepts a precomputed text param) instead of parsing the PDF
+   twice.
+2. The extension itself had no path at all for a "cold" PDF — a bare
+   PDF tab where no DOI/title could be found anywhere (page scrape, URL
+   regex, or remembered same-tab navigation state) just showed "No paper
+   detected" and stopped. This is exactly the Zotero-parity gap the user
+   was pointing at: Zotero's "Retrieve Metadata for PDF" still tries
+   even when nothing else worked. Added a "Save this PDF — I'll identify
+   it" button to that empty state (extension/popup/popup.html +
+   popup.js) that appears whenever the tab URL itself looks like a PDF;
+   it uploads the file with no paperId, which was already routed by the
+   service worker to the same import-pdf endpoint above — no new backend
+   plumbing needed, just closing the UI gap and letting the improved
+   server-side sniffing do the identification.
+
+Bumped manifest version to 0.1.4, rebuilt extension_v0.1.4.zip (clean
+submission package) — supersedes the earlier 0.1.3 zip, still needs the
+user's own Chrome Web Store Developer Dashboard to publish.
+
+Verification: node --check on both changed extension files and
+server/index.js. Confirmed extractPdfSignals() behavior directly
+against two real PDFs — the Bitcoin whitepaper (no DOI, correctly
+returns none; confirms no false positives) and a live-downloaded PLOS
+ONE article (DOI only recoverable via the new decompressed-text path,
+not the old raw-byte path). Did not re-run the two originally-broken
+library items (crayfish/mangrove papers) server-side — that offer is
+still open but superseded by fixing the systemic cause instead.

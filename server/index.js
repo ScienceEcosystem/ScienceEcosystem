@@ -1758,17 +1758,41 @@ async function storePdfFile(orcid, paperId, buffer, contentType) {
 // expected to yield empty/near-empty text, not an error — that's a
 // legitimate outcome, not a failure, so it's logged at most, never
 // surfaced to the user.
-async function extractAndStorePdfText(orcid, paperId, buffer) {
+async function extractAndStorePdfText(orcid, paperId, buffer, precomputedText) {
   try {
-    const parser = new PDFParse({ data: buffer });
-    const result = await parser.getText();
-    const text = (result?.text || "").slice(0, 2_000_000); // guard against pathological outliers
+    let text = precomputedText;
+    if (text == null) {
+      const parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
+      text = result?.text || "";
+    }
+    text = text.slice(0, 2_000_000); // guard against pathological outliers
     await pool.query(
       `UPDATE library_pdfs SET full_text=$1 WHERE orcid=$2 AND paper_id=$3`,
       [text, orcid, paperId]
     );
   } catch (e) {
     console.warn(`PDF text extraction failed for ${orcid}/${paperId}:`, e?.message || e);
+  }
+}
+
+// Real decompressed page text + embedded Info dict, used to identify a
+// "cold" PDF (DOI/title not in the raw uncompressed bytes, e.g. most
+// modern FlateDecode-compressed publisher PDFs). Returns nulls on parse
+// failure (e.g. scanned-image PDFs) rather than throwing — the caller
+// already has a raw-byte fallback for that case.
+async function extractPdfSignals(buffer) {
+  try {
+    const parser = new PDFParse({ data: buffer });
+    const [textResult, info] = await Promise.all([parser.getText(), parser.getInfo()]);
+    return {
+      text: textResult?.text || "",
+      title: info?.info?.Title?.trim() || null,
+      author: info?.info?.Author?.trim() || null,
+    };
+  } catch (e) {
+    console.warn("PDF signal extraction failed:", e?.message || e);
+    return { text: "", title: null, author: null };
   }
 }
 
@@ -2963,7 +2987,13 @@ app.post("/api/library/import-pdf", async (req, res) => {
     // and PDF cross-reference tables (which often contain metadata) are at the end.
     const headStr = file.buffer.slice(0, 65536).toString("latin1");
     const tailStr = file.buffer.slice(Math.max(0, file.buffer.length - 32768)).toString("latin1");
-    const pdfText = headStr + "\n" + tailStr;
+    const rawBytesText = headStr + "\n" + tailStr;
+
+    // Real decompressed page text + embedded Info dict — catches DOIs/titles
+    // in modern FlateDecode-compressed PDFs, which the raw-byte scan above
+    // can't see (it only reaches uncompressed sections like XMP metadata).
+    const pdfSignals = await extractPdfSignals(file.buffer);
+    const pdfText = rawBytesText + "\n" + pdfSignals.text.slice(0, 65536);
 
     // Collect all DOI candidates, pick the first that survives normalization
     const doiCandidates = [...pdfText.matchAll(/\b(10\.\d{4,9}\/[^\s"<>\][()|\\]+)/g)]
@@ -2984,7 +3014,7 @@ app.post("/api/library/import-pdf", async (req, res) => {
 
     let item = {
       id: itemId,
-      title: filename.replace(/\.pdf$/i, "") || "Imported PDF",
+      title: pdfSignals.title || filename.replace(/\.pdf$/i, "") || "Imported PDF",
       openalex_id: null,
       openalex_url: null,
       doi: doi || null,
@@ -3088,7 +3118,7 @@ app.post("/api/library/import-pdf", async (req, res) => {
       `UPDATE library_items SET local_pdf_path=$1 WHERE orcid=$2 AND id=$3`,
       [urlPath || storagePath, sess.orcid, item.id]
     );
-    extractAndStorePdfText(sess.orcid, item.id, file.buffer); // fire-and-forget
+    extractAndStorePdfText(sess.orcid, item.id, file.buffer, pdfSignals.text); // fire-and-forget, reuses the parse above
 
     res.json({ item: { ...item, local_pdf_path: urlPath || storagePath }, pdf_url: urlPath || storagePath });
   } catch (e) {

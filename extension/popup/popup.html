@@ -38,6 +38,15 @@
       <div class="icon">🔍</div>
       <p class="muted">No paper detected on this page.</p>
       <p class="hint">Navigate to a journal article, arXiv paper, or PubMed entry to save it.</p>
+
+      <!-- Shown only when the tab looks like a bare PDF with no detectable
+           DOI/title (e.g. a signed publisher asset URL) — lets the server
+           try to identify it from the PDF's own text instead of giving up. -->
+      <button class="btn btn-secondary" id="btnSaveColdPdf" hidden>
+        <span>📥</span> Save this PDF — I'll identify it
+      </button>
+      <div id="coldPdfStatus" class="pdf-status muted" hidden></div>
+
       <button class="btn btn-secondary" id="btnOpenLibrary">Open my library →</button>
     </div>
 

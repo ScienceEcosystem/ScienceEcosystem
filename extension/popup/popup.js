@@ -29,6 +29,8 @@ let _user = null;       // SE user object
 let _saved = false;     // whether paper is already in library
 let _pdfUrls = [];      // PDF URLs found on page
 let _tabId = null;      // active tab id (for in-page PDF fetch via content script)
+let _coldPdfUrl = null;   // tab URL, when it looks like a PDF but nothing was detected
+let _coldPdfTitle = null;
 
 function showState(id) {
   ["stateLoading", "stateNoAuth", "stateNoPaper", "statePaper"].forEach(hide);
@@ -106,6 +108,15 @@ async function boot() {
   }
 
   if (!meta?.detected) {
+    // No DOI/title found anywhere (page scrape, URL, or remembered tab
+    // state) — but if this still looks like a PDF, offer to upload it raw
+    // and let the server identify it from the document's own text/metadata
+    // (same idea as Zotero's "Retrieve Metadata for PDF").
+    if (tab.url && /\.pdf(\?|#|$)/i.test(tab.url)) {
+      _coldPdfUrl = tab.url;
+      _coldPdfTitle = tab.title || "PDF document";
+      show("btnSaveColdPdf");
+    }
     showState("stateNoPaper");
     return;
   }
@@ -417,6 +428,31 @@ async function handleSavePdf() {
   }
 }
 
+// Upload a "cold" PDF (no detected DOI/title) as-is and let the server
+// identify it from the document's own text/metadata — see the paperId-less
+// branch of uploadPdfBlob() in the service worker, which already hits
+// /api/library/import-pdf for exactly this case.
+async function handleSaveColdPdf() {
+  const btn = $("btnSaveColdPdf");
+  btn.disabled = true;
+  const statusEl = $("coldPdfStatus");
+  statusEl.hidden = false;
+  statusEl.textContent = "Downloading and identifying…";
+
+  const result = await tryDownloadCandidate(_coldPdfUrl, null, _coldPdfTitle);
+
+  if (result?.ok) {
+    const item = result.result?.item;
+    statusEl.textContent = item?.meta_fresh
+      ? `✓ Identified and saved: "${truncate(item.title, 80)}"`
+      : "✓ Saved to your library (couldn't confirm the exact paper — check the library entry)";
+    btn.hidden = true;
+  } else {
+    btn.disabled = false;
+    statusEl.textContent = `✗ ${result?.error || "Could not save this PDF"}`;
+  }
+}
+
 // ── UI helpers ────────────────────────────────────────────────────────────────
 
 function setSaveStatus(type, text) {
@@ -460,6 +496,9 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btnLogin")?.addEventListener("click", () => {
     chrome.tabs.create({ url: `${SE_BASE}/auth/orcid/login` });
   });
+
+  // Save a "cold" PDF (no paper detected, but URL looks like a PDF)
+  $("btnSaveColdPdf")?.addEventListener("click", handleSaveColdPdf);
 
   // Open library
   $("btnOpenLibrary")?.addEventListener("click", () => {
