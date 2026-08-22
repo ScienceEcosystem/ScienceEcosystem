@@ -3919,3 +3919,43 @@ ONE article (DOI only recoverable via the new decompressed-text path,
 not the old raw-byte path). Did not re-run the two originally-broken
 library items (crayfish/mangrove papers) server-side — that offer is
 still open but superseded by fixing the systemic cause instead.
+
+2026-08-22 — Living Version chip: real bug, silent for any GitHub repo
+only found via publisher-page scraping
+
+Context: user asked whether their own crayfish paper (DOI
+10.1007/s10750-026-06302-z, first-authored, GitHub repo
+OlivierRaven/Koura_shoreline_habitats named in the PDF's Data
+Availability statement) could become a living paper like the existing
+Fisheries Research example. Checked each backend piece directly:
+repo + GitHub Pages site both live, /api/paper/artifacts.js's publisher-
+page scraper (/api/paper/links) correctly found the GitHub link from the
+Data Availability text, and /api/paper/living-evidence already returns
+tier "auto-generated" with real extracted claims for that repo — so
+every piece needed for the chip to work was already in place.
+
+But the chip (scripts/paper.js's checkLivingPaperChip()) never showed.
+Root cause: it only lights up when a research-object item has
+`repository === "GitHub"`. That field IS set on items harvested from
+DataCite/Zenodo backlinks (via /api/paper/artifacts), but was NEVER set
+on items pushed from the /api/paper/links publisher-page scrape or the
+PDF-references/data-availability scan — meaning any paper whose GitHub
+repo is only discoverable by scraping the publisher's landing page (not
+indexed as a structured DataCite/Crossref relation) could never surface
+the Living Version chip, no matter how complete its living-paper
+evidence actually was. Not specific to this one paper — a systemic gap
+affecting every author who documents their repo only in the manuscript
+text/Data Availability section, which is the common case.
+
+Fixed: added repoNameFromUrl() (github.com/gitlab.com/bitbucket.org/
+zenodo.org/figshare.com/osf.io → their display names) and wired it into
+both previously-missing spots. Verified against the live crayfish paper
+by running the dev server locally and loading paper.html?id=W7167813053
+in a real Playwright browser: chip now appears (amber "◆ Living
+version" badge), with the correct href to living-paper.html?repo=
+OlivierRaven%2FKoura_shoreline_habitats&doi=10.1007%2Fs10750-026-06302-z.
+Confirmed the async chain is slow (~20-25s: artifacts → links → living-
+evidence run in sequence, not parallel) — a short wait during manual
+testing would have looked like the fix didn't work when it actually
+just hadn't resolved yet; worth keeping in mind for any future
+verification of this chip.

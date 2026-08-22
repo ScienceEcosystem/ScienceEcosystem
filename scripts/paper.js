@@ -370,6 +370,22 @@
   var _DATA_REPO_DOMAINS = ["zenodo.org","figshare.com","osf.io","dryad","dataverse","pangaea.de","mendeley.com","codeocean.com"];
   var _CODE_REPO_DOMAINS = ["github.com","gitlab.com","bitbucket.org","sourceforge.net","codeocean.com"];
 
+  // checkLivingPaperChip() matches on repository === "GitHub" specifically —
+  // items harvested from /api/paper/artifacts already carry that field
+  // (DataCite/Zenodo backlinks above), but items found by scraping the
+  // publisher landing page or a PDF's body text never did, so a repo found
+  // only that way could never surface the Living Version chip even when the
+  // repo genuinely has one. Fills that gap for any of the recognized hosts.
+  function repoNameFromUrl(url){
+    var s = String(url||"").toLowerCase();
+    if (s.includes("github.com")) return "GitHub";
+    if (s.includes("gitlab.com")) return "GitLab";
+    if (s.includes("bitbucket.org")) return "Bitbucket";
+    if (s.includes("zenodo.org")) return "Zenodo";
+    if (s.includes("figshare.com")) return "Figshare";
+    if (s.includes("osf.io")) return "OSF";
+    return "";
+  }
   function classifyROKind(str){
     var s = String(str||"").toLowerCase();
     if (s.includes("software") || s.includes("code")) return "Software";
@@ -444,6 +460,7 @@
               title: h.url,
               url: h.url,
               doi: "",
+              repository: repoNameFromUrl(h.url),
               confidence: 50
             });
           });
@@ -493,6 +510,7 @@
             title: doiRef,
             doi: doiRef,
             url: "https://doi.org/" + doiRef,
+            repository: repoNameFromUrl(doiRef.includes("zenodo") ? "zenodo.org" : ""),
             confidence: item.fromDataAvailability ? 85 : 70
           });
         });
