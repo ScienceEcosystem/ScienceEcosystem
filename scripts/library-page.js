@@ -381,6 +381,7 @@
   // Bootstrap
   window.addEventListener("DOMContentLoaded", async()=>{
     try{ if(globalThis.SE_SESSION?.syncHeader) await globalThis.SE_SESSION.syncHeader(); }catch{}
+    await checkPendingInvite(); // must resolve before the first collections load so a freshly-joined collection shows up
     await refreshEverything();
     bindUI();
     initResizers();
@@ -578,34 +579,172 @@
   }
 
   function buildMenuForCollection(c, anchorEl){
+    // Container-management actions (rename/move/trash/new-subcollection)
+    // are owner-only — an editor can contribute items to a shared
+    // collection but shouldn't restructure or delete it out from under
+    // everyone else. The server enforces this too (PATCH/DELETE
+    // /api/collections/:id stay owner-scoped); this just keeps the menu
+    // from offering actions that would 403/404 anyway.
+    const isOwner = !c.role || c.role === "owner";
     const defs=[
       {act:"select-all",label:"Select all (for bibliography)",onClick: ()=>{ selectAllInCollection(c.id); }},
-      {act:"new",label:"New subcollection",onClick: async()=>{
-        // Create a placeholder collection and immediately rename it inline
-        const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:"New collection",parent_id:c.id})});
-        await safeRefreshCollections(); renderTree();
-        startInlineRename({id:col.id,name:col.name});
-      }},
-      {act:"ren",label:"Rename",onClick: ()=>{ startInlineRename(c); }},
-      {act:"move",label:"Move to…",onClick: async()=>{
-        showCollectionPicker(async(parent_id)=>{
-          if(parent_id===c.id){ toast("Cannot move under itself","error"); return; }
-          await api(`/api/collections/${c.id}`,{method:"PATCH",body:JSON.stringify({parent_id})});
-          await safeRefreshCollections(); renderTree(); toast("Moved","success");
-        });
-      }},
-      {act:"trash",label:"Move to Trash",onClick: async()=>{
-        // Soft delete collection
-        try{
-          await api(`/api/trash/collections`,{method:"POST",body:JSON.stringify({id:c.id})});
-        }catch{ // fallback: mark deleted via PATCH if your API supports; otherwise delete (last resort)
-          try{ await api(`/api/collections/${c.id}`,{method:"PATCH",body:JSON.stringify({deleted_at:new Date().toISOString()})}); }catch{}
-        }
-        if(currentCollectionId===c.id) currentCollectionId=null;
-        await safeRefreshCollections(); renderTree(); renderTable();
-      }},
+      {act:"shared-items",label:"Browse shared items",onClick: ()=>{ showSharedItemsDialog(c); }},
     ];
+    if (isOwner){
+      defs.push(
+        {act:"share",label:"Share…",onClick: ()=>{ showShareDialog(c); }},
+        {act:"new",label:"New subcollection",onClick: async()=>{
+          // Create a placeholder collection and immediately rename it inline
+          const col=await api("/api/collections",{method:"POST",body:JSON.stringify({name:"New collection",parent_id:c.id})});
+          await safeRefreshCollections(); renderTree();
+          startInlineRename({id:col.id,name:col.name});
+        }},
+        {act:"ren",label:"Rename",onClick: ()=>{ startInlineRename(c); }},
+        {act:"move",label:"Move to…",onClick: async()=>{
+          showCollectionPicker(async(parent_id)=>{
+            if(parent_id===c.id){ toast("Cannot move under itself","error"); return; }
+            await api(`/api/collections/${c.id}`,{method:"PATCH",body:JSON.stringify({parent_id})});
+            await safeRefreshCollections(); renderTree(); toast("Moved","success");
+          });
+        }},
+        {act:"trash",label:"Move to Trash",onClick: async()=>{
+          // Soft delete collection
+          try{
+            await api(`/api/trash/collections`,{method:"POST",body:JSON.stringify({id:c.id})});
+          }catch{ // fallback: mark deleted via PATCH if your API supports; otherwise delete (last resort)
+            try{ await api(`/api/collections/${c.id}`,{method:"PATCH",body:JSON.stringify({deleted_at:new Date().toISOString()})}); }catch{}
+          }
+          if(currentCollectionId===c.id) currentCollectionId=null;
+          await safeRefreshCollections(); renderTree(); renderTable();
+        }},
+      );
+    }
     buildContextMenu(defs, anchorEl);
+  }
+
+  // ---- Shared libraries ----
+  // Real shared collections: collection_items now carries its own display
+  // fields (see server/index.js migration comment) so every member sees the
+  // full pool regardless of who added what — not just items that also
+  // happen to be in the viewer's own personal library_items.
+  async function showShareDialog(c){
+    const overlay=$("#shareOverlay");
+    $("#shareColName").textContent=c.name;
+    $("#shareLinkResult").style.display="none";
+    $("#shareLinkInput").value="";
+    overlay.style.display="flex";
+
+    async function loadMembers(){
+      const list=$("#shareMembersList");
+      list.innerHTML=`<li class="muted" style="padding:.5rem .75rem;">Loading…</li>`;
+      try{
+        const members=await api(`/api/collections/${c.id}/members`);
+        list.innerHTML = members.length
+          ? members.map(m=>`
+            <li style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .75rem;border-bottom:1px solid #f3f4f6;font-size:.85rem;">
+              <span>${esc(m.name||m.orcid)} <span class="muted">(${esc(m.role)}${m.accepted_at?'':' · pending'})</span></span>
+              <button class="btn btn-secondary" data-remove-orcid="${esc(m.orcid)}" style="font-size:.75rem;padding:.15rem .4rem;">Remove</button>
+            </li>`).join("")
+          : `<li class="muted" style="padding:.5rem .75rem;">No one else has access yet.</li>`;
+        list.querySelectorAll("[data-remove-orcid]").forEach(btn=>{
+          btn.addEventListener("click", async()=>{
+            await api(`/api/collections/${c.id}/members/${encodeURIComponent(btn.getAttribute("data-remove-orcid"))}`,{method:"DELETE"});
+            loadMembers();
+          });
+        });
+      }catch(e){ list.innerHTML=`<li class="muted" style="padding:.5rem .75rem;">Could not load members.</li>`; }
+    }
+    loadMembers();
+
+    $("#shareGenerateBtn").onclick=async()=>{
+      const role=$("#shareRoleSelect").value;
+      try{
+        const res=await api(`/api/collections/${c.id}/invite`,{method:"POST",body:JSON.stringify({role})});
+        const url=`${location.origin}/library.html?join=${encodeURIComponent(res.token)}`;
+        $("#shareLinkInput").value=url;
+        $("#shareLinkResult").style.display="block";
+      }catch(e){ toast("Could not create invite link","error"); }
+    };
+    $("#shareCopyBtn").onclick=async()=>{
+      try{ await navigator.clipboard.writeText($("#shareLinkInput").value); toast("Link copied","success"); }catch(e){}
+    };
+    $("#shareCloseBtn").onclick=()=>{ overlay.style.display="none"; };
+    overlay.onclick=(e)=>{ if(e.target===overlay) overlay.style.display="none"; };
+  }
+
+  async function showSharedItemsDialog(c){
+    const overlay=$("#sharedItemsOverlay");
+    $("#sharedColName").textContent=c.name;
+    const isOwner = !c.role || c.role === "owner";
+    const canEdit = isOwner || c.role === "editor";
+    $("#sharedAddRow").style.display = canEdit ? "flex" : "none";
+    overlay.style.display="flex";
+
+    async function load(){
+      const list=$("#sharedItemsList");
+      list.innerHTML=`<li class="muted" style="padding:.5rem .75rem;">Loading…</li>`;
+      try{
+        const sharedItems=await api(`/api/collections/${c.id}/items`);
+        list.innerHTML = sharedItems.length
+          ? sharedItems.map(it=>`
+            <li style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid #f3f4f6;">
+              <div style="min-width:0;">
+                <a href="paper.html?id=${encodeURIComponent(it.openalex_id||it.id)}" style="font-size:.9rem;" target="_blank">${esc(it.title||"Untitled")}</a>
+                <div class="muted" style="font-size:.78rem;">${esc([it.authors,it.year,it.venue].filter(Boolean).join(" · "))}</div>
+              </div>
+              ${canEdit?`<button class="btn btn-secondary" data-remove-id="${esc(it.id)}" style="font-size:.75rem;padding:.15rem .4rem;flex-shrink:0;">Remove</button>`:""}
+            </li>`).join("")
+          : `<li class="muted" style="padding:.5rem .75rem;">No items yet.</li>`;
+        list.querySelectorAll("[data-remove-id]").forEach(btn=>{
+          btn.addEventListener("click", async()=>{
+            await api(`/api/collections/${c.id}/items/${encodeURIComponent(btn.getAttribute("data-remove-id"))}`,{method:"DELETE"});
+            load();
+          });
+        });
+      }catch(e){ list.innerHTML=`<li class="muted" style="padding:.5rem .75rem;">Could not load items.</li>`; }
+    }
+    load();
+
+    $("#sharedAddBtn").onclick=async()=>{
+      const raw=$("#sharedAddInput").value.trim();
+      if(!raw) return;
+      try{
+        const meta=await api("/api/library/add-by-doi",{method:"POST",body:JSON.stringify({identifier:raw})}).catch(()=>null);
+        const item = meta?.item;
+        // add-by-doi returns {duplicate:true, existing_id} with NO item
+        // object when this DOI is already in the caller's own library (a
+        // real, common response shape — caught live: sending the raw DOI
+        // string as a fallback title here produced a garbage row). Send
+        // just the resolved id in that case and let the server's own
+        // backfill-from-library_items fallback (POST /api/collections/:id/
+        // items, server/index.js) fill in the real title/authors/etc.
+        const idToAdd = item?.id || meta?.existing_id || raw;
+        await api(`/api/collections/${c.id}/items`,{method:"POST",body:JSON.stringify(item
+          ? { id:item.id, title:item.title, doi:item.doi, year:item.year, venue:item.venue, authors:item.authors, openalex_id:item.openalex_id }
+          : { id: idToAdd })});
+        $("#sharedAddInput").value="";
+        load();
+        toast("Added","success");
+      }catch(e){ toast("Could not add item","error"); }
+    };
+    $("#sharedItemsCloseBtn").onclick=()=>{ overlay.style.display="none"; };
+    overlay.onclick=(e)=>{ if(e.target===overlay) overlay.style.display="none"; };
+  }
+
+  // Detect ?join=<token> on page load and offer to accept the invite.
+  async function checkPendingInvite(){
+    const url=new URL(location.href);
+    const token=url.searchParams.get("join");
+    if(!token) return;
+    url.searchParams.delete("join");
+    history.replaceState({}, "", url.toString());
+    try{
+      const res=await api("/api/collections/accept-invite",{method:"POST",body:JSON.stringify({token})});
+      toast(res.already_owner ? `You already own "${res.collection.name}"` : `Joined "${res.collection.name}"`, "success");
+      await safeRefreshCollections(); renderTree();
+    }catch(e){
+      toast("That invite link is invalid or has expired","error");
+    }
   }
 
   function setupRootKebab(){
@@ -708,10 +847,15 @@
               <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style="transform:rotate(${isCollapsed?'0':'90'}deg);transition:transform .12s;pointer-events:none;"><path d="M2 1l4.5 3.5L2 8" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
             </button>`
           :`<span style="width:16px;flex-shrink:0;"></span>`;
+        const isSharedWithMe = c.role && c.role !== "owner";
+        const sharedBadge = isSharedWithMe
+          ? `<span class="muted" title="Shared with you (${esc(c.role)})" style="font-size:.68rem;border:1px solid #d1d5db;border-radius:4px;padding:0 .25rem;flex-shrink:0;">shared</span>`
+          : "";
         li.innerHTML=`<div class="row" data-id="${String(c.id)}" style="padding-left:${Math.max(0,depth)*14}px;">
           ${arrow}
           <svg class="tree-icon" viewBox="0 0 16 16" fill="none"><path d="M1 4h5l2 2h7v7H1z" stroke="currentColor" stroke-width="1.2"/></svg>
           <span class="name" title="${esc(c.name)}">${esc(c.name)}</span>
+          ${sharedBadge}
           ${cnt?`<span class="tree-count">${cnt}</span>`:''}
           <button type="button" class="kebab" title="Collection options" aria-haspopup="menu">···</button>
         </div>`;
@@ -729,6 +873,12 @@
         }, {capture:true});
         row.addEventListener("click",(ev)=>{
           if(ev.target.closest(".kebab")||ev.target.closest(".tree-arrow")) return;
+          // A collection shared with me (not owned) has items scattered
+          // across every member's own private library_items — the personal-
+          // library table view (below) can only ever show items that also
+          // happen to be in MY OWN library, so it'd look wrong/incomplete
+          // for anything I don't own. Open the real shared-pool view instead.
+          if(isSharedWithMe){ showSharedItemsDialog(c); return; }
           currentCollectionId=c.id; selectedIds=new Set(); renderTree(); renderTable();
         });
         row.addEventListener("dblclick",(ev)=>{ if(ev.target.closest(".kebab")||ev.target.closest(".tree-arrow")) return; ev.stopPropagation(); startInlineRename(c); });

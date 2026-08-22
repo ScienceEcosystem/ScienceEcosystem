@@ -348,6 +348,47 @@
     </div>
   </div>
 
+  <div id="shareOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:8000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:1.25rem;width:min(92vw,420px);box-shadow:0 8px 30px rgba(0,0,0,.2);">
+      <h4 style="margin:0 0 .75rem;">Share "<span id="shareColName"></span>"</h4>
+      <p class="muted" style="font-size:.85rem;margin:0 0 .75rem;">Anyone with the link can join with the role you choose. Links expire after 30 days.</p>
+      <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem;">
+        <label class="muted" style="font-size:.85rem;">Role:</label>
+        <select id="shareRoleSelect" class="input" style="flex:1;">
+          <option value="viewer">Viewer — can see items</option>
+          <option value="editor">Editor — can add/remove items</option>
+        </select>
+        <button id="shareGenerateBtn" class="btn btn-secondary">Create link</button>
+      </div>
+      <div id="shareLinkResult" style="display:none;margin-bottom:.75rem;">
+        <div style="display:flex;gap:.5rem;">
+          <input id="shareLinkInput" class="input" readonly style="flex:1;font-size:.8rem;">
+          <button id="shareCopyBtn" class="btn btn-secondary">Copy</button>
+        </div>
+      </div>
+      <p class="muted" style="font-size:.8rem;margin:0 0 .3rem;">Current members</p>
+      <ul id="shareMembersList" style="list-style:none;margin:0 0 .75rem;padding:0;max-height:160px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;"></ul>
+      <div style="display:flex;justify-content:flex-end;">
+        <button id="shareCloseBtn" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sharedItemsOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:8000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:1.25rem;width:min(92vw,640px);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 30px rgba(0,0,0,.2);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <h4 style="margin:0;">Shared collection: <span id="sharedColName"></span></h4>
+        <button id="sharedItemsCloseBtn" class="btn btn-secondary">Close</button>
+      </div>
+      <p class="muted" style="font-size:.8rem;margin:0 0 .5rem;">Items added by every member of this collection — not just your own library.</p>
+      <div id="sharedAddRow" style="display:none;gap:.5rem;margin-bottom:.5rem;">
+        <input id="sharedAddInput" class="input" placeholder="Paste a DOI, doi.org link, or OpenAlex work ID…" style="flex:1;">
+        <button id="sharedAddBtn" class="btn btn-secondary">Add</button>
+      </div>
+      <ul id="sharedItemsList" style="list-style:none;margin:0;padding:0;overflow-y:auto;flex:1;border:1px solid #e5e7eb;border-radius:8px;"></ul>
+    </div>
+  </div>
+
   <script src="scripts/search.js" defer></script>
   <script src="scripts/session.js" defer></script>
   <script src="scripts/library.js" defer></script>

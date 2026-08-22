@@ -439,6 +439,61 @@ async function pgInit() {
   `);
   await pool.query(`ALTER TABLE collections ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
 
+  // Shared/group libraries. collection_items is denormalized on purpose —
+  // it used to only be readable by joining against the ADDER's own
+  // library_items row (WHERE ci.orcid = li.orcid in /api/library/full
+  // below), which meant a collaborator added to someone else's collection
+  // could see the collection existed but not the actual papers in it,
+  // since those only lived in the owner's private library. Real Zotero
+  // groups are a genuinely shared pool of items, not each member's
+  // personal copy — these columns let ANY member see full item details
+  // regardless of who added it, without needing that item in their own
+  // library. /api/library/full's existing personal-library behavior is
+  // untouched; this is additive, for the new GET /api/collections/:id/items.
+  await pool.query(`ALTER TABLE collection_items ADD COLUMN IF NOT EXISTS title TEXT`);
+  await pool.query(`ALTER TABLE collection_items ADD COLUMN IF NOT EXISTS doi TEXT`);
+  await pool.query(`ALTER TABLE collection_items ADD COLUMN IF NOT EXISTS year INTEGER`);
+  await pool.query(`ALTER TABLE collection_items ADD COLUMN IF NOT EXISTS venue TEXT`);
+  await pool.query(`ALTER TABLE collection_items ADD COLUMN IF NOT EXISTS authors TEXT`);
+  await pool.query(`ALTER TABLE collection_items ADD COLUMN IF NOT EXISTS openalex_id TEXT`);
+  await pool.query(`ALTER TABLE collection_items ADD COLUMN IF NOT EXISTS added_by TEXT`);
+  // A shared collection is one pool now, not each member's own tags — the
+  // same paper shouldn't appear twice because two different members added
+  // it independently. Safe to add: collections have only ever been
+  // single-user until this feature, so no existing row can violate it.
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE collection_items ADD CONSTRAINT collection_items_paper_unique UNIQUE (collection_id, paper_id);
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS collection_members (
+      collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+      orcid TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'viewer',
+      invited_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      accepted_at TIMESTAMPTZ,
+      PRIMARY KEY (collection_id, orcid)
+    );
+  `);
+  // Invite links, not email — deliberately. Sending email on the owner's
+  // behalf means an email-service dependency and cost; a signed-token link
+  // the owner shares however they want (Slack, email themselves, etc.)
+  // needs neither, and matches the "minimal collection of personal data"
+  // principle in business_plan/technical.tex.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS collection_invites (
+      token TEXT PRIMARY KEY,
+      collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'viewer',
+      created_by TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at TIMESTAMPTZ
+    );
+  `);
+
   // New: notes
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notes (
@@ -5140,10 +5195,34 @@ app.delete("/api/followed-sources/:sourceId", async (req, res) => {
 /* ---------------------------
    NEW: Collections API
 ----------------------------*/
+// Returns the caller's access level for a collection: 'owner' (the
+// collections.orcid row itself) | 'editor' | 'viewer' (accepted
+// collection_members row) | null (no access at all). Every collection
+// route below goes through this instead of a bare WHERE orcid=$1 check,
+// so a shared collection's collaborators get real (not just cosmetic)
+// access.
+async function collectionRole(orcid, collectionId) {
+  const own = await pool.query(`SELECT id FROM collections WHERE id=$1 AND orcid=$2`, [collectionId, orcid]);
+  if (own.rowCount) return "owner";
+  const mem = await pool.query(
+    `SELECT role FROM collection_members WHERE collection_id=$1 AND orcid=$2 AND accepted_at IS NOT NULL`,
+    [collectionId, orcid]
+  );
+  return mem.rowCount ? mem.rows[0].role : null;
+}
+
 app.get("/api/collections", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
+  // Owned collections + collections shared with me (accepted membership only
+  // — a pending invite doesn't grant visibility until accepted).
   const { rows } = await pool.query(
-    `SELECT id, name, parent_id, deleted_at FROM collections WHERE orcid=$1 ORDER BY name`,
+    `SELECT DISTINCT c.id, c.name, c.parent_id, c.deleted_at, c.orcid AS owner_orcid,
+            CASE WHEN c.orcid=$1 THEN 'owner' ELSE cm.role END AS role
+     FROM collections c
+     LEFT JOIN collection_members cm
+       ON cm.collection_id=c.id AND cm.orcid=$1 AND cm.accepted_at IS NOT NULL
+     WHERE c.orcid=$1 OR cm.orcid=$1
+     ORDER BY c.name`,
     [sess.orcid]
   );
   res.json(rows);
@@ -5154,6 +5233,8 @@ app.post("/api/collections", async (req, res) => {
   const { name, parent_id } = req.body || {};
   if (!name) return res.status(400).json({ error: "name required" });
   if (parent_id) {
+    // Creating a subcollection under a shared parent stays owner-only for
+    // now — editors can contribute items, not restructure the hierarchy.
     const p = await pool.query(`SELECT id FROM collections WHERE orcid=$1 AND id=$2`, [sess.orcid, Number(parent_id)]);
     if (!p.rowCount) return res.status(400).json({ error: "parent not found" });
   }
@@ -5165,6 +5246,11 @@ app.post("/api/collections", async (req, res) => {
   res.status(201).json(out.rows[0]);
 });
 
+// Rename/move/soft-delete the collection itself stays owner-only — a
+// deliberate, documented scope decision, not an oversight: editors can
+// contribute items to a shared collection, but shouldn't be able to rename
+// or delete the shared container out from under everyone else. Matches how
+// most sharing tools scope "editor" to content, not container management.
 app.patch("/api/collections/:id", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   const body = req.body || {};
@@ -5196,31 +5282,134 @@ app.delete("/api/collections/:id", async (req, res) => {
 });
 
 /* ---------------------------
-   NEW: Collection Items API
+   Collection Items API — owner or editor can add/remove; any accepted
+   member (viewer or editor) can read. See collectionRole() above.
 ----------------------------*/
 app.post("/api/collections/:id/items", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   const cid = Number(req.params.id);
-  const { id } = req.body || {};
+  const { id, title, doi, year, venue, authors, openalex_id } = req.body || {};
   if (!id) return res.status(400).json({ error: "paper id required" });
 
-  const col = await pool.query(`SELECT id FROM collections WHERE orcid=$1 AND id=$2`, [sess.orcid, cid]);
-  if (!col.rowCount) return res.status(404).json({ error: "collection not found" });
+  const role = await collectionRole(sess.orcid, cid);
+  if (!role) return res.status(404).json({ error: "collection not found" });
+  if (role === "viewer") return res.status(403).json({ error: "Viewers can't add items — ask the owner for editor access" });
+
+  // Denormalize display fields onto the row itself (see the migration
+  // comment above) so any member can see full item details without needing
+  // this paper in their own personal library_items. Backfill from the
+  // caller's own library item when the client didn't already send them —
+  // covers "add from my library" call sites with no client changes needed.
+  let fields = { title, doi, year, venue, authors, openalex_id };
+  if (!fields.title) {
+    const own = await pool.query(
+      `SELECT title, doi, year, venue, authors, openalex_id FROM library_items WHERE orcid=$1 AND id=$2`,
+      [sess.orcid, String(id)]
+    );
+    if (own.rowCount) fields = own.rows[0];
+  }
 
   await pool.query(
-    `INSERT INTO collection_items (orcid, collection_id, paper_id)
-     VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-    [sess.orcid, cid, String(id)]
+    `INSERT INTO collection_items (orcid, collection_id, paper_id, title, doi, year, venue, authors, openalex_id, added_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$1)
+     ON CONFLICT (collection_id, paper_id) DO NOTHING`,
+    [sess.orcid, cid, String(id), fields.title || null, fields.doi || null,
+     fields.year ? Number(fields.year) : null, fields.venue || null, fields.authors || null, fields.openalex_id || null]
   );
   res.status(201).json({ ok: true });
 });
 
 app.delete("/api/collections/:id/items/:paperId", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
+  const cid = Number(req.params.id);
+  const role = await collectionRole(sess.orcid, cid);
+  if (!role) return res.status(404).json({ error: "collection not found" });
+  if (role === "viewer") return res.status(403).json({ error: "Viewers can't remove items" });
+  // Not scoped to the caller's own orcid — an editor can remove an item any
+  // member added, since it's a shared pool now, not each member's own tags.
   await pool.query(
-    `DELETE FROM collection_items WHERE orcid=$1 AND collection_id=$2 AND paper_id=$3`,
-    [sess.orcid, Number(req.params.id), String(req.params.paperId)]
+    `DELETE FROM collection_items WHERE collection_id=$1 AND paper_id=$2`,
+    [cid, String(req.params.paperId)]
   );
+  res.status(204).end();
+});
+
+// Full item list for a shared collection — deliberately independent of the
+// caller's own library_items (that's the whole point, see the migration
+// comment above). Any accepted member (viewer or editor) can read.
+app.get("/api/collections/:id/items", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const cid = Number(req.params.id);
+  const role = await collectionRole(sess.orcid, cid);
+  if (!role) return res.status(404).json({ error: "collection not found" });
+  const { rows } = await pool.query(
+    `SELECT paper_id AS id, title, doi, year, venue, authors, openalex_id, added_by
+     FROM collection_items WHERE collection_id=$1 ORDER BY title`,
+    [cid]
+  );
+  res.json(rows);
+});
+
+// Invite links, not email — see the collection_invites migration comment.
+// Creating a link is owner-only, to avoid uncontrolled invite chains.
+app.post("/api/collections/:id/invite", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const cid = Number(req.params.id);
+  const role = await collectionRole(sess.orcid, cid);
+  if (role !== "owner") return res.status(403).json({ error: "Only the owner can create invite links" });
+  const inviteRole = req.body?.role === "editor" ? "editor" : "viewer";
+  const token = crypto.randomBytes(24).toString("hex");
+  await pool.query(
+    `INSERT INTO collection_invites (token, collection_id, role, created_by, expires_at)
+     VALUES ($1,$2,$3,$4, now() + interval '30 days')`,
+    [token, cid, inviteRole, sess.orcid]
+  );
+  res.status(201).json({ token, role: inviteRole });
+});
+
+app.post("/api/collections/accept-invite", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const token = String(req.body?.token || "");
+  if (!token) return res.status(400).json({ error: "token required" });
+  const inv = await pool.query(
+    `SELECT collection_id, role FROM collection_invites WHERE token=$1 AND expires_at > now()`,
+    [token]
+  );
+  if (!inv.rowCount) return res.status(404).json({ error: "This invite link is invalid or has expired" });
+  const { collection_id, role } = inv.rows[0];
+  const col = await pool.query(`SELECT id, name, orcid FROM collections WHERE id=$1`, [collection_id]);
+  if (!col.rowCount) return res.status(404).json({ error: "Collection no longer exists" });
+  if (col.rows[0].orcid === sess.orcid) return res.json({ ok: true, collection: col.rows[0], already_owner: true });
+  await pool.query(
+    `INSERT INTO collection_members (collection_id, orcid, role, accepted_at)
+     VALUES ($1,$2,$3, now())
+     ON CONFLICT (collection_id, orcid) DO UPDATE SET role=EXCLUDED.role, accepted_at=now()`,
+    [collection_id, sess.orcid, role]
+  );
+  res.json({ ok: true, collection: col.rows[0] });
+});
+
+// Manage members — owner only (viewing who has access is also sensitive).
+app.get("/api/collections/:id/members", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const cid = Number(req.params.id);
+  const role = await collectionRole(sess.orcid, cid);
+  if (role !== "owner") return res.status(403).json({ error: "Only the owner can view members" });
+  const { rows } = await pool.query(
+    `SELECT cm.orcid, cm.role, cm.accepted_at, u.name
+     FROM collection_members cm LEFT JOIN users u ON u.orcid=cm.orcid
+     WHERE cm.collection_id=$1 ORDER BY cm.invited_at`,
+    [cid]
+  );
+  res.json(rows);
+});
+
+app.delete("/api/collections/:id/members/:orcid", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const cid = Number(req.params.id);
+  const role = await collectionRole(sess.orcid, cid);
+  if (role !== "owner") return res.status(403).json({ error: "Only the owner can remove members" });
+  await pool.query(`DELETE FROM collection_members WHERE collection_id=$1 AND orcid=$2`, [cid, req.params.orcid]);
   res.status(204).end();
 });
 

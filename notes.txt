@@ -3737,3 +3737,131 @@ style loader.
   Copy/Copy All pick up the real version, confirmed the custom-style
   input/Go button/result flow works end-to-end through the real UI, and
   no console errors on any of it.
+
+-------------------------------------------------------
+BUILT (2026-08-22) — real shared/group libraries (fifth and final item
+from the Zotero-parity roadmap)
+-------------------------------------------------------
+
+SCOPE FOUND BIGGER THAN PLANNED, checked with Olivier before writing
+any code: collection_items was only ever readable by joining against
+the ADDER's own library_items row (`ON ci.orcid = li.orcid` in
+/api/library/full) — so a membership/ACL table alone (the original
+plan) would have let a collaborator see a shared collection *exists*
+but not the actual papers in it, since those lived only in the owner's
+private library. Confirmed real Zotero groups don't work that way — a
+shared library is a genuinely shared pool, not each member's personal
+copy. Given the choice of (a) build it properly, (b) ship a visibly-
+lesser trimmed version, or (c) defer entirely — chose (a).
+
+  [X] server/index.js schema: collection_items denormalized with its
+      own title/doi/year/venue/authors/openalex_id/added_by columns —
+      any member can now see full item details regardless of who added
+      it, no join to the adder's library_items needed. New
+      collection_members (collection_id, orcid, role, accepted_at) and
+      collection_invites (token, collection_id, role, expires_at)
+      tables. New UNIQUE(collection_id, paper_id) constraint (added via
+      an idempotent DO-block, since ALTER TABLE ADD CONSTRAINT has no
+      native IF NOT EXISTS) — safe to add since collections have only
+      ever been single-user until now, so no existing row could
+      violate it; needed so the same paper can't appear twice because
+      two different members added it independently.
+  [X] New collectionRole(orcid, collectionId) helper — 'owner' (the
+      collections.orcid row) | 'editor' | 'viewer' (accepted
+      collection_members row) | null. Every collection route now goes
+      through this instead of a bare WHERE orcid=$1 check.
+  [X] GET /api/collections extended to also return collections shared
+      with me (accepted membership only — a pending invite doesn't
+      grant visibility), each tagged with role + owner_orcid.
+  [X] POST/DELETE /api/collections/:id/items now require role owner or
+      editor (not just orcid-ownership), and DELETE is no longer
+      scoped to the caller's own orcid — an editor can remove an item
+      any member added, since it's a shared pool now. POST backfills
+      title/doi/etc. from the caller's own library_items when the
+      client didn't send them (covers "add from my library" call sites
+      with zero client changes, and also became the fix for a bug
+      caught below).
+  [X] New GET /api/collections/:id/items — the real shared-pool read,
+      independent of the caller's own library. New POST /api/
+      collections/:id/invite (owner-only, generates a signed token, 30-
+      day expiry), POST /api/collections/accept-invite (any
+      authenticated user), GET/DELETE /api/collections/:id/members
+      (owner-only).
+  [X] DELIBERATE SCOPE DECISION: renaming/deleting/moving the
+      collection itself (PATCH/DELETE /api/collections/:id) stays
+      owner-only — editors can contribute items to a shared collection
+      but shouldn't be able to restructure or delete the container
+      other members depend on. Matches how most sharing tools scope
+      "editor" to content, not container management.
+  [X] DELIBERATE SCOPE DECISION: invite links, not email. Owner
+      generates a shareable link with a signed token, shares it
+      however they want. Avoids adding an email-service dependency/
+      cost and matches the "minimal collection of personal data, no
+      tracking" principle in business_plan/technical.tex.
+  [X] scripts/library-page.js + library.html: new Share dialog (role
+      picker, generate/copy invite link, live member list with
+      Remove), new shared-items browsing dialog (denormalized item
+      list, Add-by-DOI row shown only for owner/editor, Remove per
+      item), a "shared" badge in the collections tree, and a ?join=
+      token auto-accept flow on page load. buildMenuForCollection()
+      now hides rename/move/trash/new-subcollection for anyone who
+      isn't the owner — the server already blocks these, this just
+      stops the menu offering actions that would 403/404 anyway.
+      Clicking a collection shared WITH me opens the real shared-items
+      view directly (my personal-library-filtered table would show
+      nothing useful for a collection I don't own); clicking my OWN
+      collection keeps the existing personal-library behavior
+      unchanged — "Browse shared items" in the kebab menu is how an
+      owner sees the full multi-contributor pool.
+  [X] BUG CAUGHT while verifying the real add-item flow with a real
+      duplicate DOI: /api/library/add-by-doi returns
+      {duplicate:true, existing_id} with NO item object when the DOI
+      is already in the caller's own library — a real, common response
+      shape, not an edge case. The shared-add handler's fallback used
+      the raw pasted DOI string as both id AND title, producing a
+      garbage row (title showing a literal DOI). Fixed by sending just
+      the resolved id in that case and letting the server's own
+      backfill-from-library_items logic (built for exactly this) fill
+      in the real title/authors/year/venue.
+  Verified live end-to-end with THREE real users and real sessions
+  (fabricated genuine signed sid cookies for each, same as the notes/
+  peer-review verification earlier this session) — not mocked, every
+  request went through actual auth + CSRF middleware:
+    - Owner A creates a collection, adds an item, creates an editor
+      invite link — confirmed via curl.
+    - Editor B accepts the invite, adds a second item — confirmed both
+      items visible to BOTH A and B via GET .../items (the actual
+      point of this feature: a genuinely shared pool).
+    - Outsider C with no access gets 404 on the items endpoint
+      (doesn't leak that the collection exists).
+    - Editor B correctly blocked (403) from renaming the collection;
+      correctly ALLOWED to delete an item A added (shared pool, not
+      per-adder scoping).
+    - Viewer role (C, via a separate viewer invite) can read items
+      (200) but is blocked (403, clear message) from adding one.
+    - Owner removes member B from the collection — confirmed B's
+      access is immediately revoked (404 on next request), not just
+      hidden client-side.
+    - Bogus/expired invite token correctly rejected (404).
+  Then verified the real browser UI, two separate real Playwright
+  contexts with real signed sessions (not the same page/tab): owner A
+  opens the Share dialog, picks Editor role, generates a real invite
+  link; editor B visits that exact URL, auto-joins (confirmed via the
+  "shared" badge appearing and the join token being stripped from the
+  URL after use), adds a real paper by DOI through the shared-items
+  dialog; owner A (separate browser context, kebab menu → "Browse
+  shared items") sees B's addition rendered correctly with real title/
+  authors/year/venue — confirming the cross-user round trip actually
+  works through the UI, not just the API. All test data (3 users,
+  sessions, collections, items) cleaned up from the database after.
+  KNOWN GAP, documented not fixed: no "leave a shared collection"
+  action for members yet (owner can remove a member via the Share
+  dialog; a member can't remove themselves) — small, flagged as a
+  follow-up rather than silently missing.
+
+This closes the Zotero-parity roadmap opened earlier this session: all
+5 in-scope gaps (journal following, full-text PDF search, standalone
+notes, real CSL citation styles, shared libraries) now built and
+verified. The 2 deliberately-deferred items (native desktop/mobile
+apps, a live Word/Google Docs plugin) remain documented, not built,
+per the reasoning recorded when the roadmap was first planned.
