@@ -3959,3 +3959,36 @@ evidence run in sequence, not parallel) — a short wait during manual
 testing would have looked like the fix didn't work when it actually
 just hadn't resolved yet; worth keeping in mind for any future
 verification of this chip.
+
+Audited for the same bug pattern elsewhere in paper.js (calculateReprodu
+cibilityScore, figures/stance/author-note visibility toggles) and in the
+other page scripts (library-page.js, journal.js, profile.js, search.js,
+topic.js) — clean everywhere else; reproducibility scoring already
+matches on r.url domain substrings directly rather than the fragile
+repository field, so it was never exposed to this bug.
+
+2026-08-24 — Same living-paper bug, second independent implementation
+(pdf-viewer.html)
+
+User reported the Living Version button still missing on pdf-viewer.
+html?id=W7167813053 even after the paper.html fix above. Turned out
+pdf-viewer.html has its OWN separate button + detection code
+(scripts/pdf-reader.js's checkLivingPaperAvailable(), duplicate of
+paper.js's checkLivingPaperChip() but never refactored to share it) —
+so the paper.html fix never touched this page at all. This copy had a
+worse version of the same root problem: it only ever called
+/api/paper/artifacts (structured DataCite/Crossref relations), and
+never fell back to /api/paper/links (the publisher-page text scrape)
+the way paper.html's harvest does — confirmed directly that /api/paper/
+artifacts alone returns only this paper's Zenodo entry, never the
+GitHub repo, even when passed the same title/authors query params this
+code sends. Fixed by adding the same /api/paper/links fallback when the
+artifacts call finds no GitHub hit. Verified live via local dev server
++ Playwright: button now appears with the correct living-paper.html
+href.
+
+Worth flagging as tech debt, not fixed here: this is genuinely
+duplicated logic across two files (paper.js and pdf-reader.js) that
+silently drifted out of sync once — a shared helper (repo discovery +
+living-evidence check) would prevent a third page from repeating this
+same bug independently.

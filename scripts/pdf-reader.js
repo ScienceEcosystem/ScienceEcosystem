@@ -1244,9 +1244,23 @@ async function checkLivingPaperAvailable(rawDoi, paper) {
       .map(a => a?.author?.display_name).filter(Boolean).join(', ');
     const qs = new URLSearchParams({ doi: rawDoi, title, authors });
     const res = await fetch(`/api/paper/artifacts?${qs.toString()}`);
-    if (!res.ok) return;
-    const artifacts = await res.json();
-    const repoHit = (artifacts || []).find(a => a.repository === 'GitHub');
+    const artifacts = res.ok ? await res.json() : [];
+    let repoHit = (artifacts || []).find(a => a.repository === 'GitHub' && a.url);
+
+    // The artifacts endpoint only covers structured DataCite/Crossref
+    // relations — a repo named only in the manuscript's own text (e.g. a
+    // Data Availability statement, the common case) is never indexed there.
+    // Fall back to the same publisher-page scrape paper.html's research-
+    // objects harvest uses, which reads that text directly.
+    if (!repoHit) {
+      try {
+        const linksRes = await fetch(`/api/paper/links?doi=${encodeURIComponent(rawDoi)}`);
+        if (linksRes.ok) {
+          const links = await linksRes.json();
+          repoHit = (links || []).find(h => h.url && /github\.com\//i.test(h.url));
+        }
+      } catch (_) { /* fall through with repoHit still unset */ }
+    }
     if (!repoHit || !repoHit.url) return;
     const m = repoHit.url.match(/github\.com\/([^\/]+)\/([^\/#?]+)/i);
     if (!m) return;
