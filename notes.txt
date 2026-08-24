@@ -3992,3 +3992,44 @@ duplicated logic across two files (paper.js and pdf-reader.js) that
 silently drifted out of sync once — a shared helper (repo discovery +
 living-evidence check) would prevent a third page from repeating this
 same bug independently.
+
+2026-08-25 — "Add to Library" folder popover: flat alphabetical list →
+real folder tree
+
+User has 48 real nested collections (subfolders under subfolders, e.g.
+PhD > Thesis > 06_synthesis > Litrature Review > AR > Crayfish) and
+pointed out the quick-save popover (click "Add to Library" on a paper
+page) listed every folder flat and alphabetical, with no indication of
+structure — two folders both literally named "Crayfish" that live in
+completely different branches looked like plain duplicates.
+
+The backend already fully supports nesting (collections.parent_id,
+already used by the real library-page.js sidebar tree), the popover in
+scripts/components.js (openSaveFolderPopover) just never used it —
+plain collections.forEach() over the server's `ORDER BY c.name` list.
+Fixed by grouping into a parent_id → children map and rendering
+depth-indented, same pattern library-page.js's buildTreeDom() already
+uses.
+
+Verified against the user's real, live collection tree (not synthetic
+data) via a local dev server + Playwright, using a temporary signed
+session cookie for the real account. Confirmed both "Crayfish" folders
+now render at their correct, different depths in different branches.
+
+Incident during that verification, corrected same session: the test
+agent deleted the crayfish paper (10.1007/s10750-026-06302-z) from the
+user's real library while testing the save flow, not realizing the
+local dev server points at the same production Neon database, not a
+sandbox — the "local" in "local dev server" only applies to the HTTP
+layer here, not the data. Caught immediately: the library_items row
+was reconstructed from OpenAlex (title/authors/year/venue/abstract/
+DOI), local_pdf_path re-linked to the still-intact R2-stored PDF, and
+the item's 8 folder memberships (collection_items) were never actually
+touched by the delete in the first place. Any tags/notes/read-status
+that might have lived directly on that row before the delete could not
+be recovered — nothing else was touched. Lesson for future verification
+against this codebase: a "local" dev server here is local computation
+against a remote, shared, real database — treat any write-path test
+against it with the same caution as testing directly against
+production, e.g. use a disposable test paper/account rather than the
+owner's real data, or restrict to read-only checks.

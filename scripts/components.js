@@ -710,12 +710,27 @@
 
     if (collections.length){
       pop.appendChild(divider());
+      // Render as a folder tree (indented by parent_id), not a flat
+      // alphabetical list — a subfolder buried in an unrelated part of the
+      // alphabet (e.g. "Crayfish" under "Koura") was otherwise impossible
+      // to place correctly at a glance.
+      var byParent = new Map();
       collections.forEach(function(c){
-        pop.appendChild(optionRow(c.name, function(){
-          closeSaveFolderPopover();
-          globalThis.savePaper(paper, btn, c.id);
-        }));
+        var k = c && c.parent_id != null ? String(c.parent_id) : "root";
+        if (!byParent.has(k)) byParent.set(k, []);
+        byParent.get(k).push(c);
       });
+      (function addBranch(parentKey, depth){
+        (byParent.get(parentKey) || []).forEach(function(c){
+          var row = optionRow(c.name, function(){
+            closeSaveFolderPopover();
+            globalThis.savePaper(paper, btn, c.id);
+          });
+          if (depth > 0) row.style.paddingLeft = (10 + depth * 16) + "px";
+          pop.appendChild(row);
+          addBranch(String(c.id), depth + 1);
+        });
+      })("root", 0);
     }
 
     pop.appendChild(divider());
