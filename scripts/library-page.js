@@ -339,7 +339,7 @@
   // ---- Configurable columns (Zotero-style: Title is fixed, everything
   // else is opt-in via the "Columns" picker, persisted per browser) ----
   const OPTIONAL_COLUMNS = [
-    { key:"authors",    label:"Authors",    sortKey:"authors",    get:it=>esc(firstAuthorLastName(it.authors)) },
+    { key:"authors",    label:"Authors",    sortKey:"authors",    get:it=>esc(authorsSurnameDisplay(it.authors)) },
     { key:"year",       label:"Year",       sortKey:"year",       get:it=>esc(it.year??"-") },
     { key:"venue",      label:"Venue",      sortKey:"venue",      get:it=>esc(it.venue||"-") },
     { key:"doi",        label:"DOI",        sortKey:"doi",        get:it=>esc(it.doi||"-") },
@@ -1227,20 +1227,35 @@
   }
 
   // Only show first author's last name in main table
+  // it.authors is always stored "First Last, First Last, ..." (see
+  // server/index.js's OpenAlex/Crossref authorship joins) — every author
+  // separated by a plain comma, never "Last, First" for a single person.
+  // The old version here treated the first comma as a Last/First split,
+  // which for a real multi-author list just grabbed the first author's
+  // full "First Last" name instead of their surname.
+  function authorSurname(fullName){
+    const parts = String(fullName||"").trim().split(/\s+/);
+    return parts.length ? parts[parts.length-1] : "";
+  }
+  function splitAuthorNames(authStr){
+    return String(authStr||"").split(/\s*(?:,|;| and | & )\s*/i).filter(Boolean);
+  }
+  // Sort key: bibliographic convention sorts by the first author's surname
+  // regardless of how many co-authors there are.
   function firstAuthorLastName(authStr){
-    const s=(authStr||"").trim();
-    if(!s) return "-";
-    // Split list of authors on common separators
-    let first = s.split(/;| and | & /i)[0].trim();
-    if(!first) return "-";
-    // If stored as "Last, First"
-    if(first.includes(",")){
-      first = first.split(",")[0].trim();
-    }else{
-      const parts = first.split(/\s+/);
-      if(parts.length) first = parts[parts.length-1];
-    }
-    return first || "-";
+    const names = splitAuthorNames(authStr);
+    return names.length ? (authorSurname(names[0]) || "-") : "-";
+  }
+  // Display: surnames only, never first names/initials. Two authors are
+  // both named ("Smith & Jones"); three or more collapse to "Smith et al."
+  function authorsSurnameDisplay(authStr){
+    const names = splitAuthorNames(authStr);
+    if (!names.length) return "-";
+    const surnames = names.map(authorSurname).filter(Boolean);
+    if (!surnames.length) return "-";
+    if (surnames.length === 1) return surnames[0];
+    if (surnames.length === 2) return surnames[0] + " & " + surnames[1];
+    return surnames[0] + " et al.";
   }
 
   function countFilledFields(it){

@@ -4033,3 +4033,31 @@ against a remote, shared, real database — treat any write-path test
 against it with the same caution as testing directly against
 production, e.g. use a disposable test paper/account rather than the
 owner's real data, or restrict to read-only checks.
+
+2026-08-27 — Library Authors column: real bug, not just a display
+preference
+
+User asked for surnames-only display, sorted by surname. Found the
+existing firstAuthorLastName() (scripts/library-page.js) was actually
+broken, not just showing more than wanted. it.authors is always stored
+"First Last, First Last, ..." (comma-joined, confirmed against
+server/index.js's OpenAlex/Crossref authorship joins) — but the old
+code's "if the string contains a comma, treat it as Last, First for one
+person" branch meant a real multi-author list's first comma got
+misread as a single person's Last/First split, returning the FIRST
+AUTHOR'S FULL "First Last" NAME (e.g. "Olivier Raven" from a 5-author
+list) instead of their surname. Since that same function was also the
+sort key, the column was effectively sorting by first-author given name
+for most rows — exactly the "ordered on first name" complaint.
+
+Fixed by splitting the correct way (comma/semicolon/"and"/"&" all
+treated as person-separators, never as a Last/First separator — this
+codebase never stores names that way) into authorSurname() +
+authorsSurnameDisplay(): 1 author → surname; 2 authors → both surnames
+("Smith & Doe"); 3+ → "Smith et al.". Sort key (firstAuthorLastName,
+now correctly just the first author's actual surname) is kept separate
+from the display string on purpose — bibliographic convention sorts by
+first author's surname regardless of how many co-authors are shown.
+Verified with representative cases (5-author comma list, 2-author list,
+single author, semicolon-separated, empty/null) directly in node before
+shipping.
