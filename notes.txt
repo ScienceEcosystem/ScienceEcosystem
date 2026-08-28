@@ -4061,3 +4061,52 @@ first author's surname regardless of how many co-authors are shown.
 Verified with representative cases (5-author comma list, 2-author list,
 single author, semicolon-separated, empty/null) directly in node before
 shipping.
+
+2026-08-28 — Journal-specific .csl download button (journal.html +
+journal-finder.html)
+
+New feature request: a way to grab the real CSL citation style file a
+specific journal wants, from the journal's own page and from the
+journal finder listing — distinct from the earlier generic-style Cite
+popover (apa/mla/chicago/.../custom URL) built for the Zotero-parity
+roadmap, since most of Zotero's ~9,000 styles are journal-specific
+submission-formatting styles, not general-purpose ones.
+
+Backend (routes/paper.js): rather than guess-slugify a journal name
+into a style URL (risk of silently serving the WRONG journal's style),
+indexes the real file listing of citation-style-language/
+styles-distribution (github.com, ~9,900 .csl files, both independent
+top-level styles and journal-specific ones under dependent/) once via
+the GitHub trees API, cached 24h. Looks up by normalized basename slug
+(lowercase, non-alphanumeric → hyphens) across both folders — verified
+this catches names needing the "dependent/" folder that a naive
+top-level-only search would miss (fish-and-fisheries, plos-one,
+marine-and-freshwater-research all live there). New endpoints:
+GET /api/journal/csl?name=X → {found, filename} for the frontend to
+decide whether to show a button at all, and GET /api/journal/csl/
+download?name=X → the actual file with real download headers
+(Content-Disposition: attachment), reusing the raw-content fetch/cache
+pattern the existing /api/paper/cite custom-style path already
+established. No match → button/link stays hidden; never shows a
+fuzzy/guessed style.
+
+Frontend: journal.html gets one link in the existing OpenAlex/Homepage
+row (scripts/journal.js); journal-finder.html gets one per card, for
+both the curated static list and live OpenAlex search results
+(scripts/journals.js) — both async-populate after an
+/api/journal/csl check, same hidden-until-confirmed pattern as the
+Living Version chip.
+
+Verified live: local dev server + Playwright. Confirmed real matches
+surface correctly (Hydrobiologia on its journal.html page; 11 of 44
+curated journal-finder cards — Cell, eLife, PLOS Biology, etc. — each
+with a working download link) and non-matches correctly stay hidden
+rather than showing anything guessed.
+
+Unrelated hiccup during this verification: the local dev server
+wouldn't start (hung with zero log output) — turned out to be a stale
+zombie process still squatting port 5173 from an earlier test session,
+not a code or node_modules issue this time. `lsof -ti:5173 | xargs kill
+-9` before relaunch resolved it. Worth checking port occupancy first
+next time this run-skill gotcha's symptoms reappear, before jumping
+straight to the node_modules reinstall.

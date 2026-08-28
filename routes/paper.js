@@ -1084,4 +1084,99 @@ router.get('/api/paper/cite', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Journal-specific CSL style download — "get the .csl file this journal
+// actually wants" for journal.html / journal-finder.html. Distinct from the
+// /api/paper/cite generic-style feature above: most of Zotero's ~9,000
+// styles are journal-specific (submission-formatting) styles, not the ~10
+// generic ones (APA/MLA/...) bundled there. Rather than guess which of
+// 9,000 matches a journal name, this indexes the real repo file listing
+// once and matches on a normalized slug of the actual filename — so a
+// button only ever appears when a real, named style for that exact journal
+// exists, never a fuzzy/wrong guess.
+const CSL_STYLES_TREE_URL = 'https://api.github.com/repos/citation-style-language/styles-distribution/git/trees/master?recursive=1';
+const CSL_STYLES_RAW_BASE = 'https://raw.githubusercontent.com/citation-style-language/styles-distribution/master/';
+const JOURNAL_CSL_TTL_MS = 24 * 60 * 60 * 1000; // repo changes rarely; a day is plenty fresh
+let journalCslIndex = null; // Map<basenameSlug, path> — built once, refreshed daily
+let journalCslIndexExpiresAt = 0;
+const JOURNAL_CSL_FILE_CACHE = new Map(); // path -> { value: xmlText, expiresAt }
+
+function slugifyJournalName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+async function getJournalCslIndex() {
+  if (journalCslIndex && journalCslIndexExpiresAt > Date.now()) return journalCslIndex;
+  const r = await fetch(CSL_STYLES_TREE_URL, { headers: { 'User-Agent': 'ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)' } });
+  if (!r.ok) return journalCslIndex || new Map(); // serve stale index over a hard failure
+  const data = await r.json();
+  const index = new Map();
+  for (const entry of (data.tree || [])) {
+    if (!entry.path || !entry.path.endsWith('.csl')) continue;
+    const basename = entry.path.split('/').pop().slice(0, -4);
+    // Prefer an independent (top-level) style over a same-named dependent
+    // one if both somehow exist — independents are the canonical/current form.
+    if (!index.has(basename) || !entry.path.includes('/')) index.set(basename, entry.path);
+  }
+  journalCslIndex = index;
+  journalCslIndexExpiresAt = Date.now() + JOURNAL_CSL_TTL_MS;
+  return index;
+}
+
+async function findJournalCslPath(journalName) {
+  const slug = slugifyJournalName(journalName);
+  if (!slug) return null;
+  const index = await getJournalCslIndex();
+  return index.get(slug) || null;
+}
+
+async function fetchJournalCslText(cslPath) {
+  const cached = JOURNAL_CSL_FILE_CACHE.get(cslPath);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const r = await fetch(CSL_STYLES_RAW_BASE + cslPath, { headers: { 'User-Agent': 'ScienceEcosystem/1.0 (mailto:info@scienceecosystem.org)' } });
+  if (!r.ok) return null;
+  const text = await r.text();
+  JOURNAL_CSL_FILE_CACHE.set(cslPath, { value: text, expiresAt: Date.now() + CSL_TTL_MS });
+  return text;
+}
+
+// GET /api/journal/csl?name=<journal name> — { found, filename } so the
+// frontend knows whether to show the download button at all.
+router.get('/api/journal/csl', async (req, res) => {
+  const name = String(req.query?.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name required' });
+  try {
+    const cslPath = await findJournalCslPath(name);
+    if (!cslPath) return res.json({ found: false });
+    res.json({ found: true, filename: cslPath.split('/').pop() });
+  } catch (e) {
+    console.error('GET /api/journal/csl failed:', e);
+    res.status(500).json({ found: false });
+  }
+});
+
+// GET /api/journal/csl/download?name=<journal name> — the actual file, with
+// download headers, so the button is a plain link with no client-side fetch.
+router.get('/api/journal/csl/download', async (req, res) => {
+  const name = String(req.query?.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name required' });
+  try {
+    const cslPath = await findJournalCslPath(name);
+    if (!cslPath) return res.status(404).json({ error: 'No CSL style found for this journal' });
+    const text = await fetchJournalCslText(cslPath);
+    if (!text) return res.status(502).json({ error: 'Could not fetch style file' });
+    res.set('Content-Type', 'application/vnd.citationstyles.style+xml');
+    res.set('Content-Disposition', `attachment; filename="${cslPath.split('/').pop()}"`);
+    res.send(text);
+  } catch (e) {
+    console.error('GET /api/journal/csl/download failed:', e);
+    res.status(500).json({ error: 'Failed to fetch style file' });
+  }
+});
+
 export default router;

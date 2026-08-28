@@ -80,6 +80,23 @@ function oaBadge(isOa, inDoaj) {
   return             '<span style="font-size:.72rem;background:#f1f5f9;color:#475569;padding:1px 7px;border-radius:10px;">Subscription</span>';
 }
 
+// Populates a per-card "Download .csl" link once we've confirmed a real,
+// named CSL style exists for this exact journal — same /api/journal/csl
+// lookup journal.html uses, kept hidden (never a guessed/wrong style) until
+// the check resolves. Cards call this after they're in the DOM rather than
+// blocking initial render on N parallel network calls before showing anything.
+function checkJournalCslDownload(journalName, linkEl) {
+  if (!linkEl || !journalName) return;
+  fetch("/api/journal/csl?name=" + encodeURIComponent(journalName))
+    .then(function(res){ return res.ok ? res.json() : null; })
+    .then(function(data){
+      if (!data || !data.found) return;
+      linkEl.href = "/api/journal/csl/download?name=" + encodeURIComponent(journalName);
+      linkEl.style.display = "";
+    })
+    .catch(function(){ /* silent — link just stays hidden */ });
+}
+
 function journalPageUrl(openAlexId) {
   if (!openAlexId) return null;
   const tail = String(openAlexId).replace(/^https?:\/\/openalex\.org\//i, '').replace(/^\//, '');
@@ -116,7 +133,10 @@ function makeCuratedCard(j) {
         + 'style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>'
       + '<a href="' + escJ(j.link) + '" target="_blank" rel="noopener noreferrer" '
         + 'style="font-size:.8rem;color:#475569;text-decoration:none;">Website ↗</a>'
+      + '<a class="journal-csl-link" href="#" style="display:none;font-size:.8rem;color:#475569;text-decoration:none;" '
+        + 'title="Download the CSL citation style file this journal uses">.csl ↓</a>'
     + '</div>';
+  checkJournalCslDownload(j.name, card.querySelector('.journal-csl-link'));
   return card;
 }
 
@@ -151,7 +171,10 @@ function makeOpenAlexCard(s) {
     + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
       + (pageUrl ? '<a href="' + escJ(pageUrl) + '" style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>' : '')
       + (site ? '<a href="' + escJ(site) + '" target="_blank" rel="noopener noreferrer" style="font-size:.8rem;color:#475569;text-decoration:none;">Website ↗</a>' : '')
+      + '<a class="journal-csl-link" href="#" style="display:none;font-size:.8rem;color:#475569;text-decoration:none;" '
+        + 'title="Download the CSL citation style file this journal uses">.csl ↓</a>'
     + '</div>';
+  checkJournalCslDownload(s.display_name, card.querySelector('.journal-csl-link'));
   return card;
 }
 

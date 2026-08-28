@@ -223,6 +223,19 @@
     };
   }
 
+  async function checkJournalCslDownload(journalName){
+    var link = $("journalCslLink");
+    if (!link || !journalName) return;
+    try {
+      var res = await fetch("/api/journal/csl?name=" + encodeURIComponent(journalName));
+      if (!res.ok) return;
+      var data = await res.json();
+      if (!data || !data.found) return; // no named style for this exact journal — link stays hidden
+      link.href = "/api/journal/csl/download?name=" + encodeURIComponent(journalName);
+      link.style.display = "";
+    } catch (_) { /* silent — link just stays hidden */ }
+  }
+
   function renderHeader(src){
     if ($("journalName")) $("journalName").textContent = src.display_name || "Unknown journal";
 
@@ -246,7 +259,11 @@
       var bits = [];
       bits.push('<a href="'+esc(get(src,"id","#"))+'" target="_blank" rel="noopener">OpenAlex</a>');
       if (homepage) bits.push('<a href="'+esc(homepage)+'" target="_blank" rel="noopener">Homepage</a>');
+      // Populated async by checkJournalCslDownload() once we've confirmed a
+      // real, named CSL style exists for this exact journal — hidden until then.
+      bits.push('<a id="journalCslLink" href="#" style="display:none;" title="Download the CSL citation style file this journal uses, for Zotero/EndNote/etc.">Download .csl</a>');
       $("journalLinks").innerHTML = bits.join(" · ");
+      checkJournalCslDownload(src.display_name);
     }
 
     if ($("totalWorks")) $("totalWorks").textContent = (get(src,"works_count",0)||0).toLocaleString();
