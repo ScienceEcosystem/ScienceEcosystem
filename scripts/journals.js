@@ -97,6 +97,111 @@ function checkJournalCslDownload(journalName, linkEl) {
     .catch(function(){ /* silent — link just stays hidden */ });
 }
 
+// ── Compare tray ──────────────────────────────────────────────────────────────
+// Journals a user has pinned to compare stay visible in their own panel
+// (#compareTray, outside #journalResults) across every new search — a fresh
+// search only ever rewrites #journalResults, never this tray. Persisted to
+// localStorage so it also survives a reload, not just a new query.
+
+const COMPARE_STORAGE_KEY = 'se_journal_compare';
+let compareState = loadCompareState();
+
+function loadCompareState() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(COMPARE_STORAGE_KEY) || '[]');
+    return new Map(Array.isArray(raw) ? raw.map(function(entry){ return [entry.key, entry]; }) : []);
+  } catch(_) { return new Map(); }
+}
+function saveCompareState() {
+  try { localStorage.setItem(COMPARE_STORAGE_KEY, JSON.stringify(Array.from(compareState.values()))); } catch(_) {}
+}
+function isComparing(key) { return compareState.has(key); }
+
+function toggleCompare(key, payload, btn) {
+  if (compareState.has(key)) compareState.delete(key);
+  else compareState.set(key, payload);
+  saveCompareState();
+  if (btn) setCompareButtonState(btn, compareState.has(key));
+  renderCompareTray();
+}
+
+function setCompareButtonState(btn, active) {
+  btn.textContent = active ? '✓ Comparing' : '+ Compare';
+  btn.style.color = active ? '#166534' : '#475569';
+  btn.style.fontWeight = active ? '700' : '400';
+}
+
+function compareButtonHtml(key) {
+  return '<button type="button" class="journal-compare-btn" data-compare-key="' + escJ(key) + '" '
+    + 'style="font-size:.8rem;border:none;background:none;cursor:pointer;padding:0;font:inherit;">'
+    + (isComparing(key) ? '✓ Comparing' : '+ Compare') + '</button>';
+}
+
+function renderCompareTray() {
+  const tray = document.getElementById('compareTray');
+  if (!tray) return;
+  const entries = Array.from(compareState.values());
+  if (!entries.length) { tray.style.display = 'none'; tray.innerHTML = ''; return; }
+  tray.style.display = '';
+
+  const rows = entries.map(function(e){
+    return '<tr>'
+      + '<td style="padding:.4rem .6rem;font-weight:600;">'
+        + (e.pageUrl ? '<a href="' + escJ(e.pageUrl) + '" style="color:#0f172a;text-decoration:none;">' + escJ(e.name) + '</a>' : escJ(e.name))
+      + '</td>'
+      + '<td style="padding:.4rem .6rem;color:#475569;">' + escJ(e.meta || '—') + '</td>'
+      + '<td style="padding:.4rem .6rem;color:#475569;">' + escJ(e.oaLabel || '—') + '</td>'
+      + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.works != null ? Number(e.works).toLocaleString() : '—') + '</td>'
+      + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.hIndex != null ? e.hIndex : '—') + '</td>'
+      + '<td style="padding:.4rem .6rem;">'
+        + '<button type="button" class="journal-compare-remove" data-compare-key="' + escJ(e.key) + '" '
+          + 'style="font-size:.78rem;border:none;background:none;color:#b91c1c;cursor:pointer;padding:0;">Remove</button>'
+      + '</td>'
+    + '</tr>';
+  }).join('');
+
+  tray.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">'
+      + '<h2 style="font-size:.9rem;font-weight:700;color:#374151;margin:0;">Comparing ' + entries.length + ' journal' + (entries.length===1?'':'s') + '</h2>'
+      + '<button type="button" id="compareTrayClear" style="font-size:.78rem;border:none;background:none;color:#475569;cursor:pointer;text-decoration:underline;">Clear all</button>'
+    + '</div>'
+    + '<div style="overflow-x:auto;">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:.85rem;">'
+      + '<thead><tr style="text-align:left;border-bottom:1px solid #e5e7eb;color:#64748b;font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">'
+        + '<th style="padding:.3rem .6rem;">Journal</th><th style="padding:.3rem .6rem;">Discipline / Publisher</th>'
+        + '<th style="padding:.3rem .6rem;">Access</th><th style="padding:.3rem .6rem;">Works</th>'
+        + '<th style="padding:.3rem .6rem;">h-index</th><th></th>'
+      + '</tr></thead>'
+      + '<tbody>' + rows + '</tbody>'
+    + '</table></div>';
+
+  tray.querySelectorAll('.journal-compare-remove').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const key = btn.getAttribute('data-compare-key');
+      compareState.delete(key);
+      saveCompareState();
+      renderCompareTray();
+      // Keep any currently-rendered card button in sync
+      document.querySelectorAll('.journal-compare-btn[data-compare-key="' + CSS.escape(key) + '"]').forEach(function(b){
+        setCompareButtonState(b, false);
+      });
+    });
+  });
+  const clearBtn = document.getElementById('compareTrayClear');
+  if (clearBtn) clearBtn.addEventListener('click', function(){
+    compareState.clear();
+    saveCompareState();
+    renderCompareTray();
+    document.querySelectorAll('.journal-compare-btn').forEach(function(b){ setCompareButtonState(b, false); });
+  });
+}
+
+function wireCompareButton(card, key, payload) {
+  const btn = card.querySelector('.journal-compare-btn[data-compare-key="' + CSS.escape(key) + '"]');
+  if (!btn) return;
+  payload.key = key;
+  btn.addEventListener('click', function(){ toggleCompare(key, payload, btn); });
+}
+
 function journalPageUrl(openAlexId) {
   if (!openAlexId) return null;
   const tail = String(openAlexId).replace(/^https?:\/\/openalex\.org\//i, '').replace(/^\//, '');
@@ -135,8 +240,13 @@ function makeCuratedCard(j) {
         + 'style="font-size:.8rem;color:#475569;text-decoration:none;">Website ↗</a>'
       + '<a class="journal-csl-link" href="#" style="display:none;font-size:.8rem;color:#475569;text-decoration:none;" '
         + 'title="Download the CSL citation style file this journal uses">.csl ↓</a>'
+      + compareButtonHtml('curated:' + j.id)
     + '</div>';
   checkJournalCslDownload(j.name, card.querySelector('.journal-csl-link'));
+  wireCompareButton(card, 'curated:' + j.id, {
+    name: j.name, pageUrl: 'journal.html?name=' + encodeURIComponent(j.name),
+    meta: j.discipline || null, oaLabel: j.oaPolicy || null, works: null, hIndex: null,
+  });
   return card;
 }
 
@@ -173,8 +283,16 @@ function makeOpenAlexCard(s) {
       + (site ? '<a href="' + escJ(site) + '" target="_blank" rel="noopener noreferrer" style="font-size:.8rem;color:#475569;text-decoration:none;">Website ↗</a>' : '')
       + '<a class="journal-csl-link" href="#" style="display:none;font-size:.8rem;color:#475569;text-decoration:none;" '
         + 'title="Download the CSL citation style file this journal uses">.csl ↓</a>'
+      + (s.id ? compareButtonHtml('openalex:' + s.id) : '')
     + '</div>';
   checkJournalCslDownload(s.display_name, card.querySelector('.journal-csl-link'));
+  if (s.id) {
+    wireCompareButton(card, 'openalex:' + s.id, {
+      name: s.display_name, pageUrl: pageUrl,
+      meta: pub || null, oaLabel: s.is_in_doaj ? 'DOAJ' : (s.is_oa ? 'OA' : 'Subscription'),
+      works: s.works_count != null ? s.works_count : null, hIndex: hIndex,
+    });
+  }
   return card;
 }
 
@@ -321,6 +439,7 @@ async function loadCuratedJti() {
   renderDefault(false);
   if (hint) hint.textContent = 'Showing ' + journalCatalog.length + ' curated journals by discipline. Type to search all journals via OpenAlex.';
   loadCuratedJti();
+  renderCompareTray();
 
   if (searchEl) {
     searchEl.addEventListener('input', function() {

@@ -4110,3 +4110,28 @@ not a code or node_modules issue this time. `lsof -ti:5173 | xargs kill
 -9` before relaunch resolved it. Worth checking port occupancy first
 next time this run-skill gotcha's symptoms reappear, before jumping
 straight to the node_modules reinstall.
+
+2026-08-28 — Journal finder: persistent compare tray
+
+User asked for a "compare" button on journal-finder.html cards so a
+journal you've clicked stays visible even after searching for other
+journals — i.e. survives the exact thing that used to wipe it:
+renderDefault() and searchJournals() both fully replace
+#journalResults' innerHTML on every new search/filter.
+
+Solution: a separate panel (#compareTray in journal-finder.html) that
+lives outside #journalResults, so neither render path ever touches it.
+Each card (curated + live OpenAlex search results, scripts/journals.js)
+gets a "+ Compare" toggle; clicking adds a compact record (name, page
+link, discipline/publisher, OA status, works count, h-index — whatever
+that card type actually has) to a Map, persisted to localStorage
+(se_journal_compare) so it survives a reload too, not just a same-
+session new search. Tray renders as a real comparison table (one row
+per pinned journal, with its own Remove), not just a list of chips.
+
+Verified live via local dev server + Playwright, the actual point of
+the feature specifically: compared a curated journal, ran a new search
+(results grid fully replaced), confirmed the tray still showed the
+earlier pick; added a second journal from the new results; removed one;
+reloaded the page and confirmed the remaining one was still there from
+localStorage alone, no re-clicking needed.

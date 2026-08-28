@@ -65,6 +65,12 @@
       </p>
     </section>
 
+    <!-- Persistent compare tray — populated/updated by scripts/journals.js.
+         Lives outside #journalResults on purpose so it survives every
+         re-render of the search results below (a new search wipes and
+         rebuilds #journalResults entirely). -->
+    <section id="compareTray" class="panel" style="margin-bottom:1rem;display:none;"></section>
+
     <div id="journalResults"></div>
   </main>
 
