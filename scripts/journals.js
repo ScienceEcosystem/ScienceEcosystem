@@ -153,6 +153,7 @@ function renderCompareTray() {
       + '<td style="padding:.4rem .6rem;color:#475569;">' + escJ(e.oaLabel || '—') + '</td>'
       + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.works != null ? Number(e.works).toLocaleString() : '—') + '</td>'
       + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.hIndex != null ? e.hIndex : '—') + '</td>'
+      + '<td style="padding:.4rem .6rem;color:#475569;">' + escJ(e.jti || '—') + '</td>'
       + '<td style="padding:.4rem .6rem;">'
         + '<button type="button" class="journal-compare-remove" data-compare-key="' + escJ(e.key) + '" '
           + 'style="font-size:.78rem;border:none;background:none;color:#b91c1c;cursor:pointer;padding:0;">Remove</button>'
@@ -169,7 +170,7 @@ function renderCompareTray() {
       + '<thead><tr style="text-align:left;border-bottom:1px solid #e5e7eb;color:#64748b;font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">'
         + '<th style="padding:.3rem .6rem;">Journal</th><th style="padding:.3rem .6rem;">Discipline / Publisher</th>'
         + '<th style="padding:.3rem .6rem;">Access</th><th style="padding:.3rem .6rem;">Works</th>'
-        + '<th style="padding:.3rem .6rem;">h-index</th><th></th>'
+        + '<th style="padding:.3rem .6rem;">h-index</th><th style="padding:.3rem .6rem;">JTI</th><th></th>'
       + '</tr></thead>'
       + '<tbody>' + rows + '</tbody>'
     + '</table></div>';
@@ -243,9 +244,21 @@ function makeCuratedCard(j) {
       + compareButtonHtml('curated:' + j.id)
     + '</div>';
   checkJournalCslDownload(j.name, card.querySelector('.journal-csl-link'));
+  // Real works/h-index/JTI for a curated journal only exist after
+  // loadCuratedJti()'s async OpenAlex lookup resolves (it runs in a
+  // separate batch pass after all cards are rendered) — pull from its
+  // cache if that's already happened, otherwise start with nulls and let
+  // updateCuratedCompareData() backfill this entry once the lookup lands,
+  // in case the user compares before that batch reaches this card.
+  var cachedSrc = curatedSourceCache.get(j.name);
   wireCompareButton(card, 'curated:' + j.id, {
     name: j.name, pageUrl: 'journal.html?name=' + encodeURIComponent(j.name),
-    meta: j.discipline || null, oaLabel: j.oaPolicy || null, works: null, hIndex: null,
+    meta: j.discipline || null, oaLabel: j.oaPolicy || null,
+    works: cachedSrc ? (cachedSrc.works_count ?? null) : null,
+    hIndex: cachedSrc ? (cachedSrc.summary_stats?.h_index ?? null) : null,
+    jti: cachedSrc && globalThis.SE?.components?.computeJournalTrustIndex
+      ? (function(){ var sc = SE.components.computeJournalTrustIndex(cachedSrc); return sc.total + '/100 · ' + sc.grade; })()
+      : null,
   });
   return card;
 }
@@ -291,6 +304,7 @@ function makeOpenAlexCard(s) {
       name: s.display_name, pageUrl: pageUrl,
       meta: pub || null, oaLabel: s.is_in_doaj ? 'DOAJ' : (s.is_oa ? 'OA' : 'Subscription'),
       works: s.works_count != null ? s.works_count : null, hIndex: hIndex,
+      jti: seScore ? (seScore.total + '/100 · ' + seScore.grade) : null,
     });
   }
   return card;
@@ -393,6 +407,29 @@ async function searchJournals(query, oaOnly) {
 // Fetches real OpenAlex source data for each curated journal and populates
 // the JTI badge. Runs in the background after cards are rendered.
 
+// name -> OpenAlex source object, so a compare click after this data has
+// already loaded (or a re-render of the same curated card) can use the real
+// numbers immediately instead of nulls.
+const curatedSourceCache = new Map();
+
+// If this journal is already pinned in the compare tray, its entry was
+// created before this real data existed — backfill it in place.
+function updateCuratedCompareData(journalName, src) {
+  const catalogEntry = journalCatalog.find(function(j){ return j.name === journalName; });
+  if (!catalogEntry) return;
+  const key = 'curated:' + catalogEntry.id;
+  const existing = compareState.get(key);
+  if (!existing) return;
+  existing.works = src.works_count ?? null;
+  existing.hIndex = src.summary_stats?.h_index ?? null;
+  if (globalThis.SE?.components?.computeJournalTrustIndex) {
+    const sc = SE.components.computeJournalTrustIndex(src);
+    existing.jti = sc.total + '/100 · ' + sc.grade;
+  }
+  saveCompareState();
+  renderCompareTray();
+}
+
 async function loadCuratedJti() {
   if (!globalThis.SE?.components?.computeJournalTrustIndex) return;
   const placeholders = Array.from(document.querySelectorAll('.curated-jti'));
@@ -415,6 +452,8 @@ async function loadCuratedJti() {
         const data = await res.json();
         const src = data.results && data.results[0];
         if (!src) { el.textContent = ''; return; }
+        curatedSourceCache.set(name, src);
+        updateCuratedCompareData(name, src);
         const score = SE.components.computeJournalTrustIndex(src);
         el.outerHTML = SE.components.journalTrustIndexBadgeHtml(score);
       } catch(_) { el.textContent = ''; }

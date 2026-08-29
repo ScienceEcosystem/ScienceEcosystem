@@ -4135,3 +4135,34 @@ the feature specifically: compared a curated journal, ran a new search
 earlier pick; added a second journal from the new results; removed one;
 reloaded the page and confirmed the remaining one was still there from
 localStorage alone, no re-clicking needed.
+
+2026-08-29 — Compare tray follow-up: missing JTI column + curated cards
+locking in null stats
+
+User pinned 3 curated journals (eLife, Cell, EMBO Journal) and every
+numeric column showed "—", with no JTI column at all. Two real bugs,
+not one:
+1. Never added a JTI column to the compare table to begin with.
+2. For curated (hand-picked static list) cards specifically — not live
+   OpenAlex search-result cards — the real Works/h-index numbers only
+   exist after a separate async batch fetch (loadCuratedJti(), runs
+   after all cards are already rendered) resolves. The compare button's
+   payload was built at click time, before that data existed, so a
+   curated-card comparison permanently locked in nulls with no way to
+   ever backfill.
+
+Fixed: added the JTI column (reusing the same computeJournalTrustIndex
+already used for the card badges). Added a name → OpenAlex-source cache
+(curatedSourceCache) populated by loadCuratedJti as it runs; a compare
+click after that data has already loaded now uses it immediately. More
+importantly, loadCuratedJti's handler now also calls
+updateCuratedCompareData() unconditionally for every curated card it
+processes — so an already-pinned tray entry (including ones sitting in
+localStorage from before this fix even shipped) self-heals in place on
+the very next page load, no re-clicking required.
+
+Verified live: seeded localStorage with the user's exact stale-null
+scenario (3 curated journals, works/hIndex null, no jti field),
+reloaded, waited for the async batch to resolve — all 9 cells (3
+journals × Works/h-index/JTI) came back with real values, confirmed via
+both the rendered table and the updated localStorage contents.
