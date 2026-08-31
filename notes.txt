@@ -4166,3 +4166,58 @@ scenario (3 curated journals, works/hIndex null, no jti field),
 reloaded, waited for the async batch to resolve — all 9 cells (3
 journals × Works/h-index/JTI) came back with real values, confirmed via
 both the rendered table and the updated localStorage contents.
+
+2026-08-31 — Compare tray: Scimago (SJR + quartile) columns
+
+User asked for journal quartile ranking + Scimago Journal Rank (SJR)
+score in the comparison table, believing Scimago has an open API.
+Checked directly: scimagojr.com sits entirely behind a Cloudflare bot
+challenge — even a plain page load from this server got a "Just a
+moment..." JS-challenge response, not real content, confirmed with
+several header/UA variations. No live API exists (or none reachable
+this way); their site only offers a manual "Download data" CSV/Excel
+export. User chose (via AskUserQuestion) to build around that: import
+the annual export manually rather than fake a live integration.
+
+Built:
+- journal_scimago_rankings table (server/index.js) — one row per ISSN
+  (a journal's print/online ISSNs both point at the same ranking row).
+- scripts/import-scimago-rankings.js — one-off importer, run by hand
+  against a manually-downloaded export file. Header-name-based column
+  lookup (not position), handles Scimago's real format specifics:
+  semicolon-delimited, quoted fields with embedded commas, decimal
+  comma ("44,876" = 44.876, not 44876), multi-ISSN cells ("issn1,
+  issn2"). Verified the parser against a synthetic file matching the
+  real known Scimago export shape (quoted title with embedded comma,
+  multi-ISSN split, decimal-comma conversion, empty-ISSN row correctly
+  skipped) — real Scimago data itself untested since no file exists yet;
+  told the user to report back if the header names in their actual
+  downloaded file don't match on the first real run.
+- GET /api/journal/scimago?issn=X&issnl=Y — reads the table only, no
+  external call ever made per-request. found:false just means "not in
+  the last import," not an error.
+- Frontend (scripts/journals.js): SJR + Quartile columns added to the
+  compare tray. Lookup happens at compare-click time (not for every
+  rendered card — no point calling this for journals nobody compares),
+  using issn_l now added to both OpenAlex select() calls. Same
+  backfill-in-place pattern as the JTI fix above: a curated card's
+  issn_l often isn't known yet at click time (loadCuratedJti's async
+  batch hasn't reached it), so updateCuratedCompareData() now also
+  fires the Scimago lookup once issn_l does arrive.
+
+Verified live: seeded one real test row (Hydrobiologia, real ISSN,
+fabricated SJR/quartile values) via local dev server, confirmed via
+Playwright that comparing Hydrobiologia showed the seeded values and
+comparing an unrelated journal correctly showed "—" with no error.
+Test row removed from the DB after.
+
+Found and fixed a real, unrelated bug during this verification: the
+shared /api/journal/ rate limit was 20 req/min per IP, but the default
+curated journal-finder view alone fires 40+ concurrent /api/journal/csl
+checks on page load — meaning roughly half of them were silently
+429'd since the .csl download feature shipped, with no visible error,
+just buttons that should have appeared and didn't. Confirmed directly:
+visible "Download .csl" links went from 11/44 to the real 25/44 once
+the limit was raised to 120/min (same fix already applied once before
+to /api/field-data/ for the identical failure shape, per the comment
+already sitting next to it in server/index.js).

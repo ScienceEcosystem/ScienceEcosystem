@@ -118,11 +118,37 @@ function saveCompareState() {
 function isComparing(key) { return compareState.has(key); }
 
 function toggleCompare(key, payload, btn) {
-  if (compareState.has(key)) compareState.delete(key);
-  else compareState.set(key, payload);
+  if (compareState.has(key)) {
+    compareState.delete(key);
+  } else {
+    compareState.set(key, payload);
+    applyScimagoToEntry(key, payload.issnL);
+  }
   saveCompareState();
   if (btn) setCompareButtonState(btn, compareState.has(key));
   renderCompareTray();
+}
+
+// Scimago (SJR score + quartile) — a separate lookup from OpenAlex, only
+// worth calling once a journal is actually pinned to compare, not for
+// every card on the page. Silently leaves sjr/quartile unset if this
+// journal's ISSN isn't in our imported Scimago data (see
+// scripts/import-scimago-rankings.js — Scimago has no live API, this is
+// only ever as fresh as the last manual import).
+function applyScimagoToEntry(key, issnL) {
+  if (!issnL) return;
+  fetch('/api/journal/scimago?issnl=' + encodeURIComponent(issnL))
+    .then(function(res){ return res.ok ? res.json() : null; })
+    .then(function(data){
+      if (!data || !data.found) return;
+      const entry = compareState.get(key);
+      if (!entry) return; // removed before this resolved
+      entry.sjr = data.sjr != null ? data.sjr : null;
+      entry.quartile = data.sjr_best_quartile || null;
+      saveCompareState();
+      renderCompareTray();
+    })
+    .catch(function(){ /* silent — columns just stay "—" */ });
 }
 
 function setCompareButtonState(btn, active) {
@@ -154,6 +180,8 @@ function renderCompareTray() {
       + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.works != null ? Number(e.works).toLocaleString() : '—') + '</td>'
       + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.hIndex != null ? e.hIndex : '—') + '</td>'
       + '<td style="padding:.4rem .6rem;color:#475569;">' + escJ(e.jti || '—') + '</td>'
+      + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.sjr != null ? Number(e.sjr).toFixed(3) : '—') + '</td>'
+      + '<td style="padding:.4rem .6rem;color:#475569;">' + escJ(e.quartile || '—') + '</td>'
       + '<td style="padding:.4rem .6rem;">'
         + '<button type="button" class="journal-compare-remove" data-compare-key="' + escJ(e.key) + '" '
           + 'style="font-size:.78rem;border:none;background:none;color:#b91c1c;cursor:pointer;padding:0;">Remove</button>'
@@ -170,7 +198,8 @@ function renderCompareTray() {
       + '<thead><tr style="text-align:left;border-bottom:1px solid #e5e7eb;color:#64748b;font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">'
         + '<th style="padding:.3rem .6rem;">Journal</th><th style="padding:.3rem .6rem;">Discipline / Publisher</th>'
         + '<th style="padding:.3rem .6rem;">Access</th><th style="padding:.3rem .6rem;">Works</th>'
-        + '<th style="padding:.3rem .6rem;">h-index</th><th style="padding:.3rem .6rem;">JTI</th><th></th>'
+        + '<th style="padding:.3rem .6rem;">h-index</th><th style="padding:.3rem .6rem;">JTI</th>'
+        + '<th style="padding:.3rem .6rem;">SJR</th><th style="padding:.3rem .6rem;">Quartile</th><th></th>'
       + '</tr></thead>'
       + '<tbody>' + rows + '</tbody>'
     + '</table></div>';
@@ -259,6 +288,7 @@ function makeCuratedCard(j) {
     jti: cachedSrc && globalThis.SE?.components?.computeJournalTrustIndex
       ? (function(){ var sc = SE.components.computeJournalTrustIndex(cachedSrc); return sc.total + '/100 · ' + sc.grade; })()
       : null,
+    issnL: cachedSrc ? (cachedSrc.issn_l || null) : null,
   });
   return card;
 }
@@ -305,6 +335,7 @@ function makeOpenAlexCard(s) {
       meta: pub || null, oaLabel: s.is_in_doaj ? 'DOAJ' : (s.is_oa ? 'OA' : 'Subscription'),
       works: s.works_count != null ? s.works_count : null, hIndex: hIndex,
       jti: seScore ? (seScore.total + '/100 · ' + seScore.grade) : null,
+      issnL: s.issn_l || null,
     });
   }
   return card;
@@ -369,7 +400,7 @@ async function searchJournals(query, oaOnly) {
       + '&filter=type:journal'
       + (oaOnly ? ',is_oa:true' : '')
       + '&per_page=20&sort=works_count:desc&select=id,display_name,host_organization_name,'
-      + 'is_oa,is_in_doaj,works_count,homepage_url,summary_stats'
+      + 'is_oa,is_in_doaj,works_count,homepage_url,summary_stats,issn_l'
       + '&mailto=' + OA_MAILTO;
 
     const res = await fetch(url);
@@ -426,6 +457,10 @@ function updateCuratedCompareData(journalName, src) {
     const sc = SE.components.computeJournalTrustIndex(src);
     existing.jti = sc.total + '/100 · ' + sc.grade;
   }
+  if (src.issn_l && !existing.issnL) {
+    existing.issnL = src.issn_l;
+    applyScimagoToEntry(key, src.issn_l); // fetches sjr/quartile, saves + re-renders itself once resolved
+  }
   saveCompareState();
   renderCompareTray();
 }
@@ -445,7 +480,7 @@ async function loadCuratedJti() {
       const name = card.getAttribute('data-jname');
       try {
         const url = OA_API + '/sources?search=' + encodeURIComponent(name)
-          + '&filter=type:journal&per_page=1&select=display_name,is_oa,is_in_doaj,works_count,summary_stats'
+          + '&filter=type:journal&per_page=1&select=display_name,is_oa,is_in_doaj,works_count,summary_stats,issn_l'
           + '&mailto=' + OA_MAILTO;
         const res = await fetch(url);
         if (!res.ok) return;

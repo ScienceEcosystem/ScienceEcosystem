@@ -421,6 +421,25 @@ async function pgInit() {
     );
   `);
 
+  // Scimago (SJR) journal rankings. Scimago has no live public API — this
+  // is deliberately populated from their annual CSV/Excel export
+  // (scimagojr.com/journalrank.php, "Download data" button), imported via
+  // scripts/import-scimago-rankings.js, not fetched per-request. One row
+  // per ISSN a journal holds (print/online can differ), all pointing at the
+  // same ranking data, so a lookup by either ISSN just works.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS journal_scimago_rankings (
+      issn TEXT PRIMARY KEY,
+      title TEXT,
+      sjr NUMERIC,
+      sjr_best_quartile TEXT,
+      h_index INTEGER,
+      categories TEXT,
+      year INTEGER,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
   // New: collections + collection_items
   await pool.query(`
     CREATE TABLE IF NOT EXISTS collections (
@@ -1611,7 +1630,16 @@ app.get("/health", (_req, res) => res.type("text").send("ok"));
 app.use("/api/paper/",      rateLimiter(60_000, 60));   // 60 req/min per IP
 app.use("/api/profile/",    rateLimiter(60_000, 60));
 app.use("/api/topic/",      rateLimiter(60_000, 20));
-app.use("/api/journal/",    rateLimiter(60_000, 20));
+// journal-finder.html's default curated view alone renders 40+ journal
+// cards, each firing an independent /api/journal/csl existence check (and
+// now /api/journal/scimago on compare) on load — 20/min meant roughly half
+// of them got silently 429'd on a first page load, with no visible error,
+// just a download button/compare stat that should have appeared and
+// didn't. Same failure shape already hit /api/field-data/ below; both
+// endpoint families do cheap, cached lookups (a Map/DB read after the
+// first request), so raising the ceiling is the right fix, not throttling
+// the frontend to fire fewer of these.
+app.use("/api/journal/",    rateLimiter(60_000, 120));
 // 20 distinct field-data sources now exist (GBIF/iNat/WoC/CoL/WoRMS/OBIS/
 // IUCN/eBird/Xeno-canto/ChEMBL/PDB/exoplanet/PANGAEA/materials/UniProt/
 // Wikidata/World Bank/GeoNames/earthquakes/resolve-species), and a single
@@ -5185,6 +5213,32 @@ app.delete("/api/follows/:authorId", async (req, res) => {
   } catch (e) {
     console.error("DELETE /api/follows/:authorId failed:", e);
     res.status(500).json({ error: "Failed to remove follow" });
+  }
+});
+
+// Scimago (SJR) lookup — not signed-in-gated, just reads whatever's been
+// imported into journal_scimago_rankings (see scripts/import-scimago-
+// rankings.js). No live external call here: Scimago's own site blocks
+// automated requests with a Cloudflare challenge, confirmed directly, so
+// this table is only ever as fresh as the last manual annual import —
+// found:false just means either this journal's ISSN isn't in that import,
+// or no import has been run yet.
+app.get("/api/journal/scimago", async (req, res) => {
+  const issns = [req.query?.issn, req.query?.issnl]
+    .map(v => String(v || "").replace(/[^0-9Xx]/g, "").toUpperCase())
+    .filter(Boolean);
+  if (!issns.length) return res.status(400).json({ found: false, error: "issn or issnl required" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT title, sjr, sjr_best_quartile, h_index, categories, year
+       FROM journal_scimago_rankings WHERE issn = ANY($1) LIMIT 1`,
+      [issns]
+    );
+    if (!rows.length) return res.json({ found: false });
+    res.json({ found: true, ...rows[0], sjr: rows[0].sjr != null ? Number(rows[0].sjr) : null });
+  } catch (e) {
+    console.error("GET /api/journal/scimago failed:", e);
+    res.status(500).json({ found: false });
   }
 });
 
