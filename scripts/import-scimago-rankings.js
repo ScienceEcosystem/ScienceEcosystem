@@ -28,6 +28,12 @@ const { Pool } = pkg;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  // A ~32k-row file means ~32k sequential round-trips — without these, a
+  // single dropped connection mid-run hangs the whole process forever
+  // with no error (confirmed live: a run silently stalled ~19k rows in,
+  // never crashed, never finished, just sat at 0% CPU indefinitely).
+  connectionTimeoutMillis: 10_000,
+  query_timeout: 10_000,
 });
 
 const COLUMN_ALIASES = {
@@ -117,6 +123,13 @@ async function run() {
     process.exit(1);
   }
 
+  // Resume support: an interrupted run (dropped connection, killed process)
+  // shouldn't have to redo everything already written for this same year —
+  // fetch what's already there once, up front, and skip those ISSNs below.
+  const already = await pool.query(`SELECT issn FROM journal_scimago_rankings WHERE year = $1`, [yearArg]);
+  const alreadyDone = new Set(already.rows.map(r => r.issn));
+  if (alreadyDone.size) console.log(`Resuming — ${alreadyDone.size} ISSNs already imported for ${yearArg}, will skip those.`);
+
   let rowsUpserted = 0;
   let rowsSkipped = 0;
 
@@ -125,6 +138,7 @@ async function run() {
     const issnRaw = fields[col.issn] || '';
     const issns = issnRaw.split(',').map(normalizeIssn).filter(Boolean);
     if (!issns.length) { rowsSkipped++; continue; }
+    if (issns.every(issn => alreadyDone.has(issn))) continue; // whole row already done
 
     const title = col.title !== -1 ? fields[col.title] : null;
     const sjr = parseScimagoNumber(fields[col.sjr]);
@@ -146,6 +160,9 @@ async function run() {
       } catch (e) {
         console.error(`Failed to upsert ISSN ${issn} (row ${i}):`, e.message);
       }
+    }
+    if (rowsUpserted > 0 && rowsUpserted % 2000 === 0) {
+      console.log(`...${rowsUpserted} upserted so far (row ${i}/${lines.length})`);
     }
   }
 
