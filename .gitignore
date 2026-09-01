@@ -1,2 +1,6 @@
 .env
 node_modules/
+.DS_Store
+extension_v*.zip
+scimagojr*.csv
+scimagojr*.xls
