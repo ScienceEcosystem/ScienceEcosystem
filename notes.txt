@@ -4221,3 +4221,36 @@ visible "Download .csl" links went from 11/44 to the real 25/44 once
 the limit was raised to 120/min (same fix already applied once before
 to /api/field-data/ for the identical failure shape, per the comment
 already sitting next to it in server/index.js).
+
+2026-09-02 — Real Scimago data imported (53,404 ISSN rows)
+
+User downloaded the real 2025 export by hand (scimagojr.com's manual
+"Download data" button — confirmed earlier this couldn't be automated,
+Cloudflare-blocked) and handed it over via the project folder (I can't
+read ~/Downloads directly — macOS blocks that — so it had to be moved
+into the repo dir first). ~32,000-journal, 11MB CSV.
+
+First run stalled silently at 19,380 rows: a dropped DB connection with
+no timeout configured just hung forever (0% CPU, no error) instead of
+failing. Traced to Neon connection-pool saturation from several earlier
+ad-hoc test scripts this session that got killed via kill -9 without a
+clean pool.end() — their server-side connections stayed open until
+Neon's own idle timeout eventually reaped them; a fresh connection hung
+too until that cleared. Fixed scripts/import-scimago-rankings.js:
+connectionTimeoutMillis/query_timeout so a dead connection fails fast
+instead of hanging, resume support (queries which ISSNs are already
+imported for the target year up front, skips them), and progress
+logging every 2000 rows. Reran — resumed cleanly from 19,380, finished
+the remaining ~34,000 in one go.
+
+Real data verified against a known journal: Hydrobiologia now shows
+SJR 0.916, Q1 (Aquatic Science) — genuine 2025 figures, superseding
+the fabricated 0.876/Q2 test values used to verify the feature's
+plumbing before real data existed. journal_scimago_rankings now holds
+53,404 rows (more than ~32,000 journals since many have 2 ISSNs, each
+getting its own row pointing at the same ranking data).
+
+The downloaded CSV itself stays local only (gitignored — see the
+.gitignore cleanup entry above), not committed; scripts/import-
+scimago-rankings.js is what's version-controlled, ready to run again
+against next year's export whenever the user downloads it.
