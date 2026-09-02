@@ -4453,3 +4453,24 @@ the UI alone (no typing into the search box), confirmed the preview
 matched exactly, confirmed clicking "Build & search" produced the same
 18 real results already verified for the hand-typed version, with the
 same wildcard-filtering info note.
+
+2026-09-02 — Library item panel: copy BibTeX/RIS, not just download
+
+User noticed the item detail panel only offered "↓ BibTeX"/"↓ RIS"
+(file download) — no way to just copy the citation text to paste
+somewhere, which "Copy citation" (APA/MLA/etc., already existed)
+doesn't cover since that copies a formatted citation string, not
+BibTeX/RIS. Added "⧉ BibTeX"/"⧉ RIS" buttons right next to the
+existing download ones, reusing the exact same data-generation
+(realOrLocalBibTeX/fmtRIS) the download buttons already call —
+navigator.clipboard.writeText() instead of downloadText(), matching
+the existing copyCiteBtn/shareLinkInput clipboard pattern already used
+elsewhere on this page.
+
+Verified live against a real library item (read-only test — only
+opened an item and clicked the two new copy buttons, no writes, given
+the earlier incident this session where a test accidentally deleted
+real data on this same dev-server-shares-prod-db setup): clipboard
+correctly held real BibTeX (@article{...} with real title/author/
+journal fields) and real RIS (TY - JOUR / TI - / JO - / ER - tags) for
+an actual library item, not placeholder data.

@@ -1797,7 +1797,9 @@
           <!-- Citation export -->
           <div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;padding:.4rem 0;border-top:1px solid #f0f0f0;">
             <button class="btn btn-secondary" id="exportBibBtn" style="font-size:.77rem;padding:.2rem .45rem;">↓ BibTeX</button>
+            <button class="btn btn-secondary" id="copyBibBtn" title="Copy BibTeX to clipboard" style="font-size:.77rem;padding:.2rem .45rem;">⧉ BibTeX</button>
             <button class="btn btn-secondary" id="exportRisBtn" style="font-size:.77rem;padding:.2rem .45rem;">↓ RIS</button>
+            <button class="btn btn-secondary" id="copyRisBtn" title="Copy RIS to clipboard" style="font-size:.77rem;padding:.2rem .45rem;">⧉ RIS</button>
             <select id="citeFormatSelect" class="input" style="padding:.15rem .3rem;font-size:.77rem;">
               <option value="apa">APA 7th</option>
               <option value="mla">MLA 9th</option>
@@ -1985,6 +1987,22 @@
       const safe=(item.title||"citation").replace(/[^a-z0-9]/gi,"_").slice(0,40);
       downloadText(safe+".ris", fmtRIS(item), "application/x-research-info-systems");
       toast("RIS downloaded","success");
+    });
+    $("#copyBibBtn")?.addEventListener("click", async ()=>{
+      try{
+        await navigator.clipboard.writeText(await realOrLocalBibTeX(item));
+        toast("BibTeX copied","success");
+      }catch(_e){
+        toast("Could not copy BibTeX","error");
+      }
+    });
+    $("#copyRisBtn")?.addEventListener("click", async ()=>{
+      try{
+        await navigator.clipboard.writeText(fmtRIS(item));
+        toast("RIS copied","success");
+      }catch(_e){
+        toast("Could not copy RIS","error");
+      }
     });
     $("#copyCiteBtn")?.addEventListener("click", async ()=>{
       const fmt = $("#citeFormatSelect")?.value || "apa";
