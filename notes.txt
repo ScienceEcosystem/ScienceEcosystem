@@ -4474,3 +4474,27 @@ real data on this same dev-server-shares-prod-db setup): clipboard
 correctly held real BibTeX (@article{...} with real title/author/
 journal fields) and real RIS (TY - JOUR / TI - / JO - / ER - tags) for
 an actual library item, not placeholder data.
+
+2026-09-02 — paper.html: Cite popover rendering off to the side
+
+User screenshotted the "Cite this" dialog on a paper page rendering
+docked near the right edge instead of centered on screen. Same
+duplication pattern as the earlier Living Version chip bug this
+session: paper.js has its OWN copy of the cite-popover markup
+(separate from components.js's shared paper-card template, which
+already centers correctly via position:fixed + top/left:50% +
+translate). paper.js's copy used position:absolute with no top/left at
+all — so it just rendered wherever its containing element's normal
+document flow put it, which on the paper detail page's specific layout
+was off to the side.
+
+Fixed by matching components.js's already-correct approach exactly.
+Verified live: popover bounding box center now matches viewport center
+exactly (640,400 on a 1280×800 viewport, both axes).
+
+Not fixed here, flagged again: this is the second time this exact
+"paper.js keeps its own divergent copy of markup components.js already
+has a correct shared version of" bug class has shown up this session.
+Worth a real dedup pass eventually — reusing buildCitePopover's HTML
+scaffold (not just its content-building logic) directly, rather than
+paper.js maintaining a second copy that can drift again.

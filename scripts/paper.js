@@ -808,7 +808,12 @@
           + '<button class="btn btn-secondary btn-save" data-action="save-paper" aria-label="Add to Library">Add to Library</button>'
           + '<button class="btn btn-secondary btn-cite" data-action="open-cite" aria-haspopup="dialog" aria-expanded="false">Cite</button>'
           + '<div class="cite-popover" role="dialog" aria-label="Cite this paper" hidden '
-            + 'style="position:absolute; z-index:9999; max-width:640px; width:min(92vw,640px); box-shadow:0 8px 24px rgba(0,0,0,.18); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'
+            // position:fixed + centered, matching components.js's own card
+            // template — this page had its own copy of this markup using
+            // position:absolute with no top/left, which just rendered
+            // wherever its containing element happened to sit (docked to
+            // the side, per a real screenshot) instead of centered.
+            + 'style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; max-width:640px; width:min(92vw,640px); max-height:90vh; overflow:auto; box-shadow:0 8px 32px rgba(0,0,0,.28); border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:12px;"></div>'
         + '</div>'
       + '</article>';
   }
