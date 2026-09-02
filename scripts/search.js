@@ -438,10 +438,28 @@ function parseCitationQuery(q) {
 // invalid query and a genuinely empty result set rendered identically,
 // so a syntax mistake looked exactly like "no such research exists."
 let lastPaperSearchError = null;
+// Set instead of lastPaperSearchError when the query was auto-recovered
+// (see below) — a softer, informational note, not a warning, since
+// nothing actually failed from the user's point of view.
+let lastPaperSearchNotice = null;
+
+// OpenAlex treats a bare ? or * as a wildcard character, not literal
+// punctuation — so pasting a real paper title that happens to end in a
+// question mark (not rare in science) or contain an asterisk fails with a
+// syntax error, even though the user did nothing wrong. Confirmed live
+// against a real title ("...Invasional Meltdown?") that exists in OpenAlex
+// but couldn't be found by searching its own exact title for exactly this
+// reason. Only used as a fallback retry after the literal query already
+// failed — never applied up front, so intentional wildcard search syntax
+// (e.g. "model*" in an advanced boolean query) still works normally.
+function stripWildcardChars(str) {
+  return String(str || '').replace(/[?*]/g, '').replace(/\s+/g, ' ').trim();
+}
 
 async function fetchPapers(query, authorIds = [], page = 1, signal) {
   let works = [];
   lastPaperSearchError = null;
+  lastPaperSearchNotice = null;
   try {
     // Parse citation-style queries: extract year so it becomes a filter not a search term
     const { year: queryYear, search: querySearch } = parseCitationQuery(query);
@@ -459,8 +477,23 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
     }
 
     // Primary: relevance search with year filter applied
-    const urlG = `${API_BASE}/works?search=${encodeURIComponent(querySearch)}${combinedFilter}&per_page=100&page=${page}${serverSortParam()}`;
-    const dataG = await fetchJSON(urlG, signal);
+    let effectiveSearch = querySearch;
+    const urlG = `${API_BASE}/works?search=${encodeURIComponent(effectiveSearch)}${combinedFilter}&per_page=100&page=${page}${serverSortParam()}`;
+    let dataG;
+    try {
+      dataG = await fetchJSON(urlG, signal);
+    } catch (err) {
+      if (err.name === "AbortError") throw err;
+      const stripped = stripWildcardChars(querySearch);
+      if (err.isQueryError && /wildcard/i.test(err.message) && stripped && stripped !== querySearch) {
+        effectiveSearch = stripped;
+        const urlRetry = `${API_BASE}/works?search=${encodeURIComponent(effectiveSearch)}${combinedFilter}&per_page=100&page=${page}${serverSortParam()}`;
+        dataG = await fetchJSON(urlRetry, signal);
+        lastPaperSearchNotice = `Searched for "${effectiveSearch}" — ? and * are treated as wildcard characters, not literal punctuation, so they were dropped from your query.`;
+      } else {
+        throw err;
+      }
+    }
     const generalWorks = dataG.results || [];
 
     // Secondary: title-specific search — catches papers where the query terms
@@ -468,10 +501,10 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
     // ranking under-weights relative to Google Scholar (it can rank a paper
     // with loose abstract mentions above one whose title is an exact match).
     let titleWorks = [];
-    if (querySearch) {
+    if (effectiveSearch) {
       try {
         const titleYearFilter = queryYear ? `,publication_year:${queryYear}` : '';
-        const urlT = `${API_BASE}/works?filter=display_name.search:${encodeURIComponent(querySearch)}${titleYearFilter}&per_page=25&select=id,display_name,authorships,publication_year,doi,open_access,cited_by_count,primary_location,host_venue,type`;
+        const urlT = `${API_BASE}/works?filter=display_name.search:${encodeURIComponent(effectiveSearch)}${titleYearFilter}&per_page=25&select=id,display_name,authorships,publication_year,doi,open_access,cited_by_count,primary_location,host_venue,type`;
         const dataT = await fetchJSON(urlT, signal);
         titleWorks = dataT.results || [];
       } catch(_) {}
@@ -760,6 +793,7 @@ function renderPapers(works, append = false) {
           </div>
         </div>
       </h2>
+      ${lastPaperSearchNotice ? `<p class="muted" style="font-size:.85rem;">ℹ ${escapeHtml(lastPaperSearchNotice)}</p>` : ""}
       <div id="papersList"></div>
       <div id="pagination"></div>
     `;

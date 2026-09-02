@@ -4337,3 +4337,35 @@ state whenever that happened. Verified live with the user's exact
 original query: confirmed the real OpenAlex error text now renders
 ("Wildcards (* or ?) do not work inside this quoted phrase...") instead
 of the old silent "No papers found."
+
+2026-09-02 — search.html: pasting a real paper's exact title returned
+nothing
+
+Immediately hit a second, related instance of the same root problem:
+user pasted the exact title of a paper genuinely in their library
+("Positive Interactions of Nonindigenous Species: Invasional
+Meltdown?" — W2133688117 — confirmed it exists) and got "No papers
+found." Confirmed directly: OpenAlex treats a bare `?` as a wildcard
+character, not literal punctuation — the trailing `?` in this paper's
+actual title (not rare in science, rhetorical-question titles are
+common) made the query invalid the same way the earlier wildcard-in-
+quotes bug did.
+
+Unlike the earlier boolean-syntax case, this one isn't really a "user
+mistake" worth just explaining — pasting a paper's real title to find
+it is about as legitimate as search gets, and stripping a stray ?/* is
+an unambiguous, safe recovery (confirmed: the sanitized title returns
+the exact paper as the #1 relevance-ranked result). So this gets a
+better fix than the error-surfacing one above: fetchPapers() now
+retries once, automatically, with ? and * stripped, ONLY when OpenAlex's
+error message specifically says "wildcard" (never applied up front, so
+someone intentionally using real wildcard syntax like `model*` outside
+quotes is untouched). On a successful recovery, shows a transparent ℹ
+note ("Searched for "..." — ? and * are treated as wildcard characters
+...") rather than silently rewriting what the user asked for. The
+secondary title-match query was also switched to use the same
+recovered search string for consistency.
+
+Verified live: the exact real title now returns the exact paper as
+result #1, with the info note rendering as designed — confirmed via
+Playwright, not just the API response.
