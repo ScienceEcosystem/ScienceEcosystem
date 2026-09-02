@@ -456,6 +456,75 @@ function stripWildcardChars(str) {
   return String(str || '').replace(/[?*]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+// Real wildcard support, built on top of OpenAlex rather than through it:
+// OpenAlex rejects * / ? outright (see stripWildcardChars above), including
+// — permanently, no server flag fixes it — a wildcard inside a quoted
+// phrase. So the wildcard-stripped query goes to OpenAlex for broad,
+// stemmed candidate retrieval (which already handles the AND/OR/quote
+// structure natively), and this refines those candidates down to ones
+// that genuinely satisfy every wildcard pattern the user actually wrote.
+// * becomes "any word characters", ? becomes "one word character" —
+// matched against title + abstract text, case-insensitively.
+function wildcardToRegex(text) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean).map(w => {
+    // A trailing ? is overwhelmingly literal punctuation in real text — a
+    // pasted title, a rhetorical-question title (confirmed live: exactly
+    // this broke the "search a paper's own title" fix above before this
+    // adjustment) — not a deliberate single-character wildcard. Dropped
+    // rather than turned into a match requirement. A trailing/embedded *
+    // and any mid-word ? are still treated as real wildcards.
+    const trimmed = w.endsWith('?') ? w.slice(0, -1) : w;
+    const escaped = trimmed.replace(/[.+^${}()|[\]\\*?]/g, '\\$&');
+    return escaped.replace(/\\\*/g, '[\\w-]*').replace(/\\\?/g, '[\\w-]');
+  }).filter(Boolean);
+  return words.length ? new RegExp('\\b' + words.join('\\s+'), 'i') : null;
+}
+
+// Quoted phrases and bare words are extracted and turned into separate
+// patterns — a wildcard inside quotes must match as an adjacent phrase,
+// a bare wildcarded word just needs to appear anywhere.
+function extractWildcardPatterns(rawQuery) {
+  const raw = String(rawQuery || '');
+  const patterns = [];
+  raw.replace(/"([^"]+)"/g, (_, phrase) => {
+    if (/[?*]/.test(phrase)) {
+      const re = wildcardToRegex(phrase);
+      if (re) patterns.push(re);
+    }
+    return '';
+  });
+  raw.replace(/"[^"]*"/g, ' ').split(/\s+/).forEach(tok => {
+    if (/[?*]/.test(tok) && /[A-Za-z0-9]/.test(tok)) {
+      const re = wildcardToRegex(tok);
+      if (re) patterns.push(re);
+    }
+  });
+  return patterns;
+}
+
+function abstractTextFrom(work) {
+  const idx = work?.abstract_inverted_index;
+  if (!idx || typeof idx !== 'object') return '';
+  const words = [];
+  Object.keys(idx).forEach(word => { (idx[word] || []).forEach(pos => { words[pos] = word; }); });
+  return words.join(' ');
+}
+
+// Matches if ANY wildcard pattern the user wrote is satisfied — not a full
+// boolean-tree evaluation of where each pattern sits relative to AND/OR/
+// parens (OpenAlex's own de-wildcarded query already resolved the
+// non-wildcard parts of that structure). Confirmed live this needs to be
+// OR, not AND: multiple wildcard terms joined by OR (the common case —
+// "either of these word-forms") were being wrongly required to ALL match,
+// collapsing genuine results to zero. OR is the safer default either way:
+// worst case for an AND-joined pair of wildcards is a slightly broader
+// result set, not real matches silently disappearing.
+function matchesAnyWildcardPattern(work, patterns) {
+  if (!patterns.length) return true;
+  const text = `${work?.display_name || ''} ${abstractTextFrom(work)}`;
+  return patterns.some(re => re.test(text));
+}
+
 async function fetchPapers(query, authorIds = [], page = 1, signal) {
   let works = [];
   lastPaperSearchError = null;
@@ -504,7 +573,11 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
     if (effectiveSearch) {
       try {
         const titleYearFilter = queryYear ? `,publication_year:${queryYear}` : '';
-        const urlT = `${API_BASE}/works?filter=display_name.search:${encodeURIComponent(effectiveSearch)}${titleYearFilter}&per_page=25&select=id,display_name,authorships,publication_year,doi,open_access,cited_by_count,primary_location,host_venue,type`;
+        // host_venue is a deprecated field OpenAlex no longer accepts in
+        // select= (confirmed live: a 400 was silently swallowed by the
+        // catch below, breaking this whole secondary query) — primary_
+        // location.source is the current, valid replacement, already here.
+        const urlT = `${API_BASE}/works?filter=display_name.search:${encodeURIComponent(effectiveSearch)}${titleYearFilter}&per_page=25&select=id,display_name,authorships,publication_year,doi,open_access,cited_by_count,primary_location,type`;
         const dataT = await fetchJSON(urlT, signal);
         titleWorks = dataT.results || [];
       } catch(_) {}
@@ -522,7 +595,17 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
     });
 
     merged = applyAdvancedFilters(merged);
-    if (advancedActive && page === 1) totalResults = merged.length;
+
+    // Real wildcard matching, refined on top of whatever OpenAlex's own
+    // (de-wildcarded) query already found — see matchesAnyWildcardPattern.
+    const wildcardPatterns = extractWildcardPatterns(query);
+    if (wildcardPatterns.length) {
+      const beforeCount = merged.length;
+      merged = merged.filter(w => matchesAnyWildcardPattern(w, wildcardPatterns));
+      lastPaperSearchNotice = `Showing ${merged.length} result${merged.length === 1 ? '' : 's'} that actually match your wildcard pattern, out of ${beforeCount} broader candidates OpenAlex returned for "${effectiveSearch}" — OpenAlex itself can't run wildcard search, so this checks each candidate's title/abstract text ourselves. Matches beyond what OpenAlex returned for the plain query aren't checked.`;
+    }
+
+    if ((advancedActive || wildcardPatterns.length) && page === 1) totalResults = merged.length;
 
     if (currentFilter === "citations") {
       merged.sort((a,b)=> {

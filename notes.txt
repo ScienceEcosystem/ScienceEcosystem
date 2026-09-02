@@ -4369,3 +4369,58 @@ recovered search string for consistency.
 Verified live: the exact real title now returns the exact paper as
 result #1, with the info note rendering as designed — confirmed via
 Playwright, not just the API response.
+
+2026-09-02 — search.html: real wildcard-in-phrase matching, built on
+top of OpenAlex rather than through it
+
+Follow-up to the two fixes above: user asked whether wildcard search
+(the thing OpenAlex flatly rejects, especially inside a quoted phrase)
+could be made to actually work on our side even though OpenAlex itself
+can't do it. Answer: yes for the "inside a quoted phrase" case
+specifically — chose the properly-built version over just keeping the
+existing strip-and-notify behavior (which already handled the "trailing
+? in a real title" case fine, but not real wildcard matching).
+
+Approach: OpenAlex still gets the query with * and ? stripped (existing
+fallback), for broad, stemmed candidate retrieval — its own engine
+still resolves the query's AND/OR/quote structure for everything except
+the wildcard itself. New: extractWildcardPatterns() pulls every quoted
+phrase and bare word from the ORIGINAL query that contains a wildcard,
+builds a real regex per pattern (* → any word chars, ? → one word char),
+and matchesAnyWildcardPattern() filters OpenAlex's candidate set down to
+ones whose title+abstract text (abstractTextFrom(), reconstructed from
+abstract_inverted_index) actually satisfy at least one pattern. Real
+wildcard search, layered on top rather than through OpenAlex — exactly
+what was asked, with the honest limitation (disclosed to the user
+upfront, and in an ℹ note when it fires) that it only filters whatever
+candidate pool OpenAlex's own de-wildcarded query returned, not the
+full corpus.
+
+Two real bugs caught by live verification before shipping, not by
+inspection:
+1. A trailing `?` (the exact "Meltdown?" title case from the previous
+   fix) would have been treated as "one more word character required,"
+   breaking the very case just fixed. Trailing ? is now dropped as
+   literal punctuation rather than converted to a wildcard requirement
+   — mid-word ? and any * are still treated as real wildcards.
+2. First shipped version required EVERY extracted wildcard pattern to
+   match (AND) — wrong when patterns are OR'd together in the actual
+   query, which collapsed the user's own original query (two wildcarded
+   phrases joined by OR) to zero results. Live Playwright testing caught
+   this immediately (0 results, and manually confirmed a real candidate
+   in the pool that should have matched didn't). Switched to OR
+   (matchesAnyWildcardPattern) — the safer default either way, since it
+   can only ever be too permissive, never silently drop real matches.
+
+Also fixed a small unrelated bug the same verification pass surfaced:
+the secondary title-search query's select= list still requested the
+long-deprecated host_venue field, which OpenAlex now 400s on — silently
+swallowed by that query's own catch(_) {}, meaning that whole secondary
+lookup had probably been dead for a while. Removed it; primary_location
+(already requested) is the current field.
+
+Verified live end-to-end after both bug fixes: the original complex
+query now returns 18 genuine matches with visibly correct titles
+("...Species Distribution Models", "...distribution modelling..."),
+and the trailing-? title search still correctly returns the exact paper
+as result #1.
