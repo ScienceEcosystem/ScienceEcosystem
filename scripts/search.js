@@ -1122,6 +1122,84 @@ function restoreSearchState() {
   } catch(_) { return false; }
 }
 
+/* ---------- Query builder: concept groups → real boolean/wildcard query ----------
+   Terms in the same group are OR'd; groups are AND'd. Assembles the exact
+   syntax the search box already accepts (quoted phrases, AND/OR, trailing
+   * for word variations) so a user never has to hand-type parens/quotes —
+   this is purely a query-string generator, the actual search still runs
+   through the normal runUnifiedSearch()/fetchPapers() pipeline (wildcard
+   filtering included) once built. */
+function queryTermRowHtml() {
+  return `
+    <div class="query-term-row" style="display:flex; gap:.4rem; align-items:center; margin-bottom:.4rem;">
+      <input type="text" class="input query-term-input" placeholder="term or phrase" style="flex:1; padding:.35rem .5rem; font-size:.85rem;">
+      <label style="display:flex; align-items:center; gap:.25rem; font-size:.75rem; color:#475569; white-space:nowrap;">
+        <input type="checkbox" class="query-term-wildcard"> match variations
+      </label>
+      <button type="button" class="query-term-remove btn-icon" title="Remove term" style="border:none; background:none; color:#94a3b8; cursor:pointer; font-size:1rem; line-height:1; padding:0 .25rem;">×</button>
+    </div>`;
+}
+
+function addQueryTerm(groupBody) {
+  groupBody.insertAdjacentHTML("beforeend", queryTermRowHtml());
+  wireQueryTermRemove(groupBody);
+}
+
+function wireQueryTermRemove(groupBody) {
+  groupBody.querySelectorAll(".query-term-remove").forEach(btn => {
+    btn.onclick = () => {
+      // Never remove the last term in a group — a group needs at least
+      // one input to mean anything; clearing its text is how you empty it.
+      if (groupBody.querySelectorAll(".query-term-row").length > 1) {
+        btn.closest(".query-term-row")?.remove();
+      }
+    };
+  });
+}
+
+function addQueryGroup() {
+  const container = $("queryGroups");
+  if (!container) return;
+  const isFirst = container.children.length === 0;
+  const group = document.createElement("div");
+  group.className = "query-group";
+  group.style.cssText = "margin-bottom:.6rem; padding:.6rem; background:#fff; border:1px solid #e2e8f0; border-radius:6px;";
+  group.innerHTML = `
+    ${isFirst ? "" : '<p class="muted" style="margin:0 0 .4rem; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em;">AND</p>'}
+    <div class="query-group-body"></div>
+    <button type="button" class="query-group-add-term btn-secondary btn-xs" style="margin-top:.2rem;">+ Add OR term</button>
+  `;
+  container.appendChild(group);
+  const body = group.querySelector(".query-group-body");
+  addQueryTerm(body);
+  group.querySelector(".query-group-add-term").addEventListener("click", () => addQueryTerm(body));
+}
+
+// A single-word term needs no quotes; a multi-word term is wrapped as a
+// phrase (adjacency, not "any of these words") since that's what writing
+// several words together normally means. Wildcard appends * before the
+// closing quote (or directly, for a bare single word).
+function formatQueryTerm(text, wildcard) {
+  const t = text.trim();
+  if (!t) return "";
+  const withWildcard = wildcard ? `${t}*` : t;
+  return /\s/.test(t) ? `"${withWildcard}"` : withWildcard;
+}
+
+function buildQueryFromGroups() {
+  const groups = Array.from(document.querySelectorAll(".query-group")).map(group => {
+    const terms = Array.from(group.querySelectorAll(".query-term-row"))
+      .map(row => formatQueryTerm(
+        row.querySelector(".query-term-input")?.value || "",
+        !!row.querySelector(".query-term-wildcard")?.checked
+      ))
+      .filter(Boolean);
+    if (!terms.length) return "";
+    return terms.length > 1 ? `(${terms.join(" OR ")})` : terms[0];
+  }).filter(Boolean);
+  return groups.join(" AND ");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const params = new URLSearchParams(window.location.search);
   const input = $("unifiedSearchInput");
@@ -1176,6 +1254,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $("applyAdvancedFilters")?.addEventListener("click", () => handleUnifiedSearch(true));
   $("clearAdvancedFilters")?.addEventListener("click", () => { clearAdvancedFilters(); handleUnifiedSearch(true); });
+
+  // Query builder
+  if ($("queryGroups")) {
+    addQueryGroup();
+    $("addQueryGroup")?.addEventListener("click", addQueryGroup);
+    const preview = $("queryBuilderPreview");
+    const updatePreview = () => { if (preview) preview.textContent = buildQueryFromGroups(); };
+    $("queryGroups").addEventListener("input", updatePreview);
+    $("queryGroups").addEventListener("change", updatePreview);
+    updatePreview();
+    $("runQueryBuilder")?.addEventListener("click", () => {
+      const built = buildQueryFromGroups();
+      if (!built) return;
+      const searchInput = $("unifiedSearchInput");
+      if (searchInput) searchInput.value = built;
+      handleUnifiedSearch(true);
+    });
+  }
 });
 
 // Expose highlight to components (optional)

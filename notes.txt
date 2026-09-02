@@ -4424,3 +4424,32 @@ query now returns 18 genuine matches with visibly correct titles
 ("...Species Distribution Models", "...distribution modelling..."),
 and the trailing-? title search still correctly returns the exact paper
 as result #1.
+
+2026-09-02 — search.html: visual query builder for boolean/wildcard
+search
+
+Natural next ask after the wildcard work above: make constructing this
+kind of query (Web of Science/Scopus-style) easier than hand-typing
+quotes/parens/AND/OR. Added a "Build a search (concept groups)" panel
+inside the existing "Advanced filters" <details> — concept groups of
+OR'd terms, groups AND'd together (matches the exact two-level
+structure of the request that started this whole thread), a "match
+variations" checkbox per term that appends the wildcard, a live
+monospace query preview, and a "Build & search" button that fills the
+main search box and runs it through the normal (already wildcard-aware)
+search pipeline — no new/separate search path.
+
+Pure client-side string assembly (scripts/search.js:
+buildQueryFromGroups/formatQueryTerm/addQueryGroup/addQueryTerm) — a
+multi-word term auto-quotes as a phrase, a single word doesn't need to,
+a group with one term skips the OR-parens it wouldn't need. Unit-tested
+the assembly logic in isolation before touching the UI: fed it the
+exact same structure as the original real request (two groups, three
+wildcarded/non-wildcarded terms) and confirmed byte-for-byte identical
+output to the query that was being hand-typed before.
+
+Verified live end-to-end via Playwright: built that exact query through
+the UI alone (no typing into the search box), confirmed the preview
+matched exactly, confirmed clicking "Build & search" produced the same
+18 real results already verified for the hand-typed version, with the
+same wildcard-filtering info note.

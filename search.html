@@ -63,6 +63,25 @@
       </form>
       <details style="margin-top:1rem;">
         <summary style="cursor:pointer; color:#2e7f9f; font-size:0.95rem;">Advanced filters</summary>
+
+        <!-- Query builder: assembles a real boolean/wildcard search string
+             (the same syntax the search box itself accepts, e.g.
+             ("invasional meltdown" OR "invasion meltdown") AND ("species
+             distribution model*" OR SDM)) without needing to hand-type
+             quotes/parens/AND/OR. Terms within a group are OR'd; groups
+             are AND'd together — matches Web of Science/PubMed-style
+             "search sets" builders. -->
+        <div style="margin-top:1rem; padding:.85rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
+          <p style="margin:0 0 .6rem; font-size:.85rem; color:#374151; font-weight:600;">Build a search (concept groups)</p>
+          <p class="muted" style="margin:0 0 .75rem; font-size:.8rem;">Terms in the same group are matched with OR. Separate groups are combined with AND. Check "match word variations" to also catch plurals/forms (e.g. model → models, modelling).</p>
+          <div id="queryGroups"></div>
+          <div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-xs" type="button" id="addQueryGroup">+ Add AND group</button>
+            <button class="btn btn-primary btn-xs" type="button" id="runQueryBuilder">Build &amp; search</button>
+          </div>
+          <p id="queryBuilderPreview" class="muted" style="margin:.6rem 0 0; font-size:.78rem; font-family:monospace; word-break:break-word;"></p>
+        </div>
+
         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:0.75rem; margin-top:0.75rem;">
           <label>DOI (exact)
             <input id="filterDoi" class="input" type="text" placeholder="10.xxxx/xxxxx" />
