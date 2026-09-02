@@ -2,7 +2,10 @@
 (function () {
   if (!document.body || document.body.dataset.page !== "publisher") return;
 
-  var API = "https://api.openalex.org";
+  // Routed through our own server, not api.openalex.org directly — the
+  // same anonymous-rate-limit failure already hit and fixed on journal.js/
+  // journals.js/journal-finder.html this session (a wall of 429s on load).
+  var API = location.origin + "/api/openalex";
   var MAILTO = "info@scienceecosystem.org";
   var PAGE_SIZE = 50;
 
@@ -284,9 +287,16 @@
       renderHeader(pub);
       renderTrends(pub);
 
-      // Preferred: OpenAlex usually exposes these API helper URLs
-      worksApiBaseUrl   = get(pub, "works_api_url", null)   || (API + "/works?filter=host_venue.publisher_id:" + encodeURIComponent(tail));
-      sourcesApiBaseUrl = get(pub, "sources_api_url", null) || null;
+      // Preferred: OpenAlex usually exposes these API helper URLs — but
+      // they're absolute api.openalex.org URLs, so route them through our
+      // proxy too or they bypass the fix above entirely.
+      var rewriteToProxy = function(u){ return u ? u.replace(/^https:\/\/api\.openalex\.org/, API) : u; };
+      // host_venue.publisher_id is long-deprecated by OpenAlex (confirmed
+      // live: 400 "host_venue and alternate_host_venues are deprecated in
+      // favor of locations") — this fallback path was silently broken for
+      // any publisher whose record has no works_api_url of its own.
+      worksApiBaseUrl   = rewriteToProxy(get(pub, "works_api_url", null))   || (API + "/works?filter=locations.source.host_organization:" + encodeURIComponent(tail));
+      sourcesApiBaseUrl = rewriteToProxy(get(pub, "sources_api_url", null)) || null;
 
       // Works
       var list = $("publicationsList");

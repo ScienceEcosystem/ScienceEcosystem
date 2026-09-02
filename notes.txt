@@ -4498,3 +4498,45 @@ has a correct shared version of" bug class has shown up this session.
 Worth a real dedup pass eventually — reusing buildCitePopover's HTML
 scaffold (not just its content-building logic) directly, rather than
 paper.js maintaining a second copy that can drift again.
+
+2026-09-03 — Site-wide: 6 more pages calling OpenAlex directly,
+unauthenticated
+
+User hit a wall of 429s on their own profile page — Publications stuck
+on "Error: Unreachable", Research areas concept badges failing — real
+screenshot showed every request going straight to api.openalex.org, not
+through this site's own /api/openalex proxy. Same exact bug already
+found and fixed on journal.js/journals.js earlier this session
+(migrating a file to use the proxy is easy to do for the file you're
+looking at and easy to forget still needs doing for every other file).
+
+Grepped the whole scripts/ directory this time instead of fixing one
+file and hoping: found 6 files still hardcoding api.openalex.org —
+funder.js, institute.js, profile.js, publisher.js (single API constant
+each, one-line fix), living-paper.js and pdf-reader.js (5-7 scattered
+inline template-literal URLs each, fixed via the same substitution).
+All now route through location.origin + "/api/openalex".
+
+Caught a second layer of the same bug while fixing it: institute.js,
+profile.js, and publisher.js all also directly fetch a `works_api_url`
+field that OpenAlex returns INSIDE its own API responses (e.g. an
+institution or author record's own "here's where to find their works"
+link) — that returned value is itself a raw api.openalex.org URL, so
+fetching it as-is would have silently bypassed the proxy fix entirely
+for exactly the highest-volume request on each of those pages. Added a
+rewrite step (swap the origin to our proxy, keep the rest of the URL
+OpenAlex provided) everywhere this pattern appeared.
+
+Also fixed, surfaced by live verification of the above rather than
+found by inspection: publisher.js's own fallback query (used when a
+publisher record has no works_api_url) filtered on
+host_venue.publisher_id — long-deprecated by OpenAlex (confirmed live:
+400 "host_venue and alternate_host_venues are deprecated in favor of
+locations"), silently broken for any such publisher. Replaced with
+locations.source.host_organization (tested directly, real 2.8M-work
+count for Springer Nature, not zero).
+
+Verified live: profile.html now shows real Publications with zero
+direct-to-OpenAlex calls and zero 429s; institute.html and
+publisher.html spot-checked clean the same way; publisher.html's
+"Recent Works" (previously a bare 400 error) now shows real titles.

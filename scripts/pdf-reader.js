@@ -93,7 +93,7 @@ async function getOaPdfUrl() {
   if (!paperId) return (_oaPdfUrlCache = null);
   try {
     const cleanId = paperId.replace('https://openalex.org/', '');
-    const res = await fetch(`https://api.openalex.org/works/${cleanId}?mailto=scienceecosystem@icloud.com`);
+    const res = await fetch(`${location.origin}/api/openalex/works/${cleanId}?mailto=scienceecosystem@icloud.com`);
     if (!res.ok) return (_oaPdfUrlCache = null);
     const work = await res.json();
     return (_oaPdfUrlCache = work.best_oa_location?.pdf_url || work.open_access?.oa_url || null);
@@ -1063,7 +1063,7 @@ async function loadPaperMetadata(paperId) {
 
   try {
     const cleanId = paperId.replace('https://openalex.org/', '');
-    const response = await fetch(`https://api.openalex.org/works/${cleanId}?mailto=scienceecosystem@icloud.com`);
+    const response = await fetch(`${location.origin}/api/openalex/works/${cleanId}?mailto=scienceecosystem@icloud.com`);
 
     if (!response.ok) throw new Error('Failed to load metadata');
 
@@ -1122,7 +1122,7 @@ async function loadReferencesFromOpenAlex(paper) {
   for (let i = 0; i < ids.length; i += BATCH) {
     const batch = ids.slice(i, i + BATCH).join('|');
     try {
-      const r = await fetch(`https://api.openalex.org/works?filter=ids.openalex:${batch}&per-page=50&select=id,title,authorships,publication_year,doi,open_access&mailto=scienceecosystem@icloud.com`);
+      const r = await fetch(`${location.origin}/api/openalex/works?filter=ids.openalex:${batch}&per-page=50&select=id,title,authorships,publication_year,doi,open_access&mailto=scienceecosystem@icloud.com`);
       if (r.ok) { const d = await r.json(); allWorks.push(...(d.results || [])); }
     } catch(_) {}
   }
@@ -2322,7 +2322,7 @@ async function findScienceEcosystemLink(ref) {
 async function openAlexByDoi(doi) {
   try {
     const searchResponse = await fetch(
-      `https://api.openalex.org/works?filter=doi:${encodeURIComponent(doi)}&mailto=scienceecosystem@icloud.com`
+      `${location.origin}/api/openalex/works?filter=doi:${encodeURIComponent(doi)}&mailto=scienceecosystem@icloud.com`
     );
     const searchData = await searchResponse.json();
     if (searchData.results && searchData.results.length > 0) {
@@ -2342,7 +2342,7 @@ async function openAlexByTitle(ref) {
   const q = firstAuthor ? `${title} ${firstAuthor}` : title;
   try {
     const searchResponse = await fetch(
-      `https://api.openalex.org/works?search=${encodeURIComponent(q)}&per-page=5&mailto=scienceecosystem@icloud.com`
+      `${location.origin}/api/openalex/works?search=${encodeURIComponent(q)}&per-page=5&mailto=scienceecosystem@icloud.com`
     );
     const searchData = await searchResponse.json();
     if (searchData.results && searchData.results.length > 0) {

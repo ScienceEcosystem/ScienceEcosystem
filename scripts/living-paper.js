@@ -178,7 +178,7 @@ async function loadPaperMetadata() {
   const el = document.getElementById('lpMetadata');
   if (!doi) { el.innerHTML = '<p class="muted">No DOI provided.</p>'; return; }
   try {
-    const res = await fetch(`https://api.openalex.org/works/doi:${encodeURIComponent(doi)}?mailto=scienceecosystem@icloud.com`);
+    const res = await fetch(`${location.origin}/api/openalex/works/doi:${encodeURIComponent(doi)}?mailto=scienceecosystem@icloud.com`);
     if (!res.ok) throw new Error('lookup failed');
     const paper = await res.json();
     const authors = (paper.authorships || []).slice(0, 3).map(a => a.author.display_name).join(', ') || 'Unknown authors';
@@ -234,7 +234,7 @@ async function loadReferences() {
   const el = document.getElementById('lpReferences');
   if (!doi) { el.innerHTML = '<p class="muted">No DOI provided.</p>'; return; }
   try {
-    const res = await fetch(`https://api.openalex.org/works/doi:${encodeURIComponent(doi)}?mailto=scienceecosystem@icloud.com`);
+    const res = await fetch(`${location.origin}/api/openalex/works/doi:${encodeURIComponent(doi)}?mailto=scienceecosystem@icloud.com`);
     const paper = await res.json();
     const refs = paper.referenced_works || [];
     if (!refs.length) { el.innerHTML = '<p class="muted">No references listed in OpenAlex.</p>'; return; }

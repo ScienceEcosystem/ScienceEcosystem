@@ -2,7 +2,10 @@
 (function () {
   if (!document.body || document.body.dataset.page !== "institution") return;
 
-  var API = "https://api.openalex.org";
+  // Routed through our own server, not api.openalex.org directly — the
+  // same anonymous-rate-limit failure already hit and fixed on journal.js/
+  // journals.js/journal-finder.html this session (a wall of 429s on load).
+  var API = location.origin + "/api/openalex";
   var MAILTO = "info@scienceecosystem.org";
   var PAGE_SIZE = 50;
 
@@ -268,7 +271,10 @@
   async function loadWorks(inst){
     var worksApi = inst && inst.works_api_url;
     if (!worksApi){ $("instWorksList").innerHTML = '<p class="muted">No publications endpoint provided.</p>'; return; }
-    worksApiBaseUrl = worksApi;
+    // OpenAlex hands back its own absolute api.openalex.org URL here —
+    // rewrite it to go through our proxy too, or this bypasses the fix
+    // above entirely for exactly the highest-volume fetch on this page.
+    worksApiBaseUrl = worksApi.replace(/^https:\/\/api\.openalex\.org/, API);
     currentPage = 1; accumulatedWorks = [];
     $("instWorksList").innerHTML = '<p class="muted">Loading works…</p>';
     await fetchWorksPage(currentPage, true);

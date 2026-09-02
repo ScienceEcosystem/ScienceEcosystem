@@ -2,7 +2,10 @@
 (function () {
   if (!document.body || document.body.dataset.page !== "funder") return;
 
-  const API = "https://api.openalex.org";
+  // Routed through our own server, not api.openalex.org directly — the
+  // same anonymous-rate-limit failure already hit and fixed on journal.js/
+  // journals.js/journal-finder.html this session (a wall of 429s on load).
+  const API = location.origin + "/api/openalex";
   const MAILTO = "info@scienceecosystem.org";
   const UAQS = `mailto=${encodeURIComponent(MAILTO)}`;
 
