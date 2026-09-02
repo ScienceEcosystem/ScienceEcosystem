@@ -4254,3 +4254,50 @@ The downloaded CSV itself stays local only (gitignored — see the
 .gitignore cleanup entry above), not committed; scripts/import-
 scimago-rankings.js is what's version-controlled, ready to run again
 against next year's export whenever the user downloads it.
+
+2026-09-02 — journal-finder.html: wall of 429s, stuck "JTI…" badges
+
+User reported a console full of 429 errors on journal-finder.html and
+every curated card stuck showing "JTI…" with no number. Root cause:
+scripts/journals.js (and journal.js, the single-journal page) never got
+migrated to the /api/openalex server-side proxy built earlier this
+session for exactly this reason — both still called api.openalex.org
+directly, unauthenticated, from the browser. The curated view alone
+fires 40+ near-simultaneous /sources lookups on load; anonymous
+OpenAlex has a real per-IP limit that a burst that size blows straight
+through. Fixed: both files now route through location.origin +
+"/api/openalex" the same way search.js/paper.js/topic.js already do —
+gets OPENALEX_API_KEY's higher ceiling server-side plus 5-minute
+response caching, so repeat visitors mostly hit our own cache instead
+of OpenAlex at all.
+
+Also fixed a separate real bug surfaced by the same symptom:
+loadCuratedJti()'s per-card fetch did `if (!res.ok) return;` on
+failure — silently giving up WITHOUT clearing the "JTI…" loading
+placeholder, so any failed lookup (rate limit or otherwise) left the
+badge stuck looking like it was still loading forever. Now clears to
+empty on failure, same as the "no source found" case already handled
+right below it.
+
+Mid-fix, hit a related but distinct problem live: an OpenAlex request
+came back with a genuine paid-budget error ("Insufficient budget...
+$0 remaining, resets at midnight UTC") — not a plain 429, an actual
+api_key-tied daily spend cap. Confirmed via direct testing this was a
+transient dip (a 15-request concurrent burst against the same key
+succeeded cleanly minutes later), but it's a real, separate risk now
+that journals.js/journal.js add volume to the same shared paid-key
+proxy other pages already use — a spend cap failing is strictly worse
+than a plain rate limit, since the client has nothing useful to retry
+into. Hardened server/index.js's /api/openalex proxy: on a 429 from an
+api_key-attached request, it now retries once against the free
+mailto-only pool before giving up, instead of surfacing the harder
+failure straight through. Also fixed the proxy's cache key to be based
+on the original query params rather than the full upstream URL (which
+included the injected api_key) — cleaner, and means a fallback-pool
+response gets cached under the same key a would-be api_key response
+would have used, so the next request benefits regardless of which pool
+actually served it.
+
+Verified live via local dev server + Playwright: zero direct
+api.openalex.org requests, zero 429s on /api/openalex/*, zero stuck
+"JTI…" badges after a full curated-view page load.

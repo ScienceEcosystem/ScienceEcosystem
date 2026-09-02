@@ -2,7 +2,12 @@
 (function () {
   if (!document.body || document.body.dataset.page !== "journal") return;
 
-  var API = "https://api.openalex.org";
+  // Routed through our own server, not api.openalex.org directly, so a
+  // burst of calls (this page + journal-finder's curated-card batch) shares
+  // OPENALEX_API_KEY's higher rate ceiling server-side instead of each
+  // browser tab burning through the anonymous per-IP limit on its own —
+  // same reasoning as search.js/paper.js/topic.js's existing proxy use.
+  var API = location.origin + "/api/openalex";
   var MAILTO = "info@scienceecosystem.org";
   var PAGE_SIZE = 50;
 

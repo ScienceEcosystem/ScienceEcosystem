@@ -1683,10 +1683,11 @@ app.get(/^\/api\/openalex\/(.*)$/, async (req, res) => {
   const upstreamPath = req.params[0];
   const qs = new URLSearchParams(req.query);
   if (!qs.has("mailto")) qs.set("mailto", OPENALEX_MAILTO);
-  if (OPENALEX_API_KEY && !qs.has("api_key")) qs.set("api_key", OPENALEX_API_KEY);
+  const usingApiKey = OPENALEX_API_KEY && !qs.has("api_key");
+  if (usingApiKey) qs.set("api_key", OPENALEX_API_KEY);
   const upstreamUrl = `${OPENALEX}/${upstreamPath}?${qs.toString()}`;
 
-  const cacheKey = upstreamUrl;
+  const cacheKey = `${upstreamPath}?${req.query ? new URLSearchParams(req.query).toString() : ""}`;
   const cached = OPENALEX_PROXY_CACHE.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     if (cached.retryAfter) res.setHeader("Retry-After", cached.retryAfter);
@@ -1694,7 +1695,20 @@ app.get(/^\/api\/openalex\/(.*)$/, async (req, res) => {
   }
 
   try {
-    const upstream = await fetchWithTimeout(upstreamUrl, { headers: { Accept: "application/json" } }, OPENALEX_TIMEOUT_MS);
+    let upstream = await fetchWithTimeout(upstreamUrl, { headers: { Accept: "application/json" } }, OPENALEX_TIMEOUT_MS);
+    // The paid api_key can fail on its own budget/credits being exhausted
+    // (a real, observed failure mode — a burst of calls, ours or a real
+    // visitor's, can burn through a limited daily allowance well before
+    // OpenAlex's own free anonymous-tier limit would ever kick in). That's
+    // strictly worse than not sending a key at all, so on a 429 with a key
+    // attached, retry once against the free mailto-only pool instead of
+    // surfacing a hard failure the client can't do anything useful with.
+    if (usingApiKey && upstream.status === 429) {
+      const fallbackQs = new URLSearchParams(req.query);
+      if (!fallbackQs.has("mailto")) fallbackQs.set("mailto", OPENALEX_MAILTO);
+      const fallbackUrl = `${OPENALEX}/${upstreamPath}?${fallbackQs.toString()}`;
+      upstream = await fetchWithTimeout(fallbackUrl, { headers: { Accept: "application/json" } }, OPENALEX_TIMEOUT_MS);
+    }
     const body = await upstream.text();
     const contentType = upstream.headers.get("content-type") || "application/json";
     const retryAfter = upstream.headers.get("retry-after");

@@ -66,7 +66,16 @@ let journalCatalog = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const OA_MAILTO = "info@scienceecosystem.org";
-const OA_API    = "https://api.openalex.org";
+// Routed through our own server, not api.openalex.org directly — this
+// page alone fires 40+ calls on a default page load (one per curated
+// card, for JTI + Scimago's ISSN), which was blowing straight through
+// OpenAlex's anonymous per-IP rate limit (confirmed live: a wall of 429s
+// in the console, and every "JTI…" badge left unresolved). The proxy
+// also caches identical queries for 5 minutes server-side, so repeat
+// visitors loading the same curated list mostly hit our own cache
+// instead of OpenAlex at all — same reasoning as search.js/paper.js/
+// topic.js's existing use of this proxy.
+const OA_API    = location.origin + "/api/openalex";
 
 function escJ(str) {
   return String(str || '').replace(/[&<>"']/g, function(c){
@@ -483,7 +492,11 @@ async function loadCuratedJti() {
           + '&filter=type:journal&per_page=1&select=display_name,is_oa,is_in_doaj,works_count,summary_stats,issn_l'
           + '&mailto=' + OA_MAILTO;
         const res = await fetch(url);
-        if (!res.ok) return;
+        // A failed lookup (rate limit, upstream error, whatever) should
+        // clear the "JTI…" placeholder, not leave it stuck forever looking
+        // like it's still loading — silently returning here was exactly
+        // that bug.
+        if (!res.ok) { el.textContent = ''; return; }
         const data = await res.json();
         const src = data.results && data.results[0];
         if (!src) { el.textContent = ''; return; }
