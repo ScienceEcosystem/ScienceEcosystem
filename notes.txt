@@ -4301,3 +4301,39 @@ actually served it.
 Verified live via local dev server + Playwright: zero direct
 api.openalex.org requests, zero 429s on /api/openalex/*, zero stuck
 "JTI…" badges after a full curated-view page load.
+
+2026-09-02 — search.html: invalid query syntax silently looked like
+zero results
+
+User ran a boolean/quoted search — ("invasional meltdown" OR "invasion
+meltdown") AND ("species distribution model*" OR SDM OR "ecological
+niche model*") — standard Scopus/Web-of-Science-style syntax — and got
+"No papers found for this search." Asked whether that syntax is even
+right for this site.
+
+Answer: mostly yes — OpenAlex's search= does support quoted phrases and
+AND/OR — but confirmed directly (curl) that OpenAlex rejects a wildcard
+placed INSIDE a quoted multi-word phrase specifically ("species
+distribution model*" is invalid; "species distribution model" without
+the trailing * works fine, 210 real results). Dropping just that one
+wildcard fixed the user's actual search.
+
+But the real bug is on our side: OpenAlex returned this as a proper
+HTTP 400 with a clear, specific error message explaining exactly what
+was wrong — and scripts/search.js's fetchPapers() silently swallowed
+it (bare catch, returns []), so an invalid query and a genuine
+zero-result search rendered as the exact same "No papers found"
+message. No way for a user to tell "your syntax is wrong" from "no
+such research exists" — actively misleading for anyone using real
+boolean search syntax, which is exactly the audience most likely to
+hit this (casual single-word searches never trigger OpenAlex's syntax
+validation in the first place).
+
+Fixed: fetchJSON() now reads OpenAlex's actual error message out of a
+4xx response body instead of just throwing the status code; fetchPapers()
+captures it (lastPaperSearchError); renderPapers() shows "⚠ Search
+couldn't run as written: <real reason>" instead of the generic empty
+state whenever that happened. Verified live with the user's exact
+original query: confirmed the real OpenAlex error text now renders
+("Wildcards (* or ?) do not work inside this quoted phrase...") instead
+of the old silent "No papers found."

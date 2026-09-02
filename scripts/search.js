@@ -70,7 +70,19 @@ async function fetchJSON(url, signal, { maxRetries = 4 } = {}) {
       continue;
     }
 
-    throw new Error(`${res.status} ${res.statusText}`);
+    // A 4xx here (other than the retried 401/429 above) means the query
+    // itself was rejected, not "no matches" — OpenAlex's own error body
+    // usually explains exactly why (e.g. invalid search syntax). Surface
+    // that instead of just the status code, so callers can show the real
+    // reason rather than treating this the same as zero results.
+    let detail = "";
+    if (res.status >= 400 && res.status < 500) {
+      try { detail = (await res.json())?.message || ""; } catch (_) {}
+    }
+    const err = new Error(detail || `${res.status} ${res.statusText}`);
+    err.status = res.status;
+    err.isQueryError = res.status >= 400 && res.status < 500;
+    throw err;
   }
 }
 
@@ -419,8 +431,17 @@ function parseCitationQuery(q) {
 }
 
 /* ---------- Papers (authors + general query) ---------- */
+// Set by fetchPapers() when OpenAlex rejects the query itself (bad syntax —
+// e.g. a wildcard inside a quoted phrase, which is invalid to it) rather
+// than just finding nothing. renderPapers() checks this to show the real
+// reason instead of "No papers found," which was actively misleading: an
+// invalid query and a genuinely empty result set rendered identically,
+// so a syntax mistake looked exactly like "no such research exists."
+let lastPaperSearchError = null;
+
 async function fetchPapers(query, authorIds = [], page = 1, signal) {
   let works = [];
+  lastPaperSearchError = null;
   try {
     // Parse citation-style queries: extract year so it becomes a filter not a search term
     const { year: queryYear, search: querySearch } = parseCitationQuery(query);
@@ -484,7 +505,10 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
 
     return merged;
   } catch (err) {
-    if (err.name !== "AbortError") console.error("Paper fetch failed", err);
+    if (err.name !== "AbortError") {
+      console.error("Paper fetch failed", err);
+      if (err.isQueryError) lastPaperSearchError = err.message;
+    }
     return [];
   }
 }
@@ -745,7 +769,9 @@ function renderPapers(works, append = false) {
   if (!papersList) return;
 
   if (!works || works.length === 0) {
-    papersList.innerHTML = `<p class="muted">No papers found for this search.</p>`;
+    papersList.innerHTML = lastPaperSearchError
+      ? `<p class="muted">⚠ Search couldn't run as written: ${escapeHtml(lastPaperSearchError)}</p>`
+      : `<p class="muted">No papers found for this search.</p>`;
     return;
   }
 
