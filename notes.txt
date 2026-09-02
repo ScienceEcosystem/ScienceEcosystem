@@ -4540,3 +4540,35 @@ Verified live: profile.html now shows real Publications with zero
 direct-to-OpenAlex calls and zero 429s; institute.html and
 publisher.html spot-checked clean the same way; publisher.html's
 "Recent Works" (previously a bare 400 error) now shows real titles.
+
+2026-09-03 — Compare tray: backfill decoupled from what's currently
+rendered
+
+User reported the same 3 curated journals (Cell, eLife, EMBO Journal)
+from the earlier JTI-backfill fix STILL showing every column blank,
+persisting across visits. Investigated live directly on production
+(safe — the compare tray is pure client-side localStorage, no backend
+writes) rather than guessing: a fresh reproduction of the exact same
+scenario self-healed correctly within the expected window, with no
+errors, no 429s, all functions present and correct in the deployed
+code. Most likely explanation for what the user was actually seeing:
+a browser tab left open since before today's earlier fixes deployed,
+still running old JS — a reload should have already resolved it with
+no code changes needed.
+
+Real underlying fragility found and fixed anyway, since it's a
+legitimate architectural gap regardless of what triggered this specific
+report: updateCuratedCompareData() (the backfill) only ever ran as a
+side effect of loadCuratedJti() finding .curated-jti placeholder
+elements already in the DOM — meaning it silently depends on the
+curated cards happening to be rendered on screen at that moment. Today
+that's always true on page load (renderDefault() always runs first),
+but it's a brittle dependency for a mechanism whose whole job is fixing
+data for journals that might not currently be in view. Added
+backfillPinnedCompareStats() — reads directly from compareState (what's
+actually pinned) rather than the DOM, runs unconditionally once per
+page load, independent of current view/search state. Verified live: no
+errors when running alongside the existing DOM-driven path (some
+redundant duplicate fetches on this page, by design where both
+legitimately apply — not a bug, and cheap given 5-minute proxy
+caching), correctly backfills a freshly-seeded stale pinned entry.

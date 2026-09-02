@@ -474,6 +474,43 @@ function updateCuratedCompareData(journalName, src) {
   renderCompareTray();
 }
 
+// Backfills any pinned curated journal that's still missing stats, driven
+// directly by what's actually in the compare tray — NOT by loadCuratedJti()
+// below, which only ever fires as a side effect of the curated cards being
+// rendered on screen. That meant a journal pinned once, then never revisited
+// on the plain default (unfiltered) view, stayed stuck on "—" forever, even
+// across many page loads — confirmed live with a real user's 3 pinned
+// journals still blank after repeated visits, because they kept landing on
+// a search/filtered view where the curated cards (and their JTI
+// placeholders) never render at all. Runs once per page load, independent
+// of whatever view is currently showing.
+async function backfillPinnedCompareStats() {
+  if (!globalThis.SE?.components?.computeJournalTrustIndex) return;
+  const pending = Array.from(compareState.entries())
+    .filter(([key, entry]) => key.startsWith('curated:') && (entry.works == null || entry.hIndex == null || entry.jti == null));
+  if (!pending.length) return;
+
+  const BATCH = 4;
+  for (let i = 0; i < pending.length; i += BATCH) {
+    const batch = pending.slice(i, i + BATCH);
+    await Promise.all(batch.map(async ([key, entry]) => {
+      try {
+        const url = OA_API + '/sources?search=' + encodeURIComponent(entry.name)
+          + '&filter=type:journal&per_page=1&select=display_name,is_oa,is_in_doaj,works_count,summary_stats,issn_l'
+          + '&mailto=' + OA_MAILTO;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        const src = data.results && data.results[0];
+        if (!src) return;
+        curatedSourceCache.set(entry.name, src);
+        updateCuratedCompareData(entry.name, src);
+      } catch (_) { /* leave it at "—" — will retry next page load */ }
+    }));
+    if (i + BATCH < pending.length) await new Promise(r => setTimeout(r, 150));
+  }
+}
+
 async function loadCuratedJti() {
   if (!globalThis.SE?.components?.computeJournalTrustIndex) return;
   const placeholders = Array.from(document.querySelectorAll('.curated-jti'));
@@ -527,6 +564,7 @@ async function loadCuratedJti() {
   if (hint) hint.textContent = 'Showing ' + journalCatalog.length + ' curated journals by discipline. Type to search all journals via OpenAlex.';
   loadCuratedJti();
   renderCompareTray();
+  backfillPinnedCompareStats();
 
   if (searchEl) {
     searchEl.addEventListener('input', function() {
