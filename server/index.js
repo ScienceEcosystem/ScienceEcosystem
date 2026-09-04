@@ -14,6 +14,9 @@ import { checkJournalIntegrity, clearJournalIntegrityCache } from "./journal-int
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PDFParse } from "pdf-parse";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import * as z from "zod/v4";
 const { Pool } = pkg;
 const fsp = fs.promises;
 import paperRoutes from "../routes/paper.js";
@@ -439,6 +442,26 @@ async function pgInit() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+
+  // Personal API tokens — for the MCP server (and any future programmatic
+  // access) to authenticate as a user without a browser session cookie.
+  // Only the hash is ever stored (sha256 of a high-entropy random token is
+  // fine here, unlike bcrypt for human passwords — the token itself IS the
+  // entropy, never chosen/reused text). The raw token is shown to the user
+  // exactly once at creation time and never recoverable after.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_tokens (
+      id SERIAL PRIMARY KEY,
+      orcid TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      label TEXT,
+      scope TEXT NOT NULL DEFAULT 'read',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      last_used_at TIMESTAMPTZ,
+      revoked_at TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_orcid_idx ON api_tokens(orcid)`);
 
   // New: collections + collection_items
   await pool.query(`
@@ -1663,6 +1686,7 @@ app.use("/api/openalex/",   rateLimiter(60_000, 240));
 // use (importing/syncing many papers) while still capping runaway abuse.
 app.use("/api/library",     rateLimiter(60_000, 120));
 app.use("/api/collections", rateLimiter(60_000, 120));
+app.use("/mcp",             rateLimiter(60_000, 60)); // per-IP; a single agent session making several tool calls per turn is normal
 
 // ── OpenAlex proxy ──────────────────────────────────────────────────────────
 // search.js/paper.js/topic.js call this instead of api.openalex.org directly,
@@ -2107,6 +2131,248 @@ app.get("/api/me", async (req, res) => {
   if (!row) return res.status(404).json({ error: "User not found" });
   res.json(row);
 });
+
+/* ---------------------------
+   Personal API tokens (for the MCP server / programmatic access)
+----------------------------*/
+const API_TOKEN_PREFIX = "se_live_";
+function hashApiToken(raw) {
+  return crypto.createHash("sha256").update(raw).digest("hex");
+}
+
+// GET /api/tokens — list this user's tokens. Never returns the raw token
+// (impossible to — only the hash is stored) or the hash itself, just enough
+// to recognize/manage them (label, scope, when made, when last used).
+app.get("/api/tokens", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, label, scope, created_at, last_used_at, revoked_at
+       FROM api_tokens WHERE orcid=$1 ORDER BY created_at DESC`,
+      [sess.orcid]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error("GET /api/tokens failed:", e);
+    res.status(500).json({ error: "Failed to load tokens" });
+  }
+});
+
+// POST /api/tokens — create a token. Returns the raw value exactly once;
+// only its hash is ever persisted. scope is fixed to "read" for now — no
+// write-capable token type exists yet (deliberate: MCP access starts
+// read-only, per explicit decision, until that path is trusted).
+app.post("/api/tokens", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const label = String(req.body?.label || "").trim().slice(0, 80) || "Untitled token";
+    const raw = API_TOKEN_PREFIX + crypto.randomBytes(32).toString("hex");
+    const tokenHash = hashApiToken(raw);
+    const { rows } = await pool.query(
+      `INSERT INTO api_tokens (orcid, token_hash, label, scope)
+       VALUES ($1,$2,$3,'read') RETURNING id, label, scope, created_at`,
+      [sess.orcid, tokenHash, label]
+    );
+    // The only time the raw token is ever sent anywhere — the client must
+    // show/copy it now, it cannot be retrieved again after this response.
+    res.json({ ...rows[0], token: raw });
+  } catch (e) {
+    console.error("POST /api/tokens failed:", e);
+    res.status(500).json({ error: "Failed to create token" });
+  }
+});
+
+app.delete("/api/tokens/:id", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    await pool.query(
+      `UPDATE api_tokens SET revoked_at=now() WHERE id=$1 AND orcid=$2 AND revoked_at IS NULL`,
+      [Number(req.params.id), sess.orcid]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE /api/tokens/:id failed:", e);
+    res.status(500).json({ error: "Failed to revoke token" });
+  }
+});
+
+// Resolves a raw bearer token (from an Authorization header) to the orcid
+// that owns it — used by the MCP endpoint, not by the browser-session auth
+// path above. Returns null for anything invalid/revoked, same shape as
+// getSession() returning null, so callers can treat "no valid credential"
+// uniformly. Updates last_used_at on every successful resolution (fire-
+// and-forget — not worth blocking the request on).
+async function resolveApiToken(raw) {
+  if (!raw || !raw.startsWith(API_TOKEN_PREFIX)) return null;
+  try {
+    const tokenHash = hashApiToken(raw);
+    const { rows } = await pool.query(
+      `SELECT id, orcid, scope FROM api_tokens WHERE token_hash=$1 AND revoked_at IS NULL`,
+      [tokenHash]
+    );
+    if (!rows.length) return null;
+    pool.query(`UPDATE api_tokens SET last_used_at=now() WHERE id=$1`, [rows[0].id]).catch(() => {});
+    return { orcid: rows[0].orcid, scope: rows[0].scope };
+  } catch (e) {
+    console.error("resolveApiToken failed:", e);
+    return null;
+  }
+}
+
+/* ---------------------------
+   MCP server — lets an AI agent act as a signed-in user (read-only, for
+   now — see the api_tokens.scope column above; a write scope can be added
+   later once this path is trusted). Authenticated by an Authorization:
+   Bearer <se_live_...> header, never a browser session cookie. Each
+   request builds a fresh, stateless McpServer instance (sessionIdGenerator:
+   undefined) whose tool handlers close over that request's already-
+   resolved orcid — matches the SDK's own "stateless Streamable HTTP"
+   example, appropriate here since every tool call is a self-contained,
+   independently-authenticated read.
+----------------------------*/
+function buildMcpServer(tokenInfo) {
+  const orcid = tokenInfo.orcid;
+  const server = new McpServer({ name: "scienceecosystem", version: "1.0.0" }, { capabilities: {} });
+
+  server.registerTool("se_search_papers", {
+    description: "Search ScienceEcosystem/OpenAlex for papers by keyword. Returns title, year, venue, DOI, citation count, and an open-access PDF URL when one exists.",
+    inputSchema: {
+      query: z.string().describe("Search terms — supports quoted phrases and AND/OR, same as the site's search box"),
+      per_page: z.number().int().min(1).max(25).optional().describe("Max results, default 10"),
+    },
+  }, async ({ query, per_page }) => {
+    const qs = new URLSearchParams({ search: query, per_page: String(per_page || 10) });
+    if (!qs.has("mailto")) qs.set("mailto", OPENALEX_MAILTO);
+    if (OPENALEX_API_KEY) qs.set("api_key", OPENALEX_API_KEY);
+    const data = await fetchJSONTimeout(`${OPENALEX}/works?${qs.toString()}`, {}, OPENALEX_TIMEOUT_MS);
+    const results = (data.results || []).map(w => ({
+      id: (w.id || "").replace(/^https?:\/\/openalex\.org\//i, ""),
+      title: w.display_name || w.title || null,
+      year: w.publication_year ?? null,
+      venue: w.primary_location?.source?.display_name || w.host_venue?.display_name || null,
+      doi: w.doi ? normalizeDoi(w.doi) : null,
+      cited_by_count: w.cited_by_count ?? 0,
+      oa_url: w.open_access?.oa_url || w.best_oa_location?.pdf_url || null,
+    }));
+    return { content: [{ type: "text", text: JSON.stringify({ count: data.meta?.count ?? results.length, results }, null, 2) }] };
+  });
+
+  server.registerTool("se_get_paper", {
+    description: "Get full details for one paper by OpenAlex id (e.g. W2133688117) or DOI.",
+    inputSchema: { id: z.string().describe("OpenAlex work id or a DOI (bare, doi: prefixed, or a full doi.org URL)") },
+  }, async ({ id }) => {
+    const doi = normalizeDoi(id);
+    const lookup = /^W\d+$/i.test(id.trim()) ? id.trim() : (doi ? `doi:${doi}` : id.trim());
+    const qs = new URLSearchParams();
+    if (OPENALEX_API_KEY) qs.set("api_key", OPENALEX_API_KEY);
+    qs.set("mailto", OPENALEX_MAILTO);
+    const w = await fetchJSONTimeout(`${OPENALEX}/works/${encodeURIComponent(lookup)}?${qs.toString()}`, {}, OPENALEX_TIMEOUT_MS);
+    const abstract = w.abstract_inverted_index
+      ? (() => { const words = []; Object.entries(w.abstract_inverted_index).forEach(([word, pos]) => pos.forEach(p => { words[p] = word; })); return words.join(" "); })()
+      : null;
+    const paper = {
+      id: (w.id || "").replace(/^https?:\/\/openalex\.org\//i, ""),
+      title: w.display_name || w.title || null,
+      authors: (w.authorships || []).map(a => a?.author?.display_name).filter(Boolean),
+      year: w.publication_year ?? null,
+      venue: w.primary_location?.source?.display_name || w.host_venue?.display_name || null,
+      doi: w.doi ? normalizeDoi(w.doi) : null,
+      cited_by_count: w.cited_by_count ?? 0,
+      abstract,
+      oa_url: w.open_access?.oa_url || w.best_oa_location?.pdf_url || null,
+    };
+    return { content: [{ type: "text", text: JSON.stringify(paper, null, 2) }] };
+  });
+
+  server.registerTool("se_cite", {
+    description: "Get a formatted citation for a paper by DOI, in a given style.",
+    inputSchema: {
+      doi: z.string().describe("The paper's DOI"),
+      style: z.enum(["apa", "mla", "chicago", "harvard", "vancouver", "ieee", "nature"]).optional().describe("Citation style, default apa"),
+    },
+  }, async ({ doi, style }) => {
+    const qs = new URLSearchParams({ doi, style: style || "apa" });
+    const r = await fetchWithTimeout(`http://127.0.0.1:${PORT}/api/paper/cite?${qs.toString()}`, {}, 10000);
+    const data = await r.json();
+    if (!r.ok) return { content: [{ type: "text", text: `Could not generate citation: ${data?.error || r.status}` }], isError: true };
+    return { content: [{ type: "text", text: data.citation }] };
+  });
+
+  server.registerTool("se_library_list", {
+    description: "List the signed-in user's saved library items (title, DOI, year, venue, authors, tags).",
+    inputSchema: {},
+  }, async () => {
+    const { rows } = await pool.query(
+      `SELECT id, title, doi, year, venue, authors, tags, item_type
+       FROM library_items WHERE orcid=$1 AND deleted_at IS NULL ORDER BY title LIMIT 500`,
+      [orcid]
+    );
+    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+  });
+
+  server.registerTool("se_library_search_fulltext", {
+    description: "Full-text search inside the PDFs attached to the user's own library items — searches the actual PDF body text, not just titles/abstracts.",
+    inputSchema: { query: z.string().describe("Search terms") },
+  }, async ({ query }) => {
+    const { rows } = await pool.query(
+      `SELECT paper_id,
+              ts_headline('english', full_text, plainto_tsquery('english', $2),
+                'MaxFragments=1, MaxWords=25, MinWords=10') AS snippet
+       FROM library_pdfs
+       WHERE orcid=$1 AND search_vector @@ plainto_tsquery('english', $2)
+       LIMIT 50`,
+      [orcid, query]
+    );
+    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+  });
+
+  server.registerTool("se_collections_list", {
+    description: "List the signed-in user's library folders/collections (including ones shared with them).",
+    inputSchema: {},
+  }, async () => {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT c.id, c.name, c.parent_id,
+              CASE WHEN c.orcid=$1 THEN 'owner' ELSE cm.role END AS role
+       FROM collections c
+       LEFT JOIN collection_members cm ON cm.collection_id=c.id AND cm.orcid=$1 AND cm.accepted_at IS NOT NULL
+       WHERE (c.orcid=$1 OR cm.orcid=$1) AND c.deleted_at IS NULL
+       ORDER BY c.name`,
+      [orcid]
+    );
+    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+  });
+
+  server.registerTool("se_profile_get", {
+    description: "Get the signed-in user's own ScienceEcosystem profile (name, bio, ORCID, research areas, links).",
+    inputSchema: {},
+  }, async () => {
+    const row = await getUser(orcid);
+    return { content: [{ type: "text", text: JSON.stringify(row || {}, null, 2) }] };
+  });
+
+  return server;
+}
+
+app.post("/mcp", async (req, res) => {
+  const authHeader = String(req.headers.authorization || "");
+  const raw = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const tokenInfo = await resolveApiToken(raw);
+  if (!tokenInfo) {
+    return res.status(401).json({ jsonrpc: "2.0", error: { code: -32001, message: "Invalid or missing API token — generate one from your ScienceEcosystem profile settings" }, id: null });
+  }
+  try {
+    const server = buildMcpServer(tokenInfo);
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+    res.on("close", () => { transport.close(); server.close(); });
+  } catch (e) {
+    console.error("MCP request failed:", e);
+    if (!res.headersSent) res.status(500).json({ jsonrpc: "2.0", error: { code: -32603, message: "Internal server error" }, id: null });
+  }
+});
+app.get("/mcp", (_req, res) => res.status(405).json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null }));
+app.delete("/mcp", (_req, res) => res.status(405).json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null }));
 
 // Permanent account deletion — GDPR right to erasure
 // Cascades to library_items, sessions, followed_authors, pdf_annotations via FK ON DELETE CASCADE

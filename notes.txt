@@ -4572,3 +4572,52 @@ errors when running alongside the existing DOM-driven path (some
 redundant duplicate fetches on this page, by design where both
 legitimately apply — not a bug, and cheap given 5-minute proxy
 caching), correctly backfills a freshly-seeded stale pinned entry.
+
+2026-09-04 — MCP server: let an AI agent act as a signed-in user
+(read-only)
+
+User asked whether an AI could use the site — search, read their
+library — in a way they could actually connect/automate, not just me
+clicking through pages with a hacked session cookie the way this whole
+session's testing has worked. Discussed scope first (AskUserQuestion):
+read-only for this first version, write access deferred until that
+path is trusted — directly informed by this session's own accidental-
+delete incident.
+
+Built as a real remote MCP server (Streamable HTTP, @modelcontextprotocol/
+sdk) mounted at POST /mcp on the existing Express app — no new service to
+deploy or keep alive, just another route. Stateless per request (fresh
+McpServer + transport per POST, matching the SDK's own "stateless
+Streamable HTTP" reference pattern) since every tool call is
+independently authenticated anyway.
+
+Auth: new api_tokens table (orcid, sha256 hash of the token — never the
+raw value — label, scope, created/last_used/revoked timestamps). A
+personal token is generated from Settings → API access (new section in
+settings-profile.html), shown exactly once, never recoverable after.
+The MCP endpoint resolves Authorization: Bearer <token> to an orcid via
+resolveApiToken(), the same shape as getSession() returning null for
+"no valid credential," so downstream logic doesn't need to know which
+auth path was used.
+
+7 read-only tools shipped: se_search_papers, se_get_paper, se_cite
+(loops back through this server's own /api/paper/cite rather than
+duplicating the citeproc logic), se_library_list, se_library_search_
+fulltext (real PDF full-text search, not just metadata), se_collections_
+list, se_profile_get. scope is hardcoded to 'read' at token creation —
+no write-capable token type exists yet, by design.
+
+Verified live end-to-end against the real account (not synthetic data):
+generated a real token via the API, called initialize + tools/list + all
+7 tools individually via raw JSON-RPC over HTTP — se_library_list
+returned real Zotero-synced items, se_library_search_fulltext found the
+actual crayfish paper's PDF text, se_cite produced a real APA citation
+for it, se_collections_list showed the real nested folder tree. Also
+verified the failure paths: no token → 401, wrong token → 401, and
+critically — revoking a token via DELETE /api/tokens/:id kills it
+instantly, confirmed by the same token failing immediately after. Test
+token and its temporary session both deleted after.
+
+Connect via: `claude mcp add --transport http scienceecosystem
+https://scienceecosystem.org/mcp --header "Authorization: Bearer
+<token>"`, or the equivalent remote-MCP UI in Claude Desktop/claude.ai.
