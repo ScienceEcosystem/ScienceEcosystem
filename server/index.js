@@ -2299,15 +2299,34 @@ function buildMcpServer(tokenInfo) {
   });
 
   server.registerTool("se_library_list", {
-    description: "List the signed-in user's saved library items (title, DOI, year, venue, authors, tags).",
-    inputSchema: {},
-  }, async () => {
+    description: "List the signed-in user's saved library items (title, DOI, year, venue, authors, tags). "
+      + "Prefer passing `query` to search titles/tags for something specific rather than paging through "
+      + "everything — a library can hold hundreds of items, and this returns at most `limit` per call "
+      + "(default 50, max 200). Check `total` in the response and use `offset` to page through the rest "
+      + "if you genuinely need more than one page.",
+    inputSchema: {
+      query: z.string().optional().describe("Filter to items whose title or tags contain this text (case-insensitive). Omit to list everything."),
+      limit: z.number().int().min(1).max(200).optional().describe("Max items to return, default 50"),
+      offset: z.number().int().min(0).optional().describe("Items to skip — for paging past the first `limit`"),
+    },
+  }, async ({ query, limit, offset }) => {
+    const lim = Math.min(Math.max(Number(limit) || 50, 1), 200);
+    const off = Math.max(Number(offset) || 0, 0);
+    const params = [orcid];
+    let where = "orcid=$1 AND deleted_at IS NULL";
+    if (query && query.trim()) {
+      params.push(`%${query.trim()}%`);
+      where += ` AND (title ILIKE $${params.length} OR EXISTS (SELECT 1 FROM unnest(tags) t WHERE t ILIKE $${params.length}))`;
+    }
+    const countRes = await pool.query(`SELECT count(*) FROM library_items WHERE ${where}`, params);
+    const pageParams = [...params, lim, off];
     const { rows } = await pool.query(
       `SELECT id, title, doi, year, venue, authors, tags, item_type
-       FROM library_items WHERE orcid=$1 AND deleted_at IS NULL ORDER BY title LIMIT 500`,
-      [orcid]
+       FROM library_items WHERE ${where} ORDER BY title LIMIT $${pageParams.length - 1} OFFSET $${pageParams.length}`,
+      pageParams
     );
-    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+    const result = { total: Number(countRes.rows[0].count), returned: rows.length, offset: off, items: rows };
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   });
 
   server.registerTool("se_library_search_fulltext", {

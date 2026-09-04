@@ -4649,3 +4649,42 @@ API directly), confirmed the warning text, confirmed the command block
 contains the exact same token shown above it (not a stale/placeholder
 value), confirmed the copy button copies the real command text via
 clipboard read-back. Test token and session deleted after.
+
+2026-09-04 — First real-world use of the MCP server, and what it
+surfaced
+
+User actually connected the MCP server from a separate Claude Code
+session (a real research project directory, not this dev session) and
+asked it a genuine question — "what's in my ScienceEcosystem library
+about freshwater invasion risk." Worth recording as validation: it
+worked as designed, calling se_library_search_fulltext and
+se_library_list for real, and produced a genuinely useful categorized
+answer (separating papers actually about invasion-risk modeling from
+papers that just mention it in passing/citations) — the actual value
+this feature was built for, not just plumbing that technically
+responds.
+
+It also surfaced a real, concrete gap: se_library_list had no filtering
+or pagination — for this user's real 748-item library, one call dumped
+everything as raw JSON (204K characters), blowing past Claude Code's
+own inline-result size limit and forcing an awkward "save to file, grep
+it locally" workaround just to answer a simple question. Fixed:
+se_library_list now takes `query` (searches title AND tags — tags is a
+text[] column, matched via unnest+ILIKE), `limit` (default 50, max
+200), and `offset`, and returns `{total, returned, offset, items}` so
+a caller always knows whether it's seeing everything or needs to page
+further. Tool description explicitly nudges toward using `query` for
+targeted questions instead of paging through the whole library.
+
+Verified live against the real account/library (not synthetic data):
+default call now returns 50 of 748 real items with an accurate total;
+query="crayfish" correctly returns 246 matching items; offset-based
+paging confirmed returning the correct next page. Test token and
+session deleted after.
+
+Also clarified for the user: this main dev/ops session does NOT use
+the MCP server itself — it has direct Postgres access (DATABASE_URL)
+for building and testing the site, which is broader than the scoped
+read-only MCP tools by design; connecting this session to its own MCP
+server would add a more limited path to things it can already do, not
+new capability.
