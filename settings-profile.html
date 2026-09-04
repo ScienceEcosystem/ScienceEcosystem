@@ -230,6 +230,21 @@
           <code id="newTokenValue" style="flex:1; word-break:break-all; font-size:.82rem; background:#fff; padding:.4rem .6rem; border-radius:6px; border:1px solid #d1fae5;"></code>
           <button id="copyTokenBtn" class="btn btn-secondary" style="flex-shrink:0;">Copy</button>
         </div>
+        <p style="margin:.75rem 0 .4rem; font-size:.82rem; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:.5rem .6rem;">
+          ⚠ Never paste this token directly into a chat message with Claude (or any AI) — that puts a live
+          credential into the conversation's history. It goes into a connector setup step instead, like the
+          command below, which you run in your own terminal.
+        </p>
+        <p style="margin:0 0 .3rem; font-size:.82rem; font-weight:600;">Claude Code — run this once in a terminal:</p>
+        <div style="display:flex; gap:.5rem; align-items:flex-start;">
+          <pre id="mcpAddCommand" style="flex:1; margin:0; white-space:pre-wrap; word-break:break-all; font-size:.78rem; background:#0f172a; color:#e2e8f0; padding:.6rem .7rem; border-radius:6px;"></pre>
+          <button id="copyCommandBtn" class="btn btn-secondary" style="flex-shrink:0;">Copy</button>
+        </div>
+        <p class="muted" style="margin:.5rem 0 0; font-size:.78rem;">
+          Using claude.ai or Claude Desktop instead? Add a custom connector with URL
+          <code>https://scienceecosystem.org/mcp</code> and header <code>Authorization: Bearer &lt;token above&gt;</code>
+          in Settings → Connectors — same rule: paste it into that field, not into a chat.
+        </p>
       </div>
       <table style="width:100%; border-collapse:collapse; font-size:.85rem;" id="tokensTable">
         <thead><tr style="text-align:left; border-bottom:1px solid #e5e7eb; color:#64748b; font-size:.75rem; text-transform:uppercase;">
@@ -475,6 +490,9 @@
       try {
         const created = await api("/api/tokens", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label }) });
         document.getElementById("newTokenValue").textContent = created.token;
+        document.getElementById("mcpAddCommand").textContent =
+          'claude mcp add --transport http scienceecosystem https://scienceecosystem.org/mcp \\\n' +
+          '  --header "Authorization: Bearer ' + created.token + '" --scope user';
         document.getElementById("newTokenBox").hidden = false;
         document.getElementById("newTokenLabel").value = "";
         await loadTokens();
@@ -493,6 +511,13 @@
         try {
           await navigator.clipboard.writeText(document.getElementById("newTokenValue").textContent);
           const b = document.getElementById("copyTokenBtn");
+          const orig = b.textContent; b.textContent = "Copied!"; setTimeout(() => { b.textContent = orig; }, 1500);
+        } catch (_) {}
+      });
+      document.getElementById("copyCommandBtn").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(document.getElementById("mcpAddCommand").textContent);
+          const b = document.getElementById("copyCommandBtn");
           const orig = b.textContent; b.textContent = "Copied!"; setTimeout(() => { b.textContent = orig; }, 1500);
         } catch (_) {}
       });

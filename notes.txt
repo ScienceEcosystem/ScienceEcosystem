@@ -4621,3 +4621,31 @@ token and its temporary session both deleted after.
 Connect via: `claude mcp add --transport http scienceecosystem
 https://scienceecosystem.org/mcp --header "Authorization: Bearer
 <token>"`, or the equivalent remote-MCP UI in Claude Desktop/claude.ai.
+
+2026-09-04 — API token screen: connection instructions where the token
+actually shows
+
+Real incident right after shipping the MCP feature: user pasted a live
+token directly into a chat message asking a different Claude session
+"you have access now right?" — that session correctly refused to use
+it (no way to consume a raw string as a connector) and flagged it as a
+now-compromised credential. Revoked that specific token immediately
+(direct DB update, matched by hashing the raw value the user had
+already shared — same sha256 comparison resolveApiToken uses) rather
+than leaving a leaked live token active.
+
+Root cause: the token screen showed the raw value with nothing telling
+the user what to actually DO with it — reasonable to assume "paste it
+where I'm talking to Claude" when that's the only interface in front of
+you. Fixed at the source: the token-reveal box in Settings → API access
+now includes an explicit warning against pasting it into a chat message,
+plus the exact `claude mcp add ...` command with the real generated
+token already substituted in (copy-and-run, no manual editing), plus
+the claude.ai/Desktop connector-field equivalent. A second "Copy
+command" button copies the ready-to-use command directly.
+
+Verified live: generated a real token through the actual UI (not the
+API directly), confirmed the warning text, confirmed the command block
+contains the exact same token shown above it (not a stale/placeholder
+value), confirmed the copy button copies the real command text via
+clipboard read-back. Test token and session deleted after.
