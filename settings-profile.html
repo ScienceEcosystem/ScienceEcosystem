@@ -222,6 +222,9 @@
       </p>
       <div style="display:flex; gap:.5rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
         <input class="input" id="newTokenLabel" type="text" placeholder="Label (e.g. Claude Desktop)" style="max-width:260px;"/>
+        <label style="display:flex; align-items:center; gap:.35rem; font-size:.82rem; color:#374151; white-space:nowrap;">
+          <input type="checkbox" id="newTokenWrite"/> Allow adding papers to my library
+        </label>
         <button id="createTokenBtn" class="btn btn-secondary">Generate token</button>
       </div>
       <div id="newTokenBox" hidden style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:.75rem; margin-bottom:1rem;">
@@ -486,15 +489,17 @@
     async function createToken() {
       const btn = document.getElementById("createTokenBtn");
       const label = document.getElementById("newTokenLabel").value.trim();
+      const scope = document.getElementById("newTokenWrite").checked ? "read_write" : "read";
       btn.disabled = true;
       try {
-        const created = await api("/api/tokens", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label }) });
+        const created = await api("/api/tokens", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label, scope }) });
         document.getElementById("newTokenValue").textContent = created.token;
         document.getElementById("mcpAddCommand").textContent =
           'claude mcp add --transport http scienceecosystem https://scienceecosystem.org/mcp \\\n' +
           '  --header "Authorization: Bearer ' + created.token + '" --scope user';
         document.getElementById("newTokenBox").hidden = false;
         document.getElementById("newTokenLabel").value = "";
+        document.getElementById("newTokenWrite").checked = false;
         await loadTokens();
       } catch (_) {
         alert("Could not create token.");

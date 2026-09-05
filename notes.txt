@@ -4714,3 +4714,47 @@ returned the real, exact 22 items filed there — including "Positive
 Interactions of Nonindigenous Species: Invasional Meltdown?", the same
 paper searched by title earlier this session — confirming precise,
 correct membership rather than a keyword approximation.
+
+2026-09-05 — MCP: write access (scoped), retraction check, journal
+vetting lookup
+
+User asked "what else can we do to make the site more useful like
+that" after the two real-world MCP fixes above; picked all three ideas
+offered rather than one.
+
+1. Write access, scoped. api_tokens.scope now actually varies at
+   creation time (Settings → API access gets a checkbox: "Allow adding
+   papers to my library") — read stays the default. se_library_add is
+   only registered on the MCP server when the resolved token's scope is
+   read_write; a read-scoped token's tools/list genuinely doesn't
+   include it (verified, not just described in the tool's own text).
+   Resolves an OpenAlex id/DOI, inserts into library_items
+   (ON CONFLICT DO NOTHING, same idempotency as the site's own add
+   path), optionally files into a collection via the same
+   collectionRole()-gated insert the real "add to collection" endpoint
+   uses (viewers can't write, matching site behavior exactly).
+
+2. se_check_paper — retraction check via OpenAlex's own is_retracted
+   field (simpler and more directly authoritative than re-deriving it
+   from Crossref, and OpenAlex already tracks retractions natively).
+
+3. se_journal_lookup — one call for a submission/citation trust
+   decision: ScienceEcosystem's own JTI score (the openness/recognition/
+   scale/integrity formula, hand-ported from scripts/components.js's
+   computeJournalTrustIndex since that file is browser-only — kept
+   deliberately identical, not reimplemented differently), Scimago SJR
+   + quartile from the imported dataset, and the existing predatory-
+   publisher/DOAJ integrity check (checkJournalIntegrity, already used
+   by journal.html) — combined into one structured answer instead of
+   three separate lookups.
+
+Verified live end-to-end against the real account, including the
+riskiest part (an actual write): confirmed a read-scoped token's
+tools/list excludes se_library_add and a read_write-scoped token's
+includes it; se_check_paper correctly reported the real crayfish paper
+as not retracted; se_journal_lookup returned Hydrobiologia's real JTI
+(33, Limited), real Scimago data (0.916, Q1), and a real integrity flag
+(not in DOAJ); se_library_add genuinely wrote a real, correct row for a
+test paper (confirmed by direct DB read afterward, not just the tool's
+own response) — then that row, both test tokens, and the test session
+were all deleted, leaving no residue in the real account.

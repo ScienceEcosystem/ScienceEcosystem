@@ -2159,19 +2159,20 @@ app.get("/api/tokens", async (req, res) => {
 });
 
 // POST /api/tokens — create a token. Returns the raw value exactly once;
-// only its hash is ever persisted. scope is fixed to "read" for now — no
-// write-capable token type exists yet (deliberate: MCP access starts
-// read-only, per explicit decision, until that path is trusted).
+// only its hash is ever persisted. scope defaults to "read"; the caller
+// must explicitly opt into "read_write" (the only tool that checks for it
+// is se_library_add — read tools work under either scope).
 app.post("/api/tokens", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   try {
     const label = String(req.body?.label || "").trim().slice(0, 80) || "Untitled token";
+    const scope = req.body?.scope === "read_write" ? "read_write" : "read";
     const raw = API_TOKEN_PREFIX + crypto.randomBytes(32).toString("hex");
     const tokenHash = hashApiToken(raw);
     const { rows } = await pool.query(
       `INSERT INTO api_tokens (orcid, token_hash, label, scope)
-       VALUES ($1,$2,$3,'read') RETURNING id, label, scope, created_at`,
-      [sess.orcid, tokenHash, label]
+       VALUES ($1,$2,$3,$4) RETURNING id, label, scope, created_at`,
+      [sess.orcid, tokenHash, label, scope]
     );
     // The only time the raw token is ever sent anywhere — the client must
     // show/copy it now, it cannot be retrieved again after this response.
@@ -2377,6 +2378,134 @@ function buildMcpServer(tokenInfo) {
     const row = await getUser(orcid);
     return { content: [{ type: "text", text: JSON.stringify(row || {}, null, 2) }] };
   });
+
+  server.registerTool("se_check_paper", {
+    description: "Check whether a paper has been retracted, via OpenAlex's retraction tracking — useful before citing it.",
+    inputSchema: { id: z.string().describe("OpenAlex work id or DOI") },
+  }, async ({ id }) => {
+    const doi = normalizeDoi(id);
+    const lookup = /^W\d+$/i.test(id.trim()) ? id.trim() : (doi ? `doi:${doi}` : id.trim());
+    const qs = new URLSearchParams({ select: "id,display_name,doi,is_retracted" });
+    if (OPENALEX_API_KEY) qs.set("api_key", OPENALEX_API_KEY);
+    qs.set("mailto", OPENALEX_MAILTO);
+    const w = await fetchJSONTimeout(`${OPENALEX}/works/${encodeURIComponent(lookup)}?${qs.toString()}`, {}, OPENALEX_TIMEOUT_MS);
+    const result = {
+      id: (w.id || "").replace(/^https?:\/\/openalex\.org\//i, ""),
+      title: w.display_name || null,
+      doi: w.doi ? normalizeDoi(w.doi) : null,
+      is_retracted: !!w.is_retracted,
+    };
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  });
+
+  server.registerTool("se_journal_lookup", {
+    description: "Look up a journal's trust signals for a submission or citation decision: ScienceEcosystem's own JTI (openness/recognition/scale/integrity score), Scimago SJR + quartile (when imported), and predatory-publishing/DOAJ checks.",
+    inputSchema: { name: z.string().describe("Journal name") },
+  }, async ({ name }) => {
+    const qs = new URLSearchParams({ search: name, filter: "type:journal", per_page: "1" });
+    qs.set("select", "id,display_name,is_oa,is_in_doaj,works_count,summary_stats,issn_l,host_organization_name");
+    if (OPENALEX_API_KEY) qs.set("api_key", OPENALEX_API_KEY);
+    qs.set("mailto", OPENALEX_MAILTO);
+    const data = await fetchJSONTimeout(`${OPENALEX}/sources?${qs.toString()}`, {}, OPENALEX_TIMEOUT_MS);
+    const src = data.results && data.results[0];
+    if (!src) return { content: [{ type: "text", text: JSON.stringify({ found: false }, null, 2) }] };
+
+    // Same formula as scripts/components.js's computeJournalTrustIndex —
+    // kept in sync manually, not imported, since that file is browser-only.
+    const isDoaj = !!src.is_in_doaj, isOa = !!src.is_oa;
+    const citedness = +(src.summary_stats?.["2yr_mean_citedness"] || 0);
+    const works = +(src.works_count || 0);
+    const type = String(src.type || "").toLowerCase();
+    const openness = isDoaj ? 30 : isOa ? 20 : 0;
+    const recognition = citedness > 0 ? Math.min(40, Math.round(40 * Math.log10(1 + citedness) / Math.log10(101))) : 0;
+    const scale = works > 0 ? Math.min(15, Math.round(15 * Math.log10(1 + works) / Math.log10(100001))) : 0;
+    const isPreprintOrRepo = type.includes("repository") || type.includes("preprint");
+    const integrity = isPreprintOrRepo ? 0 : (isDoaj || isOa ? 15 : 10);
+    const total = openness + recognition + scale + integrity;
+    const grade = total >= 85 ? "Excellent" : total >= 70 ? "Good" : total >= 50 ? "Fair" : total >= 30 ? "Limited" : "Poor";
+
+    let scimago = null;
+    if (src.issn_l) {
+      const { rows } = await pool.query(
+        `SELECT sjr, sjr_best_quartile FROM journal_scimago_rankings WHERE issn=$1`,
+        [String(src.issn_l).replace(/[^0-9Xx]/g, "").toUpperCase()]
+      );
+      if (rows.length) scimago = { sjr: rows[0].sjr != null ? Number(rows[0].sjr) : null, quartile: rows[0].sjr_best_quartile };
+    }
+
+    let integrityCheck = null;
+    try {
+      integrityCheck = await checkJournalIntegrity({ journalName: name, issnL: src.issn_l || "" });
+    } catch (_) { /* best-effort — omit if it fails, don't fail the whole tool call */ }
+
+    const result = {
+      found: true,
+      name: src.display_name,
+      publisher: src.host_organization_name || null,
+      is_oa: !!src.is_oa,
+      is_in_doaj: !!src.is_in_doaj,
+      works_count: works,
+      jti: { total, grade },
+      scimago,
+      integrity_check: integrityCheck ? {
+        verdict: integrityCheck.verdict,
+        score: integrityCheck.score,
+        on_predatory_list: integrityCheck.onPredatoryList,
+        flags: integrityCheck.flags,
+      } : null,
+    };
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  });
+
+  // Write access — only registered for a "read_write" scoped token, per the
+  // explicit decision to ship MCP access read-only first and add write
+  // capability once that path was trusted (see api_tokens.scope).
+  if (tokenInfo.scope === "read_write") {
+    server.registerTool("se_library_add", {
+      description: "Save a paper to the signed-in user's ScienceEcosystem library, optionally filing it into a collection/folder.",
+      inputSchema: {
+        id: z.string().describe("OpenAlex work id or a DOI"),
+        collection_id: z.number().int().optional().describe("Also file into this collection — get the id from se_collections_list"),
+      },
+    }, async ({ id, collection_id }) => {
+      const doi = normalizeDoi(id);
+      const lookup = /^W\d+$/i.test(id.trim()) ? id.trim() : (doi ? `doi:${doi}` : id.trim());
+      const qs = new URLSearchParams();
+      if (OPENALEX_API_KEY) qs.set("api_key", OPENALEX_API_KEY);
+      qs.set("mailto", OPENALEX_MAILTO);
+      const w = await fetchJSONTimeout(`${OPENALEX}/works/${encodeURIComponent(lookup)}?${qs.toString()}`, {}, OPENALEX_TIMEOUT_MS);
+      const itemId = (w.id || "").replace(/^https?:\/\/openalex\.org\//i, "") || (doi ? `doi:${doi}` : id.trim());
+      const title = w.display_name || w.title || "Untitled";
+      const itemDoi = w.doi ? normalizeDoi(w.doi) : (doi || null);
+      const year = w.publication_year ?? null;
+      const venue = w.primary_location?.source?.display_name || null;
+      const authors = (w.authorships || []).map(a => a?.author?.display_name).filter(Boolean).join(", ") || null;
+
+      await pool.query(
+        `INSERT INTO library_items (orcid, id, title, openalex_id, openalex_url, doi, year, venue, authors, meta_fresh)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
+         ON CONFLICT (orcid, id) DO NOTHING`,
+        [orcid, itemId, title, itemId.startsWith("W") ? itemId : null, w.id || null, itemDoi, year, venue, authors]
+      );
+
+      let filedInCollection = false;
+      if (collection_id != null) {
+        const role = await collectionRole(orcid, Number(collection_id));
+        if (role && role !== "viewer") {
+          await pool.query(
+            `INSERT INTO collection_items (orcid, collection_id, paper_id, title, doi, year, venue, authors, openalex_id, added_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$1)
+             ON CONFLICT (collection_id, paper_id) DO NOTHING`,
+            [orcid, Number(collection_id), itemId, title, itemDoi, year, venue, authors, itemId.startsWith("W") ? itemId : null]
+          );
+          filedInCollection = true;
+        }
+      }
+
+      const result = { saved: true, id: itemId, title, filed_in_collection: filedInCollection };
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    });
+  }
 
   return server;
 }
