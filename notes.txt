@@ -4688,3 +4688,29 @@ for building and testing the site, which is broader than the scoped
 read-only MCP tools by design; connecting this session to its own MCP
 server would add a more limited path to things it can already do, not
 new capability.
+
+2026-09-05 — se_library_list: collection_id filter
+
+Second real-world gap from the same live usage: the connected Claude
+Code session needed to know exactly what's in the "Invasion_meltdown_
+model" folder specifically, but no tool exposed per-item collection
+membership — the only option was grepping the whole library for author
+names/keywords as a proxy, explicitly flagged by that session itself as
+"a good approximation but not guaranteed complete."
+
+Added collection_id to se_library_list (joins against collection_items,
+already the correct table for this — matches li.id = ci.paper_id,
+scoped to the caller's own library_items via the existing orcid filter,
+so no separate access check needed: a nonexistent or not-theirs
+collection_id just returns zero rows, never someone else's data).
+se_collections_list's description now points at this directly, so an
+agent naturally chains "look up the folder's id" → "list exactly what's
+in it" instead of reaching for a keyword-search workaround.
+
+Verified live against the real account and the actual folder in
+question: se_collections_list correctly resolved "Invasion_meltdown_
+model" to id 12481, and se_library_list with that collection_id
+returned the real, exact 22 items filed there — including "Positive
+Interactions of Nonindigenous Species: Invasional Meltdown?", the same
+paper searched by title earlier this session — confirming precise,
+correct membership rather than a keyword approximation.

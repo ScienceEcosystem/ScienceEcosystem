@@ -2303,13 +2303,16 @@ function buildMcpServer(tokenInfo) {
       + "Prefer passing `query` to search titles/tags for something specific rather than paging through "
       + "everything — a library can hold hundreds of items, and this returns at most `limit` per call "
       + "(default 50, max 200). Check `total` in the response and use `offset` to page through the rest "
-      + "if you genuinely need more than one page.",
+      + "if you genuinely need more than one page. Pass `collection_id` (get it from se_collections_list "
+      + "first) to list only items filed into a specific folder — this is the reliable way to answer "
+      + "\"what's in my X folder,\" rather than approximating it with a keyword search.",
     inputSchema: {
       query: z.string().optional().describe("Filter to items whose title or tags contain this text (case-insensitive). Omit to list everything."),
+      collection_id: z.number().int().optional().describe("Only list items actually filed in this collection/folder — get the id from se_collections_list"),
       limit: z.number().int().min(1).max(200).optional().describe("Max items to return, default 50"),
       offset: z.number().int().min(0).optional().describe("Items to skip — for paging past the first `limit`"),
     },
-  }, async ({ query, limit, offset }) => {
+  }, async ({ query, collection_id, limit, offset }) => {
     const lim = Math.min(Math.max(Number(limit) || 50, 1), 200);
     const off = Math.max(Number(offset) || 0, 0);
     const params = [orcid];
@@ -2317,6 +2320,10 @@ function buildMcpServer(tokenInfo) {
     if (query && query.trim()) {
       params.push(`%${query.trim()}%`);
       where += ` AND (title ILIKE $${params.length} OR EXISTS (SELECT 1 FROM unnest(tags) t WHERE t ILIKE $${params.length}))`;
+    }
+    if (collection_id != null) {
+      params.push(Number(collection_id));
+      where += ` AND EXISTS (SELECT 1 FROM collection_items ci WHERE ci.collection_id=$${params.length} AND ci.paper_id=library_items.id)`;
     }
     const countRes = await pool.query(`SELECT count(*) FROM library_items WHERE ${where}`, params);
     const pageParams = [...params, lim, off];
@@ -2346,7 +2353,9 @@ function buildMcpServer(tokenInfo) {
   });
 
   server.registerTool("se_collections_list", {
-    description: "List the signed-in user's library folders/collections (including ones shared with them).",
+    description: "List the signed-in user's library folders/collections (including ones shared with them). "
+      + "Use the returned `id` with se_library_list's `collection_id` param to list exactly what's filed in "
+      + "one of these folders, rather than approximating it with a keyword search.",
     inputSchema: {},
   }, async () => {
     const { rows } = await pool.query(
