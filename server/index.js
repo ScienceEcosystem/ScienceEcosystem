@@ -2457,6 +2457,144 @@ function buildMcpServer(tokenInfo) {
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   });
 
+  server.registerTool("se_check_reproducibility", {
+    description: "Check a paper's open code/data and 'living paper' status — whether its key claims are linked to (and, at the strongest tier, CI-verified against) the actual code/data that produced them. Useful for judging how much to trust a paper's reported numbers before relying on them.",
+    inputSchema: { id: z.string().describe("OpenAlex work id or DOI") },
+  }, async ({ id }) => {
+    const doi = normalizeDoi(id);
+    const lookup = /^W\d+$/i.test(id.trim()) ? id.trim() : (doi ? `doi:${doi}` : id.trim());
+    const qs0 = new URLSearchParams();
+    if (OPENALEX_API_KEY) qs0.set("api_key", OPENALEX_API_KEY);
+    qs0.set("mailto", OPENALEX_MAILTO);
+    const w = await fetchJSONTimeout(`${OPENALEX}/works/${encodeURIComponent(lookup)}?${qs0.toString()}`, {}, OPENALEX_TIMEOUT_MS);
+    const workDoi = w.doi ? normalizeDoi(w.doi) : (doi || null);
+    const title = w.display_name || w.title || "";
+    const authors = (w.authorships || []).slice(0, 3).map(a => a?.author?.display_name).filter(Boolean).join(", ");
+    const openAlexId = (w.id || "").replace(/^https?:\/\/openalex\.org\//i, "");
+
+    // Same artifact-discovery endpoint paper.html's own sidebar uses —
+    // covers structured DataCite/Crossref relations AND a publisher-page
+    // text scrape (catches a repo only named in a Data Availability
+    // statement, the common case a structured-only lookup would miss).
+    const artifactsQs = new URLSearchParams();
+    if (workDoi) artifactsQs.set("doi", workDoi);
+    if (title) artifactsQs.set("title", title);
+    if (authors) artifactsQs.set("authors", authors);
+    if (openAlexId) artifactsQs.set("id", openAlexId);
+    let artifacts = [];
+    try {
+      // A cold call can download and parse the paper's actual PDF for
+      // reference/data-availability extraction — genuinely slower than a
+      // typical lookup. Confirmed live: a 10s timeout aborted this on a
+      // fresh server process for a real paper, silently returning an
+      // empty artifact list. 25s gives it room; a tool call is expected
+      // to take longer than a page-render request would tolerate anyway.
+      const r = await fetchWithTimeout(`http://127.0.0.1:${PORT}/api/paper/artifacts?${artifactsQs.toString()}`, {}, 25000);
+      if (r.ok) artifacts = await r.json();
+    } catch (_) { /* best-effort */ }
+    // /api/paper/artifacts alone misses a repo that's only named in the
+    // manuscript's own Data Availability text (not a structured DataCite/
+    // Crossref relation) — the common case. Confirmed live this tool
+    // otherwise reported code_available:false for a paper with a real,
+    // working GitHub repo. /api/paper/links (the publisher-page scrape)
+    // is what actually finds that; same fallback already applied to
+    // paper.js/pdf-reader.js's own research-object harvesting.
+    if (workDoi && !artifacts.some(a => a.url && /github\.com\//i.test(a.url))) {
+      try {
+        const lr = await fetchWithTimeout(`http://127.0.0.1:${PORT}/api/paper/links?doi=${encodeURIComponent(workDoi)}`, {}, 10000);
+        if (lr.ok) {
+          const links = await lr.json();
+          (links || []).forEach(l => { if (l.url && !artifacts.some(a => a.url === l.url)) artifacts.push({ provenance: "Publisher page", type: "Other", url: l.url }); });
+        }
+      } catch (_) { /* best-effort */ }
+    }
+
+    const codeLinks = artifacts.filter(a => a.type === "Software" || /github\.com|gitlab\.com/i.test(a.url || ""));
+    const dataLinks = artifacts.filter(a => a.type === "Dataset");
+
+    let livingPaper = null;
+    const ghHit = artifacts.find(a => a.url && /github\.com\//i.test(a.url));
+    if (ghHit) {
+      const m = ghHit.url.match(/github\.com\/([^\/]+)\/([^\/#?]+)/i);
+      if (m) {
+        const repo = `${m[1]}/${m[2]}`;
+        try {
+          const lr = await fetchWithTimeout(`http://127.0.0.1:${PORT}/api/paper/living-evidence?repo=${encodeURIComponent(repo)}`, {}, 10000);
+          if (lr.ok) {
+            const ld = await lr.json();
+            if (ld.tier && ld.tier !== "none") livingPaper = { repo, tier: ld.tier };
+          }
+        } catch (_) { /* best-effort */ }
+      }
+    }
+
+    const result = {
+      id: openAlexId, doi: workDoi, title,
+      is_open_access: !!w.open_access?.is_oa,
+      code_available: codeLinks.length > 0,
+      code_links: codeLinks.map(a => a.url),
+      data_available: dataLinks.length > 0,
+      data_links: dataLinks.map(a => a.url),
+      living_paper: livingPaper,
+    };
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  });
+
+  server.registerTool("se_followed_updates", {
+    description: "New papers from the journals and authors the signed-in user follows, most recent first — a standing 'what's new since I last checked' digest, using the same follow lists as the site's own follow feed.",
+    inputSchema: {
+      since_days: z.number().int().min(1).max(365).optional().describe("Only include papers published within this many days, default 30"),
+      limit: z.number().int().min(1).max(100).optional().describe("Max papers to return, default 25"),
+    },
+  }, async ({ since_days, limit }) => {
+    const [authors, sources] = await Promise.all([followsList(orcid), followedSourcesList(orcid)]);
+    if (!authors.length && !sources.length) {
+      return { content: [{ type: "text", text: JSON.stringify({ note: "Not following any authors or journals yet.", results: [] }, null, 2) }] };
+    }
+    const days = Math.min(Math.max(Number(since_days) || 30, 1), 365);
+    const lim = Math.min(Math.max(Number(limit) || 25, 1), 100);
+    const fromDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+
+    const fetchRecent = async (filterKey, ids) => {
+      if (!ids.length) return [];
+      const qs = new URLSearchParams({
+        filter: `${filterKey}:${ids.join("|")},from_publication_date:${fromDate}`,
+        sort: "publication_date:desc", per_page: String(lim),
+        select: "id,display_name,authorships,publication_year,publication_date,doi,primary_location,open_access",
+      });
+      if (OPENALEX_API_KEY) qs.set("api_key", OPENALEX_API_KEY);
+      qs.set("mailto", OPENALEX_MAILTO);
+      try {
+        const data = await fetchJSONTimeout(`${OPENALEX}/works?${qs.toString()}`, {}, OPENALEX_TIMEOUT_MS);
+        return data.results || [];
+      } catch (_) { return []; }
+    };
+
+    const [fromAuthors, fromSources] = await Promise.all([
+      fetchRecent("author.id", authors.map(a => a.author_id)),
+      fetchRecent("locations.source.id", sources.map(s => s.source_id)),
+    ]);
+
+    const seen = new Set();
+    const merged = [...fromAuthors, ...fromSources].filter(w => {
+      if (seen.has(w.id)) return false;
+      seen.add(w.id);
+      return true;
+    }).sort((a, b) => (b.publication_date || "").localeCompare(a.publication_date || "")).slice(0, lim);
+
+    const results = merged.map(w => ({
+      id: (w.id || "").replace(/^https?:\/\/openalex\.org\//i, ""),
+      title: w.display_name || null,
+      authors: (w.authorships || []).map(a => a?.author?.display_name).filter(Boolean),
+      year: w.publication_year ?? null,
+      published: w.publication_date || null,
+      venue: w.primary_location?.source?.display_name || null,
+      doi: w.doi ? normalizeDoi(w.doi) : null,
+      oa_url: w.open_access?.oa_url || null,
+    }));
+    return { content: [{ type: "text", text: JSON.stringify({ following: { authors: authors.length, journals: sources.length }, results }, null, 2) }] };
+  });
+
   // Write access — only registered for a "read_write" scoped token, per the
   // explicit decision to ship MCP access read-only first and add write
   // capability once that path was trusted (see api_tokens.scope).

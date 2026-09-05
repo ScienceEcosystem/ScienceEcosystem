@@ -4758,3 +4758,46 @@ as not retracted; se_journal_lookup returned Hydrobiologia's real JTI
 test paper (confirmed by direct DB read afterward, not just the tool's
 own response) — then that row, both test tokens, and the test session
 were all deleted, leaving no residue in the real account.
+
+2026-09-05 — MCP: reproducibility check + followed-updates digest
+
+Two more, both picked from a shortlist offered after the previous
+round: se_check_reproducibility (open code/data + living-paper status
+for a given paper) and se_followed_updates (new papers from followed
+authors/journals — the "automate it" use case from the very first ask
+that started this whole MCP thread).
+
+se_check_reproducibility hit the exact same gap already fixed twice
+this session in the frontend (paper.js, then pdf-reader.js): calling
+only /api/paper/artifacts misses a repo that's only named in a
+manuscript's Data Availability text, not a structured DataCite/Crossref
+relation — confirmed live, it reported code_available:false for the
+crayfish paper despite its real, working GitHub repo. Added the same
+/api/paper/links fallback merge as those two earlier fixes.
+
+A second, distinct bug surfaced by the SAME live test: even after that
+fix, data_available still came back false on a genuinely cold server
+process. Traced with temporary debug logging (removed after) to a
+10-second timeout on the artifacts call — a cold /api/paper/artifacts
+resolution can download and parse the paper's actual PDF for reference
+extraction, which took longer than 10s on a fresh process; the abort
+silently produced an empty artifact list with no visible error. Raised
+to 25s. Re-verified on an actually-cold server restart (not reusing a
+process that had already warmed up from earlier manual testing, which
+is exactly what made the bug hard to see at first) — code_available,
+data_available, AND living_paper all came back correct together.
+
+se_followed_updates queries OpenAlex for recent works filtered by the
+user's real followed_authors/followed_sources (locations.source.id,
+not the deprecated host_venue.id), merges and sorts by date. Verified
+live against the real account's 13 followed authors: real recent
+papers came back correctly, including one from Robin Holmes published
+2026-09-01 (days before this was tested). Noted honestly, not something
+to fix in this tool: one result attributed to "Rafael Miranda" was
+clearly a different person (pediatric anesthesia vs. aquatic ecology)
+— an OpenAlex author-id disambiguation issue upstream, inherited as-is
+since the query correctly follows the stored author_id.
+
+Both tools registered unconditionally (read scope) alongside the
+existing read tools — no new access-control surface, same orcid-scoped
+data as everything else.
