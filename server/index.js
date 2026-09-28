@@ -7,6 +7,10 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
+import dns from "dns";
+import net from "net";
+import http from "http";
+import https from "https";
 import pkg from "pg";
 import { resolveArtifacts } from "./artifacts-resolver.js";
 import { resolveLivingPaper } from "./living-paper-cache.js";
@@ -3132,6 +3136,185 @@ app.post("/api/library/add-by-doi", async (req, res) => {
   } catch (e) {
     console.error("POST /api/library/add-by-doi failed:", e);
     res.status(500).json({ error: "Could not find that paper. Check the identifier and try again." });
+  }
+});
+
+// ---- Save a plain web page (no DOI) as a library item, Zotero-style ----
+// SSRF guard: every connection (including redirect hops) resolves through a
+// custom lookup that refuses loopback/private/link-local/metadata addresses.
+function isPrivateAddress(ip) {
+  if (!ip) return true;
+  if (ip.includes(":")) {
+    const l = ip.toLowerCase();
+    if (l === "::1" || l === "::" || l.startsWith("fe80") || l.startsWith("fc") || l.startsWith("fd")) return true;
+    const m = l.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    return m ? isPrivateAddress(m[1]) : false;
+  }
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some(n => !Number.isInteger(n))) return true;
+  const [a, b] = p;
+  return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) || (a === 192 && b === 0) || a >= 224;
+}
+function safeLookup(hostname, options, cb) {
+  dns.lookup(hostname, { all: true, verbatim: true }, (err, addrs) => {
+    if (err) return cb(err);
+    const ok = (addrs || []).filter(a => !isPrivateAddress(a.address));
+    if (!ok.length) return cb(new Error("Blocked address"));
+    if (options && options.all) return cb(null, ok);
+    cb(null, ok[0].address, ok[0].family);
+  });
+}
+const safeHttpAgent = new http.Agent({ lookup: safeLookup });
+const safeHttpsAgent = new https.Agent({ lookup: safeLookup });
+
+function normalizeWebUrl(raw) {
+  let u;
+  try { u = new URL(String(raw || "").trim()); } catch { return null; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  if (u.username || u.password) return null;
+  u.hash = "";
+  return u;
+}
+
+function decodeHtmlEntities(str) {
+  return String(str || "")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCodePoint(+n); } catch { return ""; } })
+    .replace(/\s+/g, " ").trim();
+}
+
+function metaContent(html, names) {
+  for (const n of names) {
+    const re1 = new RegExp(`<meta[^>]+(?:name|property)=["']${n}["'][^>]*content=(["'])(.*?)\\1`, "i");
+    const re2 = new RegExp(`<meta[^>]+content=(["'])(.*?)\\1[^>]*(?:name|property)=["']${n}["']`, "i");
+    const m = html.match(re1) || html.match(re2);
+    if (m && m[2].trim()) return decodeHtmlEntities(m[2]);
+  }
+  return "";
+}
+
+async function fetchPageMetadata(startUrl) {
+  let url = startUrl;
+  for (let hop = 0; hop < 4; hop++) {
+    // IP-literal hosts never go through the agent's DNS lookup, so check them here.
+    const bareHost = url.hostname.replace(/^\[|\]$/g, "");
+    if (net.isIP(bareHost) && isPrivateAddress(bareHost)) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const r = await fetch(url.href, {
+        redirect: "manual",
+        signal: ctrl.signal,
+        agent: url.protocol === "https:" ? safeHttpsAgent : safeHttpAgent,
+        headers: { "User-Agent": "ScienceEcosystem-LinkSaver/1.0 (+https://scienceecosystem.org)", "Accept": "text/html,application/xhtml+xml" },
+      });
+      if (r.status >= 300 && r.status < 400 && r.headers.get("location")) {
+        const next = normalizeWebUrl(new URL(r.headers.get("location"), url).href);
+        if (!next) return null;
+        url = next;
+        continue;
+      }
+      if (!r.ok) return null;
+      const ct = String(r.headers.get("content-type") || "");
+      if (!/html|xml/i.test(ct)) return { finalUrl: url.href, title: "", contentType: ct };
+      let html = "";
+      let bytes = 0;
+      for await (const chunk of r.body) {
+        bytes += chunk.length;
+        html += chunk.toString("utf8");
+        if (bytes > 400_000) break;
+      }
+      const titleTag = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || "";
+      const authors = [...html.matchAll(/<meta[^>]+name=["']citation_author["'][^>]*content=(["'])(.*?)\1/gi)].map(m => decodeHtmlEntities(m[2])).filter(Boolean);
+      const date = metaContent(html, ["citation_publication_date", "citation_date", "article:published_time", "datePublished", "date"]);
+      return {
+        finalUrl: url.href,
+        title: metaContent(html, ["citation_title", "og:title", "twitter:title"]) || decodeHtmlEntities(titleTag),
+        site: metaContent(html, ["og:site_name", "citation_journal_title", "application-name"]),
+        authors: authors.length ? authors.join(", ") : metaContent(html, ["author", "article:author"]),
+        year: (date.match(/(19|20)\d{2}/) || [])[0] || null,
+        description: metaContent(html, ["og:description", "description", "twitter:description"]),
+      };
+    } finally { clearTimeout(timer); }
+  }
+  return null;
+}
+
+// Body: { url, title?, authors?, site?, year?, description?, collectionId? }
+// Client-supplied fields (e.g. from the extension, which reads the live page)
+// win; the server only fetches the page when no title was provided.
+app.post("/api/library/add-web", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const body = req.body || {};
+    const u = normalizeWebUrl(body.url);
+    if (!u) return res.status(400).json({ error: "Enter a valid http(s) web address" });
+
+    const clean = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
+    let title = clean(body.title, 500);
+    let authors = clean(body.authors, 1000);
+    let site = clean(body.site, 200);
+    let year = Number(body.year) || null;
+    let description = clean(body.description, 4000);
+    let finalUrl = u.href;
+
+    if (!title) {
+      let meta = null;
+      try { meta = await fetchPageMetadata(u); } catch (_) { meta = null; }
+      if (meta) {
+        finalUrl = meta.finalUrl || finalUrl;
+        title = clean(meta.title, 500);
+        authors = authors || clean(meta.authors, 1000);
+        site = site || clean(meta.site, 200);
+        year = year || (meta.year ? Number(meta.year) : null);
+        description = description || clean(meta.description, 4000);
+      }
+    }
+    const host = new URL(finalUrl).hostname.replace(/^www\./, "");
+    if (!title) title = host + (u.pathname !== "/" ? u.pathname : "");
+    if (!site) site = host;
+
+    const keyUrl = new URL(finalUrl);
+    keyUrl.hash = "";
+    const key = keyUrl.href.replace(/\/$/, "").toLowerCase();
+    const itemId = "url:" + crypto.createHash("sha1").update(key).digest("hex").slice(0, 16);
+
+    const dup = await pool.query(
+      `SELECT id FROM library_items WHERE orcid=$1 AND id=$2 AND deleted_at IS NULL LIMIT 1`,
+      [sess.orcid, itemId]
+    );
+    if (dup.rows.length) return res.json({ ok: true, duplicate: true, existing_id: itemId });
+
+    const extra = { url: finalUrl, accessed: new Date().toISOString().slice(0, 10) };
+    await pool.query(
+      `INSERT INTO library_items (orcid, id, title, year, venue, authors, abstract, item_type, extra_fields, meta_fresh)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'webpage',$8,TRUE)
+       ON CONFLICT (orcid, id) DO UPDATE SET deleted_at=NULL`,
+      [sess.orcid, itemId, title, year, site, authors || null, description || null, JSON.stringify(extra)]
+    );
+
+    const cid = Number(body.collectionId);
+    if (cid) {
+      const role = await collectionRole(sess.orcid, cid);
+      if (role === "owner" || role === "editor") {
+        await pool.query(
+          `INSERT INTO collection_items (collection_id, paper_id, orcid, title, year, venue, authors, added_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$3)
+           ON CONFLICT (collection_id, paper_id) DO NOTHING`,
+          [cid, itemId, sess.orcid, title, year, site, authors || null]
+        );
+      }
+    }
+    res.status(201).json({ ok: true, item: {
+      id: itemId, title, year, venue: site, authors: authors || null, abstract: description || null,
+      item_type: "webpage", extra_fields: extra, meta_fresh: true, doi: null,
+    } });
+  } catch (e) {
+    console.error("POST /api/library/add-web failed:", e);
+    res.status(500).json({ error: "Could not save that page" });
   }
 });
 

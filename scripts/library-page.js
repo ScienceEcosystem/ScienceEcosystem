@@ -23,7 +23,7 @@
   const _T_DISS=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><rect x=".5" y=".5" width="10" height="12" rx="1" stroke="#b45309"/><circle cx="5.5" cy="7" r="2" stroke="#b45309"/></svg>`;
   const _T_DATA=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><ellipse cx="5.5" cy="3" rx="4.5" ry="2" stroke="#6b7280"/><path d="M1 3v7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V3" stroke="#6b7280"/><path d="M1 7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2" stroke="#6b7280"/></svg>`;
   const _T_NOTE=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><path d="M.5 1.5a1 1 0 0 1 1-1h6l3 3v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10z" stroke="#c2861a"/><path d="M7.5.7V4h3.3" stroke="#c2861a"/></svg>`;
-  const TYPE_ICON_MAP={'journal-article':_T_DOC,'review':_T_DOC,'letter':_T_DOC,'editorial':_T_DOC,'other':_T_DOC,'book':_T_BOOK,'book-chapter':_T_BOOK,'conference-paper':_T_CONF,'preprint':_T_PRE,'dissertation':_T_DISS,'dataset':_T_DATA,'report':_T_DOC,'note':_T_NOTE};
+  const TYPE_ICON_MAP={'journal-article':_T_DOC,'review':_T_DOC,'letter':_T_DOC,'editorial':_T_DOC,'other':_T_DOC,'book':_T_BOOK,'book-chapter':_T_BOOK,'conference-paper':_T_CONF,'preprint':_T_PRE,'dissertation':_T_DISS,'dataset':_T_DATA,'report':_T_DOC,'note':_T_NOTE,'webpage':_T_DOC};
   function typeIcon(t){ return TYPE_ICON_MAP[t]||_T_DOC; }
 
   // Small PDF badge SVG
@@ -95,12 +95,14 @@
     "editorial":       { label: "Editorial",        bibtex: "article",   fields: ["volume","issue","pages"] },
     "other":           { label: "Other",            bibtex: "misc",      fields: [] },
     "note":            { label: "Note",              bibtex: "misc",      fields: [] },
+    "webpage":         { label: "Web Page",          bibtex: "misc",      fields: ["url","accessed"] },
   };
   const EXTRA_LABELS = {
     volume:"Volume", issue:"Issue", pages:"Pages", issn:"ISSN",
     publisher:"Publisher", isbn:"ISBN", edition:"Edition",
     conference:"Conference", repository:"Repository",
     arxiv_id:"arXiv ID", institution:"Institution",
+    url:"URL", accessed:"Accessed",
   };
 
   function getItemType(item) {
@@ -153,6 +155,8 @@
       ef.isbn?`  isbn={${ef.isbn}},`:"",
       ef.arxiv_id?`  eprint={${ef.arxiv_id}},archivePrefix={arXiv},`:"",
       item.doi?`  doi={${item.doi}},`:"",
+      ef.url?`  url={${ef.url}},`:"",
+      ef.accessed?`  note={Accessed: ${ef.accessed}},`:"",
       "}"].filter(Boolean).join("\n");
   }
   // Real, publisher-authoritative BibTeX when the item has a DOI (via
@@ -217,12 +221,15 @@
   }
   function fmtRIS(item){
     const authors=splitAuthors(item.authors);
-    return ["TY  - JOUR",
+    const ef=getExtraFields(item);
+    return [getItemType(item)==="webpage"?"TY  - ELEC":"TY  - JOUR",
       ...authors.map(a=>{ const p=splitName(a.trim()); return "AU  - "+p.family+(p.given?", "+p.given:""); }),
       "TI  - "+(item.title||""),
-      item.venue?"JO  - "+item.venue:"",
+      item.venue?(getItemType(item)==="webpage"?"T2  - ":"JO  - ")+item.venue:"",
       item.year?"PY  - "+item.year:"",
       item.doi?"DO  - "+item.doi:"",
+      ef.url?"UR  - "+ef.url:"",
+      ef.accessed?"Y2  - "+ef.accessed:"",
       "ER  - "].filter(Boolean).join("\n");
   }
   function fmtChicago(item){
@@ -1770,13 +1777,14 @@
           <!-- Links -->
           <div style="display:flex;flex-wrap:wrap;gap:.3rem;padding:.4rem 0;border-bottom:1px solid #f0f0f0;">
             ${chip(doiUrl,"Publisher")}
+            ${chip(/^https?:\/\//i.test(String(extraFields.url||"")) ? esc(extraFields.url) : null,"Open page ↗")}
             ${chip(item.openalex_url,"OpenAlex")}
             ${zoteroLink?`<a class="badge badge-zotero" href="${zoteroLink}" target="_blank" rel="noopener">Zotero</a>`:(item.zotero_key?`<span class="badge badge-zotero">Zotero</span>`:"")}
           </div>
 
           <!-- Actions -->
           <div style="display:flex;flex-wrap:wrap;gap:.3rem;padding:.4rem 0;border-bottom:1px solid #f0f0f0;">
-            <a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(openAlexId)}" style="font-size:.79rem;padding:.22rem .5rem;">Details</a>
+            ${itemType==="webpage"?"":`<a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(openAlexId)}" style="font-size:.79rem;padding:.22rem .5rem;">Details</a>`}
             ${pdfViewerUrl?`<a class="btn btn-secondary" href="${esc(pdfViewerUrl)}" style="font-size:.79rem;padding:.22rem .5rem;">Read PDF</a>`:""}
             <button class="btn btn-secondary" id="addToCollectionBtn" style="font-size:.79rem;padding:.22rem .5rem;">+ Collection</button>
             ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn" style="font-size:.79rem;padding:.22rem .5rem;">Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn" style="font-size:.79rem;padding:.22rem .5rem;">Restore</button>`}
@@ -2282,8 +2290,13 @@
   async function handleAddByDoi(input){
     const identifier = (input.value || "").trim();
     if(!identifier) return;
+    // A plain web address that isn't a DOI/OpenAlex link is saved as a web
+    // page (title/URL/accessed date), the way Zotero does for any site.
+    const isWebUrl = /^https?:\/\//i.test(identifier) && !/doi\.org\/|openalex\.org\/W\d+/i.test(identifier);
     try{
-      const res = await api("/api/library/add-by-doi", { method:"POST", body: JSON.stringify({ identifier }) });
+      const res = isWebUrl
+        ? await api("/api/library/add-web", { method:"POST", body: JSON.stringify({ url: identifier }) })
+        : await api("/api/library/add-by-doi", { method:"POST", body: JSON.stringify({ identifier }) });
       if(res?.duplicate){
         toast("Already in your library","info");
         currentSelection = res.existing_id;
@@ -2291,7 +2304,7 @@
         const idx = items.findIndex(x=>String(x.id)===String(res.item.id));
         if(idx>=0) items[idx]=res.item; else items.push(res.item);
         currentSelection = res.item.id;
-        toast("Added to library","success");
+        toast(isWebUrl?"Web page saved to library":"Added to library","success");
       } else {
         await safeRefreshItems();
       }

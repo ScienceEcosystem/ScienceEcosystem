@@ -37,7 +37,14 @@
     <div id="stateNoPaper" class="state" hidden>
       <div class="icon">🔍</div>
       <p class="muted">No paper detected on this page.</p>
-      <p class="hint">Navigate to a journal article, arXiv paper, or PubMed entry to save it.</p>
+      <p class="hint">Journal articles, arXiv and PubMed entries are saved with full metadata. Any other page can be saved as a web page.</p>
+
+      <!-- Shown for any http(s) page with no detectable DOI — saved as a
+           generic web-page item (title, URL, accessed date), like Zotero. -->
+      <button class="btn btn-primary" id="btnSaveWebPage" hidden>
+        <span>🔖</span> Save this page to my library
+      </button>
+      <div id="webPageStatus" class="pdf-status muted" hidden></div>
 
       <!-- Shown only when the tab looks like a bare PDF with no detectable
            DOI/title (e.g. a signed publisher asset URL) — lets the server

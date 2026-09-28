@@ -283,6 +283,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  // Save any web page (no DOI) as a generic "webpage" library item, like
+  // Zotero does for pages it has no translator for.
+  if (msg.type === "SAVE_WEBPAGE") {
+    seApi("/api/library/add-web", {
+      method: "POST",
+      body: JSON.stringify({
+        url: msg.url, title: msg.title, authors: msg.authors,
+        site: msg.site, year: msg.year, description: msg.description,
+        collectionId: msg.collectionId || null,
+      }),
+    }).then(result => sendResponse({ ok: true, result }))
+      .catch(e => sendResponse({ ok: false, error: e.message }));
+    return true;
+  }
+
   if (msg.type === "LIST_COLLECTIONS") {
     listCollections()
       .then(collections => sendResponse({ ok: true, collections }))

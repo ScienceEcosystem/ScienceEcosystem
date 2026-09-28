@@ -117,6 +117,16 @@ async function boot() {
       _coldPdfTitle = tab.title || "PDF document";
       show("btnSaveColdPdf");
     }
+    if (tab.url && /^https?:\/\//i.test(tab.url)) {
+      _webPage = {
+        url: tab.url,
+        title: (meta?.title || tab.title || "").trim(),
+        authors: Array.isArray(meta?.authors) ? meta.authors.join(", ") : (meta?.authors || ""),
+        year: meta?.year || null,
+        site: meta?.venue || "",
+      };
+      show("btnSaveWebPage");
+    }
     showState("stateNoPaper");
     return;
   }
@@ -428,6 +438,26 @@ async function handleSavePdf() {
   }
 }
 
+// Save the current page as a plain web-page item (no DOI needed).
+let _webPage = null;
+async function handleSaveWebPage() {
+  const btn = $("btnSaveWebPage");
+  btn.disabled = true;
+  const statusEl = $("webPageStatus");
+  statusEl.hidden = false;
+  statusEl.textContent = "Saving…";
+  const result = await msg("SAVE_WEBPAGE", _webPage || {});
+  if (result?.ok) {
+    statusEl.textContent = result.result?.duplicate
+      ? "✓ Already in your library"
+      : `✓ Saved: "${truncate(result.result?.item?.title || _webPage?.title || "web page", 80)}"`;
+    btn.hidden = true;
+  } else {
+    btn.disabled = false;
+    statusEl.textContent = `✗ ${result?.error || "Could not save this page — are you logged in?"}`;
+  }
+}
+
 // Upload a "cold" PDF (no detected DOI/title) as-is and let the server
 // identify it from the document's own text/metadata — see the paperId-less
 // branch of uploadPdfBlob() in the service worker, which already hits
@@ -499,6 +529,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Save a "cold" PDF (no paper detected, but URL looks like a PDF)
   $("btnSaveColdPdf")?.addEventListener("click", handleSaveColdPdf);
+  $("btnSaveWebPage")?.addEventListener("click", handleSaveWebPage);
 
   // Open library
   $("btnOpenLibrary")?.addEventListener("click", () => {
