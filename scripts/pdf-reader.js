@@ -75,6 +75,32 @@ function setupCanvas() {
   });
 
   bindAnnotationToolbar();
+  bindSidebarToggle();
+}
+
+// Hide/show the thumbnail strip + Info/Contents/Refs/Links sidebar, for
+// distraction-free reading — a small floating tab on the page's left edge
+// brings it back. Preference persists across PDFs via localStorage.
+function bindSidebarToggle() {
+  const container = document.querySelector('.pdf-container');
+  const toggleBtn = document.getElementById('toggleSidebarBtn');
+  const showTab = document.getElementById('showSidebarTab');
+  if (!container || !toggleBtn) return;
+
+  function setHidden(hidden) {
+    container.classList.toggle('sidebar-hidden', hidden);
+    toggleBtn.textContent = hidden ? '▶ Panel' : '◀ Panel';
+    toggleBtn.title = hidden ? 'Show the thumbnails/Info panel' : 'Hide the thumbnails/Info panel';
+    toggleBtn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+    try { localStorage.setItem('se_pdf_sidebar_hidden', hidden ? '1' : '0'); } catch (_) {}
+  }
+
+  let hidden = false;
+  try { hidden = localStorage.getItem('se_pdf_sidebar_hidden') === '1'; } catch (_) {}
+  setHidden(hidden);
+
+  toggleBtn.addEventListener('click', () => setHidden(!container.classList.contains('sidebar-hidden')));
+  showTab?.addEventListener('click', () => setHidden(false));
 }
 
 async function ensurePdfJs() {

@@ -4927,3 +4927,28 @@ real drag-and-drop browser test in this environment (no Playwright
 available) — the drop handler itself is a thin wrapper around
 handlePdfUpload, which the server-side test above already exercises
 end-to-end.
+
+2026-09-29 — PDF reader: hide/show the thumbnails + Info/Contents/Refs/Links sidebar
+
+User flagged (screenshot, circled it) that the left thumbnail strip + Info/
+Contents/Refs/Links panel always takes up screen space, even when reading
+and not needing it.
+
+pdf-viewer.html: new "◀ Panel" toggle button in the annotation toolbar,
+next to the existing zoom controls. Collapses #pdfThumbnailStrip and
+.pdf-sidebar via a .sidebar-hidden class on .pdf-container. A small
+floating "▶" tab stays pinned to the left edge of the page area
+(positioned relative to .pdf-main, not .pdf-main-body — that div's
+innerHTML gets fully replaced by pdf-reader.js's setupCanvas() on load,
+which would have wiped out a button placed inside it) so it's reachable
+even when everything else is hidden.
+
+scripts/pdf-reader.js: bindSidebarToggle(), called once from setupCanvas()
+alongside the existing bindAnnotationToolbar(). Preference persists via
+localStorage (se_pdf_sidebar_hidden) across every PDF, not just the
+current one.
+
+Verified: node --check passes, brace-balance check on the added <style>
+block passes, dev server serves the new button/class/JS. Did not get a
+real click-through in a browser this round (no Playwright available in
+this environment) — flagged, not silently skipped.
