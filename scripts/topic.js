@@ -580,12 +580,28 @@
     const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false, attributionControl: false });
     _leafletMap = map;
 
-    // Self-hosted world countries background
+    // Self-hosted world countries background. Given its own low-z-index
+    // pane, BELOW Leaflet's default tilePane (200) — otherwise this solid,
+    // fully-opaque land fill sits in Leaflet's default vector-layer pane
+    // (overlayPane, z-index 400), which is ABOVE the tile pane the GBIF
+    // heatmap below renders into, silently painting over every bit of the
+    // density heatmap that falls over land. Only the sliver of a heat blob
+    // that spills into ocean (where this fill is absent) was ever visible —
+    // easy to miss since a coastal species' data looks like it's "tracing
+    // the coastline" either way, but a species whose real distribution is
+    // inland (rivers, lakes, most terrestrial species) showed nothing at
+    // all. Confirmed directly: curled the raw GBIF tile for this exact
+    // species/zoom and got real non-empty image data back, so the fetch
+    // itself was never the problem.
+    const bgPane = map.createPane("speciesMapBgPane");
+    bgPane.style.zIndex = 150;
+    bgPane.style.pointerEvents = "none";
     try {
       const worldResp = await fetch("/assets/vendor/world-countries.geojson");
       if (worldResp.ok) {
         const worldData = await worldResp.json();
         L.geoJSON(worldData, {
+          pane: "speciesMapBgPane",
           style: { color: "#adb5bd", weight: 0.5, fillColor: "#dee2e6", fillOpacity: 1 },
           interactive: false
         }).addTo(map);

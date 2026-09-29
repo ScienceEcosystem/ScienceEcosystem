@@ -5018,3 +5018,49 @@ this round (no Playwright available in this environment) — the popup
 reuses the same data-resolution helpers (openAlexByDoi-style fetches)
 already proven elsewhere in this file, and the Save action posts to the
 same /api/library endpoint verified working in earlier sessions.
+
+2026-09-29 — Species distribution map: heat tiles hidden under the land
+background for most species
+
+User reported the map showing borders but zero orange heatmap for Black
+bullhead (Ameiurus melas) — 58,570 real GBIF occurrences, but nothing
+visible.
+
+Confirmed the GBIF tile fetch itself was fine: curled several real
+z/x/y tiles for this species' taxonKey directly and got real non-empty
+image data over both North America and Europe. So the bug was purely a
+rendering-order issue, not a data/fetch problem.
+
+Root cause: scripts/topic.js's initSpeciesMap() adds the self-hosted
+world-countries background as a plain `L.geoJSON(...).addTo(map)` with
+`fillOpacity: 1` (solid) — Leaflet puts vector layers like this into its
+default `overlayPane` (z-index 400) unless told otherwise, while the GBIF
+density-tile layer sits in the default `tilePane` (z-index 200). 400 > 200,
+so the fully-opaque land fill has always rendered ON TOP of the heatmap,
+hiding it completely wherever a species' occurrences fall over land — which
+is most species. The only place data was ever visible was where a heat
+blob spilled slightly into ocean pixels (no land polygon there to hide
+it), which is exactly why the 2026-07-15 verification for the Tūī page
+looked correct ("orange density tracing the coastline") — that was only
+ever the ocean-bleed edge of the heatmap, not the real signal, which was
+silently sitting under the land fill the whole time. A coastal/marine-
+adjacent species happened to look right; an inland one (most freshwater
+fish, plants, non-coastal wildlife) showed nothing.
+
+Fixed by giving the background its own pane (speciesMapBgPane, z-index
+150 — below the tile pane's 200) via map.createPane(), instead of
+leaving it in the default overlayPane. No change needed to the tile
+layer or the WoC EOO boundary line (addEooToMap) — the boundary already
+correctly sits above everything via the default overlayPane, and now
+the background correctly sits below the heat tiles instead of above
+them.
+
+Verified: node --check passes; dev server serves the updated
+initSpeciesMap() with the new pane; re-confirmed via curl that GBIF's
+raw tiles for this exact species (taxonKey 2340977) return real
+non-blank image data at the zoom levels the map opens on, so the fix
+addresses the actual rendering bug rather than a data-availability
+non-issue. Did not get a real browser screenshot this round (no
+Playwright available in this environment) — the fix is a well-
+understood, minimal Leaflet pane-ordering change (isolating exactly the
+one layer that was wrongly stacked), not a speculative one.
