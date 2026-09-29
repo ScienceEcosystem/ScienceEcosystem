@@ -81,26 +81,31 @@ function setupCanvas() {
 // Hide/show the thumbnail strip + Info/Contents/Refs/Links sidebar, for
 // distraction-free reading — a small floating tab on the page's left edge
 // brings it back. Preference persists across PDFs via localStorage.
+function setPdfSidebarHidden(hidden) {
+  const container = document.querySelector('.pdf-container');
+  const toggleBtn = document.getElementById('toggleSidebarBtn');
+  if (!container) return;
+  container.classList.toggle('sidebar-hidden', hidden);
+  if (toggleBtn) {
+    toggleBtn.textContent = hidden ? '▶ Panel' : '◀ Panel';
+    toggleBtn.title = hidden ? 'Show the thumbnails/Info panel' : 'Hide the thumbnails/Info panel';
+    toggleBtn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+  }
+  try { localStorage.setItem('se_pdf_sidebar_hidden', hidden ? '1' : '0'); } catch (_) {}
+}
+
 function bindSidebarToggle() {
   const container = document.querySelector('.pdf-container');
   const toggleBtn = document.getElementById('toggleSidebarBtn');
   const showTab = document.getElementById('showSidebarTab');
   if (!container || !toggleBtn) return;
 
-  function setHidden(hidden) {
-    container.classList.toggle('sidebar-hidden', hidden);
-    toggleBtn.textContent = hidden ? '▶ Panel' : '◀ Panel';
-    toggleBtn.title = hidden ? 'Show the thumbnails/Info panel' : 'Hide the thumbnails/Info panel';
-    toggleBtn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
-    try { localStorage.setItem('se_pdf_sidebar_hidden', hidden ? '1' : '0'); } catch (_) {}
-  }
-
   let hidden = false;
   try { hidden = localStorage.getItem('se_pdf_sidebar_hidden') === '1'; } catch (_) {}
-  setHidden(hidden);
+  setPdfSidebarHidden(hidden);
 
-  toggleBtn.addEventListener('click', () => setHidden(!container.classList.contains('sidebar-hidden')));
-  showTab?.addEventListener('click', () => setHidden(false));
+  toggleBtn.addEventListener('click', () => setPdfSidebarHidden(!container.classList.contains('sidebar-hidden')));
+  showTab?.addEventListener('click', () => setPdfSidebarHidden(false));
 }
 
 async function ensurePdfJs() {
@@ -406,18 +411,22 @@ async function renderLinkLayer(page, viewport, layerEl, pageNumber, tooltipEl) {
       linkEl.title = url;
       pdfLinkIndex.push({ page: pageNumber, label: inferredLabel || url, url });
     } else if (dest) {
-      // A numbered in-text citation (e.g. "[12]") is usually a real embedded
-      // PDF link pointing at the bibliography page. Following it used to
-      // scroll the whole main PDF pane down to that page — jarring when you
-      // just want to check what a citation is. Numbers matching a known
-      // reference instead get the same hover-preview + jump-to-sidebar
-      // treatment as author-year citations, with no PDF scrolling. Figure/
-      // table cross-references keep the real in-PDF jump — that one's useful.
+      // An in-text citation — numbered ("[12]") or author-year
+      // ("Devcich 1979") — is usually a real embedded PDF link pointing at
+      // the bibliography page, since this layer sits ON TOP of the plain
+      // text-layer spans and wins the click. Following it used to scroll
+      // the whole main PDF pane down to that page — jarring when you just
+      // want to check what a citation is, and easy to miss as "still
+      // jumping" even after the text-layer spans got the popup treatment,
+      // since THIS layer's raw link was still catching the click first.
+      // Numbers/author-years matching a known reference instead get the
+      // same hover-preview + popup treatment as plain-text citations, with
+      // no PDF scrolling. Figure/table cross-references keep the real
+      // in-PDF jump — that one's useful.
       const trimmed = hitText.trim();
-      const numericMatch = trimmed.match(/^\[?\s*(\d{1,4})\s*\]?$/);
       const isFigTbl = /fig(ure)?\.?\s*\d|table\s*\d/i.test(trimmed);
-      const refNum = numericMatch ? parseInt(numericMatch[1], 10) : null;
-      const isKnownCitation = refNum && !isFigTbl && (getExtractedRefByNumber(refNum) || getRefByNumber(refNum));
+      const refNum = isFigTbl ? null : findRefNumberInText(trimmed);
+      const isKnownCitation = !!refNum;
 
       if (isKnownCitation && pageWrap && tooltipEl) {
         linkEl.classList.add('citation-highlight');
@@ -445,8 +454,25 @@ async function renderLinkLayer(page, viewport, layerEl, pageNumber, tooltipEl) {
   }
 }
 
+// Builds "lastname_year" → ref number, from whichever reference source is
+// actually populated. PDF-extracted references (the common case — GROBID
+// or the text-layer fallback) are numbered by the PDF's own bibliography;
+// the OpenAlex fallback list is numbered alphabetically. Prefers extracted
+// references when present, since that's the numbering getExtractedRefByNumber
+// (and the Refs sidebar) actually uses.
 function buildAuthorYearMap() {
   authorYearMap = new Map();
+  if (extractedReferences.length) {
+    extractedReferences.forEach((ref) => {
+      const lastName = (ref.authors?.[0] || '')
+        .trim().split(' ').pop().toLowerCase().replace(/[^a-z]/g, '');
+      const year = String(ref.year || '').slice(0, 4);
+      if (!lastName || !year) return;
+      const key = `${lastName}_${year}`;
+      if (!authorYearMap.has(key)) authorYearMap.set(key, ref.number);
+    });
+    return;
+  }
   openAlexRefsList.forEach((w, i) => {
     const lastName = (w.authorships?.[0]?.author?.display_name || '')
       .split(' ').pop().toLowerCase().replace(/[^a-z]/g, '');
@@ -473,9 +499,55 @@ const _ayRe = /\(\s*([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s*[A
 // Smith et al. (2020) / Smith (2020) — author name precedes a "(year)"
 const _narRe = /([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s*[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s+\((\d{4}[a-z]?)\)/g;
 
+// Resolves a short piece of text (typically one PDF link annotation's hit
+// area — a bracketed number or an author-year fragment) to a known
+// reference number, using the same patterns applyCitationHighlightsToLayer
+// matches against the full merged text layer. Used to recognize citations
+// that arrive via a real embedded PDF hyperlink rather than plain text,
+// regardless of numbering style.
+function findRefNumberInText(text) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  const bracketMatch = t.match(/^\[?\s*(\d{1,4})\s*[\]\s,;.]*$/);
+  if (bracketMatch) {
+    const n = parseInt(bracketMatch[1], 10);
+    if (getExtractedRefByNumber(n) || getRefByNumber(n)) return n;
+  }
+  if (!authorYearMap.size) return null;
+  _ayRe.lastIndex = 0;
+  let m = _ayRe.exec(t);
+  if (!m) { _narRe.lastIndex = 0; m = _narRe.exec(t); }
+  if (m) {
+    const lastName = m[1].toLowerCase().replace(/[^a-z]/g, '');
+    const year = m[2].slice(0, 4);
+    return authorYearMap.get(`${lastName}_${year}`) || authorYearMap.get(`${lastName}_${m[2]}`) || null;
+  }
+  // Bare "Lastname Year" / "Lastname et al. 2020a" with no surrounding
+  // parentheses at all — the actual clickable rect of a PDF-embedded
+  // citation link often covers just the name+year and not the punctuation
+  // around it, so neither pattern above (both require a literal "(" ")")
+  // ever matches the isolated hit text. Safe to be looser here than the
+  // full-page scan above: this only runs against text already confirmed
+  // to sit under a real internal PDF link, not arbitrary prose.
+  const bare = t.match(/^([A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s*[A-Za-z]+|and\s+[A-Za-z]+))?[.,]?\s*(\d{4}[a-z]?)[.,;)]*$/);
+  if (bare) {
+    const lastName = bare[1].toLowerCase().replace(/[^a-z]/g, '');
+    const year = bare[2].slice(0, 4);
+    return authorYearMap.get(`${lastName}_${year}`) || authorYearMap.get(`${lastName}_${bare[2]}`) || null;
+  }
+  return null;
+}
+
 function applyCitationHighlightsToLayer(layerEl) {
-  if (!layerEl || !openAlexRefsList.length) return;
-  const maxRef = openAlexRefsList.length;
+  // Works from whichever reference source is populated — PDF-extracted
+  // references (the common case) or the OpenAlex fallback list. Used to
+  // require openAlexRefsList specifically, which meant plain in-text
+  // citations on an extracted-references PDF never got highlighted at
+  // all (no hover preview, no click-to-popup) — the only interaction
+  // available was whatever the PDF's own embedded hyperlinks did, which
+  // for non-numeric (author-year) citations is a raw jump to the
+  // bibliography page inside the PDF itself.
+  if (!layerEl || (!openAlexRefsList.length && !extractedReferences.length)) return;
   const hasAuthorYear = authorYearMap.size > 0;
 
   const spans = Array.from(layerEl.querySelectorAll('span')).filter(s => !s.hasAttribute('data-ref-number'));
@@ -495,7 +567,7 @@ function applyCitationHighlightsToLayer(layerEl) {
   _bracketRe.lastIndex = 0;
   while ((m = _bracketRe.exec(merged))) {
     const firstNum = parseInt(m[1].match(/\d+/)[0], 10);
-    if (firstNum >= 1 && firstNum <= maxRef) {
+    if (getExtractedRefByNumber(firstNum) || getRefByNumber(firstNum)) {
       candidates.push({ start: m.index, end: m.index + m[0].length, refNum: firstNum, priority: 0 });
     }
   }
@@ -1342,6 +1414,7 @@ async function extractPDFReferences(pdfUrl) {
 
     wireReferenceButtons();
     renderFiguresAndTables(data);
+    buildAuthorYearMap();
     applyCitationHighlights();
     wireCitationHover();
 
@@ -1367,6 +1440,7 @@ async function extractPDFReferences(pdfUrl) {
               </div>
             </div>`).join('');
         wireReferenceButtons();
+        buildAuthorYearMap();
         applyCitationHighlights();
       } else {
         refsDiv.innerHTML = '<p class="muted">No references found.</p>';
@@ -1706,6 +1780,17 @@ function openCitationInfoPopup(refNum, anchorEl) {
   closeReferencePopup();
   const base = _citationInfoBaseData(refNum);
   if (!base) return;
+
+  // Also switch the sidebar to Refs and highlight the matching entry there,
+  // same as the popup's own "See in References" button — this never
+  // scrolls the main PDF page (handleReferenceClick only touches the
+  // sidebar), so it's safe to do automatically alongside the popup. If the
+  // side panel is currently collapsed, reveal it too — showing the ref in
+  // a hidden panel wouldn't actually be visible.
+  if (document.querySelector('.pdf-container')?.classList.contains('sidebar-hidden')) {
+    setPdfSidebarHidden(false);
+  }
+  handleReferenceClick(refNum);
 
   const popup = document.createElement('div');
   popup.id = 'citationInfoPopup';

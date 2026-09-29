@@ -5064,3 +5064,83 @@ non-issue. Did not get a real browser screenshot this round (no
 Playwright available in this environment) — the fix is a well-
 understood, minimal Leaflet pane-ordering change (isolating exactly the
 one layer that was wrongly stacked), not a speculative one.
+
+2026-09-29 — PDF reader: citation click still jumped to the in-PDF bibliography, and the sidebar didn't reflect the popup
+
+Follow-up to yesterday's citation info popup. User reported it still
+"jumps to linked section... that section is the ref list in the pdf" —
+i.e. clicking a citation scrolled the main PDF pane down to the
+bibliography page, and asked instead for it to stay on the current page,
+just show the popup, and have the sidebar Refs tab show the same
+reference too.
+
+Root cause, found by tracing the actual click path rather than assuming
+the popup code itself was wrong: this thesis PDF has real embedded PDF
+Link annotations on its author-year in-text citations (e.g. "(Devcich
+1979)"), rendered into `.pdf-link-layer` — a DOM layer that sits on top
+of `.pdf-text-layer` (later sibling in the wrap markup, so it paints
+above and wins the click). renderLinkLayer()'s own citation-vs-real-link
+distinction only recognized bracketed numeric citations ("[12]") as
+"known" and gave everything else — including these author-year
+citations — the raw fallback behavior: follow the PDF's own internal
+destination, i.e. scroll the main pane to the bibliography. The popup
+code from yesterday was correct; it just never got a chance to run for
+this PDF's citation style, because the link layer intercepted the click
+first with completely different, older behavior.
+
+A second, related gap made it worse for PDFs with NO real embedded link
+at all: applyCitationHighlightsToLayer() (the text-layer scanner that
+tags plain citation text with .citation-highlight so it gets a
+hover-preview and our click handler) only ever ran when
+openAlexRefsList was populated — the OpenAlex-fallback numbering. For
+the common case (PDF-extracted references via GROBID, which is what
+this thesis used), that list is empty, so text-layer highlighting never
+ran either, and buildAuthorYearMap() (needed to recognize author-year
+text at all) was only ever called from the OpenAlex-fallback path, never
+from the extraction path.
+
+Fixed all three, so both DOM layers agree on what a "known citation"
+is:
+- buildAuthorYearMap() now builds from extractedReferences when present
+  (preferred — matches the PDF's own numbering) instead of only
+  openAlexRefsList, and is now called after PDF extraction succeeds
+  (and its text-layer fallback), not just after the OpenAlex path.
+- applyCitationHighlightsToLayer()'s early-return and bracket-number
+  validity check now recognize extractedReferences too, not just
+  openAlexRefsList.
+- New findRefNumberInText() — resolves a short piece of text (a link
+  annotation's hit area) to a known ref number via the same bracket/
+  author-year patterns the text-layer scanner uses, plus one more: a
+  bare "Lastname Year" match with no surrounding parentheses at all,
+  since a citation link's actual clickable rect often doesn't include
+  the punctuation around it (verified the exact fragment shapes this
+  needs to handle — "Devcich 1979", "Devcich 1979;", "Kusabs et al.,
+  2026a)" — all match). Safe to be looser here than the full-page
+  scanner: this only ever runs against text already confirmed to sit
+  under a real internal PDF link, not arbitrary prose.
+- renderLinkLayer()'s isKnownCitation check now uses
+  findRefNumberInText() instead of a numeric-only regex, so author-year
+  linked citations get the same popup treatment numeric ones already
+  had — no more raw in-PDF jump for either style.
+
+Also, per the second half of the request ("have the side panel show the
+ref also"): openCitationInfoPopup() now calls handleReferenceClick()
+itself (switches the sidebar to Refs and scrolls/highlights the
+matching card — this only ever touched the sidebar's own scroll
+container, never the main PDF pane, so it was always safe to fire
+automatically) instead of requiring a separate click on the popup's
+"See in References" button. If the side panel is currently collapsed
+(this session's earlier hide/show toggle), it's revealed automatically
+too — showing the reference in a hidden panel wouldn't do anything
+visible otherwise. Factored the toggle's hide/show logic out into
+setPdfSidebarHidden() so both the toolbar button and this new
+auto-reveal path share one implementation.
+
+Verified: node --check passes; regex-tested findRefNumberInText's new
+bare-"Lastname Year" pattern directly in node against the exact
+fragment shapes from the reported PDF (with and without trailing
+punctuation, "et al." variants) — all match correctly; dev server
+starts clean and serves the updated pdf-reader.js. Did not get a real
+click-through in a browser this round (no Playwright available in this
+environment) — flagged, not silently skipped, same as the last few
+PDF-reader changes.
