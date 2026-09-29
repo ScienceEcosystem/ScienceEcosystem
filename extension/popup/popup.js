@@ -240,51 +240,128 @@ function renderJTI(jti) {
 // the site's library separately to sort it — same idea as the folder
 // popover added on the site's own Save button.
 
-const NEW_FOLDER_VALUE = "__new_folder__";
+let _folderCollections = [];
+let _selectedFolderId = null; // null = no folder
 
 async function loadFolderPicker() {
-  const sel = $("saveFolderSelect");
-  if (!sel || _saved) return; // no point picking a folder for an already-saved paper
+  const btn = $("folderPickerBtn");
+  if (!btn || _saved) return; // no point picking a folder for an already-saved paper
   const result = await msg("LIST_COLLECTIONS");
-  const collections = (result?.ok && Array.isArray(result.collections)) ? result.collections : [];
-
-  sel.innerHTML = "";
-  const noneOpt = document.createElement("option");
-  noneOpt.value = "";
-  noneOpt.textContent = "No folder";
-  sel.appendChild(noneOpt);
-
-  collections.forEach((c) => {
-    const opt = document.createElement("option");
-    opt.value = String(c.id);
-    opt.textContent = c.name;
-    sel.appendChild(opt);
-  });
-
-  const newOpt = document.createElement("option");
-  newOpt.value = NEW_FOLDER_VALUE;
-  newOpt.textContent = "+ New folder…";
-  sel.appendChild(newOpt);
-
-  sel.hidden = false;
+  _folderCollections = (result?.ok && Array.isArray(result.collections)) ? result.collections : [];
+  _selectedFolderId = null;
+  setText("folderPickerLabel", "No folder");
+  btn.hidden = false;
 }
 
-async function handleFolderSelectChange() {
-  const sel = $("saveFolderSelect");
-  if (!sel || sel.value !== NEW_FOLDER_VALUE) return;
-  const name = prompt("New folder name:");
-  if (!name || !name.trim()) { sel.value = ""; return; }
-  const result = await msg("CREATE_COLLECTION", { name: name.trim() });
+// Renders a real collapsible folder tree — every folder starts closed, a
+// chevron expands just that branch, clicking a folder's name selects it.
+// Same shape as the site's own save-folder popover (components.js) and the
+// library page's collection picker, so the mental model matches everywhere.
+function renderFolderTree() {
+  const tree = $("folderPickerTree");
+  if (!tree) return;
+  tree.innerHTML = "";
+
+  const rootLi = document.createElement("li");
+  rootLi.textContent = "No folder";
+  rootLi.dataset.id = "";
+  if (_selectedFolderId === null) rootLi.classList.add("selected");
+  rootLi.addEventListener("click", () => selectFolder(null, "No folder"));
+  tree.appendChild(rootLi);
+
+  const byParent = new Map();
+  _folderCollections.forEach((c) => {
+    const k = c.parent_id != null ? String(c.parent_id) : "root";
+    if (!byParent.has(k)) byParent.set(k, []);
+    byParent.get(k).push(c);
+  });
+
+  (function addBranch(parentKey, depth, container) {
+    (byParent.get(parentKey) || []).forEach((c) => {
+      const hasChildren = byParent.has(String(c.id));
+      const li = document.createElement("li");
+      li.dataset.id = String(c.id);
+      li.style.marginLeft = `${depth * 14}px`;
+      if (String(_selectedFolderId) === String(c.id)) li.classList.add("selected");
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "fp-toggle";
+      toggle.textContent = hasChildren ? "▸" : "";
+      toggle.disabled = !hasChildren;
+
+      const name = document.createElement("span");
+      name.className = "fp-name";
+      name.textContent = c.name;
+
+      li.appendChild(toggle);
+      li.appendChild(name);
+      container.appendChild(li);
+
+      li.addEventListener("click", () => selectFolder(c.id, c.name));
+
+      if (hasChildren) {
+        const childWrap = document.createElement("ul");
+        childWrap.style.listStyle = "none";
+        childWrap.style.margin = "0";
+        childWrap.style.padding = "0";
+        childWrap.hidden = true;
+        container.appendChild(childWrap);
+        toggle.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const open = childWrap.hidden;
+          childWrap.hidden = !open;
+          toggle.textContent = open ? "▾" : "▸";
+          if (open && !childWrap.childElementCount) addBranch(String(c.id), depth + 1, childWrap);
+        });
+      }
+    });
+  })("root", 0, tree);
+}
+
+function selectFolder(id, name) {
+  _selectedFolderId = id;
+  setText("folderPickerLabel", name);
+  closeFolderPicker();
+}
+
+function toggleFolderPicker() {
+  const panel = $("folderPickerPanel");
+  if (!panel) return;
+  if (!panel.hidden) { closeFolderPicker(); return; }
+  renderFolderTree();
+  panel.hidden = false;
+  document.addEventListener("click", onFolderPickerOutsideClick, true);
+}
+
+function closeFolderPicker() {
+  const panel = $("folderPickerPanel");
+  if (panel) panel.hidden = true;
+  document.removeEventListener("click", onFolderPickerOutsideClick, true);
+}
+
+function onFolderPickerOutsideClick(e) {
+  const panel = $("folderPickerPanel");
+  const btn = $("folderPickerBtn");
+  if (panel && (panel.contains(e.target) || btn?.contains(e.target))) return;
+  closeFolderPicker();
+}
+
+async function handleNewFolderInput(e) {
+  if (e.key !== "Enter") return;
+  const input = $("folderPickerNewInput");
+  const name = (input.value || "").trim();
+  if (!name) return;
+  input.disabled = true;
+  const result = await msg("CREATE_COLLECTION", { name });
+  input.disabled = false;
   if (!result?.ok || !result.collection) {
     alert(`Could not create folder: ${result?.error || "unknown error"}`);
-    sel.value = "";
     return;
   }
-  const opt = document.createElement("option");
-  opt.value = String(result.collection.id);
-  opt.textContent = result.collection.name;
-  sel.insertBefore(opt, sel.lastElementChild); // keep "+ New folder…" last
-  sel.value = String(result.collection.id);
+  input.value = "";
+  _folderCollections.push(result.collection);
+  selectFolder(result.collection.id, result.collection.name);
 }
 
 // ── Render the detected-paper state ──────────────────────────────────────────
@@ -341,8 +418,7 @@ async function handleSave() {
   btn.disabled = true;
   setSaveStatus("saving", "Saving…");
 
-  const folderSel = $("saveFolderSelect");
-  const collectionId = (folderSel && folderSel.value && folderSel.value !== NEW_FOLDER_VALUE) ? folderSel.value : null;
+  const collectionId = _selectedFolderId || null;
 
   const openAlexTail = _work?.id?.replace("https://openalex.org/", "");
   const result = await msg("SAVE_PAPER", {
@@ -358,7 +434,7 @@ async function handleSave() {
     setText("btnSaveIcon", "✓");
     setText("btnSaveLabel", "Saved");
     setSaveStatus("saved", "✓ Saved to your library");
-    hide("saveFolderSelect");
+    hide("folderPickerBtn"); closeFolderPicker();
   } else {
     btn.disabled = false;
     setSaveStatus("error", `✗ ${result?.error || "Could not save — are you logged in?"}`);
@@ -517,7 +593,8 @@ function setFooter(user) {
 document.addEventListener("DOMContentLoaded", () => {
   // Save paper
   $("btnSave")?.addEventListener("click", handleSave);
-  $("saveFolderSelect")?.addEventListener("change", handleFolderSelectChange);
+  $("folderPickerBtn")?.addEventListener("click", toggleFolderPicker);
+  $("folderPickerNewInput")?.addEventListener("keydown", handleNewFolderInput);
 
   // Save PDF
   $("btnSavePdf")?.addEventListener("click", handleSavePdf);

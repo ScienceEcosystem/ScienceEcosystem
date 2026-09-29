@@ -71,8 +71,17 @@
       <!-- Status strip (already saved / saving / saved) -->
       <div id="saveStatus" class="save-status" hidden></div>
 
-      <!-- Folder picker (populated with the user's library folders; hidden until loaded) -->
-      <select id="saveFolderSelect" class="folder-select" hidden></select>
+      <!-- Folder picker: a button that opens a collapsible folder tree
+           (populated with the user's library folders; hidden until loaded) -->
+      <button type="button" id="folderPickerBtn" class="folder-select" hidden>
+        <span id="folderPickerLabel">No folder</span><span class="folder-picker-chevron">▾</span>
+      </button>
+      <div id="folderPickerPanel" class="folder-picker-panel" hidden>
+        <ul id="folderPickerTree" class="folder-picker-tree"></ul>
+        <div class="folder-picker-newrow">
+          <input type="text" id="folderPickerNewInput" placeholder="+ New folder…"/>
+        </div>
+      </div>
 
       <!-- Actions -->
       <div class="actions">

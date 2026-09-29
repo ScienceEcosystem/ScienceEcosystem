@@ -50,12 +50,57 @@
     overlay.style.display="flex";
     search.focus();
 
+    const rowStyle='padding:.6rem 1rem;cursor:pointer;border-bottom:1px solid #f3f4f6;user-select:none;display:flex;align-items:center;gap:.3rem;';
     function renderList(filter=""){
       const f=filter.toLowerCase();
-      const active=collections.filter(c=>!c.deleted_at&&(!f||c.name.toLowerCase().includes(f)));
-      list.innerHTML=active.length
-        ? active.map(c=>`<li data-id="${c.id}" style="padding:.6rem 1rem;cursor:pointer;border-bottom:1px solid #f3f4f6;user-select:none;" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">${esc(c.name)}</li>`).join("")
-        : `<li style="padding:.6rem 1rem;color:#6b7280;">No collections</li>`;
+      const active=collections.filter(c=>!c.deleted_at);
+      if (f){
+        // Searching flattens the tree — depth/collapse state isn't useful
+        // once you're typing a name to jump straight to it.
+        const matches=active.filter(c=>c.name.toLowerCase().includes(f));
+        list.innerHTML=matches.length
+          ? matches.map(c=>`<li data-id="${c.id}" style="${rowStyle}" onmouseenter="this.style.background='#f8fafc'" onmouseleave="this.style.background=''">${esc(c.name)}</li>`).join("")
+          : `<li style="padding:.6rem 1rem;color:#6b7280;">No collections</li>`;
+        return;
+      }
+      if (!active.length){
+        list.innerHTML=`<li style="padding:.6rem 1rem;color:#6b7280;">No collections</li>`;
+        return;
+      }
+      // Default view: a real collapsible tree, every folder closed to
+      // start — with many nested subfolders, showing everything expanded
+      // at once is as hard to scan as a flat list.
+      const byParent=new Map();
+      active.forEach(c=>{
+        const k=c.parent_id!=null?String(c.parent_id):"root";
+        if(!byParent.has(k)) byParent.set(k,[]);
+        byParent.get(k).push(c);
+      });
+      list.innerHTML="";
+      (function addBranch(parentKey, depth, container){
+        (byParent.get(parentKey)||[]).forEach(c=>{
+          const hasChildren=byParent.has(String(c.id));
+          const li=document.createElement("li");
+          li.dataset.id=c.id;
+          li.style.cssText=rowStyle;
+          li.style.marginLeft=(depth*16)+"px";
+          li.innerHTML=`<button type="button" data-toggle="${c.id}" style="width:18px;flex:0 0 18px;border:none;background:none;cursor:${hasChildren?"pointer":"default"};color:#64748b;font-size:.7rem;padding:0;text-align:center;" ${hasChildren?"":"disabled"}>${hasChildren?"▸":""}</button><span style="flex:1 1 auto;">${esc(c.name)}</span>`;
+          container.appendChild(li);
+          if (hasChildren){
+            const childWrap=document.createElement("ul");
+            childWrap.style.cssText="list-style:none;margin:0;padding:0;";
+            childWrap.hidden=true;
+            container.appendChild(childWrap);
+            li.querySelector("[data-toggle]").addEventListener("click", (ev)=>{
+              ev.stopPropagation();
+              const open=childWrap.hidden;
+              childWrap.hidden=!open;
+              ev.currentTarget.textContent=open?"▾":"▸";
+              if (open && !childWrap.childElementCount) addBranch(String(c.id), depth+1, childWrap);
+            });
+          }
+        });
+      })("root", 0, list);
     }
     renderList();
     search.oninput=()=>renderList(search.value);

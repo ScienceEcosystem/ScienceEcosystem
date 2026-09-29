@@ -710,27 +710,62 @@
 
     if (collections.length){
       pop.appendChild(divider());
-      // Render as a folder tree (indented by parent_id), not a flat
-      // alphabetical list — a subfolder buried in an unrelated part of the
-      // alphabet (e.g. "Crayfish" under "Koura") was otherwise impossible
-      // to place correctly at a glance.
+      // Render as a real collapsible folder tree, not a flat alphabetical
+      // list or an always-expanded indented one — with many nested
+      // subfolders, showing everything open at once is as hard to scan as
+      // a flat list. Every folder starts closed; a chevron expands just
+      // that branch, and clicking the folder's name selects it.
       var byParent = new Map();
       collections.forEach(function(c){
         var k = c && c.parent_id != null ? String(c.parent_id) : "root";
         if (!byParent.has(k)) byParent.set(k, []);
         byParent.get(k).push(c);
       });
-      (function addBranch(parentKey, depth){
+      (function addBranch(parentKey, depth, container){
         (byParent.get(parentKey) || []).forEach(function(c){
-          var row = optionRow(c.name, function(){
+          var hasChildren = byParent.has(String(c.id));
+          var row = document.createElement("div");
+          Object.assign(row.style, { display:"flex", alignItems:"stretch" });
+
+          var toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.textContent = hasChildren ? "▸" : "";
+          toggle.setAttribute("aria-label", hasChildren ? "Expand "+c.name : "");
+          toggle.disabled = !hasChildren;
+          Object.assign(toggle.style, {
+            width:"20px", flex:"0 0 20px", border:"none", background:"none",
+            cursor: hasChildren ? "pointer" : "default", color:"#64748b",
+            fontSize:".7rem", padding:"0", textAlign:"center"
+          });
+
+          var nameBtn = optionRow(c.name, function(){
             closeSaveFolderPopover();
             globalThis.savePaper(paper, btn, c.id);
           });
-          if (depth > 0) row.style.paddingLeft = (10 + depth * 16) + "px";
-          pop.appendChild(row);
-          addBranch(String(c.id), depth + 1);
+          nameBtn.style.flex = "1 1 auto";
+          nameBtn.style.paddingLeft = (depth > 0 ? 4 : 10) + "px";
+
+          row.appendChild(toggle);
+          row.appendChild(nameBtn);
+          if (depth > 0) row.style.marginLeft = (depth * 16) + "px";
+          container.appendChild(row);
+
+          if (hasChildren){
+            var childWrap = document.createElement("div");
+            childWrap.hidden = true;
+            container.appendChild(childWrap);
+            toggle.addEventListener("click", function(){
+              var open = childWrap.hidden;
+              childWrap.hidden = !open;
+              toggle.textContent = open ? "▾" : "▸";
+              toggle.setAttribute("aria-label", (open ? "Collapse " : "Expand ") + c.name);
+              if (open && !childWrap.childElementCount){
+                addBranch(String(c.id), depth + 1, childWrap);
+              }
+            });
+          }
         });
-      })("root", 0);
+      })("root", 0, pop);
     }
 
     pop.appendChild(divider());
