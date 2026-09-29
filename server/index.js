@@ -510,7 +510,7 @@ async function pgInit() {
   await pool.query(`
     DO $$ BEGIN
       ALTER TABLE collection_items ADD CONSTRAINT collection_items_paper_unique UNIQUE (collection_id, paper_id);
-    EXCEPTION WHEN duplicate_object THEN NULL;
+    EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
     END $$;
   `);
 

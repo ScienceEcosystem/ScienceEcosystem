@@ -637,7 +637,7 @@ function wireInlineCitationLink(el, tooltipEl, pageWrap, refNum) {
     ev.preventDefault();
     clearCitationActive();
     el.classList.add('active');
-    handleReferenceClick(refNum);
+    openCitationInfoPopup(refNum, el);
   });
 }
 
@@ -677,8 +677,10 @@ function wireCitationHover(layerEl, tooltipEl) {
     showTooltip(target);
   });
 
-  // Clicking the citation itself scrolls the Refs sidebar to that entry —
-  // it never jumps to a bibliography location inside the PDF page. Since
+  // Clicking the citation opens a small info popup right next to it — title,
+  // authors, abstract snippet, cited-by count, Save/Open/See-in-References —
+  // the same idea as the citation-preview popup other PDF readers show, just
+  // backed by our own OpenAlex data instead of Google Scholar. Since
   // citations no longer show a persistent highlight (only on hover/click —
   // see .citation-highlight in style.css), mark the clicked one .active so
   // there's visible confirmation of what was actually clicked.
@@ -690,7 +692,7 @@ function wireCitationHover(layerEl, tooltipEl) {
     if (!refNum) return;
     clearCitationActive();
     target.classList.add('active');
-    handleReferenceClick(parseInt(refNum, 10));
+    openCitationInfoPopup(parseInt(refNum, 10), target);
   });
 
   layerEl.addEventListener('mouseout', function (e) {
@@ -1599,60 +1601,188 @@ function handleReferenceClick(refNumber) {
   setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 2000);
 }
 
-function showReferencePopup(ref, seUrl) {
-  const existing = document.getElementById('refPopup');
-  if (existing) existing.remove();
+// ── Citation info popup ─────────────────────────────────────────────────────
+// Clicking an in-text citation opens a small card with title/authors/
+// abstract snippet/cited-by count and Save/Open/See-in-References actions,
+// anchored right next to the citation — the same idea as the citation
+// preview popup some PDF readers/extensions show, backed by our own
+// OpenAlex data instead of linking out to Google Scholar.
 
-  const popup = document.createElement('div');
-  popup.id = 'refPopup';
-  popup.style.cssText = [
-    'position: fixed',
-    'top: 50%',
-    'left: 50%',
-    'transform: translate(-50%, -50%)',
-    'background: white',
-    'padding: 2rem',
-    'border-radius: 10px',
-    'box-shadow: 0 4px 20px rgba(0,0,0,0.3)',
-    'max-width: 500px',
-    'z-index: 10000'
-  ].join(';');
-
-  popup.innerHTML = `
-    <h3 style="margin-top:0;">[${ref.number}] ${escapeHtml(ref.title || 'Untitled')}</h3>
-    <p class="muted">${escapeHtml((ref.authors || []).join(', '))}</p>
-    ${ref.year ? `<p class="muted">${escapeHtml(ref.year)}</p>` : ''}
-
-    <div style="display:flex; gap:1rem; margin-top:1.5rem; flex-wrap:wrap;">
-      ${seUrl ? `<a href="${seUrl}" target="_blank" class="btn">View in ScienceEcosystem</a>` : ''}
-      ${ref.doi ? `<a href="https://doi.org/${encodeURIComponent(ref.doi)}" target="_blank" class="btn">View on Publisher</a>` : ''}
-    </div>
-
-    <button onclick="closeReferencePopup()" style="margin-top:1rem;" class="btn btn-small">Close</button>
-  `;
-
-  const backdrop = document.createElement('div');
-  backdrop.id = 'refBackdrop';
-  backdrop.style.cssText = [
-    'position: fixed',
-    'top: 0',
-    'left: 0',
-    'right: 0',
-    'bottom: 0',
-    'background: rgba(0,0,0,0.5)',
-    'z-index: 9999'
-  ].join(';');
-  backdrop.onclick = closeReferencePopup;
-
-  document.body.appendChild(backdrop);
-  document.body.appendChild(popup);
-}
+const _citationInfoCache = new Map(); // refNum -> resolved OpenAlex work, or null
 
 function closeReferencePopup() {
-  const popup = document.getElementById('refPopup');
-  const backdrop = document.getElementById('refBackdrop');
-  if (popup) popup.remove();
-  if (backdrop) backdrop.remove();
+  document.getElementById('citationInfoPopup')?.remove();
+  document.removeEventListener('mousedown', _citationInfoOutsideClick, true);
+}
+function _citationInfoOutsideClick(e) {
+  const popup = document.getElementById('citationInfoPopup');
+  if (popup && !popup.contains(e.target) && !e.target.closest('.citation-highlight')) closeReferencePopup();
+}
+
+function _citationInfoBaseData(refNum) {
+  const extracted = getExtractedRefByNumber(refNum);
+  if (extracted) {
+    return {
+      title: extracted.title || 'Untitled',
+      authors: extracted.authors || [],
+      year: extracted.year || null,
+      doi: extracted.doi || null,
+      openalexId: null,
+      abstract: null,
+      citedBy: null,
+    };
+  }
+  const w = getRefByNumber(refNum);
+  if (!w) return null;
+  return {
+    title: w.title || w.display_name || 'Untitled',
+    authors: (w.authorships || []).map(a => a.author?.display_name).filter(Boolean),
+    year: w.publication_year || null,
+    doi: w.doi ? w.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '') : null,
+    openalexId: w.id ? w.id.replace('https://openalex.org/', '') : null,
+    abstract: w.abstract_inverted_index ? invertAbstractWords(w.abstract_inverted_index) : null,
+    citedBy: typeof w.cited_by_count === 'number' ? w.cited_by_count : null,
+  };
+}
+
+function invertAbstractWords(idx) {
+  if (!idx || typeof idx !== 'object') return null;
+  const words = [];
+  for (const [word, positions] of Object.entries(idx)) {
+    for (const p of positions) words[p] = word;
+  }
+  return words.join(' ') || null;
+}
+
+// Fetches full OpenAlex fields (abstract + cited-by count) for a reference
+// that only came from PDF text extraction — by DOI when we have one,
+// otherwise a title search. Cached per refNum for the life of the page.
+async function _resolveCitationInfoFull(refNum, base) {
+  if (_citationInfoCache.has(refNum)) return _citationInfoCache.get(refNum);
+  const fields = 'id,title,display_name,authorships,publication_year,doi,cited_by_count,abstract_inverted_index';
+  let work = null;
+  try {
+    if (base.doi) {
+      const r = await fetch(`${location.origin}/api/openalex/works/doi:${encodeURIComponent(base.doi)}?select=${fields}&mailto=scienceecosystem@icloud.com`);
+      if (r.ok) work = await r.json();
+    }
+    if (!work && base.title) {
+      const q = base.authors?.[0] ? `${base.title} ${base.authors[0]}` : base.title;
+      const r = await fetch(`${location.origin}/api/openalex/works?search=${encodeURIComponent(q)}&per-page=1&select=${fields}&mailto=scienceecosystem@icloud.com`);
+      if (r.ok) { const d = await r.json(); work = d.results?.[0] || null; }
+    }
+  } catch (_e) { work = null; }
+  _citationInfoCache.set(refNum, work);
+  return work;
+}
+
+function _citationInfoBody(data, saved) {
+  const authorsStr = data.authors.slice(0, 4).join(', ') + (data.authors.length > 4 ? ' et al.' : '');
+  const abstractHtml = data.abstract
+    ? `<div class="ci-abstract" data-full="${escapeHtml(data.abstract)}">${escapeHtml(data.abstract.length > 220 ? data.abstract.slice(0, 220) + '…' : data.abstract)}${data.abstract.length > 220 ? ' <a href="#" class="ci-show-more">Show more</a>' : ''}</div>`
+    : `<div class="ci-abstract muted" style="font-style:italic;">${data._loading ? 'Loading abstract…' : 'No abstract available.'}</div>`;
+  const citedByHtml = typeof data.citedBy === 'number'
+    ? `<div class="muted" style="font-size:.75rem;margin-top:.35rem;">Cited by ${data.citedBy.toLocaleString()}</div>` : '';
+  const paperHref = data.openalexId ? `/paper.html?id=${encodeURIComponent(data.openalexId)}`
+    : (data.doi ? `https://doi.org/${encodeURIComponent(data.doi)}` : null);
+
+  return `
+    <div style="display:flex;align-items:flex-start;gap:.4rem;">
+      <div style="flex:1;font-weight:600;font-size:.88rem;line-height:1.3;">${escapeHtml(data.title)}</div>
+      <button class="ci-close" title="Close" aria-label="Close" style="flex:0 0 auto;border:none;background:none;cursor:pointer;font-size:1rem;color:#64748b;padding:0 .1rem;">×</button>
+    </div>
+    ${authorsStr ? `<div class="muted" style="font-size:.78rem;margin-top:.15rem;">${escapeHtml(authorsStr)}${data.year ? ' · ' + escapeHtml(String(data.year)) : ''}</div>` : ''}
+    <div style="font-size:.8rem;line-height:1.4;margin-top:.5rem;color:#334155;">${abstractHtml}</div>
+    ${citedByHtml}
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.6rem;">
+      <button class="btn btn-secondary btn-xs ci-save" ${saved ? 'disabled' : ''}>${saved ? '✓ Saved' : '+ Save'}</button>
+      ${paperHref ? `<a href="${paperHref}" target="_blank" rel="noopener" class="btn btn-secondary btn-xs">Open paper page →</a>` : ''}
+      <button class="btn btn-secondary btn-xs ci-see-refs">See in References</button>
+    </div>
+  `;
+}
+
+function openCitationInfoPopup(refNum, anchorEl) {
+  closeReferencePopup();
+  const base = _citationInfoBaseData(refNum);
+  if (!base) return;
+
+  const popup = document.createElement('div');
+  popup.id = 'citationInfoPopup';
+  popup.setAttribute('role', 'dialog');
+  popup.setAttribute('aria-label', 'Reference info');
+  const cached = _citationInfoCache.get(refNum);
+  const data = cached ? { ...base, abstract: base.abstract || invertAbstractWords(cached.abstract_inverted_index), citedBy: base.citedBy ?? cached.cited_by_count ?? null, openalexId: base.openalexId || (cached.id ? cached.id.replace('https://openalex.org/', '') : null) } : base;
+  if (!cached) data._loading = true;
+  popup.innerHTML = _citationInfoBody(data, false);
+  document.body.appendChild(popup);
+  _positionCitationInfoPopup(popup, anchorEl);
+  _wireCitationInfoButtons(popup, refNum, data);
+
+  if (!cached) {
+    _resolveCitationInfoFull(refNum, base).then((work) => {
+      if (document.getElementById('citationInfoPopup') !== popup) return; // popup closed/replaced meanwhile
+      const enriched = work ? {
+        ...base,
+        abstract: invertAbstractWords(work.abstract_inverted_index),
+        citedBy: typeof work.cited_by_count === 'number' ? work.cited_by_count : null,
+        openalexId: work.id ? work.id.replace('https://openalex.org/', '') : base.openalexId,
+      } : base;
+      popup.innerHTML = _citationInfoBody(enriched, false);
+      _wireCitationInfoButtons(popup, refNum, enriched);
+    });
+  }
+
+  setTimeout(() => document.addEventListener('mousedown', _citationInfoOutsideClick, true), 0);
+}
+
+function _positionCitationInfoPopup(popup, anchorEl) {
+  popup.style.visibility = 'hidden';
+  popup.style.display = 'block';
+  const w = popup.offsetWidth || 320;
+  const h = popup.offsetHeight || 160;
+  const a = anchorEl.getBoundingClientRect();
+  let left = a.left;
+  let top = a.bottom + 8;
+  if (left + w > window.innerWidth - 12) left = window.innerWidth - w - 12;
+  if (left < 12) left = 12;
+  if (top + h > window.innerHeight - 12) top = a.top - h - 8;
+  if (top < 12) top = 12;
+  popup.style.left = left + 'px';
+  popup.style.top = top + 'px';
+  popup.style.visibility = 'visible';
+}
+
+function _wireCitationInfoButtons(popup, refNum, data) {
+  popup.querySelector('.ci-close')?.addEventListener('click', closeReferencePopup);
+  popup.querySelector('.ci-see-refs')?.addEventListener('click', () => {
+    closeReferencePopup();
+    handleReferenceClick(refNum);
+  });
+  popup.querySelector('.ci-show-more')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const el = e.target.closest('.ci-abstract');
+    if (el) el.textContent = el.dataset.full;
+  });
+  const saveBtn = popup.querySelector('.ci-save');
+  saveBtn?.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    const id = data.openalexId || (data.doi ? `doi:${data.doi}` : null);
+    if (!id) { saveBtn.textContent = 'No ID to save'; return; }
+    try {
+      const res = await fetch('/api/library', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, title: data.title, doi: data.doi || undefined }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      saveBtn.textContent = '✓ Saved';
+    } catch (_e) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Could not save — sign in?';
+    }
+  });
 }
 
 window.handleReferenceClick = handleReferenceClick;

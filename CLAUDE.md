@@ -4952,3 +4952,69 @@ Verified: node --check passes, brace-balance check on the added <style>
 block passes, dev server serves the new button/class/JS. Did not get a
 real click-through in a browser this round (no Playwright available in
 this environment) — flagged, not silently skipped.
+
+2026-09-29 — PDF reader: clicking an in-text citation opens our own info
+popup (title/authors/abstract/cited-by/save), not just a sidebar jump
+
+User showed a screenshot of Chrome's built-in PDF viewer with a citation-
+preview extension (clicking a numbered citation pops up a small card:
+title, snippet, Cited by N, Save/Cite, Related articles — sourced from
+Google Scholar) and asked for the same interaction in our reader, but
+backed by our own info instead of linking out to Scholar.
+
+Found dead code already shaped for exactly this: scripts/pdf-reader.js had
+an unused showReferencePopup()/closeReferencePopup() pair (centered modal
++ backdrop, title/authors/year/DOI link only) that nothing ever called —
+citation clicks only ever scrolled/highlighted the Refs sidebar entry
+(handleReferenceClick()). Replaced it with a real anchored popup:
+
+- openCitationInfoPopup(refNum, anchorEl) — both citation click handlers
+  (the delegated .citation-highlight listener and the inline-PDF-link
+  variant, wireInlineCitationLink) now open this instead of jumping
+  straight to the sidebar. Positioned next to the clicked citation
+  (clamped to the viewport), not centered/backdrop-blocking — you can
+  keep reading around it.
+- Shows title, authors, year, abstract snippet (with "Show more"), and
+  "Cited by N" immediately from whatever's already known locally
+  (PDF-extracted references have title/authors/year/DOI but never an
+  abstract or citation count; the OpenAlex-fallback reference list has
+  those too but was never fetching abstract_inverted_index/
+  cited_by_count — its existing select= list was id/title/authorships/
+  publication_year/doi/open_access only).
+- _resolveCitationInfoFull() lazily fetches the missing fields (by DOI
+  first, else a title search) through the existing /api/openalex proxy,
+  and fills the popup in place once it lands — cached per reference
+  number for the rest of the page view so reopening the same citation
+  doesn't refetch.
+- Actions: "+ Save" (POST /api/library — works for both DOI-based and
+  OpenAlex-id-based refs, same shape the rest of the site uses; CSRF
+  handled automatically by session.js's patched fetch, already loaded on
+  this page), "Open paper page →" (once an OpenAlex id or DOI is known),
+  "See in References" (the previous behavior — jumps to and highlights
+  the sidebar entry), and a close (×). Dismissed by outside click,
+  Escape (already wired to closeReferencePopup() from elsewhere in the
+  file), or the × button.
+- New #citationInfoPopup CSS in style.css (position:fixed, anchored
+  card, not the old full-screen centered/backdrop style).
+
+Also fixed, found while restarting the dev server for this: the
+collection_items_paper_unique constraint's idempotent DO-block (added
+2026-08-22 for shared libraries) only caught the `duplicate_object`
+exception — Postgres actually raises `duplicate_table` when the
+constraint's own backing index already exists but the constraint itself
+doesn't (the state this environment's DB was actually in), so schema
+init was aborting partway on every server start ("continuing without
+database"). Extended the WHEN clause to catch both. Real fix, not
+incidental — this was silently truncating schema migrations on startup
+here, and could do the same anywhere else the DB was ever left in that
+same intermediate state.
+
+Verified live: dev server now starts clean (no "continuing without
+database"), confirmed the /api/openalex proxy request the popup depends
+on (doi lookup with the fuller select= list) returns real cited_by_count
+and abstract_inverted_index, confirmed the served pdf-reader.js/style.css
+contain the new popup code. Did not click through it in a real browser
+this round (no Playwright available in this environment) — the popup
+reuses the same data-resolution helpers (openAlexByDoi-style fetches)
+already proven elsewhere in this file, and the Save action posts to the
+same /api/library endpoint verified working in earlier sessions.

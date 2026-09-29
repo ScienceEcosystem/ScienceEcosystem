@@ -924,6 +924,24 @@ body.annot-erase .pdf-annot { cursor: crosshair; }
   text-align: left;
   font-size: 0.85rem;
 }
+
+/* Citation info popup — opens on click, anchored next to the citation.
+   Own OpenAlex-backed data (title/authors/abstract/cited-by/save), not a
+   link out to an external search engine. */
+#citationInfoPopup {
+  position: fixed;
+  z-index: 10020;
+  background: #fff;
+  color: #1e293b;
+  padding: .7rem .8rem;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.28);
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  text-align: left;
+}
+#citationInfoPopup .ci-show-more { font-size: .78rem; }
 .reference-item {
   transition: all 0.2s ease;
 }
