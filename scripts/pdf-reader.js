@@ -63,19 +63,166 @@ function setupCanvas() {
   `;
 
   // Wire zoom buttons from the static toolbar
-  document.getElementById('zoomIn')?.addEventListener('click', () => {
-    scale = Math.min(scale + 0.25, 4);
-    updateZoomLabel();
-    renderAllPages();
-  });
-  document.getElementById('zoomOut')?.addEventListener('click', () => {
-    scale = Math.max(scale - 0.25, 0.5);
-    updateZoomLabel();
-    renderAllPages();
-  });
+  document.getElementById('zoomIn')?.addEventListener('click', () => setZoom(scale + 0.25));
+  document.getElementById('zoomOut')?.addEventListener('click', () => setZoom(scale - 0.25));
 
   bindAnnotationToolbar();
   bindSidebarToggle();
+  bindZoomMenu();
+  bindPageJumpControls();
+  bindKeyboardShortcuts();
+  document.getElementById('downloadPdfBtn')?.addEventListener('click', downloadCurrentPdf);
+  document.getElementById('exportNotesBtn')?.addEventListener('click', exportAnnotationsMarkdown);
+}
+
+// ── Zoom: presets menu instead of more toolbar buttons ──────────────────────
+function setZoom(newScale) {
+  scale = Math.max(0.5, Math.min(4, newScale));
+  updateZoomLabel();
+  renderAllPages();
+}
+
+async function computeFitScale(mode) {
+  if (!pdfDoc) return scale;
+  try {
+    const page = await pdfDoc.getPage(1);
+    const vp1 = page.getViewport({ scale: 1 });
+    const scrollEl = document.querySelector('.pdf-scroll');
+    const availW = (scrollEl?.clientWidth || 900) - 48;
+    const availH = (scrollEl?.clientHeight || 700) - 48;
+    if (mode === 'width') return Math.max(0.5, Math.min(4, availW / vp1.width));
+    if (mode === 'page') return Math.max(0.5, Math.min(4, Math.min(availW / vp1.width, availH / vp1.height)));
+  } catch (_) {}
+  return scale;
+}
+
+function bindZoomMenu() {
+  const label = document.getElementById('zoomLabel');
+  if (!label) return;
+  label.addEventListener('click', () => {
+    const existing = document.getElementById('zoomMenu');
+    if (existing) { existing.remove(); return; }
+
+    const menu = document.createElement('div');
+    menu.id = 'zoomMenu';
+    const presets = [50, 75, 100, 125, 150, 175, 200];
+    menu.innerHTML =
+      presets.map(p => `<button data-zoom="${p}">${p}%</button>`).join('') +
+      `<hr>
+       <button data-zoom="width">Fit width</button>
+       <button data-zoom="page">Fit page</button>`;
+    document.body.appendChild(menu);
+
+    const r = label.getBoundingClientRect();
+    menu.style.left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8) + 'px';
+    menu.style.top = (r.bottom + 4) + 'px';
+
+    menu.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-zoom]');
+      if (!btn) return;
+      const val = btn.getAttribute('data-zoom');
+      menu.remove();
+      if (val === 'width' || val === 'page') {
+        setZoom(await computeFitScale(val));
+      } else {
+        setZoom(Number(val) / 100);
+      }
+    });
+
+    setTimeout(() => {
+      const onOutside = (e) => {
+        if (!menu.contains(e.target) && e.target !== label) {
+          menu.remove();
+          document.removeEventListener('mousedown', onOutside);
+        }
+      };
+      document.addEventListener('mousedown', onOutside);
+    }, 0);
+  });
+}
+
+// ── Page navigation: lives in the thumbnail rail's footer, not the top
+// toolbar — thumbnails are already the page-navigation surface, so a page
+// number + prev/next belongs right there rather than as more top-bar chrome.
+function goToPage(n) {
+  if (!pdfDoc) return;
+  const target = Math.max(1, Math.min(pdfDoc.numPages, Math.round(n)));
+  renderPage(target);
+  scrollToPage(target);
+}
+
+function bindPageJumpControls() {
+  const input = document.getElementById('pdfPageInput');
+  const prevBtn = document.getElementById('pdfPrevPageBtn');
+  const nextBtn = document.getElementById('pdfNextPageBtn');
+  prevBtn?.addEventListener('click', () => goToPage(pageNum - 1));
+  nextBtn?.addEventListener('click', () => goToPage(pageNum + 1));
+  input?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const n = parseInt(input.value, 10);
+    if (Number.isFinite(n)) goToPage(n);
+    else input.value = String(pageNum);
+    input.blur();
+  });
+  input?.addEventListener('blur', () => { input.value = String(pageNum); });
+}
+
+// ── Keyboard shortcuts — no new visible UI, just behavior. Ignored while
+// typing in any input/textarea/contenteditable (search box, note editor,
+// page-jump box) so normal typing is never hijacked.
+function bindKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable;
+    if (isTyping) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    switch (e.key) {
+      case 'ArrowLeft': case 'PageUp':
+        e.preventDefault(); goToPage(pageNum - 1); break;
+      case 'ArrowRight': case 'PageDown':
+        e.preventDefault(); goToPage(pageNum + 1); break;
+      case 'Home':
+        e.preventDefault(); goToPage(1); break;
+      case 'End':
+        e.preventDefault(); if (pdfDoc) goToPage(pdfDoc.numPages); break;
+      case '+': case '=':
+        e.preventDefault(); setZoom(scale + 0.25); break;
+      case '-':
+        e.preventDefault(); setZoom(scale - 0.25); break;
+      case '/':
+        e.preventDefault(); document.getElementById('pdfSearchInput')?.focus(); break;
+      default: return;
+    }
+  });
+}
+
+// ── Download the exact PDF currently loaded, regardless of which of the
+// several load paths (signed R2 URL, streamed library upload, external
+// proxy) brought it in — pdf.js keeps the original bytes regardless of how
+// the document was opened, so this is simpler and more reliable than
+// re-deriving/re-fetching a download URL per load path.
+async function downloadCurrentPdf() {
+  const btn = document.getElementById('downloadPdfBtn');
+  if (!pdfDoc) return;
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+    const data = await pdfDoc.getData();
+    const blob = new Blob([data], { type: 'application/pdf' });
+    const blobUrl = URL.createObjectURL(blob);
+    const name = (document.title || 'document').replace(/\s*\|\s*ScienceEcosystem\s*$/i, '').replace(/[\/\\?%*:|"<>]/g, '-').trim() || 'document';
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = name + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+  } catch (_e) {
+    if (pdfUrl) window.open(pdfUrl, '_blank');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬇ Download PDF'; }
+  }
 }
 
 // Hide/show the thumbnail strip + Info/Contents/Refs/Links sidebar, for
@@ -284,8 +431,30 @@ function showPdfError(customMessage, isLibraryLoss) {
 
 function renderPage(num) {
   pageNum = num;
-  const numEl = document.getElementById('pageNum');
-  if (numEl) numEl.textContent = String(num);
+  const input = document.getElementById('pdfPageInput');
+  if (input) input.value = String(num);
+  saveLastPageDebounced(num);
+}
+
+// ── Resume where you left off: persists the current page per PDF (keyed by
+// its URL, same pattern annotationKey already uses) so reopening a long
+// document doesn't always dump you back at page 1.
+let _savePageTimer = null;
+function lastPageStorageKey() {
+  return 'se_pdf_lastpage_' + encodeURIComponent(pdfUrl || '');
+}
+function saveLastPageDebounced(num) {
+  if (!pdfUrl) return;
+  clearTimeout(_savePageTimer);
+  _savePageTimer = setTimeout(() => {
+    try { localStorage.setItem(lastPageStorageKey(), String(num)); } catch (_) {}
+  }, 400);
+}
+function getSavedPage() {
+  try {
+    const v = parseInt(localStorage.getItem(lastPageStorageKey()), 10);
+    return Number.isFinite(v) && v >= 1 ? v : null;
+  } catch (_) { return null; }
 }
 
 async function renderTextLayer(page, viewport, layerEl, tooltipEl) {
@@ -809,10 +978,21 @@ function onNextPage() {
 // Any async step that sees a stale generation aborts early.
 let _renderGen = 0;
 
+let _restoredInitialPage = false;
 async function renderAllPages() {
   if (!pdfDoc) return;
   const gen = ++_renderGen; // claim this render slot
   pageRendering = true;
+
+  // Resume where you left off — only on the very first render of this
+  // document, not on every re-render (zoom changes also call this, and
+  // should keep whatever page you're currently on, not jump back to a
+  // stale saved position).
+  if (!_restoredInitialPage) {
+    _restoredInitialPage = true;
+    const saved = getSavedPage();
+    if (saved) pageNum = Math.min(saved, pdfDoc.numPages);
+  }
 
   const pagesHost = document.getElementById('pdfPages');
   if (!pagesHost) return;
@@ -869,6 +1049,11 @@ async function renderAllPages() {
   if (_renderGen !== gen) return;
 
   renderPage(pageNum);
+  // Re-renders (zoom changes) fully rebuild #pdfPages, which would otherwise
+  // silently drop the viewport back to the top of the document every time —
+  // jump back to whatever page was current (also what makes the "resume
+  // where you left off" restore above actually land in view on first load).
+  scrollToPage(pageNum);
   renderPdfLinksSidebar();
   pageRendering = false;
   searchAllText = null;
@@ -878,8 +1063,35 @@ async function renderAllPages() {
   extractFiguresTablesFromText();
 }
 
+// Explicit page jumps (page-jump box, thumbnail click, keyboard shortcuts,
+// figure/note/outline jumps) all go through here. The scroll-position
+// tracker below fires several times DURING a smooth-scroll animation and
+// can otherwise "win" against an intentional jump — e.g. briefly seeing the
+// page just before the target as more visible than the target itself mid-
+// animation, and stomping pageNum/the page-number box back to it right as
+// the scroll settles. Suppressing the tracker for the duration of the
+// animation fixes that without touching the (many) call sites individually.
+let _suppressScrollTracking = false;
+let _suppressScrollTrackingTimer = null;
 function scrollToPage(num) {
+  const scrollEl = document.querySelector('.pdf-scroll');
   const el = document.querySelector(`.pdf-page-wrap[data-page="${num}"]`);
+
+  _suppressScrollTracking = true;
+  clearTimeout(_suppressScrollTrackingTimer);
+  const resume = () => { _suppressScrollTracking = false; };
+  // Prefer the real 'scrollend' event over a guessed timeout — a smooth
+  // scroll's duration varies with distance, and a fixed timeout either
+  // resumes tracking too early (letting it observe mid-animation and
+  // stomp pageNum back to the page just before the target — the exact bug
+  // this suppression exists to prevent) or unnecessarily late.
+  if (scrollEl && 'onscrollend' in scrollEl) {
+    scrollEl.addEventListener('scrollend', resume, { once: true });
+    _suppressScrollTrackingTimer = setTimeout(resume, 2500); // safety net
+  } else {
+    _suppressScrollTrackingTimer = setTimeout(resume, 700);
+  }
+
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   // Sync thumbnail active state
   document.querySelectorAll('.pdf-thumb').forEach(t => {
@@ -898,6 +1110,7 @@ function startScrollPageTracker() {
   if (!wraps.length) return;
 
   _scrollTracker = new IntersectionObserver((entries) => {
+    if (_suppressScrollTracking) return;
     let best = null, bestRatio = -1;
     entries.forEach(e => { if (e.intersectionRatio > bestRatio) { bestRatio = e.intersectionRatio; best = e.target; } });
     if (best) {
@@ -968,17 +1181,19 @@ async function renderThumbnails() {
   const strip = document.getElementById('pdfThumbnailStrip');
   if (!strip || !pdfDoc) return;
   strip.innerHTML = '';
+  const totalLabel = document.getElementById('pdfPageTotalLabel');
+  if (totalLabel) totalLabel.textContent = '/ ' + pdfDoc.numPages;
   for (let i = 1; i <= pdfDoc.numPages; i++) {
     const page = await pdfDoc.getPage(i);
     const vp = page.getViewport({ scale: 0.18 });
     const canvas = document.createElement('canvas');
     canvas.width = vp.width;
     canvas.height = vp.height;
-    canvas.className = 'pdf-thumb' + (i === 1 ? ' active' : '');
+    canvas.className = 'pdf-thumb' + (i === pageNum ? ' active' : '');
     canvas.setAttribute('data-page', String(i));
     canvas.title = 'Page ' + i;
     page.render({ canvasContext: canvas.getContext('2d'), viewport: vp });
-    canvas.addEventListener('click', () => { renderPage(i); setTimeout(() => scrollToPage(i), 30); });
+    canvas.addEventListener('click', () => goToPage(i));
     const label = document.createElement('span');
     label.className = 'pdf-thumb-label';
     label.textContent = i;
@@ -1527,7 +1742,7 @@ function renderFiguresAndTables(data) {
       figuresDiv.innerHTML = '<p class="muted" style="font-size:.8rem;">No figure captions detected.</p>';
     } else {
       figuresDiv.innerHTML = figures.map(f => `
-        <div class="reference-item" style="cursor:pointer;" onclick="scrollToPage(${Number(f.page)})">
+        <div class="reference-item" style="cursor:pointer;" onclick="jumpToPageWithFlash(${Number(f.page)})">
           <span class="reference-number">Fig ${escapeHtml(String(f.number))}</span>
           <div>
             <strong style="font-size:.82rem;">${escapeHtml(f.caption || 'No caption')}</strong>
@@ -1543,7 +1758,7 @@ function renderFiguresAndTables(data) {
       tablesDiv.innerHTML = '<p class="muted" style="font-size:.8rem;">No table captions detected.</p>';
     } else {
       tablesDiv.innerHTML = tables.map(t => `
-        <div class="reference-item" style="cursor:pointer;" onclick="scrollToPage(${Number(t.page)})">
+        <div class="reference-item" style="cursor:pointer;" onclick="jumpToPageWithFlash(${Number(t.page)})">
           <span class="reference-number">Table ${escapeHtml(String(t.number))}</span>
           <div>
             <strong style="font-size:.82rem;">${escapeHtml(t.caption || 'No caption')}</strong>
@@ -1873,6 +2088,7 @@ function _wireCitationInfoButtons(popup, refNum, data) {
 window.handleReferenceClick = handleReferenceClick;
 window.closeReferencePopup = closeReferencePopup;
 window.jumpToInternalLink = jumpToInternalLink;
+window.jumpToPageWithFlash = function (page) { goToPage(page); flashPageWrap(page); };
 
 // Escape handled by the combined listener below (removeSelToolbar + closeReferencePopup)
 
@@ -1891,6 +2107,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Try loading annotations from server first, fall back to localStorage
   const serverLoaded = await loadAnnotationsFromServer();
   if (!serverLoaded) loadAnnotations();
+  renderNotesTab();
 
   loadPDF(pdfUrl);
 
@@ -2536,6 +2753,122 @@ function saveAnnotations() {
     localStorage.setItem(annotationKey, JSON.stringify(annotations));
   } catch (_e) {}
   scheduleSyncAnnotations();
+  renderNotesTab();
+}
+
+// ── Notes tab: every highlight/underline/sticky-note on this PDF in one
+// place — same idea as Zotero's annotation sidebar, and a real gap before
+// this: annotations only ever lived scattered across the page itself, with
+// no way to see or jump between them all at once.
+const ANNOT_TYPE_LABEL = { highlight: 'Highlight', underline: 'Underline', note: 'Note' };
+function renderNotesTab() {
+  const host = document.getElementById('pdfNotesList');
+  if (!host) return;
+  if (!annotations.length) {
+    host.innerHTML = '<p class="muted" style="font-size:.85rem;">No highlights or notes yet — select text, or use the Note tool, to add some.</p>';
+    return;
+  }
+  const byPage = new Map();
+  annotations.forEach(a => {
+    if (!byPage.has(a.page)) byPage.set(a.page, []);
+    byPage.get(a.page).push(a);
+  });
+  const pages = Array.from(byPage.keys()).sort((x, y) => x - y);
+
+  host.innerHTML = pages.map(p => `
+    <div style="margin-bottom:.9rem;">
+      <div class="muted" style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:.3rem;cursor:pointer;" data-jump-page="${p}">Page ${p}</div>
+      ${byPage.get(p).map(a => `
+        <div class="reference-item" data-annot-jump="${escapeHtml(a.id)}" style="padding:.55rem .7rem;margin-bottom:.4rem;display:flex;gap:.4rem;align-items:flex-start;">
+          <span style="flex-shrink:0;width:10px;height:10px;border-radius:50%;margin-top:.25rem;background:${a.type === 'note' ? '#f59e0b' : (a.color || '#fde68a')};"></span>
+          <div style="flex:1;min-width:0;">
+            <div class="muted" style="font-size:.68rem;">${ANNOT_TYPE_LABEL[a.type] || a.type}</div>
+            ${a.quote ? `<div style="font-size:.82rem;font-style:italic;color:#334155;">"${escapeHtml(a.quote.slice(0, 160))}${a.quote.length > 160 ? '…' : ''}"</div>` : ''}
+            ${a.note ? `<div style="font-size:.82rem;color:#1e293b;margin-top:${a.quote ? '.25rem' : '0'};">${escapeHtml(a.note)}</div>` : ''}
+          </div>
+          <button data-annot-delete="${escapeHtml(a.id)}" title="Delete" style="flex-shrink:0;border:none;background:none;color:#94a3b8;cursor:pointer;font-size:.85rem;">×</button>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  host.querySelectorAll('[data-jump-page]').forEach(el => {
+    el.addEventListener('click', () => { const p = Number(el.getAttribute('data-jump-page')); goToPage(p); flashPageWrap(p); });
+  });
+  host.querySelectorAll('[data-annot-jump]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-annot-delete]')) return;
+      const id = el.getAttribute('data-annot-jump');
+      const a = annotations.find(x => x.id === id);
+      if (a) jumpToAnnotation(a);
+    });
+  });
+  host.querySelectorAll('[data-annot-delete]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = el.getAttribute('data-annot-delete');
+      const a = annotations.find(x => x.id === id);
+      removeAnnotation(id);
+      if (a) renderAnnotationsForPage(a.page);
+      renderNotesTab();
+    });
+  });
+}
+
+function flashPageWrap(page) {
+  const wrap = document.querySelector(`.pdf-page-wrap[data-page="${page}"]`);
+  if (!wrap) return;
+  wrap.classList.add('pdf-jump-flash');
+  setTimeout(() => wrap.classList.remove('pdf-jump-flash'), 1400);
+}
+
+function jumpToAnnotation(a) {
+  goToPage(a.page);
+  setTimeout(() => {
+    const els = document.querySelectorAll(`.pdf-annot[data-annot-id="${a.id}"], .pdf-annot-note-pin[data-annot-id="${a.id}"]`);
+    if (els.length) {
+      els.forEach(el => {
+        el.classList.add('pdf-annot-jump-flash');
+        setTimeout(() => el.classList.remove('pdf-annot-jump-flash'), 1600);
+      });
+    } else {
+      flashPageWrap(a.page);
+    }
+  }, 350); // after the smooth scroll settles
+}
+
+// Downloads every highlight/note on this PDF as a Markdown file, grouped by
+// page — a real "your annotations, out of the app" export, the same idea
+// as library-page.js's existing per-item annotation export.
+function exportAnnotationsMarkdown() {
+  if (!annotations.length) return;
+  const byPage = new Map();
+  annotations.forEach(a => {
+    if (!byPage.has(a.page)) byPage.set(a.page, []);
+    byPage.get(a.page).push(a);
+  });
+  const pages = Array.from(byPage.keys()).sort((x, y) => x - y);
+  const title = (document.title || 'PDF').replace(/\s*\|\s*ScienceEcosystem\s*$/i, '');
+  let md = `# Annotations — ${title}\n\n`;
+  pages.forEach(p => {
+    md += `## Page ${p}\n\n`;
+    byPage.get(p).forEach(a => {
+      md += `- **${ANNOT_TYPE_LABEL[a.type] || a.type}**`;
+      if (a.quote) md += `: "${a.quote}"`;
+      md += '\n';
+      if (a.note) md += `  > ${a.note}\n`;
+    });
+    md += '\n';
+  });
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = title.replace(/[\/\\?%*:|"<>]/g, '-').trim() + '-annotations.md';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 async function findScienceEcosystemLink(ref) {

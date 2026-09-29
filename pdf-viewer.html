@@ -51,10 +51,10 @@
       position: relative;
     }
 
-    /* Hide side panel: collapses the thumbnail strip + Info/Contents/Refs/
+    /* Hide side panel: collapses the thumbnail rail + Info/Contents/Refs/
        Links sidebar for distraction-free reading. A small floating tab
        stays on the left edge of the page area so it's easy to bring back. */
-    .pdf-container.sidebar-hidden #pdfThumbnailStrip,
+    .pdf-container.sidebar-hidden #pdfThumbRail,
     .pdf-container.sidebar-hidden .pdf-sidebar {
       display: none;
     }
@@ -76,7 +76,30 @@
     }
     .pdf-container.sidebar-hidden #showSidebarTab { display: block; }
 
-    /* Thumbnail strip */
+    /* Thumbnail rail: the scrollable thumbnail strip plus a page-jump
+       footer pinned under it. Page navigation belongs here, not as more
+       buttons crammed into the top toolbar — this rail is already the
+       page-navigation surface (that's what thumbnails are), so a
+       page-number readout and prev/next controls are a natural extension
+       of it rather than new chrome. */
+    #pdfThumbRail {
+      width: 80px;
+      flex-shrink: 0;
+      background: #2d2d2d;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    #pdfThumbnailStrip {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 4px;
+    }
     #pdfThumbnailStrip::-webkit-scrollbar { width: 4px; }
     #pdfThumbnailStrip::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
     .pdf-thumb {
@@ -96,6 +119,38 @@
       display: block;
       margin-top: 2px;
     }
+    #pdfPageJump {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: .35rem 2px;
+      border-top: 1px solid #444;
+      background: #262626;
+    }
+    #pdfPageJump button {
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      cursor: pointer;
+      font-size: .85rem;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    #pdfPageJump button:disabled { color: #555; cursor: default; }
+    #pdfPageJump button:not(:disabled):hover { color: #fff; }
+    #pdfPageInput {
+      width: 28px;
+      text-align: center;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 3px;
+      color: #f1f5f9;
+      font-size: .72rem;
+      padding: 1px 0;
+    }
+    #pdfPageTotalLabel { color: #94a3b8; font-size: .68rem; }
 
     /* Sidebar tabs */
     .pdf-tab-btn { color: #555; }
@@ -323,6 +378,46 @@
     .pdf-sel-toolbar button:hover {
       background: rgba(255,255,255,0.18);
     }
+
+    /* Zoom presets: the % readout is a button that opens this menu, rather
+       than adding more +/- style buttons to the toolbar for each preset. */
+    #zoomMenu {
+      position: fixed;
+      z-index: 10015;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(0,0,0,.2);
+      padding: 4px;
+      min-width: 130px;
+      font-size: .82rem;
+    }
+    #zoomMenu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: .35rem .6rem;
+      border: none;
+      background: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #1f2937;
+      font: inherit;
+    }
+    #zoomMenu button:hover { background: #f1f5f9; }
+    #zoomMenu hr { border: none; border-top: 1px solid #eee; margin: 3px 0; }
+
+    /* Momentary highlight when jumping to a figure/table/annotation from
+       the sidebar, so landing on the right spot is obvious at a glance. */
+    .pdf-jump-flash {
+      outline: 3px solid #0284c7 !important;
+      outline-offset: 2px;
+      transition: outline-color .3s;
+    }
+    .pdf-annot-jump-flash {
+      outline: 3px solid #f59e0b !important;
+      outline-offset: 1px;
+    }
   </style>
 <link rel="manifest" href="/manifest.json"/>
 <meta name="theme-color" content="#0f172a"/>
@@ -367,8 +462,16 @@
   </nav>
 
   <div class="pdf-container">
-    <!-- Thumbnail strip -->
-    <div id="pdfThumbnailStrip" style="width:80px;flex-shrink:0;background:#2d2d2d;overflow-y:auto;display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 4px;"></div>
+    <!-- Thumbnail rail: scrollable thumbnails + a page-jump footer -->
+    <div id="pdfThumbRail">
+      <div id="pdfThumbnailStrip"></div>
+      <div id="pdfPageJump">
+        <button id="pdfPrevPageBtn" title="Previous page (←)" aria-label="Previous page">‹</button>
+        <input id="pdfPageInput" type="text" inputmode="numeric" value="1" aria-label="Page number"/>
+        <span id="pdfPageTotalLabel">/ –</span>
+        <button id="pdfNextPageBtn" title="Next page (→)" aria-label="Next page">›</button>
+      </div>
+    </div>
 
     <aside class="pdf-sidebar">
       <!-- Sidebar tabs -->
@@ -376,12 +479,16 @@
         <button class="pdf-tab-btn active" data-tab="info" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid #0284c7;cursor:pointer;font-weight:600;">Info</button>
         <button class="pdf-tab-btn" data-tab="contents" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Contents</button>
         <button class="pdf-tab-btn" data-tab="refs" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Refs</button>
+        <button class="pdf-tab-btn" data-tab="notes" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Notes</button>
         <button class="pdf-tab-btn" data-tab="links" style="flex:1;padding:.4rem .2rem;font-size:.8rem;background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;">Links</button>
       </div>
 
       <!-- Info tab -->
       <div id="tabInfo" class="pdf-tab-panel">
         <div id="pdfMetadata" class="paper-metadata"><div class="loading-spinner">Loading paper info...</div></div>
+        <div style="display:flex;gap:.4rem;margin:-.75rem 0 1.25rem;">
+          <button id="downloadPdfBtn" class="btn btn-secondary btn-xs" title="Download this PDF">⬇ Download PDF</button>
+        </div>
         <h3 style="margin:1.5rem 0 .5rem;font-size:1rem;">Research Objects</h3>
         <div id="pdfResearchObjects"><div class="loading-spinner">Loading...</div></div>
         <h3 style="margin:1.5rem 0 .5rem;font-size:1rem;">Figures</h3>
@@ -398,6 +505,17 @@
       <!-- References tab -->
       <div id="tabRefs" class="pdf-tab-panel" style="display:none;">
         <div id="pdfReferences"><div class="loading-spinner">Loading references…</div></div>
+      </div>
+
+      <!-- Notes tab: every highlight/underline/sticky-note on this PDF in
+           one place (Zotero-style annotation list), instead of only being
+           visible scattered across the page itself. -->
+      <div id="tabNotes" class="pdf-tab-panel" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+          <span class="muted" style="font-size:.78rem;">Highlights &amp; notes</span>
+          <button id="exportNotesBtn" class="btn btn-secondary btn-xs" title="Download all highlights and notes as Markdown">↓ Export</button>
+        </div>
+        <div id="pdfNotesList"><p class="muted" style="font-size:.85rem;">No highlights or notes yet — select text, or use the Note tool, to add some.</p></div>
       </div>
 
       <!-- Links tab -->
@@ -418,10 +536,12 @@
         <button id="annotEraseBtn" class="btn btn-secondary btn-xs">Erase</button>
         <button id="annotClearBtn" class="btn btn-secondary btn-xs">Clear All</button>
         <div style="width:1px;height:18px;background:#dee2e6;margin:0 .2rem;"></div>
-        <!-- Zoom controls -->
-        <button id="zoomOut" class="btn btn-secondary btn-xs" title="Zoom out" style="font-size:1rem;line-height:1;padding:.15rem .5rem;">−</button>
-        <span id="zoomLabel" class="muted" style="font-size:.8rem;min-width:36px;text-align:center;">150%</span>
-        <button id="zoomIn" class="btn btn-secondary btn-xs" title="Zoom in" style="font-size:1rem;line-height:1;padding:.15rem .5rem;">+</button>
+        <!-- Zoom controls — the % readout doubles as a button opening a
+             preset menu (50–200%, Fit width, Fit page), so zoom presets
+             don't need their own row of buttons. -->
+        <button id="zoomOut" class="btn btn-secondary btn-xs" title="Zoom out (−)" style="font-size:1rem;line-height:1;padding:.15rem .5rem;">−</button>
+        <button id="zoomLabel" class="btn btn-secondary btn-xs" title="Zoom presets" style="font-size:.8rem;min-width:36px;text-align:center;">150%</button>
+        <button id="zoomIn" class="btn btn-secondary btn-xs" title="Zoom in (+)" style="font-size:1rem;line-height:1;padding:.15rem .5rem;">+</button>
         <div style="flex:1;"></div>
         <!-- Full-text search -->
         <div style="display:flex;align-items:center;gap:.3rem;">

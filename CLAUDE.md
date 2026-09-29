@@ -5144,3 +5144,87 @@ starts clean and serves the updated pdf-reader.js. Did not get a real
 click-through in a browser this round (no Playwright available in this
 environment) — flagged, not silently skipped, same as the last few
 PDF-reader changes.
+
+2026-09-29 — PDF reader: page navigation, zoom presets, resume position,
+annotations list, download — designed into existing surfaces, not bolted
+onto the toolbar
+
+Follow-up to the earlier "compare to known PDF readers" discussion. User
+asked for the recommended set but explicitly not as more toolbar buttons —
+to actually think about where each belongs. Redesigned around the page's
+existing structure instead of the top toolbar:
+
+- Page navigation lives in the thumbnail rail, not the toolbar. The
+  thumbnail strip (#pdfThumbnailStrip) is already the page-navigation
+  surface — restructured it into a new #pdfThumbRail (scrollable
+  thumbnails + a slim sticky footer: ‹ page-number-box / total ›), instead
+  of adding page buttons to the already-busy top bar. The #pageNum element
+  renderPage() referenced didn't actually exist anywhere in the page (dead
+  reference, presumably left over from an earlier design) — real page
+  navigation genuinely didn't exist before this.
+- Zoom presets replace the plain +/- readout with a menu, not more
+  buttons: the "150%" label is now a button (#zoomLabel) that opens a
+  small popover (50–200%, Fit width, Fit page) — same toolbar footprint as
+  before, more capability behind one click.
+- New "Notes" tab (5th, alongside Info/Contents/Refs/Links) — every
+  highlight/underline/sticky-note on the PDF in one place, grouped by
+  page, click to jump+flash, delete inline, "↓ Export" to Markdown. This
+  is the single biggest Zotero-parity gap from the earlier comparison:
+  annotations only ever lived scattered across the page itself, with zero
+  way to see or export them as a set — belongs as a sidebar tab (matching
+  Zotero's own pattern and this page's existing tab-based IA) rather than
+  a toolbar dropdown.
+- "Download PDF" lives in the Info tab's metadata area (next to where
+  title/authors/citation count already render), not the toolbar — a
+  document-level action belongs with the other document info, and stays
+  visible even for PDFs with no OpenAlex paperId (deliberately NOT
+  generated inside the paperId-only metadata card, so it doesn't
+  disappear when that never loads). Uses pdfDoc.getData() to grab the
+  exact bytes already loaded, regardless of which of the several load
+  paths (signed R2 URL, streamed upload, external proxy) brought the PDF
+  in — simpler and more reliable than re-deriving a download URL per path.
+- Figures/Tables sidebar entries (already jump-to-page — this existed)
+  now also flash the target page briefly, so landing on the right spot is
+  obvious.
+- Resume last page per PDF (localStorage, same keying pattern as
+  annotations), and — found while building this — zoom changes were
+  silently dropping the viewport back to the top of the document every
+  time (re-render fully rebuilds the page list with no restore), which
+  the same one-line fix (scroll to the current page at the tail of
+  renderAllPages) fixes for both cases at once.
+- Keyboard shortcuts (←/→/PageUp/PageDown/Home/End for pages, +/− for
+  zoom, "/" to focus PDF search) — no new visible UI at all, ignored
+  while typing in any input/textarea so normal typing is never hijacked.
+
+BUG CAUGHT AND FIXED while testing the page-jump box live (Playwright,
+not just code review): typing a page number and pressing Enter correctly
+navigated, but the box's displayed number would silently revert to the
+PREVIOUS page about 700ms later. Root cause: the existing scroll-position
+IntersectionObserver (which updates pageNum as you scroll) keeps firing
+DURING a smooth-scroll animation, and its per-batch "most visible entry"
+comparison can transiently — or in this case, consistently — report the
+page just before the target as more visible right as the animation
+settles, silently overwriting the intentional jump. Not a new bug I
+introduced; the exact same race existed for thumbnail clicks before, just
+never surfaced because nobody was watching the (previously nonexistent)
+page-number box closely enough to notice. Fixed by having scrollToPage()
+suspend the observer around any explicit jump, resumed by the real
+'scrollend' event (not a guessed timeout — animation duration varies with
+scroll distance) with a timeout fallback for browsers without it. This
+single fix (scrollToPage is the shared choke point for every jump path —
+page-jump box, thumbnail clicks, keyboard shortcuts, figure/table/
+reference/annotation/outline jumps) fixes it everywhere at once.
+
+Verified live end-to-end with a real headless browser (installed
+Playwright + Chromium in this environment specifically to check this,
+since the last several PDF-reader changes went out without one) against
+a real multi-page arXiv PDF: page-jump box navigates correctly and holds
+the right number; prev/next buttons work; zoom menu opens, Fit width
+computes and applies a real scale, and the current page is preserved
+across the zoom change; a real text selection → Highlight produced a
+real highlight AND a real Notes-tab entry with the actual quoted text,
+clicking it jumps+flashes with no errors, Export downloads a real
+Markdown file; Download PDF triggers a real file download; the ← → 
+keyboard shortcut advances pages. Screenshots confirm the layout — page-
+jump footer, zoom menu, Notes tab, Download button — all sit where
+intended with no overlap or crowding of the toolbar.
