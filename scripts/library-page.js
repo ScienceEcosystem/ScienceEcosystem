@@ -2302,17 +2302,22 @@
   }
 
   // ---- PDF import (front-end hook; requires /api/library/import-pdf on server) ----
+  function activeRealCollectionId(){
+    return (typeof currentCollectionId==="number") ? currentCollectionId : null;
+  }
   async function handlePdfUpload(file){
     if(!file) return;
     const form = new FormData();
     form.append("file", file);
+    const cid = activeRealCollectionId();
+    if(cid) form.append("collectionId", String(cid));
 
     try{
       const res = await api("/api/library/import-pdf",{ method:"POST", body:form });
       // Expect server to return { item } or { items: [...] }
       let createdItem = null;
       if(res && res.item){
-        createdItem = res.item;
+        createdItem = cid ? { ...res.item, collection_ids: [cid] } : res.item;
         const idx = items.findIndex(x=>String(x.id)===String(createdItem.id));
         if(idx>=0) items[idx]=createdItem; else items.push(createdItem);
       }else if(res && Array.isArray(res.items) && res.items.length){
@@ -2339,17 +2344,21 @@
     // page (title/URL/accessed date), the way Zotero does for any site.
     const isWebUrl = /^https?:\/\//i.test(identifier) && !/doi\.org\/|openalex\.org\/W\d+/i.test(identifier);
     try{
+      const cid = activeRealCollectionId();
       const res = isWebUrl
-        ? await api("/api/library/add-web", { method:"POST", body: JSON.stringify({ url: identifier }) })
-        : await api("/api/library/add-by-doi", { method:"POST", body: JSON.stringify({ identifier }) });
+        ? await api("/api/library/add-web", { method:"POST", body: JSON.stringify({ url: identifier, collectionId: cid }) })
+        : await api("/api/library/add-by-doi", { method:"POST", body: JSON.stringify({ identifier, collectionId: cid }) });
       if(res?.duplicate){
-        toast("Already in your library","info");
+        toast(cid?"Already in your library — added to this folder":"Already in your library","info");
         currentSelection = res.existing_id;
+        await safeRefreshItems();
       } else if(res?.item){
-        const idx = items.findIndex(x=>String(x.id)===String(res.item.id));
-        if(idx>=0) items[idx]=res.item; else items.push(res.item);
-        currentSelection = res.item.id;
-        toast(isWebUrl?"Web page saved to library":"Added to library","success");
+        const newItem = cid ? { ...res.item, collection_ids: [cid] } : res.item;
+        const idx = items.findIndex(x=>String(x.id)===String(newItem.id));
+        if(idx>=0) items[idx]=newItem; else items.push(newItem);
+        currentSelection = newItem.id;
+        const col = cid ? collections.find(c=>String(c.id)===String(cid)) : null;
+        toast(isWebUrl?(col?`Web page saved to "${col.name}"`:"Web page saved to library"):(col?`Added to "${col.name}"`:"Added to library"),"success");
       } else {
         await safeRefreshItems();
       }
@@ -2451,6 +2460,48 @@
         ev.target.value="";
       });
     }
+
+    // Drag-and-drop: dropping a PDF anywhere on the library page imports it
+    // the same way "Add PDF" does — Zotero-style, no need to hunt for the
+    // button. Multiple files are imported one at a time. Non-PDF drops
+    // (dragging text/links) are ignored, since only files carry `dataTransfer.files`.
+    (function wireDropzone(){
+      const grid = $("#libGrid");
+      if(!grid) return;
+      let overlay=null, dragDepth=0;
+      function showOverlay(){
+        if(overlay) return;
+        overlay=document.createElement("div");
+        overlay.textContent="Drop PDF to add to your library";
+        Object.assign(overlay.style,{
+          position:"fixed", inset:"0", zIndex:"9998", display:"flex",
+          alignItems:"center", justifyContent:"center", fontSize:"1.1rem",
+          fontWeight:"600", color:"#0369a1", background:"rgba(224,242,254,.85)",
+          border:"3px dashed #0284c7", pointerEvents:"none"
+        });
+        document.body.appendChild(overlay);
+      }
+      function hideOverlay(){ if(overlay){ overlay.remove(); overlay=null; } dragDepth=0; }
+      function hasFiles(ev){ return Array.from(ev.dataTransfer?.types||[]).includes("Files"); }
+      document.addEventListener("dragenter",(ev)=>{
+        if(!hasFiles(ev)) return;
+        ev.preventDefault(); dragDepth++; showOverlay();
+      });
+      document.addEventListener("dragover",(ev)=>{ if(hasFiles(ev)) ev.preventDefault(); });
+      document.addEventListener("dragleave",(ev)=>{
+        if(!hasFiles(ev)) return;
+        dragDepth=Math.max(0,dragDepth-1);
+        if(dragDepth===0) hideOverlay();
+      });
+      document.addEventListener("drop", async(ev)=>{
+        if(!hasFiles(ev)) return;
+        ev.preventDefault();
+        hideOverlay();
+        const files = Array.from(ev.dataTransfer?.files||[]).filter(f=>f.type==="application/pdf"||/\.pdf$/i.test(f.name));
+        if(!files.length){ toast("Only PDF files can be dropped here","error"); return; }
+        for(const f of files){ await handlePdfUpload(f); }
+      });
+    })();
 
     // Export the currently visible items (selected collection + filters) as one .bib file
     $("#exportLibBibBtn")?.addEventListener("click", async()=>{

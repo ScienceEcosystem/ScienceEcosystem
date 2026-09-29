@@ -4878,3 +4878,52 @@ available in this environment) — the click/expand logic mirrors the
 already browser-verified pattern from the 2026-08-25 flat-tree fix
 closely enough to ship, but worth a visual spot-check next time a
 browser session is available.
+
+2026-09-29 — Add-by-DOI/URL/PDF now files into the open collection; drag-and-drop PDF import
+
+Two asks: (1) adding a paper by DOI/URL while a collection is open should
+land it in that collection, not unfiled; (2) drag a PDF file anywhere onto
+the library page to import it, Zotero-style.
+
+Server: POST /api/library/add-by-doi, /api/library/add-web, and
+/api/library/import-pdf all now accept an optional collectionId
+(JSON body field for the first two, a multipart "collectionId" field for
+the PDF upload, since it's FormData). Gated through the existing
+collectionRole() check (owner/editor only, same as every other write to
+collection_items) — a viewer-only or bogus id is silently ignored, matches
+site behavior elsewhere. Applies even when the item is already in the
+library (duplicate DOI/URL): it still gets filed into the requested
+collection rather than just returning "Already in your library" with no
+side effect, since that's the actual point of asking for it while a
+folder is open.
+
+Client (scripts/library-page.js): activeRealCollectionId() returns
+currentCollectionId only when it's a real folder id (not null/"All Items"
+or the special __duplicates__/__trash__ views), passed through by
+handleAddByDoi and handlePdfUpload. New items get collection_ids set
+locally so they show up in the open folder immediately, no extra
+round-trip; a duplicate-add refreshes from the server since the existing
+item's collection_ids needs a real re-fetch. Toasts now say which folder
+("Added to "X""), plain "Added to library" when no collection is open.
+
+Drag-and-drop: a document-wide dragenter/dragover/drop listener (guarded
+to only intervene when the drag actually carries Files, so normal
+in-page text/link drags — e.g. reordering — are untouched) shows a
+dashed-border "Drop PDF to add to your library" overlay, then routes
+each dropped .pdf through the exact same handlePdfUpload() the toolbar's
+Add PDF button already uses — same server-side DOI/title sniffing,
+same collection filing.
+
+Verified live against the dev server with disposable test accounts
+(cleaned up after): add-by-doi and add-web both filed a real item into a
+freshly-created collection (confirmed via collection_items rows);
+import-pdf with a real downloaded PDF (bitcoin.org/bitcoin.pdf) filed
+into a collection via the new multipart field; re-adding an
+already-in-library DOI while a DIFFERENT collection was open correctly
+added a second collection_items row for the same paper_id, without
+duplicating the library_items row. Confirmed the served
+scripts/library-page.js includes the new dropzone code. Did not get a
+real drag-and-drop browser test in this environment (no Playwright
+available) — the drop handler itself is a thin wrapper around
+handlePdfUpload, which the server-side test above already exercises
+end-to-end.

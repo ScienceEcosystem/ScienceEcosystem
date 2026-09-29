@@ -3094,6 +3094,22 @@ app.post("/api/library/add-by-doi", async (req, res) => {
   try {
     const raw = String(req.body?.identifier || "").trim();
     if (!raw) return res.status(400).json({ error: "identifier required" });
+    const collectionId = Number(req.body?.collectionId) || null;
+
+    // Files the given/resolved item into the requested collection, if any —
+    // used both for a brand-new item and one that already existed (so
+    // adding a DOI while a collection is open still lands it there).
+    const fileIntoCollection = async (idForCollection, m) => {
+      if (!collectionId) return;
+      const role = await collectionRole(sess.orcid, collectionId);
+      if (role !== "owner" && role !== "editor") return;
+      await pool.query(
+        `INSERT INTO collection_items (collection_id, paper_id, orcid, title, doi, year, venue, authors, openalex_id, added_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$3)
+         ON CONFLICT (collection_id, paper_id) DO NOTHING`,
+        [collectionId, idForCollection, sess.orcid, m?.title || null, m?.doi || null, m?.year || null, m?.venue || null, m?.authors || null, m?.openalex_id || null]
+      );
+    };
 
     const doi = normalizeDoi(raw);
     let idTail;
@@ -3110,10 +3126,13 @@ app.post("/api/library/add-by-doi", async (req, res) => {
 
     if (meta.doi) {
       const { rows } = await pool.query(
-        `SELECT id FROM library_items WHERE orcid=$1 AND doi IS NOT NULL AND lower(doi)=lower($2) LIMIT 1`,
+        `SELECT id, title, year, venue, authors, openalex_id FROM library_items WHERE orcid=$1 AND doi IS NOT NULL AND lower(doi)=lower($2) LIMIT 1`,
         [sess.orcid, meta.doi]
       );
-      if (rows.length) return res.json({ ok: true, duplicate: true, existing_id: rows[0].id });
+      if (rows.length) {
+        await fileIntoCollection(rows[0].id, { ...rows[0], doi: meta.doi });
+        return res.json({ ok: true, duplicate: true, existing_id: rows[0].id });
+      }
     }
 
     await pool.query(
@@ -3132,6 +3151,7 @@ app.post("/api/library/add-by-doi", async (req, res) => {
        meta.year, meta.venue, meta.authors, meta.cited_by, meta.abstract, meta.pdf_url,
        meta.item_type, meta.extra_fields ? JSON.stringify(meta.extra_fields) : null]
     );
+    await fileIntoCollection(itemId, { ...meta, id: itemId });
     res.json({ ok: true, item: { id: itemId, ...meta } });
   } catch (e) {
     console.error("POST /api/library/add-by-doi failed:", e);
@@ -3758,9 +3778,10 @@ app.delete("/api/library/pdf/:paperId", async (req, res) => {
 app.post("/api/library/import-pdf", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   try {
-    const { files } = await parseMultipartForm(req, 50 * 1024 * 1024);
+    const { files, fields } = await parseMultipartForm(req, 50 * 1024 * 1024);
     const file = (files || []).find(f => f.field === "file") || files?.[0];
     if (!file?.buffer?.length) return res.status(400).json({ error: "file required" });
+    const collectionId = Number(fields?.collectionId) || null;
 
     const filename = file.filename || "import.pdf";
     const extOk = filename.toLowerCase().endsWith(".pdf");
@@ -3905,6 +3926,18 @@ app.post("/api/library/import-pdf", async (req, res) => {
       [urlPath || storagePath, sess.orcid, item.id]
     );
     extractAndStorePdfText(sess.orcid, item.id, file.buffer, pdfSignals.text); // fire-and-forget, reuses the parse above
+
+    if (collectionId) {
+      const role = await collectionRole(sess.orcid, collectionId);
+      if (role === "owner" || role === "editor") {
+        await pool.query(
+          `INSERT INTO collection_items (collection_id, paper_id, orcid, title, doi, year, venue, authors, openalex_id, added_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$3)
+           ON CONFLICT (collection_id, paper_id) DO NOTHING`,
+          [collectionId, item.id, sess.orcid, item.title, item.doi, item.year, item.venue, item.authors, item.openalex_id]
+        );
+      }
+    }
 
     res.json({ item: { ...item, local_pdf_path: urlPath || storagePath }, pdf_url: urlPath || storagePath });
   } catch (e) {
