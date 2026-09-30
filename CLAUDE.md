@@ -5228,3 +5228,26 @@ Markdown file; Download PDF triggers a real file download; the ← →
 keyboard shortcut advances pages. Screenshots confirm the layout — page-
 jump footer, zoom menu, Notes tab, Download button — all sit where
 intended with no overlap or crowding of the toolbar.
+
+2026-10-01 — Species map: individual occurrence points too faint to see
+
+User screenshot: distribution map points visible after the earlier land-
+background/z-index fix, but small and still hard to see even zoomed in.
+
+Two separate layers, both improved:
+- GBIF's own density-tile heatmap (external, we don't control its pixel
+  content) — switched from @2x to @4x resolution tiles and opacity 0.85
+  to 1. Verified directly: GBIF genuinely returns a larger, denser image
+  at @4x (86KB vs 28KB for the same tile), not just an upscaled @2x, so
+  this is a real improvement for sparser-data species whose points read
+  as faint individual specks rather than a blended blob at @2x.
+- Our own individual-observation circleMarkers (shown once zoomed in
+  past a threshold) — radius 6→8, stroke weight 1→2, and switched the
+  stroke color from dark orange (nearly the same hue as the fill — low
+  contrast against most backgrounds) to white, for a clear halo effect.
+  Also lowered the zoom threshold for switching to these real markers
+  from 8 to 7, so the more-visible, actually-controllable layer kicks in
+  a bit sooner instead of relying on GBIF's tile dots for longer.
+
+Verified the @4x tile URL returns real, larger image data via direct
+curl; node --check passes; dev server serves the updated topic.js.

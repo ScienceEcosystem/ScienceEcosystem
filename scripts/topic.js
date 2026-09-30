@@ -643,10 +643,17 @@
     // only the marker layer below (which uses the JSON search API, already
     // confirmed reliable with datasetKey) actually reflects the toggle.
     if (taxonKey) {
+      // @4x instead of @2x, and fully opaque instead of 0.85 — for a
+      // species with sparser occurrence data, @2x's individual dots read
+      // as faint, hard-to-see specks even when zoomed in (reported live,
+      // with a screenshot); @4x is real (confirmed directly — GBIF returns
+      // a genuinely larger, denser tile, not just a same-size upscale) and
+      // gives each point noticeably more visual weight at the same
+      // geographic zoom level.
       L.tileLayer(
-        `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@2x.png?taxonKey=${taxonKey}&style=orangeHeat.point`,
+        `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@4x.png?taxonKey=${taxonKey}&style=orangeHeat.point`,
         {
-          opacity: 0.85,
+          opacity: 1,
           maxZoom: 10,
           errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
         }
@@ -658,7 +665,7 @@
     // of thousands of occurrence points and there's no marker-clustering
     // library in play here. Below the threshold this stays an empty layer
     // and the density tiles above are the whole picture, same as before.
-    const MARKER_ZOOM_THRESHOLD = 8;
+    const MARKER_ZOOM_THRESHOLD = 7;
     const markersLayer = L.layerGroup().addTo(map);
     const hintEl = $("speciesMapHint");
     let markerFetchToken = 0;
@@ -685,8 +692,12 @@
         for (const r of results) {
           const lat = r.decimalLatitude, lon = r.decimalLongitude;
           if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+          // Bigger radius + a white stroke (rather than the previous
+          // dark-orange-on-dark-orange stroke, low contrast against most
+          // backgrounds) so individual points stay clearly visible instead
+          // of reading as faint specks, especially over light basemap fill.
           const marker = L.circleMarker([lat, lon], {
-            radius: 6, weight: 1, color: "#9a3412", fillColor: "#f97316", fillOpacity: 0.85,
+            radius: 8, weight: 2, color: "#ffffff", fillColor: "#ea580c", fillOpacity: 0.95,
           });
           const photo = (r.media || []).find(m => m.type === "StillImage");
           const sourceLabel = r.datasetKey === SOURCE_DATASETS.ebird.key ? "eBird"
