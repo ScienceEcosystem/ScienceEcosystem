@@ -643,18 +643,36 @@
     // only the marker layer below (which uses the JSON search API, already
     // confirmed reliable with datasetKey) actually reflects the toggle.
     if (taxonKey) {
-      // @4x instead of @2x, and fully opaque instead of 0.85 — for a
-      // species with sparser occurrence data, @2x's individual dots read
-      // as faint, hard-to-see specks even when zoomed in (reported live,
-      // with a screenshot); @4x is real (confirmed directly — GBIF returns
-      // a genuinely larger, denser tile, not just a same-size upscale) and
-      // gives each point noticeably more visual weight at the same
-      // geographic zoom level.
+      // Checked GBIF's own API docs (techdocs.gbif.org, Maps API reference)
+      // directly rather than guessing further: "Raster tiles are provided
+      // in PNG format, and are normally 512px wide squares" — that's
+      // @2x, not the @4x this was bumped to last time. The @4x change
+      // didn't actually make anything bigger, which is the mistake worth
+      // recording: Leaflet's tileLayer displays every tile into a CSS-pixel
+      // slot sized by its own `tileSize` option (default 256), regardless
+      // of the fetched image's real pixel dimensions — a higher @Nx only
+      // crams a sharper image into that SAME 256px slot (more detail for
+      // high-DPI screens), it never makes the slot itself, or anything
+      // drawn in it, bigger on screen. That's why points stayed small even
+      // zoomed in.
+      //
+      // To actually get bigger points (matching GBIF's own normal 512px
+      // tiles, not an arbitrary oversample) this sets tileSize:512 to match
+      // the fetched image 1:1, with zoomOffset:-1 so the displayed tile
+      // still covers the same geography as a standard 256px tile at the
+      // map's current zoom (same "zoomOffset -1 + tileSize 512" pattern
+      // various tile providers use for crisper/bigger 512px tile sets) —
+      // same data, same zoom level requested, each point just occupies
+      // real screen space instead of being squeezed into a slot a quarter
+      // the size. maxZoom raised to 11 (was 10) to compensate for the
+      // offset and keep the same effective deepest tile detail as before.
       L.tileLayer(
-        `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@4x.png?taxonKey=${taxonKey}&style=orangeHeat.point`,
+        `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@2x.png?taxonKey=${taxonKey}&style=orangeHeat.point`,
         {
+          tileSize: 512,
+          zoomOffset: -1,
           opacity: 1,
-          maxZoom: 10,
+          maxZoom: 11,
           errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
         }
       ).addTo(map);

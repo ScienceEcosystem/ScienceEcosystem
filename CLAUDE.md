@@ -5251,3 +5251,40 @@ Two separate layers, both improved:
 
 Verified the @4x tile URL returns real, larger image data via direct
 curl; node --check passes; dev server serves the updated topic.js.
+
+2026-10-02 — Species map: match GBIF's own documented tile size instead of
+guessing with @4x
+
+User asked directly: what size does GBIF's own heatmap actually render at,
+why not just use that. Checked their real API reference
+(techdocs.gbif.org Maps API, the actual OpenAPI spec, not guessed) instead
+of guessing further: "Raster tiles are provided in PNG format, and are
+normally 512px wide squares" — that's @2x, not the @4x this was bumped to
+in the previous fix.
+
+That previous @4x change was a real mistake worth recording, not just a
+smaller-than-optimal choice: it didn't actually make anything bigger.
+Leaflet's tileLayer displays every tile into a CSS-pixel slot sized by its
+own `tileSize` option (default 256px), regardless of the fetched image's
+real pixel dimensions — requesting a higher-resolution @Nx image only
+crams more detail into that SAME 256px slot (sharper on high-DPI screens),
+it never enlarges the slot itself or anything drawn inside it. That's why
+points stayed small even when zoomed in, despite genuinely fetching a
+bigger/denser source image.
+
+Fixed by matching GBIF's own normal size properly: tileSize:512 (to match
+the real @2x image 1:1) + zoomOffset:-1 (so the displayed tile still
+covers the same geography as a standard 256px tile at the map's current
+zoom — the same "zoomOffset -1 + tileSize 512" pattern various tile
+providers use for crisper/bigger 512px tile sets) + @2x.png instead of
+@4x.png. Same data, same zoom level requested from GBIF — each point just
+actually occupies real screen space now instead of being squeezed into a
+slot a quarter its real size. maxZoom raised 10→11 to compensate for the
+offset and keep the same effective deepest tile detail as before.
+
+Verified live end-to-end with a real headless browser (Black bullhead
+topic page): before, occurrence points were faint individual specks
+barely visible against the background even zoomed in (matches the user's
+screenshot); after, the exact same data renders as clearly visible, bold
+orange density blobs over North America/Europe/Japan at the map's default
+view — a dramatic, unambiguous visual difference, not a marginal tweak.
