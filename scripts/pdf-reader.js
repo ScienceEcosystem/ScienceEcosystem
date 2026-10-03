@@ -15,7 +15,7 @@ let openAlexRefsList = []; // sorted alphabetically, mirrors the Refs sidebar ca
 let authorYearMap = new Map(); // "lastname_year" -> 1-based ref number
 let currentTextLayer = null;
 let refMatchCache = null;
-let annotMode = 'highlight';
+let annotMode = 'none'; // 'note' (click-to-pin) | 'erase' | 'none'
 let annotations = [];
 let annotationKey = '';
 let pdfLinkIndex = [];
@@ -234,7 +234,7 @@ function setPdfSidebarHidden(hidden) {
   if (!container) return;
   container.classList.toggle('sidebar-hidden', hidden);
   if (toggleBtn) {
-    toggleBtn.textContent = hidden ? '▶ Panel' : '◀ Panel';
+    toggleBtn.textContent = hidden ? '▶' : '◀';
     toggleBtn.title = hidden ? 'Show the thumbnails/Info panel' : 'Hide the thumbnails/Info panel';
     toggleBtn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
   }
@@ -595,12 +595,18 @@ async function renderLinkLayer(page, viewport, layerEl, pageNumber, tooltipEl) {
       const trimmed = hitText.trim();
       const isFigTbl = /fig(ure)?\.?\s*\d|table\s*\d/i.test(trimmed);
       const refNum = isFigTbl ? null : findRefNumberInText(trimmed);
-      const isKnownCitation = !!refNum;
+      // Even with no local reference data to resolve against (e.g. GROBID
+      // failed and the PDF's own bibliography isn't in a format the
+      // text-layer fallback can parse — an author-year/APA reference list,
+      // common in theses, has no numbering at all), still recognize
+      // anything CITATION-SHAPED as a citation rather than falling through
+      // to the raw in-PDF jump — it just resolves live instead of locally.
+      const isKnownCitation = !!refNum || (!isFigTbl && looksLikeAuthorYearCitation(trimmed));
 
       if (isKnownCitation && pageWrap && tooltipEl) {
         linkEl.classList.add('citation-highlight');
-        linkEl.setAttribute('data-ref-number', String(refNum));
-        wireInlineCitationLink(linkEl, tooltipEl, pageWrap, refNum);
+        if (refNum) linkEl.setAttribute('data-ref-number', String(refNum));
+        wireInlineCitationLink(linkEl, tooltipEl, pageWrap, refNum, trimmed);
       } else {
         linkEl.href = '#';
         linkEl.title = 'Jump to linked section';
@@ -667,6 +673,18 @@ const _bracketRe = /\[(\d[\d,\s\-–]*)\]/g;
 const _ayRe = /\(\s*([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s*[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s*,?\s*(\d{4}[a-z]?)\s*\)/g;
 // Smith et al. (2020) / Smith (2020) — author name precedes a "(year)"
 const _narRe = /([A-Z][A-Za-zÀ-ÖØ-öø-ÿ'\-]+)(?:\s+(?:et\s+al\.?|&\s*[A-Z][A-Za-z]+|and\s+[A-Z][A-Za-z]+))?\s+\((\d{4}[a-z]?)\)/g;
+// A parenthetical citation GROUP: "(Smith 2020; Jones et al. 2019a)" — the
+// two patterns above only ever match a citation that has its own "(" right
+// before it and ")" right after, which is never true for any citation
+// inside a semicolon-separated group (only the group's own outer parens
+// exist). Matches the whole group's contents so each semicolon-separated
+// piece inside can be parsed individually below.
+const _citeGroupRe = /\(([^()]{4,240})\)/g;
+// Holds the raw text of text-layer citations that couldn't be resolved
+// against any local reference data (looked up by index from
+// data-cite-live-id on the span) — resolved live via OpenAlex on click
+// instead. Grows for the life of the page view; small enough not to matter.
+const _liveCiteTexts = [];
 
 // Resolves a short piece of text (typically one PDF link annotation's hit
 // area — a bracketed number or an author-year fragment) to a known
@@ -859,9 +877,15 @@ function positionRefTooltip(tooltipEl, wrapRect, anchorRect) {
 // element that lives outside the text layer's delegated listeners (e.g. a
 // numbered in-text citation that's a real embedded PDF link, not a text
 // span). Never scrolls the main PDF — only the Refs sidebar.
-function wireInlineCitationLink(el, tooltipEl, pageWrap, refNum) {
+// `refNum` is null when this citation only matched by shape (looks like an
+// author-year/bracket citation) but couldn't be resolved against any local
+// reference data — click still opens a popup, just resolved live via
+// openCitationInfoPopupLive() instead of a local lookup. No hover preview
+// in that case (would mean a network request on every mouseenter).
+function wireInlineCitationLink(el, tooltipEl, pageWrap, refNum, rawText) {
   let hideTimer = null;
   el.addEventListener('mouseenter', () => {
+    if (!refNum) return;
     clearTimeout(hideTimer);
     const html = buildRefTooltipHtml(refNum);
     if (!html) return;
@@ -878,7 +902,8 @@ function wireInlineCitationLink(el, tooltipEl, pageWrap, refNum) {
     ev.preventDefault();
     clearCitationActive();
     el.classList.add('active');
-    openCitationInfoPopup(refNum, el);
+    if (refNum) openCitationInfoPopup(refNum, el);
+    else openCitationInfoPopupLive(rawText, el);
   });
 }
 
@@ -889,6 +914,7 @@ function wireCitationHover(layerEl, tooltipEl) {
   let shownForNum = null;
 
   function showTooltip(target) {
+    if (!target.hasAttribute('data-ref-number')) return; // live-resolve spans have no local data to preview
     const refNum = target.getAttribute('data-ref-number');
     if (refNum === shownForNum) return;
     const html = buildRefTooltipHtml(refNum);
@@ -930,10 +956,12 @@ function wireCitationHover(layerEl, tooltipEl) {
     const target = e.target.closest('.citation-highlight');
     if (!target) return;
     const refNum = target.getAttribute('data-ref-number');
-    if (!refNum) return;
+    const liveId = target.getAttribute('data-cite-live-id');
+    if (!refNum && liveId == null) return;
     clearCitationActive();
     target.classList.add('active');
-    openCitationInfoPopup(parseInt(refNum, 10), target);
+    if (refNum) openCitationInfoPopup(parseInt(refNum, 10), target);
+    else openCitationInfoPopupLive(_liveCiteTexts[Number(liveId)] || '', target);
   });
 
   layerEl.addEventListener('mouseout', function (e) {
@@ -1986,7 +2014,7 @@ function _citationInfoBody(data, saved) {
     <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.6rem;">
       <button class="btn btn-secondary btn-xs ci-save" ${saved ? 'disabled' : ''}>${saved ? '✓ Saved' : '+ Save'}</button>
       ${paperHref ? `<a href="${paperHref}" target="_blank" rel="noopener" class="btn btn-secondary btn-xs">Open paper page →</a>` : ''}
-      <button class="btn btn-secondary btn-xs ci-see-refs">See in References</button>
+      ${data._hasLocalRef !== false ? '<button class="btn btn-secondary btn-xs ci-see-refs">See in References</button>' : ''}
     </div>
   `;
 }
@@ -2085,6 +2113,86 @@ function _wireCitationInfoButtons(popup, refNum, data) {
   });
 }
 
+// ── Live-resolved citations — for a PDF with no usable local reference data
+// at all (GROBID failed, and its own bibliography isn't in a numbered
+// format extractRefsFromTextLayer's fallback can parse — an APA/author-
+// year reference list, common in theses, has neither). Rather than fall
+// back to the old raw in-PDF jump whenever local matching comes up empty,
+// resolve the citation live via a search against OpenAlex using the
+// author+year text itself, so the popup (and specifically "not jumping
+// around the PDF") still works even with zero local reference data.
+async function resolveCitationByRawText(rawText) {
+  const t = String(rawText || '').trim();
+  const m = t.match(/([A-Za-zÀ-ÖØ-öø-ÿ'\-]+)[^0-9]*?\b((?:19|20)\d{2})([a-z])?\b/);
+  const surname = m ? m[1] : (t.match(/[A-Za-zÀ-ÖØ-öø-ÿ'\-]+/) || [])[0];
+  const year = m ? m[2] : null;
+  if (!surname) return null;
+  const fields = 'id,title,display_name,authorships,publication_year,doi,cited_by_count,abstract_inverted_index';
+  try {
+    let url = `${location.origin}/api/openalex/works?search=${encodeURIComponent(surname)}&per-page=5&select=${fields}&mailto=scienceecosystem@icloud.com`;
+    if (year) url += `&filter=publication_year:${year}`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const results = d.results || [];
+    if (!results.length) return null;
+    // Prefer a result whose actual first-author surname matches — a plain
+    // search= can rank a work mentioning the surname in its title/abstract
+    // above the work actually written by that author.
+    const surnameLower = surname.toLowerCase();
+    return results.find(w => (w.authorships?.[0]?.author?.display_name || '').split(' ').pop().toLowerCase() === surnameLower) || results[0];
+  } catch (_e) {
+    return null;
+  }
+}
+
+function looksLikeAuthorYearCitation(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (/fig(ure)?\.?\s*\d|table\s*\d/i.test(t)) return false;
+  return /[A-Za-zÀ-ÖØ-öø-ÿ]+[\s\S]*\b(19|20)\d{2}[a-z]?\b/.test(t);
+}
+
+async function openCitationInfoPopupLive(rawText, anchorEl) {
+  closeReferencePopup();
+  const popup = document.createElement('div');
+  popup.id = 'citationInfoPopup';
+  popup.setAttribute('role', 'dialog');
+  popup.setAttribute('aria-label', 'Reference info');
+  const loading = { title: rawText.trim(), authors: [], year: null, doi: null, openalexId: null, abstract: null, citedBy: null, _loading: true, _hasLocalRef: false };
+  popup.innerHTML = _citationInfoBody(loading, false);
+  document.body.appendChild(popup);
+  _positionCitationInfoPopup(popup, anchorEl);
+  _wireCitationInfoButtons(popup, null, loading);
+  setTimeout(() => document.addEventListener('mousedown', _citationInfoOutsideClick, true), 0);
+
+  const work = await resolveCitationByRawText(rawText);
+  if (document.getElementById('citationInfoPopup') !== popup) return; // closed/replaced meanwhile
+
+  if (!work) {
+    popup.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:.4rem;">
+        <div style="flex:1;font-weight:600;font-size:.88rem;">Could not identify this reference</div>
+        <button class="ci-close" title="Close" aria-label="Close" style="flex:0 0 auto;border:none;background:none;cursor:pointer;font-size:1rem;color:#64748b;">×</button>
+      </div>
+      <div class="muted" style="font-size:.8rem;margin-top:.4rem;">"${escapeHtml(rawText.trim())}"</div>`;
+    popup.querySelector('.ci-close')?.addEventListener('click', closeReferencePopup);
+    return;
+  }
+  const data = {
+    title: work.title || work.display_name || rawText.trim(),
+    authors: (work.authorships || []).map(a => a.author?.display_name).filter(Boolean),
+    year: work.publication_year || null,
+    doi: work.doi ? work.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '') : null,
+    openalexId: work.id ? work.id.replace('https://openalex.org/', '') : null,
+    abstract: invertAbstractWords(work.abstract_inverted_index),
+    citedBy: typeof work.cited_by_count === 'number' ? work.cited_by_count : null,
+    _hasLocalRef: false,
+  };
+  popup.innerHTML = _citationInfoBody(data, false);
+  _wireCitationInfoButtons(popup, null, data);
+}
+
 window.handleReferenceClick = handleReferenceClick;
 window.closeReferencePopup = closeReferencePopup;
 window.jumpToInternalLink = jumpToInternalLink;
@@ -2131,12 +2239,13 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 function bindAnnotationToolbar() {
-  const h = document.getElementById('annotHighlightBtn');
   const n = document.getElementById('annotNoteBtn');
   const e = document.getElementById('annotEraseBtn');
   const c = document.getElementById('annotClearBtn');
-  const setMode = (m) => { annotMode = m; updateAnnotButtons(); };
-  h?.addEventListener('click', () => setMode('highlight'));
+  // Toggle: clicking the already-active mode button turns it back off
+  // (returns to plain selection/reading), instead of being stuck in
+  // note-placement or erase mode until the other button is clicked.
+  const setMode = (m) => { annotMode = (annotMode === m) ? 'none' : m; updateAnnotButtons(); };
   n?.addEventListener('click', () => setMode('note'));
   e?.addEventListener('click', () => setMode('erase'));
   if (c) {
@@ -2181,7 +2290,6 @@ function bindAnnotationToolbar() {
 
 function updateAnnotButtons() {
   const map = {
-    highlight: 'annotHighlightBtn',
     note: 'annotNoteBtn',
     erase: 'annotEraseBtn'
   };
@@ -2241,7 +2349,12 @@ function showSelToolbar(x, y, quote, page, normRects) {
     showCopiedToast();
   }));
 
-  // Color swatches for highlighting
+  const divider = () => { const d = document.createElement('div'); d.className = 'pdf-sel-divider'; return d; };
+  tb.appendChild(divider());
+
+  // Color swatches — this is the one place highlighting actually happens
+  // (clicking a color highlights the selection immediately, no separate
+  // "Highlight" mode to turn on first).
   HIGHLIGHT_COLORS.forEach(c => {
     const sw = document.createElement('button');
     sw.className = 'pdf-sel-swatch';
@@ -2256,11 +2369,13 @@ function showSelToolbar(x, y, quote, page, normRects) {
     tb.appendChild(sw);
   });
 
+  tb.appendChild(divider());
+
   tb.appendChild(btn('U Underline', () => {
     createAnnotation(page, normRects, quote, 'underline', '', UNDERLINE_COLOR);
   }));
 
-  tb.appendChild(btn('📝 Note', () => {
+  tb.appendChild(btn('💬 Comment', () => {
     // Replace toolbar contents with an inline note input
     tb.innerHTML = '';
     const input = document.createElement('input');
@@ -2717,9 +2832,19 @@ function renderAnnotationsForPage(page) {
         d.style.height = '2px';
         d.style.background = a.color || UNDERLINE_COLOR;
       } else {
-        d.style.top = `${py}px`;
+        // The captured rect is the browser's full line-box (Range.
+        // getClientRects()), which includes leading/line-gap above and
+        // below the glyphs themselves — drawing a highlight at that exact
+        // height makes it visibly bleed into the whitespace above/below
+        // the actual text instead of hugging just the line (reported
+        // live, with a screenshot). Trimmed in just for highlights —
+        // underline already computes its own thin bar separately above,
+        // and this is purely cosmetic (doesn't touch the stored rect, so
+        // it can be tuned again later without migrating saved annotations).
+        const inset = a.type === 'highlight' ? ph * 0.16 : 0;
+        d.style.top = `${py + inset / 2}px`;
         d.style.width = `${pw}px`;
-        d.style.height = `${ph}px`;
+        d.style.height = `${ph - inset}px`;
         d.style.background = a.color || (a.type === 'note' ? 'rgba(255,193,7,0.35)' : 'rgba(255,235,59,0.55)');
       }
       if (a.note) d.setAttribute('title', a.note);

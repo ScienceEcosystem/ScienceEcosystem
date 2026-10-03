@@ -76,6 +76,27 @@
     }
     .pdf-container.sidebar-hidden #showSidebarTab { display: block; }
 
+    /* Panel toggle — a small plain icon button, not a full green CTA-style
+       button like the action buttons next to it (Highlight/Note/etc.) —
+       it's a chrome control (show/hide), not an action, so it shouldn't
+       compete visually with the real actions in the toolbar. */
+    .pdf-icon-btn {
+      width: 26px;
+      height: 26px;
+      flex-shrink: 0;
+      border: 1px solid #dee2e6;
+      background: #fff;
+      border-radius: 6px;
+      color: #495057;
+      font-size: .75rem;
+      line-height: 1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pdf-icon-btn:hover { background: #f1f3f5; border-color: #adb5bd; }
+
     /* Thumbnail rail: the scrollable thumbnail strip plus a page-jump
        footer pinned under it. Page navigation belongs here, not as more
        buttons crammed into the top toolbar — this rail is already the
@@ -527,12 +548,11 @@
     <main class="pdf-main">
       <!-- Toolbar (always visible) -->
       <div class="pdf-annot-toolbar" style="display:flex;gap:.4rem;align-items:center;padding:.5rem .75rem;background:#f8f9fa;border-bottom:1px solid #dee2e6;flex-wrap:wrap;flex-shrink:0;">
-        <button id="toggleSidebarBtn" class="btn btn-secondary btn-xs" title="Hide the thumbnails/Info panel" aria-expanded="true">◀ Panel</button>
+        <button id="toggleSidebarBtn" class="pdf-icon-btn" title="Hide the thumbnails/Info panel" aria-expanded="true">◀</button>
         <div style="width:1px;height:18px;background:#dee2e6;margin:0 .2rem;"></div>
         <a id="livingPaperBtn" href="#" class="btn btn-secondary btn-xs" style="display:none;background:#fffbeb;border-color:#fde68a;color:#92400e;font-weight:600;" title="Full text with claims linked to the code and data that produced them">◆ Living version</a>
         <span class="muted" style="font-size:.85rem;">Annotate:</span>
-        <button id="annotHighlightBtn" class="btn btn-secondary btn-xs">Highlight</button>
-        <button id="annotNoteBtn" class="btn btn-secondary btn-xs">Note</button>
+        <button id="annotNoteBtn" class="btn btn-secondary btn-xs" title="Click anywhere on the page to pin a free-floating note — to highlight or comment on text, just select it">📌 Pin note</button>
         <button id="annotEraseBtn" class="btn btn-secondary btn-xs">Erase</button>
         <button id="annotClearBtn" class="btn btn-secondary btn-xs">Clear All</button>
         <div style="width:1px;height:18px;background:#dee2e6;margin:0 .2rem;"></div>

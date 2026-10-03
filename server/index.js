@@ -152,7 +152,15 @@ app.use((req, res, next) => {
     "img-src 'self' data: blob: https:",
     "connect-src 'self' https://api.openalex.org https://api.semanticscholar.org https://api.crossref.org https://pub.orcid.org https://api.orcid.org https://core.ac.uk https://unpaywall.org https://api.unpaywall.org https://zenodo.org https://api.altmetric.com https://d1bxh8uas1mnw7.cloudfront.net https://www.ebi.ac.uk https://*.wikipedia.org https://api.inaturalist.org https://www.inaturalist.org https://api.gbif.org https://*.r2.cloudflarestorage.com https://raw.githubusercontent.com https://*.github.io https://api.github.com",
     "media-src https://upload.wikimedia.org https://xeno-canto.org",
-    "frame-src 'self'",
+    // 'self' alone blocked navigating to a living-paper's own Notebooks/
+    // Other-Formats links (Analysis Notebook, Supplementary Information,
+    // etc.) — the manuscript iframe starts as srcdoc (exempt from this
+    // check), but clicking one of its own relative links resolves (via the
+    // <base> tag living-paper.js injects) to a real https://*.github.io
+    // URL, and navigating the iframe there is a frame-src-governed
+    // navigation, not a srcdoc one — reported live as "can't open the
+    // analysis workbook".
+    "frame-src 'self' https://*.github.io",
     "object-src 'none'",
     "base-uri 'self' https://*.github.io"
   ].join("; "));

@@ -911,6 +911,8 @@ body.annot-erase .pdf-annot { cursor: crosshair; }
   border: 1px solid rgba(255,255,255,.5);
 }
 .pdf-sel-toolbar .pdf-sel-swatch:hover { transform: scale(1.15); }
+.pdf-sel-toolbar .pdf-sel-swatch.active { box-shadow: 0 0 0 2px #fff; }
+.pdf-sel-divider { width: 1px; align-self: stretch; margin: 2px 3px; background: rgba(255,255,255,.18); flex-shrink: 0; }
 
 .citation-tooltip {
   position: absolute;

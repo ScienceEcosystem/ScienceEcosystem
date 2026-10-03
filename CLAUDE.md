@@ -5288,3 +5288,80 @@ barely visible against the background even zoomed in (matches the user's
 screenshot); after, the exact same data renders as clearly visible, bold
 orange density blobs over North America/Europe/Japan at the map's default
 view — a dramatic, unambiguous visual difference, not a marginal tweak.
+
+2026-10-02 — Four more real bugs from live use: living-paper Tools menu/
+notebook links, PDF reader panel toggle + highlight overflow + duplicate
+annotation controls
+
+1. living-paper.html was missing the Tools dropdown — same gap as
+   pdf-viewer.html a few days ago, just never applied here. Same fix:
+   added the markup; style.css's existing :hover/:focus-within rules
+   handle it with no JS needed (components.js isn't loaded on this page).
+
+2. "Can't open the analysis workbook" — real bug, not a UX complaint.
+   The living manuscript loads via iframe.srcdoc (so it stays same-
+   origin-scriptable from this page) with a <base href> already pointing
+   at the real GitHub Pages URL, so its own relative links (Notebooks,
+   Other Formats) correctly resolve to real, working pages — confirmed
+   directly (analysis-preview.html etc. all return 200). But navigating
+   the iframe TO one of those resolved URLs is a separate, CSP-governed
+   action from the initial srcdoc load: this site's `frame-src` directive
+   was still `'self'` only (never updated when script-src/style-src/
+   font-src were all opened up to `*.github.io` for the manuscript's own
+   assets), so the browser silently blocked the click's navigation.
+   Fixed: `frame-src 'self' https://*.github.io`. Verified live end-to-
+   end with a real headless browser: clicked the actual "Analysis
+   Notebook" link inside the loaded manuscript, confirmed a real 200
+   response for analysis-preview.html and a real rendered notebook page
+   (title, table of contents, code cells) inside the iframe — not just
+   "no longer blocked," genuinely working.
+
+3. PDF reader toolbar redesign, three related complaints bundled
+   together ("instead of the big box... just the small arrow", "we have
+   it a bit double — highlight, note, and when selecting text see it
+   again", "highlight... going over the line"):
+
+   - Panel toggle: was a full green `.btn.btn-secondary.btn-xs` reading
+     "◀ Panel" — same visual weight as the real action buttons next to
+     it. Replaced with a small (26×26) plain icon button (new
+     `.pdf-icon-btn` class) showing just "◀"/"▶" — a chrome/visibility
+     control shouldn't compete with actual actions for attention.
+
+   - Duplicate Highlight/Note controls: tracing the actual code path
+     showed the top toolbar's "Highlight" button was dead weight —
+     clicking it only set a mode flag that NOTHING in the selection
+     handler ever checked; any text selection always opened the floating
+     color-swatch popup regardless, which is the only place highlighting
+     has ever actually happened. Removed the button entirely rather than
+     wiring it to do something redundant. The remaining "Note" button
+     genuinely does something different from the selection popup's own
+     note option (pins a free-floating note at a clicked point vs.
+     attaching a comment to selected text) but was confusingly named the
+     same in both places — relabeled to "📌 Pin note" (toolbar) vs.
+     "💬 Comment" (selection popup) so the distinction is visible, not
+     just logical. Also added dividers between Copy / highlight colors /
+     Underline+Comment in the selection popup so the groups read as
+     groups instead of a flat row of mixed-purpose buttons, and made
+     Erase/Note toggle off on a second click (previously you could only
+     switch between modes, never back to plain reading/selecting).
+
+   - Highlight overflow: confirmed via screenshot — a highlight's
+     rendered box used the exact height of the browser's own
+     Range.getClientRects() line box, which includes leading/line-gap
+     above and below the actual glyphs, so it visibly bled into the
+     whitespace between lines instead of hugging the text. Trimmed ~16%
+     off the rendered height (centered) for highlight-type annotations
+     specifically — purely cosmetic at render time, doesn't touch the
+     stored rect data.
+
+Verified all four live with a real headless browser against a real
+multi-page PDF: Tools dropdown present on living-paper.html; a real
+notebook link click produces a real 200 response and a genuinely
+rendered notebook page; toggle button is a real 26×26 icon-only
+control that correctly hides/shows the panel; annotHighlightBtn no
+longer exists, annotNoteBtn reads "📌 Pin note"; selection popup has 2
+real dividers and reads Copy | [4 swatches] | Underline | 💬 Comment;
+a real text selection → swatch click produced a highlight rendered at
+16.6px tall against the source text's own 16px line height — visibly
+hugging the two lines it covers in the screenshot, not spilling into
+the gap between them.
