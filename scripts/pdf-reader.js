@@ -734,7 +734,13 @@ function applyCitationHighlightsToLayer(layerEl) {
   // available was whatever the PDF's own embedded hyperlinks did, which
   // for non-numeric (author-year) citations is a raw jump to the
   // bibliography page inside the PDF itself.
-  if (!layerEl || (!openAlexRefsList.length && !extractedReferences.length)) return;
+  // Note: this used to also bail out when BOTH openAlexRefsList and
+  // extractedReferences were empty (no local reference data at all) — but
+  // the multi-citation-group pass below can tag citations for LIVE
+  // resolution (looksLikeAuthorYearCitation) with zero local data, which
+  // is exactly the common case when reference extraction fails/finds
+  // nothing. Bailing out there silently skipped that pass entirely.
+  if (!layerEl) return;
   const hasAuthorYear = authorYearMap.size > 0;
 
   const spans = Array.from(layerEl.querySelectorAll('span')).filter(s => !s.hasAttribute('data-ref-number'));
@@ -777,6 +783,39 @@ function applyCitationHighlightsToLayer(layerEl) {
     }
   }
 
+  // Multi-citation groups — "(Smith 2020; Jones et al. 2019a)". _ayRe above
+  // requires its own "(" immediately before the name and ")" immediately
+  // after the year, which is only ever true for the FIRST citation of a
+  // group and only when the group holds exactly one citation — every other
+  // citation in a semicolon-separated group has neither, so it's invisible
+  // to every pattern above. Finds each parenthesized group, then resolves
+  // each semicolon-separated piece independently (so each citation inside
+  // a group is still individually clickable, not one highlight spanning
+  // the whole group) — locally when possible, else tagged for live
+  // resolution via findRefNumberInText's same matching (bracket, then
+  // paren-wrapped, then bare "Lastname Year").
+  _citeGroupRe.lastIndex = 0;
+  while ((m = _citeGroupRe.exec(merged))) {
+    const groupStart = m.index + 1; // skip the "("
+    const content = m[1];
+    if (!content.includes(';')) continue; // single-citation case already covered by _ayRe above
+    let pieceOffset = 0;
+    for (const piece of content.split(';')) {
+      const pieceStart = groupStart + pieceOffset;
+      pieceOffset += piece.length + 1; // +1 for the consumed ';'
+      const trimmed = piece.trim();
+      if (!trimmed) continue;
+      const localStart = pieceStart + (piece.length - piece.trimStart().length);
+      const localEnd = localStart + trimmed.length;
+      const refNum = findRefNumberInText(trimmed);
+      if (refNum) {
+        candidates.push({ start: localStart, end: localEnd, refNum, priority: 3 });
+      } else if (looksLikeAuthorYearCitation(trimmed)) {
+        candidates.push({ start: localStart, end: localEnd, rawText: trimmed, priority: 3 });
+      }
+    }
+  }
+
   // Resolve overlaps: earliest match wins; ties broken by priority (more specific pattern first)
   candidates.sort((a, b) => a.start - b.start || a.priority - b.priority);
   const accepted = [];
@@ -790,9 +829,14 @@ function applyCitationHighlightsToLayer(layerEl) {
   for (const c of accepted) {
     for (const o of offsets) {
       if (o.end <= c.start || o.start >= c.end) continue;
-      if (o.span.hasAttribute('data-ref-number')) continue;
+      if (o.span.hasAttribute('data-ref-number') || o.span.hasAttribute('data-cite-live-id')) continue;
       o.span.classList.add('citation-highlight');
-      o.span.setAttribute('data-ref-number', String(c.refNum));
+      if (c.refNum) {
+        o.span.setAttribute('data-ref-number', String(c.refNum));
+      } else if (c.rawText) {
+        const id = _liveCiteTexts.push(c.rawText) - 1;
+        o.span.setAttribute('data-cite-live-id', String(id));
+      }
     }
   }
 }
@@ -2136,11 +2180,16 @@ async function resolveCitationByRawText(rawText) {
     const d = await r.json();
     const results = d.results || [];
     if (!results.length) return null;
-    // Prefer a result whose actual first-author surname matches — a plain
-    // search= can rank a work mentioning the surname in its title/abstract
-    // above the work actually written by that author.
+    // Only trust a result whose actual first-author surname matches — a
+    // plain search= can rank a work that merely MENTIONS the surname in its
+    // title/abstract above (or instead of) any work actually written by
+    // that author. Falling back to results[0] when nothing matches would
+    // confidently show an unrelated paper's title/abstract rather than
+    // admitting the citation couldn't be identified — found live: a
+    // "Momot, 1995" citation with no matching OpenAlex author surname was
+    // resolving to an unrelated French mining-survey document.
     const surnameLower = surname.toLowerCase();
-    return results.find(w => (w.authorships?.[0]?.author?.display_name || '').split(' ').pop().toLowerCase() === surnameLower) || results[0];
+    return results.find(w => (w.authorships?.[0]?.author?.display_name || '').split(' ').pop().toLowerCase() === surnameLower) || null;
   } catch (_e) {
     return null;
   }

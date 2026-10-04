@@ -5398,3 +5398,71 @@ multi-citation-group case this was meant to fix is NOT yet handled.
 Single citations and link-layer citations (both fixed earlier) work;
 grouped parenthetical citations in plain text still don't get highlighted/
 popup treatment. Revisit if this comes up again.
+
+2026-10-04 — Finished the multi-citation-group matching pass flagged
+incomplete above, and found two real bugs live-testing it
+
+The matching code itself (_citeGroupRe loop inside
+applyCitationHighlightsToLayer(), splitting each semicolon-separated
+parenthetical group and resolving each piece independently via
+findRefNumberInText()/looksLikeAuthorYearCitation()) was already written
+and syntax-checked, but had never actually been exercised against a real
+PDF before this. Live-testing it (Playwright, the real
+Koura_shoreline_habitats thesis PDF) surfaced two real bugs, not just
+"needs verification":
+
+1. applyCitationHighlightsToLayer() had an early-return guard —
+   `if (!layerEl || (!openAlexRefsList.length && !extractedReferences.length)) return;`
+   — that bailed out of the ENTIRE function whenever there was no local
+   reference data at all. That's exactly the common failure case (GROBID
+   extraction returning 0 references, confirmed live on this thesis PDF)
+   that the whole live-resolve path was built to handle — the group-match
+   pass can tag a citation for live resolution with zero local data, but
+   the guard was skipping it before it ever got the chance to run.
+   Removed the local-data requirement from the guard (kept the
+   !layerEl check) — confirmed live this took text-layer citation
+   spans from 0 to 40 tagged on a 32-page PDF with authorYearMap.size===0.
+
+2. resolveCitationByRawText() (the live OpenAlex lookup behind
+   openCitationInfoPopupLive) searched OpenAlex for the citation's
+   surname+year, tried to confirm the result's first author actually
+   matches that surname, but fell back to `results[0]` — ANY top search
+   hit — whenever nothing matched. Caught live: clicking a real
+   "(Momot, 1995; ...)" citation group popped up "Annexe 1. Indices
+   métallurgiques et miniers entre Sens et Troyes" — a completely
+   unrelated French mining-survey document that happened to rank #1 for
+   a plain search=Momot&filter=publication_year:1995 query. Removed the
+   `|| results[0]` fallback — a non-matching search now correctly returns
+   null, which the existing (already-built) "Could not identify this
+   reference" popup state handles.
+
+Also directly re-verified the actual reported bug this whole chain
+exists to fix ("clicking a citation still jumps to the in-PDF reference
+list"): scrolled a live-resolve citation into view, recorded the page
+number, clicked it, and confirmed the page number is unchanged before
+vs. after the click — only the anchored info popup opens. (An earlier,
+flawed version of this same test recorded the page number BEFORE
+scrolling the citation into view instead of after, making the test's own
+scroll look like a click-triggered jump — corrected methodology, not a
+real regression.)
+
+Not fixed, flagged as a separate, lower-priority issue found during this
+same testing: applyCitationHighlightsToLayer()'s overlap-tagging (for
+every citation type, not just groups — pre-existing, not introduced
+here) tags the WHOLE pdf.js text-layer span that any matched citation
+range overlaps, not just the matched substring. When a citation sits
+mid-sentence inside one long text-run span (common — confirmed live,
+e.g. a span covering "cycling, organic matter decomposition and
+bioturbation (Momot, 1995; Collier et al., 1997...)"), the entire
+sentence becomes hover/click-highlighted as if it were the citation,
+not just the "(Author, Year)" part. Cosmetically confusing but not
+functionally wrong (still resolves to the correct citation) — would need
+splitting the span's text node at the match boundary to fix properly,
+out of scope for this pass.
+
+Verified live end-to-end (Playwright against the real thesis PDF, dev
+server): 40 text-layer citation spans correctly tagged with
+data-cite-live-id after the guard fix (was 0 before); clicking one opens
+the anchored popup with no PDF page/scroll change; popup now correctly
+shows "Could not identify this reference" instead of a wrong paper for
+an unresolvable citation.
