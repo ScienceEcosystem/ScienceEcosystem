@@ -5365,3 +5365,36 @@ a real text selection → swatch click produced a highlight rendered at
 16.6px tall against the source text's own 16px line height — visibly
 hugging the two lines it covers in the screenshot, not spilling into
 the gap between them.
+
+2026-10-04 — Found uncommitted: GROBID timeout + correct failure status on /api/pdf/extract
+
+Leftover from the "still jumps to ref list" investigation a few days ago —
+written and syntax-checked at the time but never committed before the
+session moved on to the living-paper/PDF-toolbar fixes. Committing now,
+on its own: it's complete and safe independently of the (still not
+finished — see below) multi-citation grouping work.
+
+- Added a 25s timeout on the PDF fetch and a 45s timeout on the GROBID
+  call (AbortSignal.timeout) — GROBID's cloud instance can silently hang
+  on very large PDFs (the 60MB+ thesis from the original report) with no
+  prior timeout at all.
+- The failure path now returns 502 instead of 200 with an empty
+  references array. This is load-bearing, not cosmetic: pdf-reader.js's
+  extractPDFReferences() only falls back to its own text-layer scan
+  (which works without GROBID) when this endpoint's response is a real
+  HTTP failure — a 200 with `references: []` looks identical to "GROBID
+  genuinely found zero references," so the fallback never ran and large/
+  slow PDFs were silently left with no reference data and no author-year
+  citation matching at all.
+
+KNOWN INCOMPLETE, flagging rather than hiding it: scripts/pdf-reader.js
+already has `_citeGroupRe` and `_liveCiteTexts` committed (from the same
+investigation) in support of a planned multi-citation-parenthetical
+matching pass — e.g. "(Devcich 1979; Kusabs et al. 2026a)" — but the
+actual matching pass was never written into
+applyCitationHighlightsToLayer(). `_citeGroupRe` is currently declared
+but unused — harmless (no behavior change, just dead code) but the
+multi-citation-group case this was meant to fix is NOT yet handled.
+Single citations and link-layer citations (both fixed earlier) work;
+grouped parenthetical citations in plain text still don't get highlighted/
+popup treatment. Revisit if this comes up again.

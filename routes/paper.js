@@ -148,7 +148,8 @@ router.post('/api/pdf/extract', async (req, res) => {
         'DNT': '1',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1'
-      }
+      },
+      signal: AbortSignal.timeout(25000)
     });
     if (!pdfResponse.ok) throw new Error('Failed to fetch PDF');
     const pdfBuffer = await pdfResponse.arrayBuffer();
@@ -156,18 +157,34 @@ router.post('/api/pdf/extract', async (req, res) => {
     const formData = new FormData();
     formData.append('input', new Blob([pdfBuffer]), 'paper.pdf');
 
+    // GROBID's cloud instance can silently choke on very large PDFs (e.g. a
+    // 60MB+ thesis) — a hard timeout here, rather than letting the request
+    // hang indefinitely, matters because the client's own text-layer
+    // fallback (extractRefsFromTextLayer, no GROBID needed) is only ever
+    // triggered by a genuine failure response — see the status code below.
     const grobidResponse = await fetch('https://cloud.science-miner.com/grobid/api/processFulltextDocument', {
       method: 'POST',
-      body: formData
+      body: formData,
+      signal: AbortSignal.timeout(45000)
     });
-    if (!grobidResponse.ok) throw new Error('GROBID processing failed');
+    if (!grobidResponse.ok) throw new Error('GROBID processing failed: ' + grobidResponse.status);
 
     const teiXml = await grobidResponse.text();
     const parsed = parseGrobidTEI(teiXml);
     res.json(parsed);
   } catch (e) {
     console.error('PDF extraction error:', e);
-    res.json({
+    // A non-2xx status here (not a 200 with an empty references array) is
+    // load-bearing: pdf-reader.js's extractPDFReferences() only falls back
+    // to its own text-layer scan (extractRefsFromTextLayer — works without
+    // GROBID, and is what actually lets author-year citation links resolve
+    // to a popup instead of falling back to a raw in-PDF jump) when this
+    // request fails outright. Returning 200 here — which this endpoint used
+    // to always do, even on a real GROBID failure — looked to the client
+    // exactly like "GROBID genuinely found zero references", so the
+    // fallback never ran and every citation on the PDF silently had no
+    // author-year data to match against.
+    res.status(502).json({
       references: [],
       figures: [],
       tables: [],
