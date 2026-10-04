@@ -602,7 +602,7 @@
         const worldData = await worldResp.json();
         L.geoJSON(worldData, {
           pane: "speciesMapBgPane",
-          style: { color: "#adb5bd", weight: 0.5, fillColor: "#dee2e6", fillOpacity: 1 },
+          style: { color: "#334155", weight: 0.5, fillColor: "#1e293b", fillOpacity: 1 },
           interactive: false
         }).addTo(map);
       }
