@@ -241,6 +241,28 @@
     } catch (_) { /* silent — link just stays hidden */ }
   }
 
+  // Author fee (APC) — OpenAlex returns this for virtually every source in
+  // its database, not just a curated subset, so this works for any journal
+  // this page can load. apc_usd is the convenience single-number field;
+  // apc_prices (per-currency list) backs it. A journal can have no APC and
+  // is_oa:true (genuinely free to publish+read — "diamond" OA, e.g.
+  // SciPost) or an APC with is_oa:false (a subscription/hybrid journal that
+  // still charges per-article to open just that one piece — worth
+  // surfacing distinctly, since "open access" badges alone don't show this).
+  function apcInfo(src){
+    var usd = get(src,"apc_usd",null);
+    var oa = !!get(src,"is_oa",false);
+    if (usd == null) {
+      return oa
+        ? { label: "No fee to publish or read", cls: "apc-free", title: "No author-facing charge found in OpenAlex for this journal." }
+        : { label: "Not listed", cls: "apc-unknown", title: "OpenAlex has no publication-fee data for this journal." };
+    }
+    var fmt = "$" + usd.toLocaleString() + " to publish open access";
+    return oa
+      ? { label: fmt, cls: "apc-paid", title: "Author-facing open-access publication fee, from OpenAlex." }
+      : { label: fmt + " (hybrid)", cls: "apc-hybrid", title: "This journal isn't fully open access — this is the per-article fee to open just your own article (\"hybrid\" OA)." };
+  }
+
   function renderHeader(src){
     if ($("journalName")) $("journalName").textContent = src.display_name || "Unknown journal";
 
@@ -305,6 +327,9 @@
       parts.push(". Type: "+(type||"-")+".");
       if (oa) parts.push(" Open Access journal.");
       if (doaj) parts.push(" Indexed in DOAJ.");
+      var apc0 = apcInfo(src);
+      if (apc0.cls === "apc-free") parts.push(" No fee to publish or read.");
+      else if (apc0.cls === "apc-paid" || apc0.cls === "apc-hybrid") parts.push(" Author fee: "+apc0.label+".");
       var pubName = get(src,"publisher",null) || get(src,"host_organization_name",null);
       if (pubName) parts.push(" Publisher: "+pubName+".");
       $("journalSummary").textContent = parts.join("");
@@ -312,8 +337,10 @@
 
     // Metadata list
     if ($("journalMeta")){
+      var apc = apcInfo(src);
       var items = [];
       items.push('<li><span>Open Access</span><strong>'+(oa?"Yes":"No")+'</strong></li>');
+      items.push('<li><span>Author fee (APC)</span><strong class="apc-badge '+apc.cls+'" title="'+esc(apc.title)+'">'+esc(apc.label)+'</strong></li>');
       items.push('<li><span>DOAJ</span><strong>'+(doaj?"Yes":"No")+'</strong></li>');
       items.push('<li><span>Type</span><strong>'+esc(type||"-")+'</strong></li>');
       if (issn_l) items.push('<li><span>ISSN-L</span><strong>'+esc(issn_l)+'</strong></li>');

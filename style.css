@@ -1884,6 +1884,16 @@ body.annot-erase .pdf-annot { cursor: crosshair; }
 .stance-extends     { color: #0369a1; background: #e0f2fe; }
 .stance-uses-method { color: #475569; background: #f8fafc; }
 
+/* Author fee (APC) badge — journal.html + journal-finder.html compare tray.
+   Reuses the stance-badge color pairs above (already WCAG-checked):
+   free=green, hybrid double-charge=red (the worst case — a subscription
+   journal that ALSO charges per-article), paid-OA=amber, unknown=grey. */
+.apc-badge { display: inline-block; padding: .1rem .5rem; border-radius: 4px; font-weight: 600; }
+.apc-free    { color: #15803d; background: #f0fdf4; }
+.apc-hybrid  { color: #b91c1c; background: #fef2f2; }
+.apc-paid    { color: #b45309; background: #fffbeb; }
+.apc-unknown { color: #475569; background: #f8fafc; }
+
 /* ---- Hover preview card ---- */
 #hoverPreviewCard {
   display: none;

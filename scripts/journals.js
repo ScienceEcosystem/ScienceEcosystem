@@ -83,6 +83,31 @@ function escJ(str) {
   });
 }
 
+// Author fee (APC) — OpenAlex returns apc_usd for virtually every source
+// in its database (not a curated subset), so this works for any journal
+// here: curated cards, live OpenAlex search results, and the compare tray
+// alike. null apc_usd + is_oa:true means genuinely free to publish+read
+// ("diamond" OA, e.g. SciPost); an apc_usd with is_oa:false means a
+// subscription/hybrid journal that still separately charges per-article to
+// open just one piece — worth flagging distinctly, not just folded into a
+// generic "Subscription" badge.
+function apcInfo(isOa, apcUsd) {
+  if (apcUsd == null) {
+    return isOa
+      ? { label: 'No fee', cls: 'apc-free', title: 'No author-facing charge found in OpenAlex for this journal.' }
+      : { label: null, cls: null, title: null };
+  }
+  var fmt = '$' + Number(apcUsd).toLocaleString();
+  return isOa
+    ? { label: fmt + ' APC', cls: 'apc-paid', title: 'Author-facing open-access publication fee, from OpenAlex.' }
+    : { label: fmt + ' (hybrid)', cls: 'apc-hybrid', title: 'Not fully open access — this is the per-article fee to open just your own article ("hybrid" OA).' };
+}
+function apcBadgeHtml(isOa, apcUsd) {
+  var a = apcInfo(isOa, apcUsd);
+  if (!a.label) return '';
+  return '<span class="apc-badge ' + a.cls + '" style="font-size:.72rem;padding:1px 7px;border-radius:10px;" title="' + escJ(a.title) + '">' + escJ(a.label) + '</span>';
+}
+
 function oaBadge(isOa, inDoaj) {
   if (inDoaj) return '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:10px;">DOAJ · Gold OA</span>';
   if (isOa)   return '<span style="font-size:.72rem;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:10px;">Open Access</span>';
@@ -189,6 +214,7 @@ function renderCompareTray() {
       + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.works != null ? Number(e.works).toLocaleString() : '—') + '</td>'
       + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.hIndex != null ? e.hIndex : '—') + '</td>'
       + '<td style="padding:.4rem .6rem;color:#475569;">' + escJ(e.jti || '—') + '</td>'
+      + '<td style="padding:.4rem .6rem;color:#475569;">' + escJ(e.apc || '—') + '</td>'
       + '<td style="padding:.4rem .6rem;color:#475569;">' + (e.sjr != null ? Number(e.sjr).toFixed(3) : '—') + '</td>'
       + '<td style="padding:.4rem .6rem;color:#475569;">' + escJ(e.quartile || '—') + '</td>'
       + '<td style="padding:.4rem .6rem;">'
@@ -208,6 +234,7 @@ function renderCompareTray() {
         + '<th style="padding:.3rem .6rem;">Journal</th><th style="padding:.3rem .6rem;">Discipline / Publisher</th>'
         + '<th style="padding:.3rem .6rem;">Access</th><th style="padding:.3rem .6rem;">Works</th>'
         + '<th style="padding:.3rem .6rem;">h-index</th><th style="padding:.3rem .6rem;">JTI</th>'
+        + '<th style="padding:.3rem .6rem;">Author fee (APC)</th>'
         + '<th style="padding:.3rem .6rem;">SJR</th><th style="padding:.3rem .6rem;">Quartile</th><th></th>'
       + '</tr></thead>'
       + '<tbody>' + rows + '</tbody>'
@@ -268,9 +295,13 @@ function makeCuratedCard(j) {
     + '</div>'
     + '<p style="font-size:.8rem;color:#475569;margin:0;line-height:1.4;">' + escJ(j.summary) + '</p>'
     + '<div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-top:.2rem;">'
-      + (j.apcBand && j.apcBand !== 'Unknown' ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">APC: ' + escJ(j.apcBand) + '</span>' : '')
       + (j.speed && j.speed !== 'Unknown' ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">' + escJ(j.speed) + '</span>' : '')
       + '<span class="curated-jti" style="font-size:.72rem;color:#cbd5e1;">JTI…</span>'
+      // Real $ APC, upgraded in place by loadCuratedJti() once its OpenAlex
+      // lookup resolves — same pattern as the JTI placeholder above. Starts
+      // from the catalog's own hand-estimated apcBand (e.g. "Over3500") so
+      // there's still something useful on screen before that lookup lands.
+      + (j.apcBand && j.apcBand !== 'Unknown' ? '<span class="curated-apc" style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">APC: ' + escJ(j.apcBand) + '</span>' : '<span class="curated-apc"></span>')
     + '</div>'
     + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
       + '<a href="journal.html?name=' + encodeURIComponent(j.name) + '" '
@@ -298,6 +329,7 @@ function makeCuratedCard(j) {
       ? (function(){ var sc = SE.components.computeJournalTrustIndex(cachedSrc); return sc.total + '/100 · ' + sc.grade; })()
       : null,
     issnL: cachedSrc ? (cachedSrc.issn_l || null) : null,
+    apc: cachedSrc ? apcInfo(cachedSrc.is_oa, cachedSrc.apc_usd).label : (j.apcBand && j.apcBand !== 'Unknown' ? 'APC: ' + j.apcBand : null),
   });
   return card;
 }
@@ -318,6 +350,7 @@ function makeOpenAlexCard(s) {
 
   const seScore   = (globalThis.SE?.components?.computeJournalTrustIndex) ? SE.components.computeJournalTrustIndex(s) : null;
   const scoreBadge = seScore ? SE.components.journalTrustIndexBadgeHtml(seScore) : '';
+  const apcBadge = apcBadgeHtml(s.is_oa, s.apc_usd);
 
   card.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">'
@@ -329,6 +362,7 @@ function makeOpenAlexCard(s) {
       + '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">' + works + ' works</span>'
       + (hIndex ? '<span style="font-size:.72rem;background:#f1f5f9;color:#374151;padding:1px 7px;border-radius:10px;">h-index ' + hIndex + '</span>' : '')
       + scoreBadge
+      + apcBadge
     + '</div>'
     + '<div style="margin-top:auto;padding-top:.25rem;display:flex;gap:.75rem;align-items:center;">'
       + (pageUrl ? '<a href="' + escJ(pageUrl) + '" style="font-size:.8rem;color:#2e7f9f;text-decoration:none;font-weight:600;">Full details →</a>' : '')
@@ -345,6 +379,7 @@ function makeOpenAlexCard(s) {
       works: s.works_count != null ? s.works_count : null, hIndex: hIndex,
       jti: seScore ? (seScore.total + '/100 · ' + seScore.grade) : null,
       issnL: s.issn_l || null,
+      apc: apcInfo(s.is_oa, s.apc_usd).label,
     });
   }
   return card;
@@ -409,7 +444,7 @@ async function searchJournals(query, oaOnly) {
       + '&filter=type:journal'
       + (oaOnly ? ',is_oa:true' : '')
       + '&per_page=20&sort=works_count:desc&select=id,display_name,host_organization_name,'
-      + 'is_oa,is_in_doaj,works_count,homepage_url,summary_stats,issn_l'
+      + 'is_oa,is_in_doaj,works_count,homepage_url,summary_stats,issn_l,apc_usd'
       + '&mailto=' + OA_MAILTO;
 
     const res = await fetch(url);
@@ -462,6 +497,7 @@ function updateCuratedCompareData(journalName, src) {
   if (!existing) return;
   existing.works = src.works_count ?? null;
   existing.hIndex = src.summary_stats?.h_index ?? null;
+  existing.apc = apcInfo(src.is_oa, src.apc_usd).label;
   if (globalThis.SE?.components?.computeJournalTrustIndex) {
     const sc = SE.components.computeJournalTrustIndex(src);
     existing.jti = sc.total + '/100 · ' + sc.grade;
@@ -496,7 +532,7 @@ async function backfillPinnedCompareStats() {
     await Promise.all(batch.map(async ([key, entry]) => {
       try {
         const url = OA_API + '/sources?search=' + encodeURIComponent(entry.name)
-          + '&filter=type:journal&per_page=1&select=display_name,is_oa,is_in_doaj,works_count,summary_stats,issn_l'
+          + '&filter=type:journal&per_page=1&select=display_name,is_oa,is_in_doaj,works_count,summary_stats,issn_l,apc_usd'
           + '&mailto=' + OA_MAILTO;
         const res = await fetch(url);
         if (!res.ok) return;
@@ -526,7 +562,7 @@ async function loadCuratedJti() {
       const name = card.getAttribute('data-jname');
       try {
         const url = OA_API + '/sources?search=' + encodeURIComponent(name)
-          + '&filter=type:journal&per_page=1&select=display_name,is_oa,is_in_doaj,works_count,summary_stats,issn_l'
+          + '&filter=type:journal&per_page=1&select=display_name,is_oa,is_in_doaj,works_count,summary_stats,issn_l,apc_usd'
           + '&mailto=' + OA_MAILTO;
         const res = await fetch(url);
         // A failed lookup (rate limit, upstream error, whatever) should
@@ -541,6 +577,8 @@ async function loadCuratedJti() {
         updateCuratedCompareData(name, src);
         const score = SE.components.computeJournalTrustIndex(src);
         el.outerHTML = SE.components.journalTrustIndexBadgeHtml(score);
+        const apcEl = card.querySelector('.curated-apc');
+        if (apcEl) apcEl.outerHTML = apcBadgeHtml(src.is_oa, src.apc_usd);
       } catch(_) { el.textContent = ''; }
     }));
     // Small pause between batches

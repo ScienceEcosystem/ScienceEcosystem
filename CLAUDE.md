@@ -2,16 +2,24 @@ ScienceEcosystem — Development Notes
 Last updated: 2026-06-25
 =======================================================
 
-goal is that we can help with accomplishing what is happeing here also
-https://open-research-europe.ec.europa.eu/blog/how-open-peer-review-improves-scholarly-publication
+this doi does not reveal anyghing why:https://doi.org/10.1577/1548-8659(1965)94%5B1:DPITBB%5D2.0.CO;2
 
+also not whan searching for the full citation:
+Darnell RM, Meierotto RR (1965) Diurnal periodicity in the black bullhead, Ictalurus melas (Rafinesque). Transactions of the American Fisheries Society 94(1): 1–8,https://doi.org/10.1577/1548-8659(1965)94%5B1:DPITBB%5D2.0.CO;2
 
+this doi also does not show any results:
+IPBES (2019) Summary for policymakers of the global assessment report on biodiversity and ecosystem services. Zenodo, https://doi.org/10.5281/zenodo.3553579
+
+when searching for this it does not find it but when only for title it does work, can it than not alsways try to find it:
+Kline JL, Wood BM (1996) Food habits and diet selectivity of the brown bullhead. Journal of Freshwater Ecology 11(2): 145–151
+
+https://fd.nl/tech-en-innovatie/1614726/wetenschappers-komen-in-opstand-tegen-commerciele-uitgevers-en-flippen-hun-tijdschriften?utm_medium=social&utm_source=app&utm_campaign=earned&utm_content=20261011&utm_term=app-ios&gift=xKa7B
 
 =======================================================
 BUGS / QUICK FIXES
 =======================================================
 
-- [X] Citation contexts overclaiming "via Semantic Scholar" when actually
+- [x] Citation contexts overclaiming "via Semantic Scholar" when actually
       showing the citing paper's abstract (2026-06-25) — user flagged a
       real example: a citing paper's shown "context" was just the opening
       of ITS abstract, completely unrelated to the actual sentence where
@@ -54,7 +62,7 @@ BUGS / QUICK FIXES
       the dead badge code is gone from served scripts/paper.js and
       scripts/profile.js.
 
-- [X] Fix installed-PWA app icon showing a generic "S" placeholder
+- [x] Fix installed-PWA app icon showing a generic "S" placeholder
       (2026-06-24) — user installs the site as a desktop app (PWA, not an
       Xcode/Safari extension build — clarified after an initial wrong
       assumption that this was about the Safari extension Xcode port).
@@ -83,7 +91,7 @@ BUGS / QUICK FIXES
       both icon files re-confirmed 200 via the dev server after
       regeneration.
 
-- [X] Retry PDF load on transient R2 408s (2026-06-23) — user hit "PDF no
+- [x] Retry PDF load on transient R2 408s (2026-06-23) — user hit "PDF no
       longer available... Unexpected server response (408)" opening a
       library PDF. Confirmed the file was NOT actually broken: curled the
       exact signed R2 URL from the error message directly and it returned
@@ -95,7 +103,7 @@ BUGS / QUICK FIXES
       backoff) on 408/425/429/5xx before falling back to the OA-PDF lookup
       / "PDF no longer available" error state. Verified the status-
       extraction regex against the exact error string from the report.
-- [X] Fix misleading "publisher is blocking" message after attaching a
+- [x] Fix misleading "publisher is blocking" message after attaching a
       library PDF (2026-06-23) — user attached a PDF to a library item
       that previously had none (got the badge confirming it), but opening
       it in the reader still showed the OLD "publisher is blocking direct
@@ -118,7 +126,7 @@ BUGS / QUICK FIXES
       live failure for this user's specific item (W4410980898) couldn't be
       reproduced directly (would need their browser session), but the
       message-masking bug is fixed regardless of the underlying cause.
-- [X] Found the real root cause of the repeat 408s — R2 range-request bug
+- [x] Found the real root cause of the repeat 408s — R2 range-request bug
       (2026-06-24) — the message-masking fix above immediately surfaced
       the TRUE underlying error for W4410980898: a genuine, repeating 408
       on this exact PDF, surviving the loadSignedUrlWithRetry() retries
@@ -138,7 +146,7 @@ BUGS / QUICK FIXES
       every direct curl test. Retry-on-transient-status logic kept as a
       second line of defense. Verified live (fetch/getDocument-with-data
       pattern confirmed in served scripts/pdf-reader.js).
-- [X] Extension's "Save PDF" only ever tried the FIRST candidate URL
+- [x] Extension's "Save PDF" only ever tried the FIRST candidate URL
       (2026-06-24) — user hit this on ScienceDirect: extension found 17
       candidate PDF links ("Save PDF (17 found)") but clicking it failed
       with "File is not a valid PDF" — turned out extension/popup/popup.js's
@@ -152,7 +160,7 @@ BUGS / QUICK FIXES
       (`/pdfft?isDTMRedir=true&download=true`) gets an HTML interstitial
       instead of the PDF, which correctly fails the server's %PDF- check.
       Fixed the part actually fixable without fighting Elsevier's anti-bot
-      flow: popup.js now tries each candidate in _pdfUrls in order, stopping
+      flow: popup.js now tries each candidate in \_pdfUrls in order, stopping
       at the first one that actually validates as a real PDF, instead of
       giving up after one attempt. Doesn't guarantee ScienceDirect specifically
       works (still publisher-dependent — extension/manifest.json's
@@ -163,7 +171,7 @@ BUGS / QUICK FIXES
       for every publisher, and the user can still always fall back to
       manually attaching a PDF via the website (which does work, confirmed
       multiple times this session).
-- [X] Extension can now save a paper from its raw PDF view, not just the
+- [x] Extension can now save a paper from its raw PDF view, not just the
       article page (2026-06-24) — follow-up to the above: user manually
       found the real, working PDF by clicking through ScienceDirect's UI to
       its "online reader", landing on a bare PDF render at
@@ -183,7 +191,7 @@ BUGS / QUICK FIXES
       for that tab and offers to save THIS exact PDF (the tab's current
       URL — which is the real, working file, better than any guessed
       candidate) against that remembered paper. Added the "storage"
-      permission to manifest.json (wasn't there before — chrome.storage.*
+      permission to manifest.json (wasn't there before — chrome.storage.\*
       needs it), a chrome.tabs.onRemoved cleanup listener in
       service-worker.js to delete the per-tab entry when the tab closes,
       and a defensive document.contentType==="application/pdf" check in
@@ -193,7 +201,7 @@ BUGS / QUICK FIXES
       pass syntax/JSON validation; the actual runtime behavior needs a
       real reload-and-test in Chrome (can't simulate chrome.storage/
       chrome.tabs APIs from this environment).
-- [X] Extension now fetches PDFs in-page instead of from the background
+- [x] Extension now fetches PDFs in-page instead of from the background
       script, matching how Zotero's connector avoids anti-bot rejections
       (2026-06-24) — user asked specifically how Zotero handles this.
       Honest answer given: Zotero's real advantage is ~1,400 hand-written,
@@ -232,80 +240,73 @@ NEAR-TERM FEATURES (next 1–3 months)
 =======================================================
 
 USER PROFILE PAGE (currently very empty)
-- [X] Show claimed profile cleanly: name, bio, links, publications
-- [X] Let researcher add links to: GitHub, Google Scholar, personal website, institution page
-- [X] "Claim profile" and "Merge profiles" options should only appear when the user is
+
+- [x] Show claimed profile cleanly: name, bio, links, publications
+- [x] Let researcher add links to: GitHub, Google Scholar, personal website, institution page
+- [x] "Claim profile" and "Merge profiles" options should only appear when the user is
       in edit mode — not permanently visible to everyone
-- [X] Support multiple current affiliations — DB has affiliations TEXT[], settings has chip UI,
+- [x] Support multiple current affiliations — DB has affiliations TEXT[], settings has chip UI,
       profile displays all joined by · (2026-05-24)
-- [X] Olivier's 3 OpenAlex IDs need merging on our side:
-        A5117810853 (O.V. Raven)
-        A5057345880 (Olivier V. Raven)
-        A5133781948 (Olivier Raven)
+- [x] Olivier's 3 OpenAlex IDs need merging on our side:
+      A5117810853 (O.V. Raven)
+      A5057345880 (Olivier V. Raven)
+      A5133781948 (Olivier Raven)
       OpenAlex no longer allows merge requests — we need to handle this in our DB by
       treating all 3 as one author, combining their works, and picking the canonical ID this should work for everyone
-- [X] Publication type badges + opt-in library linking + library "Recently added"
-      (2026-06-21):
-      1. Datasets/preprints/etc. were visually identical to articles in the
-         Publications list. Added a small badge (Dataset/Preprint/Book chapter/
-         Dissertation/Report/Peer review/Retraction/Erratum) to
-         scripts/components.js renderPaperCard() chips array, keyed off
-         OpenAlex's `type` field (was already present on every work, just
-         unused). Deliberately no badge for plain "article" (the default —
-         would be noise). Since renderPaperCard() is shared, this applies
-         everywhere paper cards render (search, topic pages), not just
-         profiles. New .badge-type CSS rule in style.css.
-      2. Claiming an author ID does NOT auto-populate your library (deliberate
-         — library should stay curated, not become a mirror of your full
-         publication list). Discovered per-item "Add to Library" already
-         existed on every publication card (renderPaperCard → savePaper(),
-         already wired into profile.js). Added the missing piece: a bulk
-         "Add all to library" button (profile.html .pubs-header, only shown
-         when isOwner), wired in scripts/profile.js setupBulkAddToLibrary() —
-         loops accumulatedWorks calling the existing savePaper() per item,
-         150ms-staggered to stay under the /api/library rate limiter, with
-         inline progress text on the button itself. No backend changes needed.
-      3. Added a "Recently added" panel to library.html showing your 5 most
-         recently saved items as clickable chips (sorted client-side by the
-         existing created_at column, no new endpoint). scripts/library-page.js
-         renderRecentlyAdded(), called from renderTable() so it stays in sync
-         on every refresh. Clicking a chip opens that item in the inspector
-         (reuses the existing renderInspector()).
+- [x] Publication type badges + opt-in library linking + library "Recently added"
+      (2026-06-21): 1. Datasets/preprints/etc. were visually identical to articles in the
+      Publications list. Added a small badge (Dataset/Preprint/Book chapter/
+      Dissertation/Report/Peer review/Retraction/Erratum) to
+      scripts/components.js renderPaperCard() chips array, keyed off
+      OpenAlex's `type` field (was already present on every work, just
+      unused). Deliberately no badge for plain "article" (the default —
+      would be noise). Since renderPaperCard() is shared, this applies
+      everywhere paper cards render (search, topic pages), not just
+      profiles. New .badge-type CSS rule in style.css. 2. Claiming an author ID does NOT auto-populate your library (deliberate
+      — library should stay curated, not become a mirror of your full
+      publication list). Discovered per-item "Add to Library" already
+      existed on every publication card (renderPaperCard → savePaper(),
+      already wired into profile.js). Added the missing piece: a bulk
+      "Add all to library" button (profile.html .pubs-header, only shown
+      when isOwner), wired in scripts/profile.js setupBulkAddToLibrary() —
+      loops accumulatedWorks calling the existing savePaper() per item,
+      150ms-staggered to stay under the /api/library rate limiter, with
+      inline progress text on the button itself. No backend changes needed. 3. Added a "Recently added" panel to library.html showing your 5 most
+      recently saved items as clickable chips (sorted client-side by the
+      existing created_at column, no new endpoint). scripts/library-page.js
+      renderRecentlyAdded(), called from renderTable() so it stays in sync
+      on every refresh. Clicking a chip opens that item in the inspector
+      (reuses the existing renderInspector()).
       Verified end-to-end against the live dev server (all new element IDs/
       CSS confirmed present in served output) — not yet visually verified in
       a real browser session with real library data.
-- [X] ORCID/OpenAlex prefill across settings/dashboard/public profile
+- [x] ORCID/OpenAlex prefill across settings/dashboard/public profile
       (2026-06-21) — goal: minimal manual typing for a researcher who
       already has an ORCID. Confirmed Google Scholar and ResearchGate have
       no public APIs and block scraping — not usable. ORCID's public API
-      (pub.orcid.org, no auth) and OpenAlex are the two real sources.
-      1. The ORCID OAuth login callback already fetched the public ORCID
-         record every login but only used name + first employment. Added
-         parseOrcidRecord() (server/index.js, shared helper) extracting
-         biography→bio, keywords, researcher-urls (matched by ORCID's own
-         human-assigned url-name label first — "Github"/"LinkedIn" etc. —
-         falling back to hostname matching, then a website_url catch-all),
-         and ALL employments→affiliations (not just the first). Verified
-         the exact ORCID v3.0 field paths against a real fetch (Olivier's
-         own record) before relying on them.
-      2. Extended upsertUser()'s COALESCE-fills-blanks-only pattern (already
-         used for name/affiliation/bio) to also cover affiliations + the 8
-         external URL columns, so this stays free and non-destructive —
-         happens silently on next login, never overwrites a field the
-         researcher already edited in settings.
-      3. Added explicit "Import from ORCID" button on settings-profile.html
-         (POST /api/settings/import-orcid) for re-syncing after the fact —
-         same parser, same fill-blanks-only behavior, for users who signed
-         up before this existed or updated their ORCID since.
-      4. OpenAlex fallback: when a researcher saves their openalex_author_id
-         in settings, if keywords/affiliations are still blank, opportunistically
-         fills keywords from x_concepts and affiliations from
-         last_known_institutions (same fields scripts/profile.js already
-         uses elsewhere) — piggybacks on an action they're already taking,
-         no extra UI. Verified field names against a real OpenAlex author.
-      5. Added a "Complete your profile" nudge card to user-profile.html
-         (dashboard), shown only when bio/affiliation/any external link is
-         still missing after the above, linking to settings.
+      (pub.orcid.org, no auth) and OpenAlex are the two real sources. 1. The ORCID OAuth login callback already fetched the public ORCID
+      record every login but only used name + first employment. Added
+      parseOrcidRecord() (server/index.js, shared helper) extracting
+      biography→bio, keywords, researcher-urls (matched by ORCID's own
+      human-assigned url-name label first — "Github"/"LinkedIn" etc. —
+      falling back to hostname matching, then a website_url catch-all),
+      and ALL employments→affiliations (not just the first). Verified
+      the exact ORCID v3.0 field paths against a real fetch (Olivier's
+      own record) before relying on them. 2. Extended upsertUser()'s COALESCE-fills-blanks-only pattern (already
+      used for name/affiliation/bio) to also cover affiliations + the 8
+      external URL columns, so this stays free and non-destructive —
+      happens silently on next login, never overwrites a field the
+      researcher already edited in settings. 3. Added explicit "Import from ORCID" button on settings-profile.html
+      (POST /api/settings/import-orcid) for re-syncing after the fact —
+      same parser, same fill-blanks-only behavior, for users who signed
+      up before this existed or updated their ORCID since. 4. OpenAlex fallback: when a researcher saves their openalex_author_id
+      in settings, if keywords/affiliations are still blank, opportunistically
+      fills keywords from x_concepts and affiliations from
+      last_known_institutions (same fields scripts/profile.js already
+      uses elsewhere) — piggybacks on an action they're already taking,
+      no extra UI. Verified field names against a real OpenAlex author. 5. Added a "Complete your profile" nudge card to user-profile.html
+      (dashboard), shown only when bio/affiliation/any external link is
+      still missing after the above, linking to settings.
       Public profile page (profile.html) needed no changes — its external-
       link rendering already expects exactly these field names, so it
       automatically shows more once settings is better-filled.
@@ -315,7 +316,7 @@ USER PROFILE PAGE (currently very empty)
       endpoint confirmed live and correctly CSRF/auth-gated. NOT yet tested
       through a real browser OAuth login end-to-end (would need a real
       ORCID login round-trip, not practical to simulate here).
-- [X] Fix merged-ID publication count not showing for logged-out visitors
+- [x] Fix merged-ID publication count not showing for logged-out visitors
       (2026-06-21) — found via screenshot: Olivier's own profile showed
       "Publications: 3" when logged in viewing his own profile, but only
       "Publications: 1" when logged out viewing the same public profile URL.
@@ -331,7 +332,7 @@ USER PROFILE PAGE (currently very empty)
       of the owner-only /api/claims call. Verified against Olivier's real
       profile: endpoint now returns claimed_author_ids: ["A5117810853",
       "A5133781948"] with no auth required.
-- [X] Fix "Login with ORCID" button contrast (2026-06-21) — the official
+- [x] Fix "Login with ORCID" button contrast (2026-06-21) — the official
       ORCID logo (grey wordmark + lime-green "iD" icon, assets/logos/orcid.png)
       is designed for light backgrounds per ORCID's own brand guidelines;
       placed on our green --success button it was green-icon-on-green-button,
@@ -340,76 +341,70 @@ USER PROFILE PAGE (currently very empty)
       to a white background with a green border/text instead of solid green
       fill — matches how ORCID's own button generator does it. No new image
       assets needed.
-- [X] Fix three profile-page layout/design issues (2026-06-21), flagged via
-      screenshot:
-      1. Large empty gap in the main column between Publications and "Who
-         cited me". Cause: #profileMain and #whoCitedMeSection were two
-         separate .main-col grid items while the sidebar (.side-col) spanned
-         grid-row:1/-1 across both their rows — when the sidebar's own
-         content was taller than the Publications list alone, CSS Grid grew
-         the second (mostly-empty, since whoCitedMeSection loads async)
-         row to fit it, leaving a tall empty gap before "Who cited me"
-         finally rendered into it. Fixed by wrapping both sections in one
-         `<div class="main-col">` (profile.html) so there's exactly one
-         grid item per column — removed the now-unnecessary
-         `grid-row: 1/-1` from .side-col (style.css).
-      2. Co-authors sidebar showed the profile owner's own name variants
-         (e.g. "Olivier Raven" and "O.V. Raven" listed as if they were each
-         other's co-author) — a direct side effect of the public-profile
-         merge fix from earlier this session (now correctly includes all
-         claimed name variants in the works list, but the co-author loop
-         didn't exclude them). Fixed in scripts/profile.js
-         processWorksForSidebar(): co-author loop now also checks
-         `authorTails[aid]` (the same set already used elsewhere on this
-         page to recognize the owner's own merged IDs), not just the
-         primary ID.
-      3. "Who cited me" entries used bespoke custom-styled HTML, visually
-         inconsistent with the standard paper cards used everywhere else.
-         Extended SE.components.renderPaperCard() (components.js) with new
-         opts: `abstract` (override the abstract text — used to show the
-         citation snippet instead), `hideActions` (hide Save/Cite buttons,
-         since these are external citing papers we don't have full
-         metadata for), `minimalMeta` (year only, no fake "Cited by 0"),
-         `titleHref` (link externally instead of to our paper.html when we
-         don't have a real internal id), `extraChips` (lets callers append
-         badges — used for the intent/stance labels). Rewrote
-         loadWhoCitedMe() in scripts/profile.js to build a small synthetic
-         work object per citation and render it through the shared card
-         component instead of custom markup — same look as Publications,
-         search results, and topic pages everywhere else on the site.
+- [x] Fix three profile-page layout/design issues (2026-06-21), flagged via
+      screenshot: 1. Large empty gap in the main column between Publications and "Who
+      cited me". Cause: #profileMain and #whoCitedMeSection were two
+      separate .main-col grid items while the sidebar (.side-col) spanned
+      grid-row:1/-1 across both their rows — when the sidebar's own
+      content was taller than the Publications list alone, CSS Grid grew
+      the second (mostly-empty, since whoCitedMeSection loads async)
+      row to fit it, leaving a tall empty gap before "Who cited me"
+      finally rendered into it. Fixed by wrapping both sections in one
+      `<div class="main-col">` (profile.html) so there's exactly one
+      grid item per column — removed the now-unnecessary
+      `grid-row: 1/-1` from .side-col (style.css). 2. Co-authors sidebar showed the profile owner's own name variants
+      (e.g. "Olivier Raven" and "O.V. Raven" listed as if they were each
+      other's co-author) — a direct side effect of the public-profile
+      merge fix from earlier this session (now correctly includes all
+      claimed name variants in the works list, but the co-author loop
+      didn't exclude them). Fixed in scripts/profile.js
+      processWorksForSidebar(): co-author loop now also checks
+      `authorTails[aid]` (the same set already used elsewhere on this
+      page to recognize the owner's own merged IDs), not just the
+      primary ID. 3. "Who cited me" entries used bespoke custom-styled HTML, visually
+      inconsistent with the standard paper cards used everywhere else.
+      Extended SE.components.renderPaperCard() (components.js) with new
+      opts: `abstract` (override the abstract text — used to show the
+      citation snippet instead), `hideActions` (hide Save/Cite buttons,
+      since these are external citing papers we don't have full
+      metadata for), `minimalMeta` (year only, no fake "Cited by 0"),
+      `titleHref` (link externally instead of to our paper.html when we
+      don't have a real internal id), `extraChips` (lets callers append
+      badges — used for the intent/stance labels). Rewrote
+      loadWhoCitedMe() in scripts/profile.js to build a small synthetic
+      work object per citation and render it through the shared card
+      component instead of custom markup — same look as Publications,
+      search results, and topic pages everywhere else on the site.
       Verified all three end-to-end against the live dev server (section
       tag balance confirmed, all new opts/checks confirmed present in
       served output) — not yet visually confirmed in a real browser.
-- [X] Reorder paper.html sections + fix double-box nesting (2026-06-21),
-      flagged via screenshot:
-      1. Moved "How this paper is being cited" (citationContextsSection)
-         to appear right after the Similar Papers Map (graphBlock) instead
-         of much earlier in the page (it used to sit right after Figures,
-         before the author note/objects/graph sections). New order:
-         Abstract → Figures → Author's note → Objects → Similar Papers Map
-         → How this paper is being cited → Papers like this/References &
-         Citations.
-      2. "Papers like this" and the two "References & Citations"
-         subsections ("Papers this work cites"/"Papers that cite this
-         work") were each wrapped in their own `.panel.light` box
-         (border+shadow+padding, since no CSS override for `.light`
-         actually existed — it just inherited the full `.panel` look) on
-         top of each individual paper card *also* being boxed
-         (.result-card.paper-card) — nested boxes inside boxes. Removed the
-         outer `.panel.light` wrapper from all three (scripts/paper.js) —
-         confirmed via grep that this class combo is used nowhere else
-         relevant on this page (other 3 usages are unrelated controls,
-         left untouched) — so now only the individual cards are boxed,
-         consistent with how Abstract/Publications etc. already look.
-      3. Simplified the confusing italic sub-headings: "Papers this work
-         *cites*" → "References", "Papers that *cite* this work" →
-         "Cited by" (matches familiar Google Scholar-style terminology,
-         no italics, no panel title + sub-title redundancy with the
-         "References & Citations" h2 above them).
+- [x] Reorder paper.html sections + fix double-box nesting (2026-06-21),
+      flagged via screenshot: 1. Moved "How this paper is being cited" (citationContextsSection)
+      to appear right after the Similar Papers Map (graphBlock) instead
+      of much earlier in the page (it used to sit right after Figures,
+      before the author note/objects/graph sections). New order:
+      Abstract → Figures → Author's note → Objects → Similar Papers Map
+      → How this paper is being cited → Papers like this/References &
+      Citations. 2. "Papers like this" and the two "References & Citations"
+      subsections ("Papers this work cites"/"Papers that cite this
+      work") were each wrapped in their own `.panel.light` box
+      (border+shadow+padding, since no CSS override for `.light`
+      actually existed — it just inherited the full `.panel` look) on
+      top of each individual paper card _also_ being boxed
+      (.result-card.paper-card) — nested boxes inside boxes. Removed the
+      outer `.panel.light` wrapper from all three (scripts/paper.js) —
+      confirmed via grep that this class combo is used nowhere else
+      relevant on this page (other 3 usages are unrelated controls,
+      left untouched) — so now only the individual cards are boxed,
+      consistent with how Abstract/Publications etc. already look. 3. Simplified the confusing italic sub-headings: "Papers this work
+      _cites_" → "References", "Papers that _cite_ this work" →
+      "Cited by" (matches familiar Google Scholar-style terminology,
+      no italics, no panel title + sub-title redundancy with the
+      "References & Citations" h2 above them).
       Verified against the live dev server: section order in served HTML
       confirmed (graphBlock → citationContextsSection → relatedBlock), new
       headings present, panel-light removed from the 3 relevant spots.
-- [X] Paper page's own "How this paper is being cited" entries also moved
+- [x] Paper page's own "How this paper is being cited" entries also moved
       to the shared paper-card design (2026-06-21) — same fix as Who-cited-
       me on profile.html, just applied to paper.js's own
       renderCitationContexts() (this is a separate, parallel renderer —
@@ -421,56 +416,50 @@ USER PROFILE PAGE (currently very empty)
       badges as extraChips. Falls back to the old bespoke markup only if
       SE.components isn't loaded for some reason. Verified live: confirmed
       present in served scripts/paper.js.
-- [X] "Papers like this" heading size fix + References/Cited-by redesign
-      (2026-06-21), flagged via screenshot:
-      1. "Papers like this" was `<h3>` while its sibling sections ("How
-         this paper is being cited", "References & Citations") were both
-         `<h2>` — made it look smaller than its peers. Fixed to `<h2>`.
-      2. Removed the "References & Citations" umbrella heading — "References"
-         and "Cited by" are now each their own top-level `<h2>` section,
-         not subsections of something else.
-      3. Added a real filter/sort system to both lists (previously just a
-         flat list — these can hold up to 200 items each per the existing
-         fetchCitedPapers/fetchCitingPapers per_page=200 cap). New
-         renderFilterableList() helper (scripts/paper.js) gives each list
-         independently: a live text search (title/author substring), a
-         sort dropdown (Author A–Z / Newest / Oldest / Most cited —
-         References defaults to Author A–Z matching its old behavior,
-         Cited-by defaults to Most cited matching its old behavior), and
-         type filter tabs (Article/Dataset/Preprint/etc., reusing the same
-         tab-btn visual pattern as the existing Influential/Methodology/
-         Result tabs) — tabs only appear when a list actually contains more
-         than one type, so a references list that's 100% articles shows no
-         tabs at all rather than a useless single "Article" filter.
+- [x] "Papers like this" heading size fix + References/Cited-by redesign
+      (2026-06-21), flagged via screenshot: 1. "Papers like this" was `<h3>` while its sibling sections ("How
+      this paper is being cited", "References & Citations") were both
+      `<h2>` — made it look smaller than its peers. Fixed to `<h2>`. 2. Removed the "References & Citations" umbrella heading — "References"
+      and "Cited by" are now each their own top-level `<h2>` section,
+      not subsections of something else. 3. Added a real filter/sort system to both lists (previously just a
+      flat list — these can hold up to 200 items each per the existing
+      fetchCitedPapers/fetchCitingPapers per_page=200 cap). New
+      renderFilterableList() helper (scripts/paper.js) gives each list
+      independently: a live text search (title/author substring), a
+      sort dropdown (Author A–Z / Newest / Oldest / Most cited —
+      References defaults to Author A–Z matching its old behavior,
+      Cited-by defaults to Most cited matching its old behavior), and
+      type filter tabs (Article/Dataset/Preprint/etc., reusing the same
+      tab-btn visual pattern as the existing Influential/Methodology/
+      Result tabs) — tabs only appear when a list actually contains more
+      than one type, so a references list that's 100% articles shows no
+      tabs at all rather than a useless single "Article" filter.
       Verified live: renderFilterableList/filterBarHtml/refsTypeTabs/
       citedByTypeTabs all confirmed present in served scripts/paper.js.
-- [X] Search + year-range filter on entity works lists (2026-06-22) —
+- [x] Search + year-range filter on entity works lists (2026-06-22) —
       journal.html, profile.html, institute.html, and publisher.html each
       had Sort-by/Order only on their works list, no way to narrow it down.
       Prompted by trying to find something specific in "The Science of The
       Total Environment" (83,853 works) with only sort available. All four
       pages independently duplicate the same fetchWorksPage(page, replace)
       pattern (no shared helper exists beyond SE.components.renderPaperCard/
-      enhancePaperCards) — added the same fix to each:
-        - New text input (debounced 400ms) + From/To year number inputs in
-          each page's .sort-controls row, all sharing the same element ids
-          (#worksFilterQuery/#worksFilterYearMin/#worksFilterYearMax) for
-          consistency across the 4 pages.
-        - New applyWorksFilters(u) helper in each script (journal.js,
-          institute.js, publisher.js, profile.js) — reads the existing
-          filter= value already baked into that page's base works URL
-          (host_venue.id:X / author.id:X / institutions.id:X / publisher
-          equivalent), then rejoins it with new from_publication_date:/
-          to_publication_date: clauses (comma-AND syntax) and a search=
-          param, rather than overwriting filter= outright — overwriting
-          would have silently shown ALL works on OpenAlex instead of just
-          that entity's. Used `search=` and `from_publication_date`/
-          `to_publication_date` syntax already proven elsewhere in this
-          codebase (scripts/search.js), not guessed fresh.
-        - profile.html needed no special-casing despite supporting merged/
-          claimed OpenAlex author IDs — the merge logic resolves the base
-          URL string BEFORE fetchWorksPage ever runs, so by the time the
-          filter logic runs it's just a normal URL like the other 3 pages.
+      enhancePaperCards) — added the same fix to each: - New text input (debounced 400ms) + From/To year number inputs in
+      each page's .sort-controls row, all sharing the same element ids
+      (#worksFilterQuery/#worksFilterYearMin/#worksFilterYearMax) for
+      consistency across the 4 pages. - New applyWorksFilters(u) helper in each script (journal.js,
+      institute.js, publisher.js, profile.js) — reads the existing
+      filter= value already baked into that page's base works URL
+      (host_venue.id:X / author.id:X / institutions.id:X / publisher
+      equivalent), then rejoins it with new from_publication_date:/
+      to_publication_date: clauses (comma-AND syntax) and a search=
+      param, rather than overwriting filter= outright — overwriting
+      would have silently shown ALL works on OpenAlex instead of just
+      that entity's. Used `search=` and `from_publication_date`/
+      `to_publication_date` syntax already proven elsewhere in this
+      codebase (scripts/search.js), not guessed fresh. - profile.html needed no special-casing despite supporting merged/
+      claimed OpenAlex author IDs — the merge logic resolves the base
+      URL string BEFORE fetchWorksPage ever runs, so by the time the
+      filter logic runs it's just a normal URL like the other 3 pages.
       Verified directly against the real OpenAlex API (not just code
       review): the journal case (search "mangrove" + 2020-2022 range on
       S86852077) correctly narrowed 83,853 works down to 255, properly
@@ -480,25 +469,19 @@ USER PROFILE PAGE (currently very empty)
       served output via the live dev server.
 
 PAPER PAGE
-- [X] Include graphical abstracts and figures where available — Europe PMC figures API,
+
+- [x] Include graphical abstracts and figures where available — Europe PMC figures API,
       covers papers with PMCIDs (~35-40% of biomedical lit); grid layout + lightbox (2026-05-24)
 
 ANALYTICS (private, no cookies, no privacy impact)
-- [X] Build a private /admin or /stats page (auth-gated, only for Olivier) that shows:
-        - Daily/weekly active users
-        - Most searched terms
-        - Most saved papers
-        - Library usage counts
-        - Extension installs vs active users
-      Options that avoid cookies and GDPR issues:
-        - Server-side log parsing (already have Render logs)
-        - Plausible Analytics (privacy-first, no cookies, ~$9/mo) — cheapest option
-        - Self-hosted Umami (free, open source, runs on Neon + Render)
-        - Simple DB counter table (free, basic, no external service needed)
+
+- [x] Build a private /admin or /stats page (auth-gated, only for Olivier) that shows: - Daily/weekly active users - Most searched terms - Most saved papers - Library usage counts - Extension installs vs active users
+      Options that avoid cookies and GDPR issues: - Server-side log parsing (already have Render logs) - Plausible Analytics (privacy-first, no cookies, ~$9/mo) — cheapest option - Self-hosted Umami (free, open source, runs on Neon + Render) - Simple DB counter table (free, basic, no external service needed)
       Recommendation: start with a simple DB counter table, upgrade to Umami later
 
 SECURITY & SESSION MANAGEMENT
-- [X] Shared link safety (2026-06-20) — audited: sessions are cookie-only
+
+- [x] Shared link safety (2026-06-20) — audited: sessions are cookie-only
       (signed, httpOnly "sid"), getSession() never reads a token from
       query/body, and there is no shareable-link feature anywhere in the
       codebase that embeds a session token in a URL. ORCID OAuth callback
@@ -506,10 +489,10 @@ SECURITY & SESSION MANAGEMENT
       documented in privacy.html ("Sharing a link... your session cannot
       be transferred through a link"). No code change needed — verified,
       not built.
-- [X] CSRF protection on all POST endpoints (2026-06-20) — double-submit
+- [x] CSRF protection on all POST endpoints (2026-06-20) — double-submit
       cookie pattern. server/index.js sets a non-httpOnly `csrf_token`
-      cookie on every visit; all state-changing requests to /api/* or
-      /auth/* must echo it back as an X-CSRF-Token header or get a 403.
+      cookie on every visit; all state-changing requests to /api/_ or
+      /auth/_ must echo it back as an X-CSRF-Token header or get a 403.
       scripts/session.js patches window.fetch globally so every existing
       fetch() call across the site gets the header automatically — no
       per-call-site changes needed. The browser extension (uses the same
@@ -520,7 +503,7 @@ SECURITY & SESSION MANAGEMENT
       ACTION NEEDED: set EXTENSION_ORIGINS on Render to the real published
       Chrome/Firefox extension IDs, or the extension's save/upload
       features will start failing CSRF checks once this deploys.
-- [X] Rate limiting on /api/library and search endpoints (2026-06-20) —
+- [x] Rate limiting on /api/library and search endpoints (2026-06-20) —
       added to /api/library and /api/collections (120 req/min/IP — auth-
       gated already, this is defense-in-depth against a compromised/buggy
       client). Note: there is no server-side search endpoint to rate-limit
@@ -528,10 +511,10 @@ SECURITY & SESSION MANAGEMENT
       that part of the item doesn't apply to our infrastructure.
 
 BROWSER EXTENSION
-- [X] Firefox extension port: submitted to addons.mozilla.org (2026-05-22), awaiting review
-- [ ] Safari extension port (requires Xcode + Apple developer account — plan for later)
-- [X] Extension update: JTI score shown in popup (v0.1.2, 2026-05-22)
 
+- [x] Firefox extension port: submitted to addons.mozilla.org (2026-05-22), awaiting review
+- [ ] Safari extension port (requires Xcode + Apple developer account — plan for later)
+- [x] Extension update: JTI score shown in popup (v0.1.2, 2026-05-22)
 
 =======================================================
 PHASE 2 — EVIDENCE LINKS (medium-term, needs funding/help)
@@ -549,7 +532,7 @@ PHASE 2 — EVIDENCE LINKS (medium-term, needs funding/help)
 - [ ] Knowledge graph foundation: begin building the internal graph structure that
       connects papers → datasets → code → authors → institutions
       (see business_plan/future.tex for architecture vision)
-- [X] Public roadmap page on the site itself (not just Overleaf) (2026-07-07)
+- [x] Public roadmap page on the site itself (not just Overleaf) (2026-07-07)
       — added roadmap.html, matching site's panel/nav/footer template.
       Content pulled from this file's Stage 1/2/3 build plan (not the vaguer
       Phase 1/2/3 summary already on about.html): Stage 1 marked
@@ -557,7 +540,6 @@ PHASE 2 — EVIDENCE LINKS (medium-term, needs funding/help)
       Scholar citations-endpoint bottleneck called out explicitly, Stage 3
       marked as blocked on Stage 2 data. Linked from about.html's "What's
       next" section and from roadmap.html's own footer. Verified 200 locally.
-
 
 =======================================================
 PHASE 3 — INFRASTRUCTURE (long-term vision)
@@ -567,20 +549,22 @@ These are from the business plan (future.tex, technical.tex). Not for immediate 
 but keep them visible so short-term decisions don't block them.
 
 LIVING PAPERS
+
 - [ ] A paper format where the underlying data, code, figures, and text are stored as
       a knowledge graph and rendered as a traditional paper on the surface.
       The researcher experience: write prose, add figures, upload data, run code → see a paper.
       Behind the scenes: entities, methods, results, claims, provenance, uncertainty, versions.
 
 MEMORY ALPHA (connective knowledge layer)
+
 - [ ] Context, methods, and meaning preserved alongside results — not just data storage.
       Research objects that remain understandable and reusable across decades, even as
       institutions and technologies change. The long-term scientific memory infrastructure.
 
 REPRODUCIBLE WORKSPACES
+
 - [ ] Link code at version level, record computational environments, allow re-execution
       and verification workflows.
-
 
 =======================================================
 VISION — THE LIVING SCIENCE RECORD
@@ -597,6 +581,7 @@ conversation sits frozen — a PDF issued on a fixed date, unchanged, showing
 no trace of what happened to its claims after publication.
 
 A reader encountering that paper today has no way of knowing:
+
 - Whether its central finding was later replicated or failed replication
 - Whether a key method was shown to be flawed
 - Whether three subsequent papers challenged its interpretation
@@ -626,13 +611,13 @@ simply never tested again.
 Our long-term vision is to make these claims — not papers — the primary unit
 of the scientific record. Each claim is a living node:
 
-  - Linked to the paper and section where it was made
-  - Linked to every subsequent paper that tested, challenged, supported,
-    or qualified it
-  - Annotated with the current state of evidence (supported / contested /
-    refuted / replicated / qualified)
-  - Readable by anyone, editable by the research community under governance rules
-  - Traceable: every annotation cites its source
+- Linked to the paper and section where it was made
+- Linked to every subsequent paper that tested, challenged, supported,
+  or qualified it
+- Annotated with the current state of evidence (supported / contested /
+  refuted / replicated / qualified)
+- Readable by anyone, editable by the research community under governance rules
+- Traceable: every annotation cites its source
 
 This is not a replacement for papers. Papers remain the authoritative
 source of methodology and context. The claim layer sits above them —
@@ -649,7 +634,7 @@ The first step toward the claim layer — buildable now — is citation stance
 classification: reading the sentence(s) in which a paper is cited and
 classifying the relationship as:
 
-  Supports / Challenges / Corrects / Extends / Uses method / Background mention
+Supports / Challenges / Corrects / Extends / Uses method / Background mention
 
 Combined with author response (the cited author can attach a note visible on
 their paper page), this turns citations from a one-way reference system into
@@ -665,12 +650,14 @@ THE TOPIC PAGE AS LIVING RECORD
 
 ScienceEcosystem's topic pages are already closer to this vision than
 anything else that exists. A topic page today aggregates:
+
 - The Wikipedia overview of a concept
 - The papers most associated with it
 - The key authors
 - Citation and publication trends over time
 
 The next version of a topic page becomes the living record of a field:
+
 - The central claims and their current evidential status
 - The key debates: where does the field agree, where does it not
 - The methodological fault lines: which results depend on which methods
@@ -705,26 +692,28 @@ existing literature and makes its evolution visible.
 CONCRETE ROADMAP TOWARD THIS VISION
 
 Near-term (buildable now):
-- [X] Citation context display on paper pages (Semantic Scholar API) — see
+
+- [x] Citation context display on paper pages (Semantic Scholar API) — see
       Stage 2B below, done (paper.html + profile.js, 2026-03-07/2026-05-25,
       verified working 2026-06-21)
-- [X] Citation stance classification using Claude API — see Stage 2C below,
+- [x] Citation stance classification using Claude API — see Stage 2C below,
       built 2026-06-21 but currently disabled via AI_FEATURES_ENABLED kill
       switch pending cost/abuse hardening (see AI USAGE POLICY section)
-- [X] Author response field on paper pages (owner-only, visible to all) —
+- [x] Author response field on paper pages (owner-only, visible to all) —
       see Stage 2D below, done 2026-06-21
 
 Medium-term (Phase 2 foundation):
+
 - [ ] Claim extraction from paper abstracts and results sections
 - [ ] Claim-to-claim linking across papers (same claim, different papers)
 - [ ] Community annotation layer with governance rules and source requirements
 
 Long-term (Phase 3):
+
 - [ ] Full claim graph: every major claim in the indexed literature as a node
 - [ ] Topic pages show field-level consensus, contested areas, open questions
 - [ ] Living paper format: new papers published directly into the graph,
       not as static PDFs but as structured claim sets with linked evidence
-
 
 =======================================================
 DETAILED BUILD PLAN — STEP BY STEP
@@ -736,56 +725,54 @@ The full narrative is in business_plan/future.tex.
 Each stage must be fully stable before the next begins.
 Each stage must be independently useful — not just a stepping stone.
 
-
 ───────────────────────────────────────────────────────
 STAGE 1 — BE USEFUL TODAY
 Status: substantially done. Ongoing maintenance.
 ───────────────────────────────────────────────────────
 
 What we have:
-  [X] Paper pages: metadata, abstract, citations, figures (Europe PMC),
-      citation graph (vis-network), Altmetric badge, open access status
-  [X] Author profiles: publication list, citation trends, co-authors,
-      career timeline, keywords linking to topic pages, avatar upload,
-      multi-affiliation support, Semantic Scholar citation augmentation
-  [X] Topic pages: Wikipedia article, blue linked words, references,
-      related topics, top papers, top authors, citation trend chart
-  [X] Library: save papers, collections, Zotero sync, PDF storage (R2)
-  [X] Search: full-text, DOI, boolean operators, author search
-  [X] Browser extension: Chrome live, Firefox submitted
-  [X] Admin stats dashboard
+[X] Paper pages: metadata, abstract, citations, figures (Europe PMC),
+citation graph (vis-network), Altmetric badge, open access status
+[X] Author profiles: publication list, citation trends, co-authors,
+career timeline, keywords linking to topic pages, avatar upload,
+multi-affiliation support, Semantic Scholar citation augmentation
+[X] Topic pages: Wikipedia article, blue linked words, references,
+related topics, top papers, top authors, citation trend chart
+[X] Library: save papers, collections, Zotero sync, PDF storage (R2)
+[X] Search: full-text, DOI, boolean operators, author search
+[X] Browser extension: Chrome live, Firefox submitted
+[X] Admin stats dashboard
 
 Still needed in Stage 1 (before moving to Stage 2):
-  [X] CSRF protection on all POST endpoints (2026-06-20, see Security section above)
-  [X] Rate limiting on /api/library and search (2026-06-20, see Security section above)
-  [X] Terms of Service (2026-06-20) — terms.html added, linked from every
-      page's footer next to Privacy policy. Covers acceptable use, content
-      ownership, third-party data accuracy disclaimer, warranty disclaimer,
-      liability limitation, termination, governing law. DRAFT — written
-      in good faith matching the site's tone, but not reviewed by a lawyer;
-      recommend professional review before leaning on it in a real dispute.
-  [X] CONTRIBUTING.md so others can contribute (2026-06-20) — added at repo
-      root. FLAGS A GAP: there is no LICENSE file in the repo yet, which
-      needs to be decided (MIT/Apache-2.0/AGPL/etc.) before outside PRs can
-      be accepted on a legally clean footing.
-  [X] Public roadmap page on the site (2026-07-07) — see PHASE 2 checklist
-      above for details
-  [X] LICENSE file (2026-07-07) — Olivier chose AGPL-3.0: closes the gap
-      flagged above (2026-06-20). AGPL specifically over MIT/Apache-2.0
-      because ScienceEcosystem is a network service, not a library — AGPL's
-      network-use clause means a fork run as a competing closed SaaS must
-      also open-source its changes, which plain copyleft (GPL) wouldn't
-      catch since there's no "distribution" happening in a hosted-service
-      fork. Added LICENSE (full AGPL-3.0 text, copyright notice filled in
-      per FSF's own "how to apply" instructions at the end of the license)
-      and updated CONTRIBUTING.md's License section to point to it instead
-      of flagging the gap. Outside PRs can now be accepted on a legally
-      clean footing.
+[X] CSRF protection on all POST endpoints (2026-06-20, see Security section above)
+[X] Rate limiting on /api/library and search (2026-06-20, see Security section above)
+[X] Terms of Service (2026-06-20) — terms.html added, linked from every
+page's footer next to Privacy policy. Covers acceptable use, content
+ownership, third-party data accuracy disclaimer, warranty disclaimer,
+liability limitation, termination, governing law. DRAFT — written
+in good faith matching the site's tone, but not reviewed by a lawyer;
+recommend professional review before leaning on it in a real dispute.
+[X] CONTRIBUTING.md so others can contribute (2026-06-20) — added at repo
+root. FLAGS A GAP: there is no LICENSE file in the repo yet, which
+needs to be decided (MIT/Apache-2.0/AGPL/etc.) before outside PRs can
+be accepted on a legally clean footing.
+[X] Public roadmap page on the site (2026-07-07) — see PHASE 2 checklist
+above for details
+[X] LICENSE file (2026-07-07) — Olivier chose AGPL-3.0: closes the gap
+flagged above (2026-06-20). AGPL specifically over MIT/Apache-2.0
+because ScienceEcosystem is a network service, not a library — AGPL's
+network-use clause means a fork run as a competing closed SaaS must
+also open-source its changes, which plain copyleft (GPL) wouldn't
+catch since there's no "distribution" happening in a hosted-service
+fork. Added LICENSE (full AGPL-3.0 text, copyright notice filled in
+per FSF's own "how to apply" instructions at the end of the license)
+and updated CONTRIBUTING.md's License section to point to it instead
+of flagging the gap. Outside PRs can now be accepted on a legally
+clean footing.
 
 DECISION: Do not start Stage 2 features until CSRF and rate limiting are done.
 STATUS: Done as of 2026-06-20 — Stage 2 is now unblocked.
 These are baseline security requirements for a platform that stores user data.
-
 
 ───────────────────────────────────────────────────────
 STAGE 2 — MAKING THE CONVERSATION VISIBLE
@@ -810,24 +797,25 @@ Why now: OpenAlex already returns cited_by data. We have it.
 This is the simplest possible starting point and immediately useful.
 
 How to build:
-  - On profile page, add "My work has been cited in" section
-  - Query OpenAlex: works?filter=cites:W{id} for each of the user's papers
-  - Or more efficiently: fetch the user's works with cited_by_count > 0,
-    then for the top papers fetch citing works
-  - Display as a grouped list: "Your paper X was cited in: [paper A], [paper B]..."
-  - Cap at 50 most recent citing papers to start
+
+- On profile page, add "My work has been cited in" section
+- Query OpenAlex: works?filter=cites:W{id} for each of the user's papers
+- Or more efficiently: fetch the user's works with cited_by_count > 0,
+  then for the top papers fetch citing works
+- Display as a grouped list: "Your paper X was cited in: [paper A], [paper B]..."
+- Cap at 50 most recent citing papers to start
 
 DB changes needed: none — all data from OpenAlex API, not stored locally
 
 Decision to make: do we cache citing papers in our DB or always fetch live?
-  → Start with live fetch, cache if it gets slow.
-  → Semantic Scholar may give better data here — see 2B.
+→ Start with live fetch, cache if it gets slow.
+→ Semantic Scholar may give better data here — see 2B.
 
-  [X] Build "Who cited me" section on profile pages (already existed, just
-      unchecked here — scripts/profile.js:885-979 loadWhoCitedMe(), wired
-      into profile.html:203-210. Built 2026-05-25, found/verified 2026-06-21).
-      Also fixed (2026-06-21) to consume the real API response shape — see
-      2B note below; was silently always showing "no contexts available".
+[X] Build "Who cited me" section on profile pages (already existed, just
+unchecked here — scripts/profile.js:885-979 loadWhoCitedMe(), wired
+into profile.html:203-210. Built 2026-05-25, found/verified 2026-06-21).
+Also fixed (2026-06-21) to consume the real API response shape — see
+2B note below; was silently always showing "no contexts available".
 
 ──── 2B. CITATION CONTEXT — SHOW THE ACTUAL SENTENCES ────
 
@@ -836,152 +824,157 @@ paper is mentioned. The reader sees not "cited 47 times" but the actual
 text of how each citation was used.
 
 Source: Semantic Scholar API
-  - Endpoint: GET https://api.semanticscholar.org/graph/v1/paper/{id}/citations
-  - Fields: contexts, intents, isInfluential, paperId, title, authors, year
-  - {id} can be a DOI: use "DOI:{doi}" format
-  - Returns up to 1000 citations per call (use offset for pagination)
-  - Rate limit: 100 req/5min without key, 1 req/sec with free API key
-  - Get a free API key: https://www.semanticscholar.org/product/api
 
-  Response includes:
-    contexts: ["In line with Smith et al. [3], we found...", "..."]
-    intents: ["background", "methodology", "result"]  ← their classification
+- Endpoint: GET https://api.semanticscholar.org/graph/v1/paper/{id}/citations
+- Fields: contexts, intents, isInfluential, paperId, title, authors, year
+- {id} can be a DOI: use "DOI:{doi}" format
+- Returns up to 1000 citations per call (use offset for pagination)
+- Rate limit: 100 req/5min without key, 1 req/sec with free API key
+- Get a free API key: https://www.semanticscholar.org/product/api
 
-  This is free data. We already use Semantic Scholar for citation counts
-  on author profiles. Extend that.
+Response includes:
+contexts: ["In line with Smith et al. [3], we found...", "..."]
+intents: ["background", "methodology", "result"] ← their classification
+
+This is free data. We already use Semantic Scholar for citation counts
+on author profiles. Extend that.
 
 How to display:
-  - New collapsible section on paper page: "How this paper is cited"
-  - Each citing paper listed with: title, year, authors
-  - Under each: the 1-3 sentences where the citation appears (the "context")
-  - Context shown in a subtle blockquote style, not as a card
-  - Initially collapsed (don't overwhelm the page), expandable
+
+- New collapsible section on paper page: "How this paper is cited"
+- Each citing paper listed with: title, year, authors
+- Under each: the 1-3 sentences where the citation appears (the "context")
+- Context shown in a subtle blockquote style, not as a card
+- Initially collapsed (don't overwhelm the page), expandable
 
 DB changes needed:
-  - New table: citation_contexts
-      paper_id TEXT,          -- our paper's OpenAlex ID
-      citing_paper_s2_id TEXT,  -- Semantic Scholar paper ID
-      citing_paper_doi TEXT,
-      citing_paper_title TEXT,
-      citing_paper_year INT,
-      contexts JSONB,         -- array of context strings
-      s2_intents JSONB,       -- Semantic Scholar's own intent labels
-      fetched_at TIMESTAMPTZ
-      PRIMARY KEY (paper_id, citing_paper_s2_id)
-  - Cache for 30 days — citation contexts don't change often
-  - Fetch on demand when paper page is loaded, store in cache
+
+- New table: citation_contexts
+  paper_id TEXT, -- our paper's OpenAlex ID
+  citing_paper_s2_id TEXT, -- Semantic Scholar paper ID
+  citing_paper_doi TEXT,
+  citing_paper_title TEXT,
+  citing_paper_year INT,
+  contexts JSONB, -- array of context strings
+  s2_intents JSONB, -- Semantic Scholar's own intent labels
+  fetched_at TIMESTAMPTZ
+  PRIMARY KEY (paper_id, citing_paper_s2_id)
+- Cache for 30 days — citation contexts don't change often
+- Fetch on demand when paper page is loaded, store in cache
 
 Server endpoint needed:
-  - GET /api/paper/:id/citation-contexts
-  - Checks cache, fetches from S2 if stale/missing, returns JSON
-  - Falls back gracefully if S2 doesn't have this paper
 
-  [X] Get Semantic Scholar API key (2026-06-21) — turned out the original
-      key was missing its "s2k-" prefix (only part of it got pasted into
-      .env originally, going back to 2026-05-25), which is why it always
-      403'd. Olivier re-applied, got a correctly-formatted s2k- key,
-      updated .env + Render. Basic paper lookups now return 200, but the
-      /paper/{id}/citations endpoint specifically keeps returning 429 even
-      after waiting — looks like a separate/stricter quota on that
-      endpoint, or it needs longer to fully activate than basic lookups.
-      Not fully resolved — revisit by retesting just the citations
-      endpoint after a longer wait (hours, not seconds).
-  [X] Found and fixed a real bug while investigating the 429s (2026-07-07)
-      — routes/paper.js:400 requested the nested citingPaper field bare
-      (fields=...,citingPaper) instead of with dot notation. Confirmed
-      directly against the live S2 API: after a clean cooldown, the bare
-      field name gets a consistent 400 "Unrecognized or unsupported
-      fields: [citingPaper]" — a real, permanent bug independent of rate
-      limiting. Fixed to fields=...,citingPaper.title,citingPaper.year,
-      citingPaper.authors,citingPaper.url,citingPaper.externalIds,
-      citingPaper.openAccessPdf — verified this exact field list returns
-      200 with real data on a clean call before the key got rate-limited
-      again from testing.
-      Rate limit itself is SEPARATE and still unresolved: retested once,
-      cleanly, ~20 min after the last hit — still 429. So the limit on
-      this specific /citations endpoint outlasts a 20-minute cooldown,
-      confirming it's stricter than basic paper lookups, not just slower
-      to activate. NEXT STEP: wait several hours (not just ~20 min) and
-      retest once, OR contact Semantic Scholar support about this key's
-      quota tier for the citations endpoint specifically — a 429 that
-      persists this long on a low-volume test key suggests a
-      misconfigured/undocumented limit, not normal usage backpressure.
-      Do not hammer this endpoint with repeated test calls — each one
-      appears to reset however long the cooldown actually is.
-  [X] OpenAlex fallback wired in (2026-06-21) — rather than wait on S2,
-      wired the existing-but-unused getOpenAlexCitingAbstractSnippets()
-      (routes/paper.js, was dead code) into the citation-contexts endpoint
-      as a parallel source alongside Semantic Scholar. Uses the exact same
-      reliable OpenAlex cites: filter that "Recently cited you" on
-      user-profile.html already depends on — extracts the first 1-2
-      sentences of each citing paper's open-access abstract as a
-      context-like snippet. Verified end-to-end: even with S2 still 429ing,
-      this fallback alone now populates real citation contexts (tested
-      against the ResNet paper, got a real AlphaFold citing-snippet back).
-      citationContexts is now S2 results + OpenAlex results combined, not
-      S2-only. New sources.openAlexAbstracts flag in the response.
-  [X] DB table: skipped — using in-memory cache instead (6h TTL,
-      CITATION_CONTEXTS_CACHE in routes/paper.js), same tradeoff notes.txt
-      already accepted for 2A. Fine at current scale.
-  [X] Build server endpoint GET /api/paper/citation-contexts — already
-      existed (routes/paper.js:667+, built 2026-03-07), aggregates Semantic
-      Scholar + OpenCitations + CORE + ScienceOpen + Lens. Found 2026-06-21
-      while wiring up 2C.
-  [X] Build UI section on paper.html "How this paper is cited" — already
-      existed (paper.html:90-114, scripts/paper.js loadCitationContexts/
-      renderCitationContexts, built 2026-03-07). Found 2026-06-21.
-  [X] Test with papers that have high citation counts — tested locally
-      against several DOIs (ResNet, etc); confirmed the route resolves
-      correctly end-to-end, but returns empty contexts due to the invalid
-      S2 key above, not a code bug.
+- GET /api/paper/:id/citation-contexts
+- Checks cache, fetches from S2 if stale/missing, returns JSON
+- Falls back gracefully if S2 doesn't have this paper
 
-  BUGS FOUND AND FIXED while wiring up 2C (2026-06-21):
-  - There were actually TWO separate, independently-built implementations
-    of GET /api/paper/citation-contexts: one in routes/paper.js (2026-03-07,
-    multi-source aggregator, returns {citationContexts, peerReviews,
-    impact,...}) and a second, newer one added straight into server/index.js
-    (2026-05-25, simpler S2-only, returns {results, total_citations,...}).
-    Because routes/paper.js's router is mounted (app.use) before the
-    server/index.js route is reached, the OLD routes/paper.js version always
-    won — the May 25 version, and BOTH profile.js's loadWhoCitedMe (which
-    expected the May 25 shape) AND any future code built against it were
-    silently broken. Fixed by removing the dead server/index.js duplicate,
-    rewriting profile.js's loadWhoCitedMe to consume the real
-    routes/paper.js response shape, and adding stance classification (2C)
-    directly into routes/paper.js's implementation instead.
-  - Separately, routes/paper.js has a catch-all GET /api/paper/:doi(*)
-    route registered first, with an explicit allowlist of path prefixes
-    (artifacts/oa/links/citation-contexts) that skip it via next() — but
-    "abstract" was missing from that allowlist, so GET /api/paper/abstract
-    was ALSO being silently swallowed by the catch-all (returning unrelated
-    linkedResources JSON) and never reaching its real handler. This had two
-    duplicate definitions too, same pattern as above — kept the richer
-    server/index.js version (S2 → Europe PMC → CrossRef fallback chain),
-    deleted the routes/paper.js duplicate (S2-only), added "abstract" to
-    the skip-list. This bug predates this session entirely (paper.js's
-    abstract-fallback call has been broken since whenever both routes
-    started coexisting) and is unrelated to Stage 2 — found as a side
-    effect of fixing the citation-contexts shadowing.
-  - The new GET /api/paper/:id/author-note (added for 2D below) would have
-    hit the exact same catch-all shadowing bug — added a matching skip rule
-    (raw.endsWith("/author-note")) before it ever shipped.
-  - Verified all of the above with an isolated Express route-matching test
-    (not just code review) before considering it fixed.
+[X] Get Semantic Scholar API key (2026-06-21) — turned out the original
+key was missing its "s2k-" prefix (only part of it got pasted into
+.env originally, going back to 2026-05-25), which is why it always
+403'd. Olivier re-applied, got a correctly-formatted s2k- key,
+updated .env + Render. Basic paper lookups now return 200, but the
+/paper/{id}/citations endpoint specifically keeps returning 429 even
+after waiting — looks like a separate/stricter quota on that
+endpoint, or it needs longer to fully activate than basic lookups.
+Not fully resolved — revisit by retesting just the citations
+endpoint after a longer wait (hours, not seconds).
+[X] Found and fixed a real bug while investigating the 429s (2026-07-07)
+— routes/paper.js:400 requested the nested citingPaper field bare
+(fields=...,citingPaper) instead of with dot notation. Confirmed
+directly against the live S2 API: after a clean cooldown, the bare
+field name gets a consistent 400 "Unrecognized or unsupported
+fields: [citingPaper]" — a real, permanent bug independent of rate
+limiting. Fixed to fields=...,citingPaper.title,citingPaper.year,
+citingPaper.authors,citingPaper.url,citingPaper.externalIds,
+citingPaper.openAccessPdf — verified this exact field list returns
+200 with real data on a clean call before the key got rate-limited
+again from testing.
+Rate limit itself is SEPARATE and still unresolved: retested once,
+cleanly, ~20 min after the last hit — still 429. So the limit on
+this specific /citations endpoint outlasts a 20-minute cooldown,
+confirming it's stricter than basic paper lookups, not just slower
+to activate. NEXT STEP: wait several hours (not just ~20 min) and
+retest once, OR contact Semantic Scholar support about this key's
+quota tier for the citations endpoint specifically — a 429 that
+persists this long on a low-volume test key suggests a
+misconfigured/undocumented limit, not normal usage backpressure.
+Do not hammer this endpoint with repeated test calls — each one
+appears to reset however long the cooldown actually is.
+[X] OpenAlex fallback wired in (2026-06-21) — rather than wait on S2,
+wired the existing-but-unused getOpenAlexCitingAbstractSnippets()
+(routes/paper.js, was dead code) into the citation-contexts endpoint
+as a parallel source alongside Semantic Scholar. Uses the exact same
+reliable OpenAlex cites: filter that "Recently cited you" on
+user-profile.html already depends on — extracts the first 1-2
+sentences of each citing paper's open-access abstract as a
+context-like snippet. Verified end-to-end: even with S2 still 429ing,
+this fallback alone now populates real citation contexts (tested
+against the ResNet paper, got a real AlphaFold citing-snippet back).
+citationContexts is now S2 results + OpenAlex results combined, not
+S2-only. New sources.openAlexAbstracts flag in the response.
+[X] DB table: skipped — using in-memory cache instead (6h TTL,
+CITATION_CONTEXTS_CACHE in routes/paper.js), same tradeoff notes.txt
+already accepted for 2A. Fine at current scale.
+[X] Build server endpoint GET /api/paper/citation-contexts — already
+existed (routes/paper.js:667+, built 2026-03-07), aggregates Semantic
+Scholar + OpenCitations + CORE + ScienceOpen + Lens. Found 2026-06-21
+while wiring up 2C.
+[X] Build UI section on paper.html "How this paper is cited" — already
+existed (paper.html:90-114, scripts/paper.js loadCitationContexts/
+renderCitationContexts, built 2026-03-07). Found 2026-06-21.
+[X] Test with papers that have high citation counts — tested locally
+against several DOIs (ResNet, etc); confirmed the route resolves
+correctly end-to-end, but returns empty contexts due to the invalid
+S2 key above, not a code bug.
+
+BUGS FOUND AND FIXED while wiring up 2C (2026-06-21):
+
+- There were actually TWO separate, independently-built implementations
+  of GET /api/paper/citation-contexts: one in routes/paper.js (2026-03-07,
+  multi-source aggregator, returns {citationContexts, peerReviews,
+  impact,...}) and a second, newer one added straight into server/index.js
+  (2026-05-25, simpler S2-only, returns {results, total_citations,...}).
+  Because routes/paper.js's router is mounted (app.use) before the
+  server/index.js route is reached, the OLD routes/paper.js version always
+  won — the May 25 version, and BOTH profile.js's loadWhoCitedMe (which
+  expected the May 25 shape) AND any future code built against it were
+  silently broken. Fixed by removing the dead server/index.js duplicate,
+  rewriting profile.js's loadWhoCitedMe to consume the real
+  routes/paper.js response shape, and adding stance classification (2C)
+  directly into routes/paper.js's implementation instead.
+- Separately, routes/paper.js has a catch-all GET /api/paper/:doi(\*)
+  route registered first, with an explicit allowlist of path prefixes
+  (artifacts/oa/links/citation-contexts) that skip it via next() — but
+  "abstract" was missing from that allowlist, so GET /api/paper/abstract
+  was ALSO being silently swallowed by the catch-all (returning unrelated
+  linkedResources JSON) and never reaching its real handler. This had two
+  duplicate definitions too, same pattern as above — kept the richer
+  server/index.js version (S2 → Europe PMC → CrossRef fallback chain),
+  deleted the routes/paper.js duplicate (S2-only), added "abstract" to
+  the skip-list. This bug predates this session entirely (paper.js's
+  abstract-fallback call has been broken since whenever both routes
+  started coexisting) and is unrelated to Stage 2 — found as a side
+  effect of fixing the citation-contexts shadowing.
+- The new GET /api/paper/:id/author-note (added for 2D below) would have
+  hit the exact same catch-all shadowing bug — added a matching skip rule
+  (raw.endsWith("/author-note")) before it ever shipped.
+- Verified all of the above with an isolated Express route-matching test
+  (not just code review) before considering it fixed.
 
 ──── 2C. CITATION STANCE CLASSIFICATION ────
 
 What: for each citation context sentence, classify the relationship as:
-  Supports     — citing paper agrees with / builds directly on the finding
-  Challenges   — citing paper contests the interpretation or finding
-  Corrects     — citing paper identifies a specific error or limitation
-  Extends      — citing paper takes the finding further in a new direction
-  Uses method  — citing paper uses the methodology but not the finding
-  Background   — general reference, not engaging specifically with the claim
+Supports — citing paper agrees with / builds directly on the finding
+Challenges — citing paper contests the interpretation or finding
+Corrects — citing paper identifies a specific error or limitation
+Extends — citing paper takes the finding further in a new direction
+Uses method — citing paper uses the methodology but not the finding
+Background — general reference, not engaging specifically with the claim
 
 Why this is better than Semantic Scholar's intent classification:
-  S2 classifies WHAT the citation is for (background/method/result)
-  We classify the STANCE (agreement/disagreement/correction)
-  These are orthogonal dimensions. A "result" citation can support or challenge.
+S2 classifies WHAT the citation is for (background/method/result)
+We classify the STANCE (agreement/disagreement/correction)
+These are orthogonal dimensions. A "result" citation can support or challenge.
 
 CORRECTION (2026-08-04): the line that used to be here — "Nobody does
 stance classification at scale on live literature. This is new." — was
@@ -992,78 +985,81 @@ each citing sentence as Supporting/Contrasting/Mentioning across 880M+
 classified citation statements, and has for several years
 (https://scite.ai, verified via MIT Press academic writeup + scite's own
 published reports). The actual differentiation, not "nobody does this":
-  - scite is commercial/paywalled; this would be free and open
-  - scite's taxonomy is 3-way (Supporting/Contrasting/Mentioning); this
-    plan's 6-way taxonomy (Supports/Challenges/Corrects/Extends/Uses
-    method/Background) is finer-grained
-  - the author-response feature (2D) pairing a cited author's own reply
-    with the classification isn't something scite does, as far as checked
-Don't lean on "nobody does this" in the pitch — lean on the free/open +
-finer-grained + author-response combination instead, which is real.
+
+- scite is commercial/paywalled; this would be free and open
+- scite's taxonomy is 3-way (Supporting/Contrasting/Mentioning); this
+  plan's 6-way taxonomy (Supports/Challenges/Corrects/Extends/Uses
+  method/Background) is finer-grained
+- the author-response feature (2D) pairing a cited author's own reply
+  with the classification isn't something scite does, as far as checked
+  Don't lean on "nobody does this" in the pitch — lean on the free/open +
+  finer-grained + author-response combination instead, which is real.
 
 How to build:
-  - For each context sentence already fetched in 2B, send to Claude API
-  - Prompt (short, cheap — context sentences are 1-3 sentences each):
 
-    "A researcher is citing a paper. Here is the sentence from the citing paper:
+- For each context sentence already fetched in 2B, send to Claude API
+- Prompt (short, cheap — context sentences are 1-3 sentences each):
 
-    '{context}'
+  "A researcher is citing a paper. Here is the sentence from the citing paper:
 
-    Classify the citation stance as exactly one of:
-    Supports / Challenges / Corrects / Extends / Uses method / Background
+  '{context}'
 
-    Respond with only the single word label. If genuinely ambiguous, choose
-    the most prominent stance."
+  Classify the citation stance as exactly one of:
+  Supports / Challenges / Corrects / Extends / Uses method / Background
 
-  - Cost estimate: ~800 tokens per classification (context + prompt + response)
-    At Claude Haiku pricing (~$0.25/M input tokens): ~$0.0002 per citation
-    A paper with 100 citing papers: ~$0.02 total
-    This is negligible. Run it server-side, cache the result permanently.
+  Respond with only the single word label. If genuinely ambiguous, choose
+  the most prominent stance."
 
-  - Store result in the citation_contexts table:
-      stance TEXT  -- our classified stance label
-      stance_classified_at TIMESTAMPTZ
+- Cost estimate: ~800 tokens per classification (context + prompt + response)
+  At Claude Haiku pricing (~$0.25/M input tokens): ~$0.0002 per citation
+  A paper with 100 citing papers: ~$0.02 total
+  This is negligible. Run it server-side, cache the result permanently.
 
-  - Classify lazily: when a paper's citation contexts are fetched for display,
-    classify any that don't yet have a stance. Background jobs can batch the rest.
+- Store result in the citation_contexts table:
+  stance TEXT -- our classified stance label
+  stance_classified_at TIMESTAMPTZ
+
+- Classify lazily: when a paper's citation contexts are fetched for display,
+  classify any that don't yet have a stance. Background jobs can batch the rest.
 
 Display:
-  - Show a colour-coded label next to each citing paper in the "How cited" section:
-      Supports     → green
-      Challenges   → amber
-      Corrects     → red
-      Extends      → blue
-      Uses method  → grey
-      Background   → light grey
-  - Show a summary at the top: "47 citations: 18 supporting, 6 challenging,
-    3 correcting, 12 extending, 5 methodological, 3 background"
-  - This summary is immediately more informative than a raw citation count
+
+- Show a colour-coded label next to each citing paper in the "How cited" section:
+  Supports → green
+  Challenges → amber
+  Corrects → red
+  Extends → blue
+  Uses method → grey
+  Background → light grey
+- Show a summary at the top: "47 citations: 18 supporting, 6 challenging,
+  3 correcting, 12 extending, 5 methodological, 3 background"
+- This summary is immediately more informative than a raw citation count
 
 DB changes: add stance + stance_classified_at columns to citation_contexts
 
 Decisions to make:
-  → Use Claude Haiku (cheapest, good for classification) or Sonnet?
-    Haiku should be sufficient for single-label classification.
-  → Classify all contexts at fetch time, or background batch?
-    Both: classify at fetch time, also run a background job for cached papers.
-  → What if the context is not in English?
-    Claude handles multilingual well. Keep it simple, classify anyway.
-  → Show confidence score or just the label?
-    Just the label for now. Confidence adds complexity without clear user value.
+→ Use Claude Haiku (cheapest, good for classification) or Sonnet?
+Haiku should be sufficient for single-label classification.
+→ Classify all contexts at fetch time, or background batch?
+Both: classify at fetch time, also run a background job for cached papers.
+→ What if the context is not in English?
+Claude handles multilingual well. Keep it simple, classify anyway.
+→ Show confidence score or just the label?
+Just the label for now. Confidence adds complexity without clear user value.
 
-  [X] Stance columns — skipped, no DB table for citation contexts at all
-      (see 2B), so stance lives only as a transient `stance` field on the
-      in-memory cached payload, not persisted.
-  [X] Build stance classification in server endpoint (2026-06-21) —
-      routes/paper.js classifyCitationStances(), one batched Claude Haiku
-      call per request (not per-citation — sends all context sentences
-      numbered in one prompt, parses a JSON array of labels back). Fails
-      open if ANTHROPIC_API_KEY is missing or the call errors — endpoint
-      still works, just without stance. Confirmed ANTHROPIC_API_KEY is
-      already configured and working in production (existing pattern at
-      server/index.js's /api/topic/synthesis). NOT YET VERIFIED with real
-      data end-to-end — blocked on the dead Semantic Scholar key (see 2B),
-      since there are no context sentences to classify without it.
+[X] Stance columns — skipped, no DB table for citation contexts at all
+(see 2B), so stance lives only as a transient `stance` field on the
+in-memory cached payload, not persisted.
+[X] Build stance classification in server endpoint (2026-06-21) —
+routes/paper.js classifyCitationStances(), one batched Claude Haiku
+call per request (not per-citation — sends all context sentences
+numbered in one prompt, parses a JSON array of labels back). Fails
+open if ANTHROPIC_API_KEY is missing or the call errors — endpoint
+still works, just without stance. Confirmed ANTHROPIC_API_KEY is
+already configured and working in production (existing pattern at
+server/index.js's /api/topic/synthesis). NOT YET VERIFIED with real
+data end-to-end — blocked on the dead Semantic Scholar key (see 2B),
+since there are no context sentences to classify without it.
 
       KILL SWITCH ADDED (2026-06-21): Olivier flagged a real cost/abuse
       risk before this ever went live — both this endpoint and
@@ -1081,18 +1077,19 @@ Decisions to make:
       but first add tighter abuse protection (e.g. gate to authenticated
       users only, or a global daily Claude spend cap, not just per-IP
       rate limiting).
-  [X] Add colour-coded stance labels to paper page citation section
-      (2026-06-21) — scripts/paper.js renderCitationContexts() + new
-      .stance-supports/.stance-challenges/.stance-corrects/.stance-extends/
-      .stance-uses-method CSS classes in style.css (colors reused from
-      elsewhere on the site so they already pass the WCAG contrast pass).
-  [X] Add stance summary counts to paper page header area (2026-06-21) —
-      new #stanceSummary line in paper.html + renderStanceSummary() in
-      scripts/paper.js, includes the "AI-classified, may be inaccurate"
-      attribution per the legal note in cross-cutting decision #7 below.
-      Also added to profile.js's "Who cited me" section.
-  [ ] Test classification quality on 20-30 real examples manually —
-      BLOCKED until the Semantic Scholar key is replaced (2B).
+
+[X] Add colour-coded stance labels to paper page citation section
+(2026-06-21) — scripts/paper.js renderCitationContexts() + new
+.stance-supports/.stance-challenges/.stance-corrects/.stance-extends/
+.stance-uses-method CSS classes in style.css (colors reused from
+elsewhere on the site so they already pass the WCAG contrast pass).
+[X] Add stance summary counts to paper page header area (2026-06-21) —
+new #stanceSummary line in paper.html + renderStanceSummary() in
+scripts/paper.js, includes the "AI-classified, may be inaccurate"
+attribution per the legal note in cross-cutting decision #7 below.
+Also added to profile.js's "Who cited me" section.
+[ ] Test classification quality on 20-30 real examples manually —
+BLOCKED until the Semantic Scholar key is replaced (2B).
 
 ──── 2D. AUTHOR RESPONSE FIELD ────
 
@@ -1107,25 +1104,28 @@ It doesn't require the citing author to agree. It simply adds the original
 author's perspective to the record.
 
 How to build:
-  - Only shown to the paper's owner (matched by ORCID in our DB)
-  - A simple textarea: "Add a note about how this paper has been cited..."
-  - Max 1000 characters. Plain text only. Editable.
-  - Displayed in a distinct style ("Author's note") in the citation section
-  - Visible to all readers whether logged in or not
+
+- Only shown to the paper's owner (matched by ORCID in our DB)
+- A simple textarea: "Add a note about how this paper has been cited..."
+- Max 1000 characters. Plain text only. Editable.
+- Displayed in a distinct style ("Author's note") in the citation section
+- Visible to all readers whether logged in or not
 
 DB changes:
-  - New table: author_paper_notes
-      paper_id TEXT NOT NULL,
-      orcid TEXT NOT NULL REFERENCES users(orcid),
-      note TEXT NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      PRIMARY KEY (paper_id, orcid)
+
+- New table: author_paper_notes
+  paper_id TEXT NOT NULL,
+  orcid TEXT NOT NULL REFERENCES users(orcid),
+  note TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (paper_id, orcid)
 
 Server endpoints:
-  - GET  /api/paper/:id/author-note  (public, returns note if exists)
-  - POST /api/paper/:id/author-note  (auth required, owner only)
-  - DELETE /api/paper/:id/author-note (auth required, owner only)
+
+- GET /api/paper/:id/author-note (public, returns note if exists)
+- POST /api/paper/:id/author-note (auth required, owner only)
+- DELETE /api/paper/:id/author-note (auth required, owner only)
 
 Ownership check: user is "owner" if their ORCID matches any author on the
 paper (as stored in OpenAlex authorships). CORRECTION (2026-06-21): this
@@ -1136,48 +1136,48 @@ users.openalex_author_id, claimed_authors, and merged_claims (previously
 three separate, never-combined sources), then fetches the OpenAlex work's
 authorships server-side to verify — never trusts a client-supplied flag.
 
-  [X] Add author_paper_notes table (2026-06-21) — server/index.js, matches
-      the schema sketched above exactly.
-  [X] Build server endpoints (GET/POST/DELETE) (2026-06-21) —
-      server/index.js, right after the citation-contexts route. GET is
-      public; POST/DELETE require auth + isAuthorOfPaper (403 otherwise).
-      Already covered by the existing /api/paper/ rate limiter (60/min).
-      NOTE: GET would have been silently shadowed by routes/paper.js's
-      catch-all wildcard route (see bug note under 2B) — fixed before ship.
-  [X] Add author note display to paper page (visible to all) (2026-06-21) —
-      new #authorNoteSection in paper.html, loadAuthorNote()/
-      renderAuthorNoteView() in scripts/paper.js.
-  [X] Add author note editor to paper page (owner-only, replaces display)
-      (2026-06-21) — renderAuthorNoteEditor() in scripts/paper.js, textarea
-      with 1000-char counter, Save/Cancel/Delete. CSRF handled automatically
-      by scripts/session.js's patched window.fetch (no extra code needed).
-      Edit UI visibility is a client-side hint only (checks the user's
-      claimed OpenAlex IDs against the paper's authorships, already loaded
-      for the page) — the server independently re-verifies on every write.
-  [X] Test with a real logged-in session (2026-06-21) — Olivier logged into
-      production (scienceecosystem.org) and tested the full round trip on
-      a real claimed paper (W3103727569, "Does plastic waste kill
-      mangroves?"): added a note via the UI → confirmed it landed correctly
-      in author_paper_notes (right orcid/paper_id/timestamp) → confirmed
-      GET is publicly readable with no auth (the whole point — visitors see
-      it) → confirmed an unauthenticated POST is correctly rejected
-      (403, CSRF/auth gate) → deleted via the UI → confirmed the row was
-      removed and the public endpoint returns {note:null} again. Full
-      feature confirmed working end-to-end in production.
+[X] Add author_paper_notes table (2026-06-21) — server/index.js, matches
+the schema sketched above exactly.
+[X] Build server endpoints (GET/POST/DELETE) (2026-06-21) —
+server/index.js, right after the citation-contexts route. GET is
+public; POST/DELETE require auth + isAuthorOfPaper (403 otherwise).
+Already covered by the existing /api/paper/ rate limiter (60/min).
+NOTE: GET would have been silently shadowed by routes/paper.js's
+catch-all wildcard route (see bug note under 2B) — fixed before ship.
+[X] Add author note display to paper page (visible to all) (2026-06-21) —
+new #authorNoteSection in paper.html, loadAuthorNote()/
+renderAuthorNoteView() in scripts/paper.js.
+[X] Add author note editor to paper page (owner-only, replaces display)
+(2026-06-21) — renderAuthorNoteEditor() in scripts/paper.js, textarea
+with 1000-char counter, Save/Cancel/Delete. CSRF handled automatically
+by scripts/session.js's patched window.fetch (no extra code needed).
+Edit UI visibility is a client-side hint only (checks the user's
+claimed OpenAlex IDs against the paper's authorships, already loaded
+for the page) — the server independently re-verifies on every write.
+[X] Test with a real logged-in session (2026-06-21) — Olivier logged into
+production (scienceecosystem.org) and tested the full round trip on
+a real claimed paper (W3103727569, "Does plastic waste kill
+mangroves?"): added a note via the UI → confirmed it landed correctly
+in author_paper_notes (right orcid/paper_id/timestamp) → confirmed
+GET is publicly readable with no auth (the whole point — visitors see
+it) → confirmed an unauthenticated POST is correctly rejected
+(403, CSRF/auth gate) → deleted via the UI → confirmed the row was
+removed and the public endpoint returns {note:null} again. Full
+feature confirmed working end-to-end in production.
 
 ──── STAGE 2 SUMMARY ────
 
 When Stage 2 is complete, a researcher visiting their paper page sees:
-  - How many times it was cited (already there)
-  - The actual papers that cited it (2A)
-  - The sentence(s) in which each citation appears (2B)
-  - A colour-coded label for each: Supports / Challenges / Corrects / etc. (2C)
-  - A summary: "47 citations: 18 supporting, 6 challenging..." (2C)
-  - A field where they can add their own note to the record (2D)
+
+- How many times it was cited (already there)
+- The actual papers that cited it (2A)
+- The sentence(s) in which each citation appears (2B)
+- A colour-coded label for each: Supports / Challenges / Corrects / etc. (2C)
+- A summary: "47 citations: 18 supporting, 6 challenging..." (2C)
+- A field where they can add their own note to the record (2D)
 
 This is the conversation made visible. No platform has it.
 Estimated dev time: 3-5 weeks of focused work.
-
 
 ───────────────────────────────────────────────────────
 STAGE 3 — TOPIC PAGES AS FIELD RECORDS
@@ -1195,30 +1195,33 @@ the first community contribution features — researchers can add to the
 record, not just read it.
 
 Prerequisites:
-  - Stage 2 complete and generating stance data
-  - At least a few months of data accumulation across popular topics
-  - Some basic governance/editorial thinking done (see decisions below)
+
+- Stage 2 complete and generating stance data
+- At least a few months of data accumulation across popular topics
+- Some basic governance/editorial thinking done (see decisions below)
 
 ──── 3A. FIELD CONSENSUS SUMMARY ON TOPIC PAGES ────
 
 What: a "State of the field" section on topic pages showing:
-  - The most-cited claims in this topic area and their overall stance profile
-    ("Protein X inhibits pathway Y — 34 papers support, 4 challenge")
-  - The most-challenged papers in this topic (where debate is active)
-  - Recent corrections or retractions (flagged clearly)
+
+- The most-cited claims in this topic area and their overall stance profile
+  ("Protein X inhibits pathway Y — 34 papers support, 4 challenge")
+- The most-challenged papers in this topic (where debate is active)
+- Recent corrections or retractions (flagged clearly)
 
 How to build:
-  - Aggregate citation stance data by topic (join citation_contexts with
-    paper topics from OpenAlex concepts)
-  - For each topic: find papers with high citation counts + interesting
-    stance distributions (many challenges = active debate)
-  - Surface papers where "Corrects" or "Challenges" stances are high
-    relative to "Supports" — these are the contested areas
 
-  [ ] Build topic-level stance aggregation query
-  [ ] Design "State of the field" UI section for topic pages
-  [ ] Add "Most debated papers in this topic" subsection
-  [ ] Test on 5-10 well-studied topics (e.g. CRISPR, mRNA vaccines, MOND)
+- Aggregate citation stance data by topic (join citation_contexts with
+  paper topics from OpenAlex concepts)
+- For each topic: find papers with high citation counts + interesting
+  stance distributions (many challenges = active debate)
+- Surface papers where "Corrects" or "Challenges" stances are high
+  relative to "Supports" — these are the contested areas
+
+[ ] Build topic-level stance aggregation query
+[ ] Design "State of the field" UI section for topic pages
+[ ] Add "Most debated papers in this topic" subsection
+[ ] Test on 5-10 well-studied topics (e.g. CRISPR, mRNA vaccines, MOND)
 
 ──── 3B. OPEN QUESTIONS TRACKER ────
 
@@ -1226,21 +1229,23 @@ What: identify claims that were made or called for in a topic area
 but have not been adequately tested since. These are the open questions.
 
 Sources:
-  - Paper conclusions: "Future work should investigate..."
-    (LLM extraction from conclusions sections — see Stage 4 groundwork)
-  - Citation deserts: papers that made specific claims and have received
-    few citations (the claim was not picked up by the community)
-  - Replication gaps: highly cited papers where the central finding has
-    few direct replications in the citation record
+
+- Paper conclusions: "Future work should investigate..."
+  (LLM extraction from conclusions sections — see Stage 4 groundwork)
+- Citation deserts: papers that made specific claims and have received
+  few citations (the claim was not picked up by the community)
+- Replication gaps: highly cited papers where the central finding has
+  few direct replications in the citation record
 
 This is harder to build well than 3A. Start with the simplest version:
-  - Flag papers that were highly cited 5+ years ago and have received
-    almost no citations in the last 2 years — "may need revisiting"
-  - This is a proxy for "the field has moved on but may not have resolved this"
 
-  [ ] Design open question detection heuristic (start simple: old+few recent cites)
-  [ ] Add "Open questions" section to topic pages
-  [ ] Test and refine the heuristic on topics where we know the field state
+- Flag papers that were highly cited 5+ years ago and have received
+  almost no citations in the last 2 years — "may need revisiting"
+- This is a proxy for "the field has moved on but may not have resolved this"
+
+[ ] Design open question detection heuristic (start simple: old+few recent cites)
+[ ] Add "Open questions" section to topic pages
+[ ] Test and refine the heuristic on topics where we know the field state
 
 ──── 3C. FIELD TIMELINE ────
 
@@ -1249,63 +1254,65 @@ understanding of a topic has evolved. What was the dominant view in 2010?
 What changed, when, and because of which papers?
 
 How to approach:
-  - We already have "papers by year" charts on topic pages
-  - Extend: identify "turning point" papers — papers that received
-    a disproportionate number of "Challenges" or "Corrects" stances
-    relative to earlier work
-  - These papers represent moments where the field shifted
-  - Display as annotated timeline: [year] — [paper title] —
-    "Challenged the dominant view of X; 12 subsequent papers built on this"
 
-  [ ] Define "turning point" detection algorithm
-  [ ] Build timeline UI component for topic pages
-  [ ] Test on topics with well-known historical turning points
+- We already have "papers by year" charts on topic pages
+- Extend: identify "turning point" papers — papers that received
+  a disproportionate number of "Challenges" or "Corrects" stances
+  relative to earlier work
+- These papers represent moments where the field shifted
+- Display as annotated timeline: [year] — [paper title] —
+  "Challenged the dominant view of X; 12 subsequent papers built on this"
+
+[ ] Define "turning point" detection algorithm
+[ ] Build timeline UI component for topic pages
+[ ] Test on topics with well-known historical turning points
 
 ──── 3D. COMMUNITY ANNOTATION (FIRST VERSION) ────
 
 What: allow verified researchers to add short structured annotations
 to topic pages. Not free-text edits (too hard to govern) but structured:
-  - "This claim is now widely accepted" + required citation
-  - "This claim is contested — see debate between [paper A] and [paper B]"
-  - "This method is no longer considered valid — replaced by [paper]"
+
+- "This claim is now widely accepted" + required citation
+- "This claim is contested — see debate between [paper A] and [paper B]"
+- "This method is no longer considered valid — replaced by [paper]"
 
 This is the first community contribution feature. It is governance-heavy.
 Design the governance model before building the feature.
 
 Governance decisions to make before building this:
-  → Who can annotate? Verified researchers only? Any logged-in user?
-    → Start: any user with a claimed ORCID profile.
-  → How are annotations reviewed? Community voting? Editorial review?
-    → Start: show annotations with contributor name and citation.
-      Flag if multiple users dispute an annotation.
-  → How are disputes resolved?
-    → Initially: contact process, then governance board when we have one.
-  → Can annotations be removed?
-    → Yes, by the contributor. By admins for violations.
-  → Are annotations versioned?
-    → Yes. Full history stored. Transparency is fundamental.
+→ Who can annotate? Verified researchers only? Any logged-in user?
+→ Start: any user with a claimed ORCID profile.
+→ How are annotations reviewed? Community voting? Editorial review?
+→ Start: show annotations with contributor name and citation.
+Flag if multiple users dispute an annotation.
+→ How are disputes resolved?
+→ Initially: contact process, then governance board when we have one.
+→ Can annotations be removed?
+→ Yes, by the contributor. By admins for violations.
+→ Are annotations versioned?
+→ Yes. Full history stored. Transparency is fundamental.
 
-  [ ] Design annotation data model (structured, not free text)
-  [ ] Write governance rules document (public, versioned)
-  [ ] Build annotation submission UI on topic pages
-  [ ] Build annotation display with contributor attribution
-  [ ] Build dispute flagging mechanism
-  [ ] Build admin moderation interface
+[ ] Design annotation data model (structured, not free text)
+[ ] Write governance rules document (public, versioned)
+[ ] Build annotation submission UI on topic pages
+[ ] Build annotation display with contributor attribution
+[ ] Build dispute flagging mechanism
+[ ] Build admin moderation interface
 
 ──── STAGE 3 SUMMARY ────
 
 When Stage 3 is complete, a researcher visiting a topic page sees:
-  - Wikipedia overview (already there)
-  - State of the field: consensus areas and contested claims (3A)
-  - Open questions: what hasn't been adequately answered yet (3B)
-  - Field timeline: how understanding has evolved (3C)
-  - Community annotations from verified researchers (3D)
+
+- Wikipedia overview (already there)
+- State of the field: consensus areas and contested claims (3A)
+- Open questions: what hasn't been adequately answered yet (3B)
+- Field timeline: how understanding has evolved (3C)
+- Community annotations from verified researchers (3D)
 
 This is what a domain expert holds in their head after years in a field.
 For the first time, it is written down, structured, and updatable.
 Estimated timeline: 6-12 months after Stage 2, depending on data accumulation.
 Likely requires at least one additional developer and some funding.
-
 
 ───────────────────────────────────────────────────────
 STAGE 4 — CLAIMS AS FIRST-CLASS OBJECTS
@@ -1330,54 +1337,55 @@ empirical claims it makes. Starting with abstracts (structured, short,
 contain most key findings). Later: results sections, conclusions.
 
 A claim is: a falsifiable assertion with these components:
-  Entity      — what is the claim about? (a compound, a method, a population)
-  Relation    — what is asserted? (inhibits, outperforms, correlates with)
-  Conditions  — under what conditions? (in vitro, in population X, at dose Y)
-  Confidence  — how confident? (significantly, tends to, may)
-  Quantitative — is there a number? (p<0.05, r=0.72, 40% reduction)
+Entity — what is the claim about? (a compound, a method, a population)
+Relation — what is asserted? (inhibits, outperforms, correlates with)
+Conditions — under what conditions? (in vitro, in population X, at dose Y)
+Confidence — how confident? (significantly, tends to, may)
+Quantitative — is there a number? (p<0.05, r=0.72, 40% reduction)
 
 How to build:
-  - LLM extraction from abstract text (Claude API)
-  - Structured output: JSON with the five components above
-  - Extraction prompt needs careful design and testing
-  - Start with a specific domain (e.g. cancer biology) to validate quality
-    before running across all topics
+
+- LLM extraction from abstract text (Claude API)
+- Structured output: JSON with the five components above
+- Extraction prompt needs careful design and testing
+- Start with a specific domain (e.g. cancer biology) to validate quality
+  before running across all topics
 
 Prompt structure (rough):
-  "Extract the main empirical claims from this abstract. For each claim
-   provide: entity, relation, conditions, confidence qualifier, quantitative
-   value if present. Return as JSON. Abstract: {text}"
+"Extract the main empirical claims from this abstract. For each claim
+provide: entity, relation, conditions, confidence qualifier, quantitative
+value if present. Return as JSON. Abstract: {text}"
 
-  - Expected: 2-5 claims per abstract on average
-  - Cost: ~2000 tokens per abstract at Haiku pricing: ~$0.0005 per paper
-    For 1 million papers: ~$500 total. Very affordable.
-  - Cache permanently. Claims don't change once extracted.
+- Expected: 2-5 claims per abstract on average
+- Cost: ~2000 tokens per abstract at Haiku pricing: ~$0.0005 per paper
+  For 1 million papers: ~$500 total. Very affordable.
+- Cache permanently. Claims don't change once extracted.
 
 DB schema for claims:
-  claims:
-    id UUID PRIMARY KEY,
-    paper_id TEXT NOT NULL,     -- OpenAlex paper ID
-    entity TEXT,
-    relation TEXT,
-    conditions TEXT,
-    confidence_qualifier TEXT,
-    quantitative_value TEXT,
-    full_text TEXT,             -- the original claim as a sentence
-    extraction_model TEXT,      -- which model extracted this
-    extracted_at TIMESTAMPTZ,
-    human_reviewed BOOLEAN DEFAULT FALSE
+claims:
+id UUID PRIMARY KEY,
+paper_id TEXT NOT NULL, -- OpenAlex paper ID
+entity TEXT,
+relation TEXT,
+conditions TEXT,
+confidence_qualifier TEXT,
+quantitative_value TEXT,
+full_text TEXT, -- the original claim as a sentence
+extraction_model TEXT, -- which model extracted this
+extracted_at TIMESTAMPTZ,
+human_reviewed BOOLEAN DEFAULT FALSE
 
-  DECISION: Do we expose unreviewed AI-extracted claims to users?
-    → Not as authoritative claims. Show as "AI-extracted, unverified"
-      with clear labelling. Allow researchers to verify (confirm/edit/reject).
-      Only verified claims enter the primary claim graph.
+DECISION: Do we expose unreviewed AI-extracted claims to users?
+→ Not as authoritative claims. Show as "AI-extracted, unverified"
+with clear labelling. Allow researchers to verify (confirm/edit/reject).
+Only verified claims enter the primary claim graph.
 
-  [ ] Design claim extraction prompt (test on 100 abstracts manually)
-  [ ] Validate extraction quality — what % are accurate? what % are wrong?
-  [ ] Build extraction pipeline (server-side, batch, cached)
-  [ ] Add claims table to DB
-  [ ] Build UI to display extracted claims on paper pages
-  [ ] Build researcher verification flow (confirm/edit/reject)
+[ ] Design claim extraction prompt (test on 100 abstracts manually)
+[ ] Validate extraction quality — what % are accurate? what % are wrong?
+[ ] Build extraction pipeline (server-side, batch, cached)
+[ ] Add claims table to DB
+[ ] Build UI to display extracted claims on paper pages
+[ ] Build researcher verification flow (confirm/edit/reject)
 
 ──── 4B. CLAIM DEDUPLICATION AND LINKING ────
 
@@ -1387,36 +1395,28 @@ a single canonical claim node, not treated as 100 separate claims.
 
 This is technically hard. Options:
 
-  Option A: Embedding similarity
-    - Generate embeddings for all extracted claims (use a text embedding model)
-    - Cluster by semantic similarity
-    - Candidates for merging: claims with cosine similarity > threshold
-    - Human review confirms or rejects each merge proposal
-    → Pros: scalable, can run on all claims
-    → Cons: requires embedding infrastructure, similarity threshold is tricky,
-      "aspirin inhibits COX-1 in vitro" and "aspirin inhibits COX-1 in vivo"
-      are similar but NOT the same claim
+Option A: Embedding similarity - Generate embeddings for all extracted claims (use a text embedding model) - Cluster by semantic similarity - Candidates for merging: claims with cosine similarity > threshold - Human review confirms or rejects each merge proposal
+→ Pros: scalable, can run on all claims
+→ Cons: requires embedding infrastructure, similarity threshold is tricky,
+"aspirin inhibits COX-1 in vitro" and "aspirin inhibits COX-1 in vivo"
+are similar but NOT the same claim
 
-  Option B: Community-driven linking
-    - Show researchers "This claim looks similar to [claim X] — are they the same?"
-    - Community votes to merge or keep separate
-    → Pros: human judgement, builds community engagement
-    → Cons: slow, requires active community
+Option B: Community-driven linking - Show researchers "This claim looks similar to [claim X] — are they the same?" - Community votes to merge or keep separate
+→ Pros: human judgement, builds community engagement
+→ Cons: slow, requires active community
 
-  Option C: Hybrid
-    - Embedding similarity generates candidates
-    - Community reviews candidates
-    → Best approach for long-term quality. Start with Option B only
-      (simpler to build), add embedding in Stage 4B later.
+Option C: Hybrid - Embedding similarity generates candidates - Community reviews candidates
+→ Best approach for long-term quality. Start with Option B only
+(simpler to build), add embedding in Stage 4B later.
 
-  DB schema extension:
-    canonical_claims:
-      id UUID PRIMARY KEY,
-      canonical_text TEXT,    -- human-reviewed statement of the claim
-      topic_id TEXT,          -- which topic this belongs to
-      evidence_status TEXT,   -- supported/contested/refuted/unknown
-      evidence_status_updated_at TIMESTAMPTZ,
-      last_reviewed_at TIMESTAMPTZ
+DB schema extension:
+canonical_claims:
+id UUID PRIMARY KEY,
+canonical_text TEXT, -- human-reviewed statement of the claim
+topic_id TEXT, -- which topic this belongs to
+evidence_status TEXT, -- supported/contested/refuted/unknown
+evidence_status_updated_at TIMESTAMPTZ,
+last_reviewed_at TIMESTAMPTZ
 
     claim_instances:
       canonical_claim_id UUID REFERENCES canonical_claims,
@@ -1424,52 +1424,53 @@ This is technically hard. Options:
       linked_by TEXT,         -- 'ai_similarity' or 'community'
       linked_at TIMESTAMPTZ
 
-  DECISION: Who can propose claim merges? Any verified user?
-    → Yes, with human review by a second verified user to confirm.
+DECISION: Who can propose claim merges? Any verified user?
+→ Yes, with human review by a second verified user to confirm.
 
-  [ ] Design canonical claim data model
-  [ ] Build "propose merge" UI for researchers
-  [ ] Build review/confirmation flow
-  [ ] Test on a specific topic with well-understood claim structure
+[ ] Design canonical claim data model
+[ ] Build "propose merge" UI for researchers
+[ ] Build review/confirmation flow
+[ ] Test on a specific topic with well-understood claim structure
 
 ──── 4C. EVIDENCE STATUS AND UPDATES ────
 
 What: for each canonical claim, maintain a current evidence status:
-  Supported    — strong, consistent evidence across multiple papers
-  Likely       — good evidence, limited replication
-  Contested    — significant disagreement in the literature
-  Refuted      — preponderance of evidence runs against the claim
-  Retracted    — the primary paper making this claim has been retracted
-  Insufficient — claim made but inadequately tested
-  Unknown      — no assessment made yet
+Supported — strong, consistent evidence across multiple papers
+Likely — good evidence, limited replication
+Contested — significant disagreement in the literature
+Refuted — preponderance of evidence runs against the claim
+Retracted — the primary paper making this claim has been retracted
+Insufficient — claim made but inadequately tested
+Unknown — no assessment made yet
 
 This is governance-heavy. The evidence status represents what the
 platform says the field believes. Getting this wrong is harmful.
 
 How to determine status:
-  - Algorithmically: based on aggregated citation stances from Stage 2
-    If 80% of citing papers with a stance label say "Supports": likely Supported
-    If 30%+ say "Challenges" or "Corrects": flag as Contested
-  - With community review: researchers can propose a status change,
-    citing their sources. Other researchers review the proposal.
-  - Show confidence: "Based on 47 citing papers with stance data"
-  - Always show the evidence, not just the label
 
-  DECISION: What happens when the AI-derived status disagrees with
-  community consensus? → Community consensus wins. AI provides a starting
-  point, not a verdict.
+- Algorithmically: based on aggregated citation stances from Stage 2
+  If 80% of citing papers with a stance label say "Supports": likely Supported
+  If 30%+ say "Challenges" or "Corrects": flag as Contested
+- With community review: researchers can propose a status change,
+  citing their sources. Other researchers review the proposal.
+- Show confidence: "Based on 47 citing papers with stance data"
+- Always show the evidence, not just the label
 
-  DECISION: Can a claim's status be Refuted if the original authors
-  dispute this? → Yes, with both perspectives shown. The platform
-  does not take sides; it shows the state of evidence. The author's
-  response field (Stage 2D) is where original authors can present
-  their view.
+DECISION: What happens when the AI-derived status disagrees with
+community consensus? → Community consensus wins. AI provides a starting
+point, not a verdict.
 
-  [ ] Design evidence status algorithm (threshold-based from stance data)
-  [ ] Build evidence status display on canonical claim pages
-  [ ] Build evidence status review flow for community
-  [ ] Write public documentation of how status is determined
-  [ ] Legal review: does calling a claim "Refuted" create liability?
+DECISION: Can a claim's status be Refuted if the original authors
+dispute this? → Yes, with both perspectives shown. The platform
+does not take sides; it shows the state of evidence. The author's
+response field (Stage 2D) is where original authors can present
+their view.
+
+[ ] Design evidence status algorithm (threshold-based from stance data)
+[ ] Build evidence status display on canonical claim pages
+[ ] Build evidence status review flow for community
+[ ] Write public documentation of how status is determined
+[ ] Legal review: does calling a claim "Refuted" create liability?
 
 ──── 4D. TOPIC PAGES POWERED BY CLAIM GRAPH ────
 
@@ -1477,29 +1478,31 @@ What: at this stage, topic pages are no longer summaries of the Wikipedia
 article with papers attached. They are generated from the claim graph.
 
 A topic page now shows:
-  - The major supported claims in this area
-  - The contested claims and the nature of the disagreement
-  - The refuted claims (what the field used to believe but no longer does)
-  - The open claims (asserted but inadequately tested)
-  - The key papers: not just the most cited, but the most pivotal
-    (papers that changed the evidence status of a claim)
+
+- The major supported claims in this area
+- The contested claims and the nature of the disagreement
+- The refuted claims (what the field used to believe but no longer does)
+- The open claims (asserted but inadequately tested)
+- The key papers: not just the most cited, but the most pivotal
+  (papers that changed the evidence status of a claim)
 
 This is the first version of the "living field record" described in the vision.
 
-  [ ] Rebuild topic page generation from claim graph data
-  [ ] Design topic page layout for claim-based view
-  [ ] Add claim status legend and documentation for readers
-  [ ] Test on topics with well-known historical trajectories
-  [ ] User testing with domain experts — does this match their mental model?
+[ ] Rebuild topic page generation from claim graph data
+[ ] Design topic page layout for claim-based view
+[ ] Add claim status legend and documentation for readers
+[ ] Test on topics with well-known historical trajectories
+[ ] User testing with domain experts — does this match their mental model?
 
 ──── 4E. LIVING PAPER FORMAT ────
 
 What: a submission format for new research. Researchers who want to
 publish new work through ScienceEcosystem do so by:
-  1. Writing their paper in a structured editor (prose + figures + data + code)
-  2. The platform extracts the claim structure and knowledge graph entries
-  3. The researcher reviews and confirms the extracted claims
-  4. The paper is published and immediately enters the claim graph
+
+1. Writing their paper in a structured editor (prose + figures + data + code)
+2. The platform extracts the claim structure and knowledge graph entries
+3. The researcher reviews and confirms the extracted claims
+4. The paper is published and immediately enters the claim graph
 
 This is the step that closes the loop: new science is born into the graph
 rather than converted into it retroactively.
@@ -1509,38 +1512,38 @@ the claims are simply structured from the start. A paper submitted here
 can simultaneously be submitted to a journal. The platform adds structure;
 it does not substitute for community validation.
 
-  DECISION: Do we want to be a preprint server?
-    → Not necessarily. The living paper format can work as a supplement
-      to existing preprint servers (arXiv, bioRxiv) rather than a replacement.
-      A researcher deposits a preprint there AND structures their claims here.
+DECISION: Do we want to be a preprint server?
+→ Not necessarily. The living paper format can work as a supplement
+to existing preprint servers (arXiv, bioRxiv) rather than a replacement.
+A researcher deposits a preprint there AND structures their claims here.
 
-  DECISION: Who does the peer review for living papers?
-    → Not us, initially. The claim structure is neutral — it records what
-      the paper claims, not whether those claims are correct. Review happens
-      through the same citation stance + community annotation process as
-      for existing literature.
+DECISION: Who does the peer review for living papers?
+→ Not us, initially. The claim structure is neutral — it records what
+the paper claims, not whether those claims are correct. Review happens
+through the same citation stance + community annotation process as
+for existing literature.
 
-  [ ] Design structured editor (probably a long way off — needs dedicated work)
-  [ ] Define living paper schema (what fields are required)
-  [ ] Build claim review/confirmation flow for submitting authors
-  [ ] Design publication and indexing process
-  [ ] Consider integration with existing preprint servers
+[ ] Design structured editor (probably a long way off — needs dedicated work)
+[ ] Define living paper schema (what fields are required)
+[ ] Build claim review/confirmation flow for submitting authors
+[ ] Design publication and indexing process
+[ ] Consider integration with existing preprint servers
 
 ──── STAGE 4 SUMMARY ────
 
 When Stage 4 is complete, the platform has:
-  - Claims extracted from every paper in the literature (gradually)
-  - Canonical claims linking the same assertion across multiple papers
-  - Evidence status for each claim, based on aggregated stance data
-  - Topic pages showing field-level consensus, debate, and open questions
-    generated from the claim graph, not Wikipedia summaries
-  - A submission format for new papers that enters them directly into the graph
+
+- Claims extracted from every paper in the literature (gradually)
+- Canonical claims linking the same assertion across multiple papers
+- Evidence status for each claim, based on aggregated stance data
+- Topic pages showing field-level consensus, debate, and open questions
+  generated from the claim graph, not Wikipedia summaries
+- A submission format for new papers that enters them directly into the graph
 
 Timeline: this is years of work, not months. It requires a team, funding,
 and a community that trusts the platform. The earlier stages build toward all
 three. Do not rush this. A poorly governed claim status system is worse than
 no claim status system.
-
 
 ───────────────────────────────────────────────────────
 CROSS-CUTTING DECISIONS (need answers before or during Stage 2)
@@ -1567,43 +1570,42 @@ CROSS-CUTTING DECISIONS (need answers before or during Stage 2)
    This is imperfect (not all papers have ORCID-linked authors in OpenAlex).
    Alternative: email verification against institutional address.
    → Decision: start with ORCID match, flag unmatched cases as "unverified claim",
-     add email verification in a later iteration.
+   add email verification in a later iteration.
 
 4. WHAT TO DO WHEN STANCE IS CLEARLY WRONG
    LLM classification will sometimes be wrong. A "Challenges" label on a
    citation that is actually supportive would be misleading and embarrassing.
    → Decision: show stance labels with a "Report this label" link.
-     On report: hide the label pending review. Review queue for admins.
+   On report: hide the label pending review. Review queue for admins.
    → Also: allow the citing paper's authors to dispute a stance label
-     (same ownership verification as above).
+   (same ownership verification as above).
 
 5. LANGUAGE AND NON-ENGLISH LITERATURE
    A significant portion of scientific literature is not in English.
    Claude handles multilingual input well for classification.
    Citation contexts may be in any language.
    → Decision: classify in any language, display context in original language,
-     show stance label in English. Add translated context display later.
+   show stance label in English. Add translated context display later.
 
 6. GOVERNANCE DOCUMENTATION
    Before any community contribution feature goes live (Stage 3D onwards),
    we need public documentation explaining:
-     - How stance classification works and its limitations
-     - How evidence status is determined
-     - How disputes are resolved
-     - Who can change what, and why
-   This documentation must be versioned (git), public, and linked from
-   every page that shows AI-derived or community-derived content.
-   → ACTION: draft governance document before Stage 3D begins.
+   - How stance classification works and its limitations
+   - How evidence status is determined
+   - How disputes are resolved
+   - Who can change what, and why
+     This documentation must be versioned (git), public, and linked from
+     every page that shows AI-derived or community-derived content.
+     → ACTION: draft governance document before Stage 3D begins.
 
 7. LEGAL
    Displaying "Challenges" or "Corrects" labels on papers could theoretically
    expose us to claims from paper authors who feel their work is misrepresented.
    → Get legal review before any stance data is publicly displayed.
    → Labels should always be attributed: "Based on AI classification of
-     citation context. This may be inaccurate. Report an error."
+   citation context. This may be inaccurate. Report an error."
    → We are showing what citing authors wrote, not making our own judgements.
-     This is closer to indexing than editorialising.
-
+   This is closer to indexing than editorialising.
 
 ───────────────────────────────────────────────────────
 AI USAGE POLICY — COST, ACCURACY, AND NECESSITY GUARDRAILS
@@ -1639,11 +1641,11 @@ Before building anything that calls an LLM, answer these in order:
    of which there are millions, vs. one call per topic/concept, of
    which there are a few hundred thousand and growing slowly)?
    → Bounded/low-cardinality + still cacheable → fine to keep as a live,
-     synchronous call behind a kill switch.
+   synchronous call behind a kill switch.
    → Unbounded/high-cardinality + publicly triggerable → must NOT be a
-     live synchronous call. Move it to a scheduled batch job with a
-     fixed daily budget, or gate it behind authentication (which adds
-     real friction against bot abuse, unlike a per-IP rate limit).
+   live synchronous call. Move it to a scheduled batch job with a
+   fixed daily budget, or gate it behind authentication (which adds
+   real friction against bot abuse, unlike a per-IP rate limit).
 
 4. What's the worst-case monthly spend if this endpoint were hit by a
    sustained botnet ignoring the rate limiter? If the honest answer is
@@ -1702,12 +1704,12 @@ APPLYING THIS TO WHAT EXISTS TODAY
   want it at all, can't be derived structurally. But it's currently a
   live, synchronous, unauthenticated, paper-ID-keyed call — exactly the
   unbounded-cardinality case flagged above. Before re-enabling:
-    1. Move to a nightly batch job over papers that actually got
-       pageviews recently (a small, real, bounded list), with a fixed
-       daily Claude budget, instead of classifying on every live
-       pageview of every paper that's ever existed.
-    2. Build the "report this label" control first.
-    3. Only then flip AI_FEATURES_ENABLED=true on Render.
+  1. Move to a nightly batch job over papers that actually got
+     pageviews recently (a small, real, bounded list), with a fixed
+     daily Claude budget, instead of classifying on every live
+     pageview of every paper that's ever existed.
+  2. Build the "report this label" control first.
+  3. Only then flip AI_FEATURES_ENABLED=true on Render.
 - Claim extraction / evidence status (Stage 4, years out) — eventually
   unavoidable (reading millions of abstracts has no non-AI substitute),
   but by the time this is reachable, traffic and funding should justify
@@ -1715,45 +1717,45 @@ APPLYING THIS TO WHAT EXISTS TODAY
   never a live per-request call. Same accuracy rules apply, doubled —
   this is the highest-stakes AI use case on the roadmap.
 
-
 ───────────────────────────────────────────────────────
 KNOWLEDGE GRAPH — NODE AND EDGE INVENTORY
 What exists now vs what we're building toward
 ───────────────────────────────────────────────────────
 
 NODE TYPES:
-  [X] Paper          — OpenAlex work record
-  [X] Author         — OpenAlex/SE user
-  [X] Topic          — OpenAlex concept
-  [X] Institution    — OpenAlex institution
-  [X] Journal        — OpenAlex source
-  [ ] CitationContext — Stage 2B (the actual citing sentence)
-  [ ] Stance          — Stage 2C (the relationship type)
-  [ ] AuthorResponse  — Stage 2D (author's note on their citation record)
-  [ ] CanonicalClaim  — Stage 4B (the deduplicated claim node)
-  [ ] ClaimInstance   — Stage 4A (a specific claim in a specific paper)
-  [ ] Method          — Stage 4A (a research method referenced by papers)
-  [ ] Dataset         — Phase 2 (a dataset referenced by papers)
+[X] Paper — OpenAlex work record
+[X] Author — OpenAlex/SE user
+[X] Topic — OpenAlex concept
+[X] Institution — OpenAlex institution
+[X] Journal — OpenAlex source
+[ ] CitationContext — Stage 2B (the actual citing sentence)
+[ ] Stance — Stage 2C (the relationship type)
+[ ] AuthorResponse — Stage 2D (author's note on their citation record)
+[ ] CanonicalClaim — Stage 4B (the deduplicated claim node)
+[ ] ClaimInstance — Stage 4A (a specific claim in a specific paper)
+[ ] Method — Stage 4A (a research method referenced by papers)
+[ ] Dataset — Phase 2 (a dataset referenced by papers)
 
 EDGE TYPES:
-  [X] cites(Paper → Paper)
-  [X] authored_by(Paper → Author)
-  [X] about(Paper → Topic)
-  [X] employed_by(Author → Institution)
-  [X] published_in(Paper → Journal)
-  [ ] cites_with_stance(Paper → Paper, via Stance)    — Stage 2C
-  [ ] responded_to(AuthorResponse → Paper)             — Stage 2D
-  [ ] makes_claim(Paper → ClaimInstance)               — Stage 4A
-  [ ] instance_of(ClaimInstance → CanonicalClaim)      — Stage 4B
-  [ ] tests_claim(Paper → CanonicalClaim, via Stance)  — Stage 4C
-  [ ] uses_method(Paper → Method)                      — Stage 4A
-  [ ] uses_dataset(Paper → Dataset)                    — Phase 2
+[X] cites(Paper → Paper)
+[X] authored_by(Paper → Author)
+[X] about(Paper → Topic)
+[X] employed_by(Author → Institution)
+[X] published_in(Paper → Journal)
+[ ] cites_with_stance(Paper → Paper, via Stance) — Stage 2C
+[ ] responded_to(AuthorResponse → Paper) — Stage 2D
+[ ] makes_claim(Paper → ClaimInstance) — Stage 4A
+[ ] instance_of(ClaimInstance → CanonicalClaim) — Stage 4B
+[ ] tests_claim(Paper → CanonicalClaim, via Stance) — Stage 4C
+[ ] uses_method(Paper → Method) — Stage 4A
+[ ] uses_dataset(Paper → Dataset) — Phase 2
 
 The graph is intentionally built on PostgreSQL for as long as possible.
 Dedicated graph DB (Neo4j, etc.) is premature until query complexity demands it.
 PostgreSQL with good indexing and recursive CTEs handles this well at our scale.
 
 GOVERNANCE (once there is a team and funding)
+
 - [ ] Board of Trustees (independent, science/infrastructure/law/ethics expertise)
 - [ ] Scientific Council (disciplinary advisors)
 - [ ] Community Council (elected by contributors)
@@ -1762,19 +1764,19 @@ GOVERNANCE (once there is a team and funding)
 - [ ] Legal incorporation as non-profit
 
 FUNDING STRATEGY
+
 - [ ] Apply for: national research infrastructure grants, EU/UNESCO-aligned programmes,
       science and open-knowledge foundations (Wellcome Trust, Sloan Foundation, etc.)
 - [ ] No: venture capital, paywalls, user data sales, advertising, sponsored ranking
 - [ ] Long-term goal: endowment covering baseline operational costs
- 
 
 =======================================================
 INFRASTRUCTURE / PLATFORM HEALTH
 =======================================================
 
-- [X] GitHub repo already public with README at github.com/ScienceEcosystem/ScienceEcosystem
+- [x] GitHub repo already public with README at github.com/ScienceEcosystem/ScienceEcosystem
       node_modules removed from git tracking (2026-05-22)
-- [X] WCAG 2.1 AA accessibility pass (2026-06-11) — prompted by Emmy Delekta
+- [x] WCAG 2.1 AA accessibility pass (2026-06-11) — prompted by Emmy Delekta
       (Auburn University Museum) feedback that this matters for funding.
       Pass 1+2: Lighthouse accessibility audits across all 28 pages —
       color-contrast (--primary, --success, #9ca3af, #64748b, #2e7f9f, #6c757d,
@@ -1792,14 +1794,14 @@ INFRASTRUCTURE / PLATFORM HEALTH
       to trigger button), added role="img"+aria-label to species map for
       screen readers, fixed low-contrast pdf-viewer thumbnail labels.
       All 28 pages now score 1.0 on Lighthouse accessibility.
-- [X] Research Tools Directory improvements (2026-06-11) — remaining feedback
+- [x] Research Tools Directory improvements (2026-06-11) — remaining feedback
       from Emmy Delekta. Added Geography / User level / Taxon group filter
       dropdowns + data-geo/data-userlevel/data-taxon tags on the 29
       biodiversity-relevant tools (Biodiversity & ecology + Citizen science
       categories). Added a Reset button that clears all filters. Added
       auto-fetched favicon logos (Google s2 favicon service, by domain) to
       all 232 tool cards. Lighthouse accessibility still 1.0.
-- [X] Research Tools geography fixes (2026-06-11) — geo tags were a mix of
+- [x] Research Tools geography fixes (2026-06-11) — geo tags were a mix of
       countries and continents (USA x3, New Zealand, Australia x2) with
       South America missing entirely. Normalized all data-geo values to
       continents: USA -> North America, Australia/New Zealand -> Oceania.
@@ -1813,7 +1815,7 @@ INFRASTRUCTURE / PLATFORM HEALTH
       letter-badge instead of hiding it. All 234 onerror handlers updated.
       Verified by simulating a blocked favicon service in headless Chrome —
       letter badges render correctly. Lighthouse accessibility still 1.0.
-- [X] Brand color consistency pass (2026-06-11) — the WCAG pass had darkened
+- [x] Brand color consistency pass (2026-06-11) — the WCAG pass had darkened
       the site's blue/teal accent (#2e7f9f/#296f8b) and --primary (#0369a1),
       drifting away from the SE logo's blue (#006294). Standardized the whole
       site (style.css + ~25 HTML/JS/CSS files, including the browser
@@ -1868,7 +1870,7 @@ INFRASTRUCTURE / PLATFORM HEALTH
       "Visit X ->" links and many other small-text/link uses of
       #0284c7 across admin.html, user-profile.html, settings-profile.html,
       pdf-viewer.html, search.html, extension/popup/popup.css,
-      scripts/*.js, style.css (.tab-btn.active, .stance-result) all
+      scripts/\*.js, style.css (.tab-btn.active, .stance-result) all
       failed 4.5:1 at #0284c7 (4.10:1) — these were originally a
       separate accent color #2e7f9f (4.51:1), conflated into --primary
       by an earlier over-broad replace. Reverted them to #2e7f9f, except
@@ -1887,28 +1889,25 @@ INFRASTRUCTURE / PLATFORM HEALTH
       at 1.0 on Lighthouse accessibility (admin, pdf-viewer,
       research-tools, settings-profile, user-profile, index). Bumped
       service worker to se-v14.
-- [X] Fix pdf-viewer.html whole-page scroll bug (2026-06-11) — the
+- [x] Fix pdf-viewer.html whole-page scroll bug (2026-06-11) — the
       page hardcoded `.pdf-container { height: calc(100vh - 60px);
-      margin-top: 60px; }` assuming a 60px nav, but .app-nav is
+margin-top: 60px; }` assuming a 60px nav, but .app-nav is
       actually 88px tall. The 28px shortfall made <body> taller than
       the viewport, so the whole page became scrollable — scrolling it
       pushed the sidebar's Info/Contents/Refs/Links tab bar out of view
       under the nav. Fixed by making body a column flexbox
       (`height:100%; overflow:hidden`) with `.pdf-container { flex:1;
-      min-height:0 }`, so it always exactly fills the space below the
+min-height:0 }`, so it always exactly fills the space below the
       nav regardless of nav height/breakpoint. Also made the sidebar
       tab bar `position:sticky; top:0` (new .pdf-sidebar-tabs class) so
       it stays visible while sidebar panel content scrolls. Now only
       the PDF page area (.pdf-main-body), the sidebar panels, and the
       thumbnail strip scroll — the page itself never does.
-- [X] Research Tools Directory 3-part redesign (2026-06-13):
-      1. Added Asia (India Biodiversity Portal) and Africa (SANBI-GBIF)
+- [x] Research Tools Directory 3-part redesign (2026-06-13): 1. Added Asia (India Biodiversity Portal) and Africa (SANBI-GBIF)
       tool cards to research-tools.html — geo filter now covers Asia,
-      Africa, Europe, North/South America, Oceania, Global.
-      2. Taxon filter is now progressive disclosure: hidden by default,
+      Africa, Europe, North/South America, Oceania, Global. 2. Taxon filter is now progressive disclosure: hidden by default,
       only shown when category = "Biodiversity & ecology" or "Citizen
-      science" (the only categories where data-taxon varies).
-      3. Built a safe, build-time generator for the 236+ tool cards:
+      science" (the only categories where data-taxon varies). 3. Built a safe, build-time generator for the 236+ tool cards:
       scripts/tools-catalog-data.js holds one entry per tool (journals.js
       style), scripts/build-research-tools.js regenerates the
       pre-rendered <article class="tool-card"> blocks between
@@ -1923,7 +1922,7 @@ INFRASTRUCTURE / PLATFORM HEALTH
       assets/tools.json are leftover dead code from earlier failed fix
       attempts (still pre-cached by service-worker.js) — not used by the
       new generator, candidates for removal in a future cleanup.
-- [X] Add in-app back/forward buttons for installed PWA (2026-06-13) —
+- [x] Add in-app back/forward buttons for installed PWA (2026-06-13) —
       in standalone mode there's no browser chrome, so "go back to
       previous page" had no equivalent. scripts/session.js now injects
       a small back/forward button pair into .logo in the nav bar,
@@ -1932,14 +1931,12 @@ INFRASTRUCTURE / PLATFORM HEALTH
       CSS in style.css. Verified injection fires only in standalone
       mode and Lighthouse accessibility unaffected (1.0). Bumped
       service worker to se-v15 (session.js changed, loaded everywhere).
-- [X] Library-wide .bib export + "cite anywhere" docs (2026-06-13):
-      1. Added "↓ Export .bib" button to library.html toolbar (next to
+- [x] Library-wide .bib export + "cite anywhere" docs (2026-06-13): 1. Added "↓ Export .bib" button to library.html toolbar (next to
       Add PDF). Handler in scripts/library-page.js exports the current
       view (collection + filters applied via currentViewItems() +
       applyFilters()) as one combined .bib file, reusing the existing
       fmtBibTeX()/downloadText() helpers and de-duping BibTeX keys
-      across items. Filename includes the active collection name.
-      2. Added a new "Cite anywhere — free, no plugin required" section
+      across items. Filename includes the active collection name. 2. Added a new "Cite anywhere — free, no plugin required" section
       to about.html documenting the free Quarto/Pandoc workflow:
       export library.bib, grab a .csl style from zotero.org/styles,
       reference both in the .qmd/.md YAML header, cite with [@citekey],
@@ -1948,7 +1945,7 @@ INFRASTRUCTURE / PLATFORM HEALTH
       rendering + Lighthouse accessibility 1.0 on about.html.
       (Full Zotero CSL style picker with citeproc-js in-app remains a
       possible future step if requested — not built this round.)
-- [X] "Recently cited you" feed on user-profile.html (2026-06-13) —
+- [x] "Recently cited you" feed on user-profile.html (2026-06-13) —
       researcher home-base feature: a "citation alert" panel that shows
       papers that recently cited the logged-in user's work, the
       lowest-friction "daily check" researchers already do (cf. Google
@@ -1961,7 +1958,7 @@ INFRASTRUCTURE / PLATFORM HEALTH
       linked, shows a prompt pointing to settings-profile.html. Verified
       live against a real OpenAlex author (rendered titles/authors/dates
       correctly) and Lighthouse accessibility 1.0.
-- [X] Fix public profile pages rendering empty (2026-06-14) —
+- [x] Fix public profile pages rendering empty (2026-06-14) —
       scripts/profile.js renderAuthorHeader(a) referenced `opts.seUser`
       on lines ~531-532, but `opts` is boot()'s parameter and
       renderAuthorHeader is a sibling function, not nested — threw
@@ -1975,7 +1972,7 @@ INFRASTRUCTURE / PLATFORM HEALTH
       renderOpenSciencePortfolio() (Open Science Portfolio panel, now
       visible again) — #16a34a→#15803d, #94a3b8→#64748b. Verified on
       both ?id= and ?orcid= URLs; Lighthouse accessibility back to 1.0.
-- [X] Fix profile.html sidebar layout regression (2026-06-14) — once
+- [x] Fix profile.html sidebar layout regression (2026-06-14) — once
       boot() stopped erroring (above fix), #whoCitedMeSection (a
       .main-col panel) could become visible and CSS grid auto-placement
       put it in the sidebar's column/row, pushing #profileSidebar
@@ -1987,7 +1984,7 @@ INFRASTRUCTURE / PLATFORM HEALTH
       in the 1024px single-column breakpoint. Verified via screenshots
       at 1400px (sidebar correct) and 800px (stacks correctly);
       Lighthouse accessibility still 1.0.
-- [X] Audit all 237 research-tools.html catalog links (2026-06-15) —
+- [x] Audit all 237 research-tools.html catalog links (2026-06-15) —
       checked every link via curl + web search. Fixed 15 dead/moved
       links in scripts/tools-catalog-data.js (Sci-Hub mirror, GlobalSoilMap,
       BiodiversityMIP→ISIMIP, Copernicus Open Access Hub→Data Space
@@ -2001,7 +1998,7 @@ INFRASTRUCTURE / PLATFORM HEALTH
       Rebuilt research-tools.html via build-research-tools.js — 236
       cards, all links re-verified 200. Did not do a full text-accuracy
       pass on all 236 descriptions (only the 15 renamed/relinked tools).
-- [X] Add 10 tools from GitHub awesome-lists (2026-06-15) — sourced from
+- [x] Add 10 tools from GitHub awesome-lists (2026-06-15) — sourced from
       maurice-schleussinger/awesome-open-science and Julie-Fabre/
       awesome_science. Added BioRender (Design & illustration), GenBank
       and UniProt (Genomics & phylogenetics), eLife and PLOS (Publisher),
@@ -2012,7 +2009,7 @@ INFRASTRUCTURE / PLATFORM HEALTH
       screenshot-verified rendering. Re-ran check-tool-links.js: 19 flagged
       links, all pre-existing known false positives (bot-blocking/TLS
       quirks); none of the 10 new tools affected.
-- [X] Add 3 tools recommended by Dr Andy Stapleton (YouTube) (2026-06-15) —
+- [x] Add 3 tools recommended by Dr Andy Stapleton (YouTube) (2026-06-15) —
       reviewed his "free AI tools for researchers" picks (Gemini, Asta,
       Semantic Scholar, ResearchRabbit, NotebookLM, Goblin Tools).
       Semantic Scholar and ResearchRabbit already in catalog; skipped
@@ -2022,18 +2019,17 @@ INFRASTRUCTURE / PLATFORM HEALTH
       scripts/tools-catalog-data.js. Rebuilt research-tools.html via
       build-research-tools.js — 249 cards, links verified 200,
       screenshot-verified rendering.
-- [X] Add Elicit to reach 250 tools (2026-06-15) — found via TnTo/
+- [x] Add Elicit to reach 250 tools (2026-06-15) — found via TnTo/
       awesome-research GitHub list. Added Elicit (Literature review
       tool) — AI research assistant that answers questions and extracts
       data from papers with citations. Link verified 200. Rebuilt
       research-tools.html via build-research-tools.js — 250 cards,
       screenshot-verified rendering.
-- [X] Add CONTRIBUTING.md so outside developers can contribute (2026-06-20)
+- [x] Add CONTRIBUTING.md so outside developers can contribute (2026-06-20)
 - [ ] Neon DB: add indexes if queries get slow as user count grows
 - [ ] Render: currently free tier — when traffic grows, upgrade to paid or migrate
 - [ ] Cloudflare R2: monitor storage usage, set lifecycle rules if needed
-- [X] Legal: write a proper Terms of Service (2026-06-20) — terms.html, draft pending lawyer review
-
+- [x] Legal: write a proper Terms of Service (2026-06-20) — terms.html, draft pending lawyer review
 
 =======================================================
 OPEN QUESTIONS / DECISIONS TO MAKE
@@ -2051,91 +2047,80 @@ OPEN QUESTIONS / DECISIONS TO MAKE
   relevant grant programmes and write one application. EU Open Science Cloud (EOSC)
   and national science foundation equivalents are the most relevant targets.
 
-
 =======================================================
 DONE
 =======================================================
 
-- [X] Session TTL: already 90 days with sliding window (auto-extends if <45 days remain) — good
-- [X] Cite button popup: now fixed-position, centered on screen with backdrop (2026-05-22)
-- [X] GitHub repo already public; node_modules removed from tracking (2026-05-22)
-- [X] Add more metrics for journal quality: Journal Trust Index (JTI) implemented
+- [x] Session TTL: already 90 days with sliding window (auto-extends if <45 days remain) — good
+- [x] Cite button popup: now fixed-position, centered on screen with backdrop (2026-05-22)
+- [x] GitHub repo already public; node_modules removed from tracking (2026-05-22)
+- [x] Add more metrics for journal quality: Journal Trust Index (JTI) implemented
       — Openness + Recognition + Scale + Integrity = 0–100
-- [X] Search bar now handles DOI search and long sentence queries
-- [X] Paper cards: reduced whitespace, better layout
-- [X] Show journal/paper score on paper cards (JTI badge)
-- [X] Chrome extension live on Web Store (v0.1.1)
-- [X] PDF storage via Cloudflare R2 (persistent, survives Render restarts)
-- [X] Profile page: author ID deduplication (3 IDs → merged works)
-- [X] Profile page: trend charts (citations by year, publications by year)
-- [X] Profile page: career timeline and co-authors sidebar
-- [X] Profile page: BibTeX export of all publications
-- [X] Profile page: CV export (print CSS, clean typography, DOI URLs inline)
-- [X] Profile page: Open Science Portfolio in sidebar
-- [X] Tools finder: fixed Safari HTML parser crash (pre-rendered static HTML)
-- [X] Paper page: self-hosted vis-network (fixed 408 CDN errors)
-- [X] Extension: keyboard shortcut Alt+Shift+S saves paper
-- [X] about.html: rewritten — honest, 7 sections, clear narrative arc
-- [X] index.html: updated — honest tagline and features, removed overclaiming on data/code
-- [X] node_modules added to .gitignore
-- [X] Library/PDF reader Zotero-parity pass (2026-06-15):
-      1. Unified PDF storage: new storePdfFile() helper used by both
-         "Attach PDF" (/api/library/pdf) and "Add PDF" import
-         (/api/library/import-pdf) — uses R2 when configured, local
-         filesystem otherwise, so a saved PDF always loads in the reader
-         (fixes "R2 not configured" 500s in dev and inconsistent storage
-         between the two upload paths).
-      2. Save flow: savePaper() now sends doi (enables server-side
-         dedup) and immediately calls /api/items/:id/refresh after
-         saving so title/authors/year/abstract are hydrated right away
-         instead of only when the inspector is opened.
-      3. PDF reader: multi-color highlight palette (yellow/green/blue/
-         pink) plus a new "Underline" annotation type, selectable from
-         the floating selection toolbar.
-      4. Library page: "Add by DOI / URL" quick-add box in the toolbar
-         — new POST /api/library/add-by-doi endpoint resolves a DOI/
-         doi.org link/OpenAlex work ID via OpenAlex and inserts the item
-         with full metadata pre-hydrated.
-      5. Library search filter now also matches the abstract text.
-      6. Inspector: "Copy citation" button with APA/MLA format picker
-         (alongside existing BibTeX/RIS export).
-      7. Annotation panel: "→ Send to note" button per highlight/note,
-         and "↓ Export" downloads all annotations as a Markdown file.
+- [x] Search bar now handles DOI search and long sentence queries
+- [x] Paper cards: reduced whitespace, better layout
+- [x] Show journal/paper score on paper cards (JTI badge)
+- [x] Chrome extension live on Web Store (v0.1.1)
+- [x] PDF storage via Cloudflare R2 (persistent, survives Render restarts)
+- [x] Profile page: author ID deduplication (3 IDs → merged works)
+- [x] Profile page: trend charts (citations by year, publications by year)
+- [x] Profile page: career timeline and co-authors sidebar
+- [x] Profile page: BibTeX export of all publications
+- [x] Profile page: CV export (print CSS, clean typography, DOI URLs inline)
+- [x] Profile page: Open Science Portfolio in sidebar
+- [x] Tools finder: fixed Safari HTML parser crash (pre-rendered static HTML)
+- [x] Paper page: self-hosted vis-network (fixed 408 CDN errors)
+- [x] Extension: keyboard shortcut Alt+Shift+S saves paper
+- [x] about.html: rewritten — honest, 7 sections, clear narrative arc
+- [x] index.html: updated — honest tagline and features, removed overclaiming on data/code
+- [x] node_modules added to .gitignore
+- [x] Library/PDF reader Zotero-parity pass (2026-06-15): 1. Unified PDF storage: new storePdfFile() helper used by both
+      "Attach PDF" (/api/library/pdf) and "Add PDF" import
+      (/api/library/import-pdf) — uses R2 when configured, local
+      filesystem otherwise, so a saved PDF always loads in the reader
+      (fixes "R2 not configured" 500s in dev and inconsistent storage
+      between the two upload paths). 2. Save flow: savePaper() now sends doi (enables server-side
+      dedup) and immediately calls /api/items/:id/refresh after
+      saving so title/authors/year/abstract are hydrated right away
+      instead of only when the inspector is opened. 3. PDF reader: multi-color highlight palette (yellow/green/blue/
+      pink) plus a new "Underline" annotation type, selectable from
+      the floating selection toolbar. 4. Library page: "Add by DOI / URL" quick-add box in the toolbar
+      — new POST /api/library/add-by-doi endpoint resolves a DOI/
+      doi.org link/OpenAlex work ID via OpenAlex and inserts the item
+      with full metadata pre-hydrated. 5. Library search filter now also matches the abstract text. 6. Inspector: "Copy citation" button with APA/MLA format picker
+      (alongside existing BibTeX/RIS export). 7. Annotation panel: "→ Send to note" button per highlight/note,
+      and "↓ Export" downloads all annotations as a Markdown file.
       Note: could not run full DB-backed end-to-end tests this session —
       the local Neon Postgres connection returned ECONNRESET (pre-existing
       environment issue, unrelated to these changes). All edited files
       pass `node --check` and the dev server serves library.html and
       pdf-viewer.html with the new UI elements present.
-- [X] PDF reader annotation bug fixes (2026-07-05):
-      1. Highlight overflow: mergeLineRects() (scripts/pdf-reader.js) used
-         a fragile "next rect's top within 60% of the first rect's height"
-         heuristic to decide if two selection rects were on the same line —
-         on tight academic line spacing this could merge two different
-         lines into one band, stretching the highlight box past the actual
-         text. Replaced with a real vertical-overlap-ratio check (two rects
-         are the same line only if their vertical ranges overlap by ≥50%
-         of the shorter rect's height).
-      2. Citation references were permanently painted blue over whole
-         paragraphs. Two bugs stacked: (a) pdf-viewer.html had a second,
-         conflicting `.citation-highlight` CSS rule (blue background) that
-         silently overrode the yellow one in style.css — removed the
-         duplicate, style.css is now the single source; (b) citations are
-         now styled with no background at rest, a hover tint, and a
-         background only on `.active` (the one just clicked) — matches the
-         "only show a link when clicked" request. Also wired the in-text
-         citation click handler to actually mark the clicked span `.active`
-         (it previously only switched the sidebar tab).
-      3. "Note" button did nothing on a plain click: bindAnnotationToolbar()
-         only ever set `annotMode = 'note'` — nothing else in the file
-         checked that mode, so clicking the page did nothing (notes could
-         only be created by first drag-selecting text). Added real sticky
-         notes: a plain click on the page while in Note mode now opens a
-         bright yellow, draggable, editable box anchored at that exact
-         point (openNoteBox()/wireNotePointDrag() in scripts/pdf-reader.js);
-         it collapses to a small 📌 pin when closed, reopens on click, and
-         both the pin and the open box can be dragged to reposition —
-         position and text persist via the existing annotation
-         save/localStorage path.
+- [x] PDF reader annotation bug fixes (2026-07-05): 1. Highlight overflow: mergeLineRects() (scripts/pdf-reader.js) used
+      a fragile "next rect's top within 60% of the first rect's height"
+      heuristic to decide if two selection rects were on the same line —
+      on tight academic line spacing this could merge two different
+      lines into one band, stretching the highlight box past the actual
+      text. Replaced with a real vertical-overlap-ratio check (two rects
+      are the same line only if their vertical ranges overlap by ≥50%
+      of the shorter rect's height). 2. Citation references were permanently painted blue over whole
+      paragraphs. Two bugs stacked: (a) pdf-viewer.html had a second,
+      conflicting `.citation-highlight` CSS rule (blue background) that
+      silently overrode the yellow one in style.css — removed the
+      duplicate, style.css is now the single source; (b) citations are
+      now styled with no background at rest, a hover tint, and a
+      background only on `.active` (the one just clicked) — matches the
+      "only show a link when clicked" request. Also wired the in-text
+      citation click handler to actually mark the clicked span `.active`
+      (it previously only switched the sidebar tab). 3. "Note" button did nothing on a plain click: bindAnnotationToolbar()
+      only ever set `annotMode = 'note'` — nothing else in the file
+      checked that mode, so clicking the page did nothing (notes could
+      only be created by first drag-selecting text). Added real sticky
+      notes: a plain click on the page while in Note mode now opens a
+      bright yellow, draggable, editable box anchored at that exact
+      point (openNoteBox()/wireNotePointDrag() in scripts/pdf-reader.js);
+      it collapses to a small 📌 pin when closed, reopens on click, and
+      both the pin and the open box can be dragged to reposition —
+      position and text persist via the existing annotation
+      save/localStorage path.
       Note: could not run full DB-backed end-to-end interactive testing
       this session (same pre-existing local Neon/Postgres connectivity
       issue as above) — verified via `node --check`, a CSS brace-balance
@@ -2144,41 +2129,40 @@ DONE
       click/drag/multi-line-selection behavior should be spot-checked in
       a browser against a real PDF.
 
-
 =======================================================
 EXTERNAL DATA INTEGRATIONS — TOPIC & SPECIES PAGES
 =======================================================
 
 Built so far (2026-06):
-  [X] World of Crayfish (world.crayfish.ro) — validated scientific occurrence records for
-      crayfish species. API: GET /services/api/check-engine.php?baseline={species}
-      Shows: record count, hexagonal cells, countries, native vs non-indigenous split,
-      data quality, density, geo-narrative, bar chart of top 10 countries.
-      Ask builder (met at crayfish conference) for full geo-narrative endpoint — current
-      API only returns short methods/results text, not the rich biogeographic overview.
+[X] World of Crayfish (world.crayfish.ro) — validated scientific occurrence records for
+crayfish species. API: GET /services/api/check-engine.php?baseline={species}
+Shows: record count, hexagonal cells, countries, native vs non-indigenous split,
+data quality, density, geo-narrative, bar chart of top 10 countries.
+Ask builder (met at crayfish conference) for full geo-narrative endpoint — current
+API only returns short methods/results text, not the rich biogeographic overview.
 
-  [X] iNaturalist (inaturalist.org) — citizen science observations.
-      API: api.inaturalist.org/v1/ — fully open, no auth needed.
-      Shows: total observations, research-grade count, observer count,
-      year sparkline (last 10 years), CC-licensed photo if available.
+[X] iNaturalist (inaturalist.org) — citizen science observations.
+API: api.inaturalist.org/v1/ — fully open, no auth needed.
+Shows: total observations, research-grade count, observer count,
+year sparkline (last 10 years), CC-licensed photo if available.
 
-  [X] GBIF (gbif.org) — Global Biodiversity Information Facility, the broadest
-      occurrence database in existence (120M+ records, aggregated from thousands
-      of sources incl. NIWA NZ Freshwater Fish Database).
-      API: api.gbif.org/v1/ — fully open, no auth needed.
-      Shows: total occurrences, country count + bar chart, year trend sparkline,
-      vernacular names, link to GBIF species page.
-      Also owns the shared Leaflet species distribution map (self-hosted Natural
-      Earth background + GBIF occurrence density tile layer); WoC EOO boundary
-      is overlaid on top when available.
+[X] GBIF (gbif.org) — Global Biodiversity Information Facility, the broadest
+occurrence database in existence (120M+ records, aggregated from thousands
+of sources incl. NIWA NZ Freshwater Fish Database).
+API: api.gbif.org/v1/ — fully open, no auth needed.
+Shows: total occurrences, country count + bar chart, year trend sparkline,
+vernacular names, link to GBIF species page.
+Also owns the shared Leaflet species distribution map (self-hosted Natural
+Earth background + GBIF occurrence density tile layer); WoC EOO boundary
+is overlaid on top when available.
 
-  [X] Catalogue of Life (catalogueoflife.org) — authoritative taxonomy.
-      API: api.catalogueoflife.org/dataset/3LR/nameusage/search?q={species}&rank=species
-      Fully open, no auth needed.
-      Shows: classification breadcrumb (kingdom → phylum → ... → genus) with
-      authorships, accepted/synonym status, link to CoL species page.
-      Rendered in the sidebar Infobox panel (#colClassification), not the
-      Field Data block — it's taxonomy reference info, not occurrence data.
+[X] Catalogue of Life (catalogueoflife.org) — authoritative taxonomy.
+API: api.catalogueoflife.org/dataset/3LR/nameusage/search?q={species}&rank=species
+Fully open, no auth needed.
+Shows: classification breadcrumb (kingdom → phylum → ... → genus) with
+authorships, accepted/synonym status, link to CoL species page.
+Rendered in the sidebar Infobox panel (#colClassification), not the
+Field Data block — it's taxonomy reference info, not occurrence data.
 
 All panels trigger only on binomial species names (regex: /^[A-Z][a-z]+ [a-z]+/).
 Server proxies all APIs with 24h cache. Not visible on non-species topic pages.
@@ -2187,332 +2171,329 @@ NOTE: EOL (Encyclopedia of Life) is now behind Cloudflare bot-challenge pages �
 api.eol.org returns an HTML "Just a moment..." challenge instead of JSON.
 Dropped from the roadmap; no workaround without a headless browser.
 
-  [X] WoRMS — World Register of Marine Species (2026-06-24) — taxonomy/
-      validity register, same role as Catalogue of Life above (not an
-      occurrence-stats source — WoRMS has no occurrence counts).
-      GET /api/field-data/worms?species=X →
-      marinespecies.org/rest/AphiaRecordsByName/{species}?like=false&marine_only=false
-      Renders into sidebar #wormsClassification (loadWormsData() in
-      scripts/topic.js): classification breadcrumb + environment badges
-      (Marine/Brackish/Freshwater/Terrestrial — only the true ones shown)
-      + link. Hidden entirely when no WoRMS record exists (most
-      terrestrial species correctly won't have one). Verified live against
-      both a marine species (Gadus morhua — accepted record, Marine+
-      Brackish) and a freshwater-only one (Astacus astacus — still
-      matches, since WoRMS isn't marine_only by default, correctly tagged
-      Freshwater only).
+[X] WoRMS — World Register of Marine Species (2026-06-24) — taxonomy/
+validity register, same role as Catalogue of Life above (not an
+occurrence-stats source — WoRMS has no occurrence counts).
+GET /api/field-data/worms?species=X →
+marinespecies.org/rest/AphiaRecordsByName/{species}?like=false&marine_only=false
+Renders into sidebar #wormsClassification (loadWormsData() in
+scripts/topic.js): classification breadcrumb + environment badges
+(Marine/Brackish/Freshwater/Terrestrial — only the true ones shown) + link. Hidden entirely when no WoRMS record exists (most
+terrestrial species correctly won't have one). Verified live against
+both a marine species (Gadus morhua — accepted record, Marine+
+Brackish) and a freshwater-only one (Astacus astacus — still
+matches, since WoRMS isn't marine_only by default, correctly tagged
+Freshwater only).
 
-  [X] OBIS — Ocean Biodiversity Information System (2026-06-24) —
-      occurrence stats, same role as GBIF above but marine-specific.
-      GET /api/field-data/obis?species=X →
-      api.obis.org/v3/checklist?scientificname=X (records count + a bonus
-      IUCN conservation category, free, ahead of the dedicated IUCN
-      integration) + api.obis.org/v3/statistics/years?scientificname=X
-      (year trend, same shape as GBIF's). Renders as a .inat-panel in
-      #inatContent (loadObisData()) — total records, IUCN badge if
-      present (color-coded by severity), year-trend sparkline, link.
-      Verified live: Gadus morhua → 3,115,364 records, IUCN "VU", 14 years
-      of trend data; Astacus astacus (freshwater-only) → correctly 404s,
-      no panel shown, no error surfaced.
+[X] OBIS — Ocean Biodiversity Information System (2026-06-24) —
+occurrence stats, same role as GBIF above but marine-specific.
+GET /api/field-data/obis?species=X →
+api.obis.org/v3/checklist?scientificname=X (records count + a bonus
+IUCN conservation category, free, ahead of the dedicated IUCN
+integration) + api.obis.org/v3/statistics/years?scientificname=X
+(year trend, same shape as GBIF's). Renders as a .inat-panel in
+#inatContent (loadObisData()) — total records, IUCN badge if
+present (color-coded by severity), year-trend sparkline, link.
+Verified live: Gadus morhua → 3,115,364 records, IUCN "VU", 14 years
+of trend data; Astacus astacus (freshwater-only) → correctly 404s,
+no panel shown, no error surfaced.
 
-  [DROPPED] AmphibiaWeb — confirmed via live test (2026-06-24) that both
-      its API endpoints (amphib_ws and amphib_names.json) now redirect
-      into a Cloudflare Turnstile "verify you are human" challenge page
-      (amphibiaweb.org's homepage itself still loads fine — this is
-      API-specific, not a full site outage). Identical failure mode to
-      EOL above. No workaround without a headless browser — dropped from
-      the roadmap for the same reason.
+[DROPPED] AmphibiaWeb — confirmed via live test (2026-06-24) that both
+its API endpoints (amphib_ws and amphib_names.json) now redirect
+into a Cloudflare Turnstile "verify you are human" challenge page
+(amphibiaweb.org's homepage itself still loads fine — this is
+API-specific, not a full site outage). Identical failure mode to
+EOL above. No workaround without a headless browser — dropped from
+the roadmap for the same reason.
 
--------------------------------------------------------
-TO BUILD — TIER 1 remaining
--------------------------------------------------------
+---
+
+## TO BUILD — TIER 1 remaining
 
 Tier 1 (no-auth) is now complete other than AmphibiaWeb (dropped, see
 above). Nothing else queued here.
 
--------------------------------------------------------
-TIER 3 (beyond biology) — DONE for the 4 no-auth sources (2026-07-11)
--------------------------------------------------------
+---
+
+## TIER 3 (beyond biology) — DONE for the 4 no-auth sources (2026-07-11)
 
 These expand the "Field Data" concept beyond species pages, into topic
 pages for chemistry, structural biology, astronomy, and earth science.
 
-  [X] ChEMBL — bioactive molecule database. GET /api/field-data/chembl?name=X
-      → ebi.ac.uk/chembl pref_name__iexact exact match. Shows molecular
-      formula/weight, first approval year, clinical phase badge, ChEMBL link.
-  [X] Protein Data Bank (RCSB) — GET /api/field-data/pdb?name=X → RCSB
-      full-text search + title-verification (see below), shows entry title,
-      method, resolution, RCSB link.
-  [X] NASA Exoplanet Archive — GET /api/field-data/exoplanet?name=X →
-      TAP query against `pscomppars` (composite params, one row per planet)
-      for an exact pl_name match. Shows host star, discovery year/method,
-      radius/mass/eq. temp/distance.
-  [X] PANGAEA — GET /api/field-data/pangaea?name=X → full-text dataset
-      search with a relevance-score floor (see below). Shows up to 5
-      matching dataset citations with DOI links.
-  Materials Project (needs a free API key) intentionally left for later —
-  it's the only Tier 3 item that isn't no-auth.
+[X] ChEMBL — bioactive molecule database. GET /api/field-data/chembl?name=X
+→ ebi.ac.uk/chembl pref_name\_\_iexact exact match. Shows molecular
+formula/weight, first approval year, clinical phase badge, ChEMBL link.
+[X] Protein Data Bank (RCSB) — GET /api/field-data/pdb?name=X → RCSB
+full-text search + title-verification (see below), shows entry title,
+method, resolution, RCSB link.
+[X] NASA Exoplanet Archive — GET /api/field-data/exoplanet?name=X →
+TAP query against `pscomppars` (composite params, one row per planet)
+for an exact pl_name match. Shows host star, discovery year/method,
+radius/mass/eq. temp/distance.
+[X] PANGAEA — GET /api/field-data/pangaea?name=X → full-text dataset
+search with a relevance-score floor (see below). Shows up to 5
+matching dataset citations with DOI links.
+Materials Project (needs a free API key) intentionally left for later —
+it's the only Tier 3 item that isn't no-auth.
 
-  IMPORTANT — the original plan for this section ("detection shifts from
-  binomial name → OpenAlex concept ancestors") turned out not to work:
-  live-tested against OpenAlex's Concepts API, `ancestors` comes back
-  EMPTY for essentially everything (Aspirin, Hemoglobin, Exoplanet, Coral
-  reef, Organic chemistry all returned ancestors: [] — that API is legacy/
-  frozen since OpenAlex moved to their newer Topics system). So there's no
-  reliable field/domain signal to gate on before calling these APIs.
+IMPORTANT — the original plan for this section ("detection shifts from
+binomial name → OpenAlex concept ancestors") turned out not to work:
+live-tested against OpenAlex's Concepts API, `ancestors` comes back
+EMPTY for essentially everything (Aspirin, Hemoglobin, Exoplanet, Coral
+reef, Organic chemistry all returned ancestors: [] — that API is legacy/
+frozen since OpenAlex moved to their newer Topics system). So there's no
+reliable field/domain signal to gate on before calling these APIs.
 
-  Instead all 4 fire unconditionally on every topic page (non-blocking,
-  same as the species panels) and rely on each endpoint's own precision to
-  stay silent on irrelevant topics:
-    - ChEMBL & NASA Exoplanet Archive: exact-match lookups (pref_name /
-      pl_name) — a random topic name won't coincidentally equal a real
-      compound or planet's exact registered name.
-    - PDB: its full-text search alone is NOT safe — live-tested "Sociology"
-      as a control and it returned a confident-looking match (a cryo-EM
-      structure completely unrelated to sociology). Fixed by verifying the
-      topic name actually appears in the matched entry's title before
-      trusting it — that same "Sociology" query now correctly 404s.
-    - PANGAEA: full-text search over datasets also returns weak matches for
-      almost any term (an ethnography dataset scored ~28 for "Sociology"),
-      so a minimum score floor (45) is applied, calibrated against that
-      same false positive vs. a true positive ("coral reef bleaching"
-      scored 76-79).
-  All 4 verified live end-to-end (real curl calls + a rendered topic.html
-  in a real browser via Playwright) for both true positives (Aspirin →
-  ChEMBL+PDB, Kepler-186 f → Exoplanet Archive, Coral reef → PANGAEA) and
-  the Sociology false-positive control (correctly hidden on PDB and
-  PANGAEA, and never even queried as a false match on ChEMBL/Exoplanet
-  since those are exact-match).
+Instead all 4 fire unconditionally on every topic page (non-blocking,
+same as the species panels) and rely on each endpoint's own precision to
+stay silent on irrelevant topics: - ChEMBL & NASA Exoplanet Archive: exact-match lookups (pref_name /
+pl_name) — a random topic name won't coincidentally equal a real
+compound or planet's exact registered name. - PDB: its full-text search alone is NOT safe — live-tested "Sociology"
+as a control and it returned a confident-looking match (a cryo-EM
+structure completely unrelated to sociology). Fixed by verifying the
+topic name actually appears in the matched entry's title before
+trusting it — that same "Sociology" query now correctly 404s. - PANGAEA: full-text search over datasets also returns weak matches for
+almost any term (an ethnography dataset scored ~28 for "Sociology"),
+so a minimum score floor (45) is applied, calibrated against that
+same false positive vs. a true positive ("coral reef bleaching"
+scored 76-79).
+All 4 verified live end-to-end (real curl calls + a rendered topic.html
+in a real browser via Playwright) for both true positives (Aspirin →
+ChEMBL+PDB, Kepler-186 f → Exoplanet Archive, Coral reef → PANGAEA) and
+the Sociology false-positive control (correctly hidden on PDB and
+PANGAEA, and never even queried as a false match on ChEMBL/Exoplanet
+since those are exact-match).
 
--------------------------------------------------------
-TIER 2 (free API key required)
--------------------------------------------------------
+---
 
-  [X] IUCN Red List (2026-07-11) — GET /api/field-data/iucn?species=X →
-      api.iucnredlist.org/api/v4/taxa/scientific_name (Authorization
-      header, token free-registered by Olivier). Splits the binomial into
-      genus_name/species_name query params. `assessments` is a SIBLING of
-      `taxon` in the response, not nested inside it — got this wrong on
-      the first pass (empty result every time) before checking the raw
-      response shape directly. `latest: true` is scoped per-region (a
-      species can be Regionally Extinct in one area and Vulnerable
-      globally, both flagged "latest") — filters for scope code "1"
-      (Global) to get the real headline status. Renders a colored
-      category badge (VU/EN/CR/etc, same label/color map already used for
-      OBIS's bonus IUCN field) + assessment year + link. Verified live:
-      Panthera leo → Vulnerable (2025 assessment); a fake binomial
-      correctly 404s (also fixed a bug where IUCN's own 404 "not found"
-      response was being caught and reported as a 502 "service
-      unavailable" instead of passed through as a clean "no match").
+## TIER 2 (free API key required)
 
-  [X] eBird (2026-07-11) — GET /api/field-data/ebird?species=X →
-      api.ebird.org/v2/ref/taxonomy/ebird (X-eBirdApiToken header, key
-      free-registered by Olivier via the API access request form).
-      eBird's API is fundamentally region/checklist-based — there's no
-      global occurrence-count endpoint like GBIF/OBIS have — so this is a
-      taxonomy-confirmation panel (common name, family, link to the
-      species' eBird page), same role as the Catalogue of Life/WoRMS
-      panels rather than an occurrence-stats one. Verified live: Turdus
-      migratorius → American Robin, Thrushes and Allies (Turdidae); a
-      non-bird species (Astacus astacus, a crayfish) correctly 404s.
+[X] IUCN Red List (2026-07-11) — GET /api/field-data/iucn?species=X →
+api.iucnredlist.org/api/v4/taxa/scientific_name (Authorization
+header, token free-registered by Olivier). Splits the binomial into
+genus_name/species_name query params. `assessments` is a SIBLING of
+`taxon` in the response, not nested inside it — got this wrong on
+the first pass (empty result every time) before checking the raw
+response shape directly. `latest: true` is scoped per-region (a
+species can be Regionally Extinct in one area and Vulnerable
+globally, both flagged "latest") — filters for scope code "1"
+(Global) to get the real headline status. Renders a colored
+category badge (VU/EN/CR/etc, same label/color map already used for
+OBIS's bonus IUCN field) + assessment year + link. Verified live:
+Panthera leo → Vulnerable (2025 assessment); a fake binomial
+correctly 404s (also fixed a bug where IUCN's own 404 "not found"
+response was being caught and reported as a 502 "service
+unavailable" instead of passed through as a clean "no match").
 
-  [X] Xeno-canto (2026-07-12) — GET /api/field-data/xenocanto?species=X →
-      xeno-canto.org/api/3/recordings, query=sp:"X" (v3 API requires the
-      sp: tag now — the old tag-less search from v2 is discontinued),
-      key free-registered by Olivier. First genuinely new content type
-      across all these panels — up to 5 sample recordings, each with a
-      sonogram thumbnail and an inline <audio> player (not just a link
-      out), plus recordist/location/date/quality and a link to the full
-      recording + species page. Restricted/vulnerable species have
-      loc/file/file-name redacted per the API's `_meta.redacted_fields` —
-      filtered out rather than showing a broken audio player with no
-      file to play. Verified live: Turdus migratorius → 977 recordings,
-      5 playable samples rendered with working audio; Astacus astacus
-      (a crayfish) correctly 404s.
-      BUG CAUGHT: the site's CSP `media-src` directive only allowlisted
-      upload.wikimedia.org, so the <audio src="https://xeno-canto.org/...">
-      elements were silently blocked by the browser (console warning,
-      panel still rendered, audio just never loaded) — caught via a real
-      Playwright run, not just a curl check. Added xeno-canto.org to
-      media-src.
+[X] eBird (2026-07-11) — GET /api/field-data/ebird?species=X →
+api.ebird.org/v2/ref/taxonomy/ebird (X-eBirdApiToken header, key
+free-registered by Olivier via the API access request form).
+eBird's API is fundamentally region/checklist-based — there's no
+global occurrence-count endpoint like GBIF/OBIS have — so this is a
+taxonomy-confirmation panel (common name, family, link to the
+species' eBird page), same role as the Catalogue of Life/WoRMS
+panels rather than an occurrence-stats one. Verified live: Turdus
+migratorius → American Robin, Thrushes and Allies (Turdidae); a
+non-bird species (Astacus astacus, a crayfish) correctly 404s.
 
-  [X] Materials Project (2026-07-12) — GET /api/field-data/materials?name=X
-      → api.materialsproject.org/materials/summary (X-API-KEY header, key
-      free-registered by Olivier), formula=X&is_stable=true to get the
-      one canonical stable structure per formula (many formulas have
-      dozens of unstable polymorphs otherwise). MP's formula parser
-      rejects anything that isn't valid chemical-formula syntax outright
-      (400 error) — live-tested this is a SAFE fail-closed, not a fuzzy
-      match (confirmed with both "Sociology" and the plain-English word
-      "Silicon" itself, which isn't valid formula syntax either). Added a
-      118-element name→symbol map (hydrogen→H, silicon→Si, gold→Au, etc.)
-      so element topic pages resolve to a real formula the API accepts;
-      multi-word compound names (e.g. "table salt") aren't resolved and
-      correctly stay hidden — no name-resolution API for those was built.
-      Lives in the Tier 3 unconditional-fire group, not species-gated.
-      Verified live: Silicon → Si, cubic Fd-3m, 2.31 g/cm³, 0.61 eV band
-      gap; Sociology correctly 404s.
+[X] Xeno-canto (2026-07-12) — GET /api/field-data/xenocanto?species=X →
+xeno-canto.org/api/3/recordings, query=sp:"X" (v3 API requires the
+sp: tag now — the old tag-less search from v2 is discontinued),
+key free-registered by Olivier. First genuinely new content type
+across all these panels — up to 5 sample recordings, each with a
+sonogram thumbnail and an inline <audio> player (not just a link
+out), plus recordist/location/date/quality and a link to the full
+recording + species page. Restricted/vulnerable species have
+loc/file/file-name redacted per the API's `_meta.redacted_fields` —
+filtered out rather than showing a broken audio player with no
+file to play. Verified live: Turdus migratorius → 977 recordings,
+5 playable samples rendered with working audio; Astacus astacus
+(a crayfish) correctly 404s.
+BUG CAUGHT: the site's CSP `media-src` directive only allowlisted
+upload.wikimedia.org, so the <audio src="https://xeno-canto.org/...">
+elements were silently blocked by the browser (console warning,
+panel still rendered, audio just never loaded) — caught via a real
+Playwright run, not just a curl check. Added xeno-canto.org to
+media-src.
 
--------------------------------------------------------
-ROUND 2 (2026-07-12) — UniProt, Wikidata, USGS earthquakes, World Bank
--------------------------------------------------------
+[X] Materials Project (2026-07-12) — GET /api/field-data/materials?name=X
+→ api.materialsproject.org/materials/summary (X-API-KEY header, key
+free-registered by Olivier), formula=X&is_stable=true to get the
+one canonical stable structure per formula (many formulas have
+dozens of unstable polymorphs otherwise). MP's formula parser
+rejects anything that isn't valid chemical-formula syntax outright
+(400 error) — live-tested this is a SAFE fail-closed, not a fuzzy
+match (confirmed with both "Sociology" and the plain-English word
+"Silicon" itself, which isn't valid formula syntax either). Added a
+118-element name→symbol map (hydrogen→H, silicon→Si, gold→Au, etc.)
+so element topic pages resolve to a real formula the API accepts;
+multi-word compound names (e.g. "table salt") aren't resolved and
+correctly stay hidden — no name-resolution API for those was built.
+Lives in the Tier 3 unconditional-fire group, not species-gated.
+Verified live: Silicon → Si, cubic Fd-3m, 2.31 g/cm³, 0.61 eV band
+gap; Sociology correctly 404s.
+
+---
+
+## ROUND 2 (2026-07-12) — UniProt, Wikidata, USGS earthquakes, World Bank
 
 Four more no-auth sources, chosen to push Field Data into fields it had
 zero coverage in before: humanities/geography identifiers (Wikidata),
 economics (World Bank), and earth science beyond PANGAEA (USGS). All
 fire unconditionally per topic page (Tier 3 style) except UniProt.
 
-  [X] UniProt — GET /api/field-data/uniprot?name=X → rest.uniprot.org,
-      query=protein_name:X AND reviewed:true. protein_name: is a precise
-      field match, not full-text — live-tested "Sociology" and "Aspirin"
-      (a compound, not a protein) both correctly return zero results.
-      BUG CAUGHT before shipping: without an organism filter, UniProt's
-      relevance ranking can surface an obscure species' version of a
-      protein over the well-known human one — live-tested "Insulin"
-      returned a sea hare's insulin first, not human insulin. Fixed by
-      querying organism_id:9606 (human) first and only falling back to
-      any organism if there's no human match. Shows protein name, gene,
-      organism, a truncated function summary, sequence length, link.
-      Complements PDB (which is structure-only) rather than duplicating
-      it. Verified live: Insulin → human INS gene, Q9NDE7→P01308 fix
-      confirmed; Sociology correctly 404s.
+[X] UniProt — GET /api/field-data/uniprot?name=X → rest.uniprot.org,
+query=protein_name:X AND reviewed:true. protein_name: is a precise
+field match, not full-text — live-tested "Sociology" and "Aspirin"
+(a compound, not a protein) both correctly return zero results.
+BUG CAUGHT before shipping: without an organism filter, UniProt's
+relevance ranking can surface an obscure species' version of a
+protein over the well-known human one — live-tested "Insulin"
+returned a sea hare's insulin first, not human insulin. Fixed by
+querying organism_id:9606 (human) first and only falling back to
+any organism if there's no human match. Shows protein name, gene,
+organism, a truncated function summary, sequence length, link.
+Complements PDB (which is structure-only) rather than duplicating
+it. Verified live: Insulin → human INS gene, Q9NDE7→P01308 fix
+confirmed; Sociology correctly 404s.
 
-  [X] Wikidata — GET /api/field-data/wikidata?name=X → wbsearchentities
-      + Special:EntityData. Deliberately does NOT duplicate the full
-      Wikipedia article already shown as the page's main content —
-      instead surfaces a curated "Identifiers" panel of external
-      cross-reference IDs (CAS Number, PubChem CID, ChEMBL ID, UniProt
-      ID, MeSH ID, VIAF, Library of Congress ID — chosen to exclude
-      anything we already show from a dedicated integration, like IUCN
-      or WoRMS IDs) plus population/coordinates/image when present.
-      Fires for virtually any topic (it's a universal knowledge base),
-      but only renders when there's something not already on the page —
-      no identifiers/population/coords/image at all means no panel.
-      Verified live: Aspirin → 5 identifiers + image; Sumatra → 2
-      identifiers + population (50.4M) + coordinates + image.
+[X] Wikidata — GET /api/field-data/wikidata?name=X → wbsearchentities + Special:EntityData. Deliberately does NOT duplicate the full
+Wikipedia article already shown as the page's main content —
+instead surfaces a curated "Identifiers" panel of external
+cross-reference IDs (CAS Number, PubChem CID, ChEMBL ID, UniProt
+ID, MeSH ID, VIAF, Library of Congress ID — chosen to exclude
+anything we already show from a dedicated integration, like IUCN
+or WoRMS IDs) plus population/coordinates/image when present.
+Fires for virtually any topic (it's a universal knowledge base),
+but only renders when there's something not already on the page —
+no identifiers/population/coords/image at all means no panel.
+Verified live: Aspirin → 5 identifiers + image; Sumatra → 2
+identifiers + population (50.4M) + coordinates + image.
 
-  [X] USGS earthquakes — GET /api/field-data/earthquakes?lat=X&lon=Y →
-      earthquake.usgs.gov, magnitude ≥4.5 within 500km, last 12 months.
-      No name-based trigger of its own — chained directly off Wikidata's
-      coordinates (loadWikidataData calls loadEarthquakeData when P625
-      is present) rather than needing a separate geocoding step or key.
-      GeoNames (the originally-considered geography source) needs a
-      free-registered username and wasn't set up this round — this
-      approach gets real seismic data onto place topic pages without
-      waiting on that. Verified live: Sumatra/New Zealand coordinates →
-      5 real recent M4.5+ quakes each, correct place names and links.
+[X] USGS earthquakes — GET /api/field-data/earthquakes?lat=X&lon=Y →
+earthquake.usgs.gov, magnitude ≥4.5 within 500km, last 12 months.
+No name-based trigger of its own — chained directly off Wikidata's
+coordinates (loadWikidataData calls loadEarthquakeData when P625
+is present) rather than needing a separate geocoding step or key.
+GeoNames (the originally-considered geography source) needs a
+free-registered username and wasn't set up this round — this
+approach gets real seismic data onto place topic pages without
+waiting on that. Verified live: Sumatra/New Zealand coordinates →
+5 real recent M4.5+ quakes each, correct place names and links.
 
-  [X] World Bank — GET /api/field-data/worldbank?name=X → matches the
-      topic name exactly against the World Bank's own ~215-country list
-      (fetched once, cached), then pulls GDP/population/life-expectancy
-      for whichever is the most recent available year per indicator.
-      First integration to open Field Data to economics/social-science
-      topic pages — previously biology, chemistry, astronomy, earth
-      science, and materials science only. Verified live: New Zealand →
-      GDP $264B (2025), population 5.32M (2025), life expectancy 82.0
-      (2024); Aspirin correctly 404s (not a country name).
+[X] World Bank — GET /api/field-data/worldbank?name=X → matches the
+topic name exactly against the World Bank's own ~215-country list
+(fetched once, cached), then pulls GDP/population/life-expectancy
+for whichever is the most recent available year per indicator.
+First integration to open Field Data to economics/social-science
+topic pages — previously biology, chemistry, astronomy, earth
+science, and materials science only. Verified live: New Zealand →
+GDP $264B (2025), population 5.32M (2025), life expectancy 82.0
+(2024); Aspirin correctly 404s (not a country name).
 
-  [X] GeoNames (2026-07-12, right after the round above — Olivier
-      registered a username and enabled Free Web Services, which is off
-      by default even after signup) — GET /api/field-data/geonames?name=X
-      → api.geonames.org/searchJSON with name_equals (exact match, not
-      full-text — live-tested "Sociology" correctly 404s) + orderby=
-      population to resolve name collisions toward the place someone
-      actually means (live-tested "Auckland" — returns the 1.5M-person
-      city/region, not an unrelated hamlet in California also named
-      Auckland), then a second getJSON call for timezone/elevation.
-      Deliberately doesn't duplicate Wikidata's population/coordinates —
-      shows feature type (island/mountain/city/etc), admin hierarchy,
-      elevation, and timezone instead, the things GeoNames actually has
-      that Wikidata mostly doesn't. Verified live: Sumatra → island,
-      Indonesia, pop 50.4M, Asia/Jakarta; Auckland → correctly
-      disambiguated to the NZ region over the CA hamlet.
+[X] GeoNames (2026-07-12, right after the round above — Olivier
+registered a username and enabled Free Web Services, which is off
+by default even after signup) — GET /api/field-data/geonames?name=X
+→ api.geonames.org/searchJSON with name_equals (exact match, not
+full-text — live-tested "Sociology" correctly 404s) + orderby=
+population to resolve name collisions toward the place someone
+actually means (live-tested "Auckland" — returns the 1.5M-person
+city/region, not an unrelated hamlet in California also named
+Auckland), then a second getJSON call for timezone/elevation.
+Deliberately doesn't duplicate Wikidata's population/coordinates —
+shows feature type (island/mountain/city/etc), admin hierarchy,
+elevation, and timezone instead, the things GeoNames actually has
+that Wikidata mostly doesn't. Verified live: Sumatra → island,
+Indonesia, pop 50.4M, Asia/Jakarta; Auckland → correctly
+disambiguated to the NZ region over the CA hamlet.
 
-  BUG CAUGHT (unrelated to the above, found while testing them): the
-  Neon Postgres pool had no 'error' event handler — pg emits dropped
-  idle connections (ECONNRESET, which happens periodically and is
-  normal/expected for pooled serverless Postgres) as an 'error' event on
-  the pool, and an unhandled 'error' event crashes the entire Node
-  process. Hit this live mid-testing session — the dev server died with
-  no request in flight, purely from an idle connection reset. Added
-  pool.on('error', ...) to log and let the pool recover (it already
-  does, via opening a fresh connection on the next query) instead of
-  taking the whole server down. This would have crashed production on
-  Render too, not just local dev — worth flagging as a real fix, not
-  incidental to this round's actual feature work.
+BUG CAUGHT (unrelated to the above, found while testing them): the
+Neon Postgres pool had no 'error' event handler — pg emits dropped
+idle connections (ECONNRESET, which happens periodically and is
+normal/expected for pooled serverless Postgres) as an 'error' event on
+the pool, and an unhandled 'error' event crashes the entire Node
+process. Hit this live mid-testing session — the dev server died with
+no request in flight, purely from an idle connection reset. Added
+pool.on('error', ...) to log and let the pool recover (it already
+does, via opening a fresh connection on the next query) instead of
+taking the whole server down. This would have crashed production on
+Render too, not just local dev — worth flagging as a real fix, not
+incidental to this round's actual feature work.
 
-  Also note: OpenAlex's legacy Concepts API search (topic.js's
-  fetchConceptByIdOrSearch) is broadly unreliable for exact name lookups
-  independent of any of the above — live-tested searching for "Japan",
-  "Chile", "Turkey", "Australia" as topic IDs and got "Japanese
-  encephalitis", "Very Large Telescope", "Turkish", "Australian English"
-  back respectively. Pre-existing behavior, not something this round
-  touched or is in scope to fix, but it means a topic page whose title
-  the resolver mangled will silently get none of these panels (they're
-  keyed off whatever display_name it actually resolved to) — always
-  verify against the resolved display_name, not the input search term,
-  when spot-checking any Field Data panel by URL.
+Also note: OpenAlex's legacy Concepts API search (topic.js's
+fetchConceptByIdOrSearch) is broadly unreliable for exact name lookups
+independent of any of the above — live-tested searching for "Japan",
+"Chile", "Turkey", "Australia" as topic IDs and got "Japanese
+encephalitis", "Very Large Telescope", "Turkish", "Australian English"
+back respectively. Pre-existing behavior, not something this round
+touched or is in scope to fix, but it means a topic page whose title
+the resolver mangled will silently get none of these panels (they're
+keyed off whatever display_name it actually resolved to) — always
+verify against the resolved display_name, not the input search term,
+when spot-checking any Field Data panel by URL.
 
--------------------------------------------------------
+---
+
 FIXES (2026-07-13/14) — Wikidata false match, common-name species pages,
 WoC 502
--------------------------------------------------------
+
+---
 
 Three bugs found from a real user report on a live topic page
 (scienceecosystem.org/topic.html?id=Tūī), not from synthetic testing.
 
-  [X] Wikidata matching the wrong entity for accented names — reported
-      live: the Tūī (NZ bird) topic page showed a photo of an airliner.
-      wbsearchentities' top result for "Tūī" was "TUI Group" (a German
-      travel company), not the bird — its real Wikidata entity exists but
-      wasn't even in the top-5 result set for that exact query. Fixed by
-      fetching the top 5 candidates and only trusting one whose own label
-      equals the query after normalizing case and diacritics (NFD +
-      strip U+0300–U+036F combining marks), same "verify, don't just
-      trust the top full-text hit" pattern as the earlier PDB fix. No
-      match found → panel now correctly stays hidden instead of showing
-      the wrong entity. (One retry needed mid-fix: an API error flagged
-      the first attempt, most likely a false-positive content classifier
-      triggered by pasting raw Unicode combining-mark characters directly
-      into a regex character class — rewrote it using the escaped \u0300-\u036f hex range instead, functionally
-      identical, avoids the issue.)
+[X] Wikidata matching the wrong entity for accented names — reported
+live: the Tūī (NZ bird) topic page showed a photo of an airliner.
+wbsearchentities' top result for "Tūī" was "TUI Group" (a German
+travel company), not the bird — its real Wikidata entity exists but
+wasn't even in the top-5 result set for that exact query. Fixed by
+fetching the top 5 candidates and only trusting one whose own label
+equals the query after normalizing case and diacritics (NFD +
+strip U+0300–U+036F combining marks), same "verify, don't just
+trust the top full-text hit" pattern as the earlier PDB fix. No
+match found → panel now correctly stays hidden instead of showing
+the wrong entity. (One retry needed mid-fix: an API error flagged
+the first attempt, most likely a false-positive content classifier
+triggered by pasting raw Unicode combining-mark characters directly
+into a regex character class — rewrote it using the escaped \u0300-\u036f hex range instead, functionally
+identical, avoids the issue.)
 
-  [X] Common-name topic pages never fired any species panel — the actual
-      root cause behind the Tūī report once the Wikidata fix exposed it:
-      GBIF, iNaturalist, eBird, IUCN, Xeno-canto, WoRMS, OBIS, and WoC all
-      gate on a binomial-shaped display name (/^[A-Z][a-z]+ [a-z]+/), and
-      "Tūī" is the common name — the topic page's title never was the
-      scientific name "Prosthemadera novaeseelandiae", so none of those
-      panels ever had a chance to fire, even though the species is fully
-      documented in every one of those sources. New endpoint GET
-      /api/field-data/resolve-species?name=X (server/index.js): if X is
-      already binomial-shaped, returns it as-is (no extra call); otherwise
-      searches GBIF's /species/search?q= (which indexes vernacular names)
-      for candidates, then — critically — verifies the query term is
-      actually listed in that candidate's OWN vernacular-names list
-      (GBIF's /species/{key}/vernacularNames) before trusting the match.
-      This verification step is required, not optional: live-tested
-      "Sociology" against plain /species/search and got real (wrong)
-      species back as top hits (loose full-text match on some unrelated
-      field) — the vernacular-names check correctly rejects those.
-      scripts/topic.js now resolves this once per topic page load and
-      passes the resolved scientific name to all species-gated loaders,
-      while the Tier 3 (non-species) loaders keep using the page's own
-      title as before. Verified live end-to-end: Tūī → resolves to
-      Prosthemadera novaeseelandiae → iNaturalist, eBird, Xeno-canto,
-      IUCN all correctly fired and rendered real data that was
-      previously invisible on this page.
+[X] Common-name topic pages never fired any species panel — the actual
+root cause behind the Tūī report once the Wikidata fix exposed it:
+GBIF, iNaturalist, eBird, IUCN, Xeno-canto, WoRMS, OBIS, and WoC all
+gate on a binomial-shaped display name (/^[A-Z][a-z]+ [a-z]+/), and
+"Tūī" is the common name — the topic page's title never was the
+scientific name "Prosthemadera novaeseelandiae", so none of those
+panels ever had a chance to fire, even though the species is fully
+documented in every one of those sources. New endpoint GET
+/api/field-data/resolve-species?name=X (server/index.js): if X is
+already binomial-shaped, returns it as-is (no extra call); otherwise
+searches GBIF's /species/search?q= (which indexes vernacular names)
+for candidates, then — critically — verifies the query term is
+actually listed in that candidate's OWN vernacular-names list
+(GBIF's /species/{key}/vernacularNames) before trusting the match.
+This verification step is required, not optional: live-tested
+"Sociology" against plain /species/search and got real (wrong)
+species back as top hits (loose full-text match on some unrelated
+field) — the vernacular-names check correctly rejects those.
+scripts/topic.js now resolves this once per topic page load and
+passes the resolved scientific name to all species-gated loaders,
+while the Tier 3 (non-species) loaders keep using the page's own
+title as before. Verified live end-to-end: Tūī → resolves to
+Prosthemadera novaeseelandiae → iNaturalist, eBird, Xeno-canto,
+IUCN all correctly fired and rendered real data that was
+previously invisible on this page.
 
-  [X] World of Crayfish (WoC) returning 502 instead of 404 for non-
-      crayfish species — surfaced while verifying the fix above (every
-      species check now legitimately queries WoC, since it's one of the
-      species-gated panels). WoC's own API returns a clean 404 with a
-      well-formed JSON body for species it doesn't have, but the
-      fetchJSONTimeout helper throws on any non-2xx status — turning
-      that clean "not found" into a misleading "unavailable" every time.
-      Same exact bug class as the IUCN 404-vs-502 fix from the round
-      above; same fix — check the raw response status before parsing as
-      JSON, treat 404 as a clean no-match rather than an upstream error.
+[X] World of Crayfish (WoC) returning 502 instead of 404 for non-
+crayfish species — surfaced while verifying the fix above (every
+species check now legitimately queries WoC, since it's one of the
+species-gated panels). WoC's own API returns a clean 404 with a
+well-formed JSON body for species it doesn't have, but the
+fetchJSONTimeout helper throws on any non-2xx status — turning
+that clean "not found" into a misleading "unavailable" every time.
+Same exact bug class as the IUCN 404-vs-502 fix from the round
+above; same fix — check the raw response status before parsing as
+JSON, treat 404 as a clean no-match rather than an upstream error.
 
 Note: a GBIF panel + species map didn't render for the Tūī page in one
 test run (data fetched fine, 200 OK, but no panel appeared) while it did
@@ -2522,9 +2503,9 @@ rather than a logic bug (GBIF's own panel code is unchanged from before
 this session and renders correctly for topics that already had a
 binomial name). Not chased further — flagging in case it recurs.
 
--------------------------------------------------------
-FIX (2026-07-14) — GeoNames matching a same-named-but-wrong place
--------------------------------------------------------
+---
+
+## FIX (2026-07-14) — GeoNames matching a same-named-but-wrong place
 
 Also caught on the live Tūī page, right after the fixes above went out
 and the missing Render env vars (EBIRD_API_KEY, IUCN_API_TOKEN,
@@ -2537,23 +2518,24 @@ name_equals param turned out NOT to be a strict exact match despite its
 name; it appears to fold/ignore diacritics internally.
 
 Fixed in two layers:
-  1. Backend (server/index.js): fetch 5 candidates instead of trusting
-     result[0], verify the candidate's own toponymName equals the query
-     after the same case+diacritic normalization used for the earlier
-     Wikidata fix. This alone eliminates the "Province du Tuy" class of
-     error (clearly a different string once normalized).
-  2. That's not sufficient by itself, though: GeoNames also has a real
-     town in Spain literally spelled "Tui" (no macrons) — which DOES
-     equal "tūī" after normalization, and got served up as the "verified"
-     match instead. No amount of string comparison can tell a genuine
-     same-spelled place apart from what the topic is actually about — it
-     requires independent corroboration. So GeoNames no longer fires
-     unconditionally on name alone: scripts/topic.js now only calls
-     loadGeonamesData() from inside loadWikidataData(), gated behind
-     Wikidata having ALREADY confirmed real coordinates for this exact
-     entity (the same gate that already protects the earthquake panel).
-     Since the Wikidata fix already correctly finds no confident entity
-     for "Tūī", GeoNames now correctly never fires for it either.
+
+1. Backend (server/index.js): fetch 5 candidates instead of trusting
+   result[0], verify the candidate's own toponymName equals the query
+   after the same case+diacritic normalization used for the earlier
+   Wikidata fix. This alone eliminates the "Province du Tuy" class of
+   error (clearly a different string once normalized).
+2. That's not sufficient by itself, though: GeoNames also has a real
+   town in Spain literally spelled "Tui" (no macrons) — which DOES
+   equal "tūī" after normalization, and got served up as the "verified"
+   match instead. No amount of string comparison can tell a genuine
+   same-spelled place apart from what the topic is actually about — it
+   requires independent corroboration. So GeoNames no longer fires
+   unconditionally on name alone: scripts/topic.js now only calls
+   loadGeonamesData() from inside loadWikidataData(), gated behind
+   Wikidata having ALREADY confirmed real coordinates for this exact
+   entity (the same gate that already protects the earthquake panel).
+   Since the Wikidata fix already correctly finds no confident entity
+   for "Tūī", GeoNames now correctly never fires for it either.
 
 Verified live end-to-end (local, before pushing): Tūī → Wikidata 404s →
 GeoNames never even called, no wrong "Tui, Spain" data shown. Sumatra
@@ -2567,10 +2549,12 @@ enough when two genuinely different real-world entities can share
 the exact same name — that needs a second, independent source to
 corroborate, not just written the name-matching logic more carefully.
 
--------------------------------------------------------
+---
+
 FIX (2026-07-14) — topic-page name resolution now uses Wikipedia to
 verify OpenAlex matches, instead of trusting OpenAlex's own search
--------------------------------------------------------
+
+---
 
 Prompted directly by "why are we still using OpenAlex topics, they're
 so bad, can't we use Wikipedia instead" — investigated properly rather
@@ -2620,9 +2604,9 @@ good cases (Aspirin, Silicon, Coral reef, Insulin, Hemoglobin) to confirm
 the new stricter verification doesn't regress anything that was already
 working — all still resolve correctly.
 
--------------------------------------------------------
-FIX (2026-07-14) — species distribution map rendering blank
--------------------------------------------------------
+---
+
+## FIX (2026-07-14) — species distribution map rendering blank
 
 Reported live: the map on the Field Data panel showed as a plain grey
 box (zoom controls visible, nothing else) even though the panel data
@@ -2658,65 +2642,65 @@ the original report) loads instantly and correctly via direct request
 (200 OK, valid JPEG, hosted on inaturalist-open-data's S3 bucket) — a
 one-off network hiccup on that specific load, not a code issue.
 
--------------------------------------------------------
-IMPROVEMENT (2026-07-15) — species map: heatmap style + auto-zoom to range
--------------------------------------------------------
+---
+
+## IMPROVEMENT (2026-07-15) — species map: heatmap style + auto-zoom to range
 
 Requested directly: "would like the map to be as clear as inaturalist.org".
 Two changes, plus a real bug caught while building the second one.
 
-  1. Tile style: switched GBIF's occurrence-density layer from
-     classic.point (sparse individual dots — hard to read at the world/
-     continent zoom the map opens at) to orangeHeat.point (smooth density
-     blobs tracing the actual distribution shape, much closer to
-     iNaturalist's own grid-heatmap look). Compared classic.point,
-     purpleHeat.point, orangeHeat.point, and classic.poly side-by-side
-     first — classic.poly came back empty at low zoom (GBIF's poly styles
-     only render much closer in), orangeHeat read as the clearest/most
-     legible. Also switched the EOO boundary line color (WoC native-range
-     overlay) from orange to blue, since an orange boundary would now
-     blend into the new orange heatmap instead of standing out against it.
+1. Tile style: switched GBIF's occurrence-density layer from
+   classic.point (sparse individual dots — hard to read at the world/
+   continent zoom the map opens at) to orangeHeat.point (smooth density
+   blobs tracing the actual distribution shape, much closer to
+   iNaturalist's own grid-heatmap look). Compared classic.point,
+   purpleHeat.point, orangeHeat.point, and classic.poly side-by-side
+   first — classic.poly came back empty at low zoom (GBIF's poly styles
+   only render much closer in), orangeHeat read as the clearest/most
+   legible. Also switched the EOO boundary line color (WoC native-range
+   overlay) from orange to blue, since an orange boundary would now
+   blend into the new orange heatmap instead of standing out against it.
 
-  2. Auto-zoom: the map previously always opened on a fixed world view
-     regardless of species — fine for a globally-common species, but a
-     genuinely broken experience for a range-restricted one (a NZ-only
-     bird reads as a couple of barely-visible specks on the edge of a
-     world map). Now fetches up to 300 real occurrence coordinates and
-     calls fitBounds() so the map opens already zoomed to where the
-     species actually is, same as iNaturalist's own species maps do.
+2. Auto-zoom: the map previously always opened on a fixed world view
+   regardless of species — fine for a globally-common species, but a
+   genuinely broken experience for a range-restricted one (a NZ-only
+   bird reads as a couple of barely-visible specks on the edge of a
+   world map). Now fetches up to 300 real occurrence coordinates and
+   calls fitBounds() so the map opens already zoomed to where the
+   species actually is, same as iNaturalist's own species maps do.
 
-  BUG CAUGHT while building #2, non-obvious enough to be worth recording
-  in detail: fitBounds() was being called with valid points (confirmed
-  via direct in-page instrumentation — pts.length was correct) but the
-  resulting zoom stayed at the world-view default every time. Root cause:
-  a naive min/max bounding box breaks for any species whose range crosses
-  the antimeridian (±180° longitude) — New Zealand is a real, live
-  example of this, not a contrived edge case: its main islands sit around
-  +166 to +179°, but its own Chatham Islands (a real NZ territory) are at
-  ~-176°, just past the dateline. A plain bbox spanning both reads as a
-  ~360°-wide span (from -176 to +179 the "long way" instead of the actual
-  short ~7° gap across the dateline) and zooms out to fit nearly the
-  whole planet. Confirmed via direct testing that curl/manual fetch of
-  the same coordinates "worked fine" in isolation — the bug only showed
-  up in fitBounds' own bounds computation, not in fetching the data,
-  which is why the first few rounds of debugging (checking CORS, checking
-  CSP connect-src, checking for silent exceptions) all came back clean.
-  Fixed by trimming to the 90% of points closest to the median center
-  (using a wraparound-aware longitude distance, not naive subtraction)
-  before computing bounds, rather than writing proper antimeridian-aware
-  bbox math for what's ultimately just a "pick a reasonable starting
-  view" heuristic — this also matches iNaturalist's own map behavior,
-  confirmed from the user's own reference screenshot: it doesn't force-
-  fit the Chathams into the main view either, it zooms to the main
-  archipelago and leaves the outlying cluster visible off to the side.
+BUG CAUGHT while building #2, non-obvious enough to be worth recording
+in detail: fitBounds() was being called with valid points (confirmed
+via direct in-page instrumentation — pts.length was correct) but the
+resulting zoom stayed at the world-view default every time. Root cause:
+a naive min/max bounding box breaks for any species whose range crosses
+the antimeridian (±180° longitude) — New Zealand is a real, live
+example of this, not a contrived edge case: its main islands sit around
++166 to +179°, but its own Chatham Islands (a real NZ territory) are at
+~-176°, just past the dateline. A plain bbox spanning both reads as a
+~360°-wide span (from -176 to +179 the "long way" instead of the actual
+short ~7° gap across the dateline) and zooms out to fit nearly the
+whole planet. Confirmed via direct testing that curl/manual fetch of
+the same coordinates "worked fine" in isolation — the bug only showed
+up in fitBounds' own bounds computation, not in fetching the data,
+which is why the first few rounds of debugging (checking CORS, checking
+CSP connect-src, checking for silent exceptions) all came back clean.
+Fixed by trimming to the 90% of points closest to the median center
+(using a wraparound-aware longitude distance, not naive subtraction)
+before computing bounds, rather than writing proper antimeridian-aware
+bbox math for what's ultimately just a "pick a reasonable starting
+view" heuristic — this also matches iNaturalist's own map behavior,
+confirmed from the user's own reference screenshot: it doesn't force-
+fit the Chathams into the main view either, it zooms to the main
+archipelago and leaves the outlying cluster visible off to the side.
 
-  Verified live (local): map now opens zoomed to New Zealand with visible
-  orange density tracing the coastline, Chatham Islands cluster still
-  visible off to the side rather than forcing a world-view zoom-out.
+Verified live (local): map now opens zoomed to New Zealand with visible
+orange density tracing the coastline, Chatham Islands cluster still
+visible off to the side rather than forcing a world-view zoom-out.
 
--------------------------------------------------------
-IMPROVEMENT (2026-07-15) — IUCN moved to sidebar Infobox
--------------------------------------------------------
+---
+
+## IMPROVEMENT (2026-07-15) — IUCN moved to sidebar Infobox
 
 Requested directly: IUCN status is a single fact (like CoL/WoRMS
 classification), not occurrence data, so it doesn't need a full-width
@@ -2732,9 +2716,9 @@ page check can catch it mid-flight. Re-tested with a longer wait and all
 5 species panels (iNaturalist, GBIF, eBird, Xeno-canto, IUCN) rendered
 correctly every time.
 
--------------------------------------------------------
-FINDING — GBIF already aggregates iNaturalist + eBird (and others)
--------------------------------------------------------
+---
+
+## FINDING — GBIF already aggregates iNaturalist + eBird (and others)
 
 User hypothesis, verified directly: checked GBIF's own dataset
 breakdown for the tūī (facet=datasetKey) and the two largest
@@ -2763,56 +2747,58 @@ the public API), so "add identification tips" isn't achievable via
 eBird's API as originally asked — worth being upfront about that
 limitation before promising it.
 
--------------------------------------------------------
+---
+
 BUILT (2026-07-16/17) — unified GBIF map: source toggle + clickable
 individual observations
--------------------------------------------------------
+
+---
 
 Scoped with the user first (kept existing iNaturalist/eBird panels
 as-is rather than removing them; markers load in only past a zoom
 threshold rather than clustering) before building, since this was a
 real feature addition, not a bug fix.
 
-  [X] Source toggle (All sources / eBird / iNaturalist) — filters BOTH
-      the density-heatmap tiles and the individual-observation markers
-      using GBIF's own datasetKey, via two well-known, GBIF-wide
-      constant dataset keys (not species-specific):
-        eBird:       4fa7b334-ce0d-4e88-aaae-2e0c138d049e
-        iNaturalist: 50c9509d-22c7-4a22-a47d-8c48425ef4a7
-      New #speciesMapSourceToggle row in topic.html, buttons built/wired
-      in initSpeciesMap() (scripts/topic.js). Verified live: toggling to
-      eBird visibly changed the in-view observation count (2,659 → 2,246
-      for the same map extent).
+[X] Source toggle (All sources / eBird / iNaturalist) — filters BOTH
+the density-heatmap tiles and the individual-observation markers
+using GBIF's own datasetKey, via two well-known, GBIF-wide
+constant dataset keys (not species-specific):
+eBird: 4fa7b334-ce0d-4e88-aaae-2e0c138d049e
+iNaturalist: 50c9509d-22c7-4a22-a47d-8c48425ef4a7
+New #speciesMapSourceToggle row in topic.html, buttons built/wired
+in initSpeciesMap() (scripts/topic.js). Verified live: toggling to
+eBird visibly changed the in-view observation count (2,659 → 2,246
+for the same map extent).
 
-  [X] Individual clickable observation markers — GBIF's occurrence/
-      search (same endpoint already used for auto-zoom bounds) now also
-      powers a live marker layer, refetched on every map moveend
-      (debounced 400ms) but ONLY once zoomed to level 8+ — below that,
-      only the existing density tiles show, exactly as scoped. Capped
-      at 200 results per fetch with a "showing N of TOTAL" hint when
-      there's more in view than that. Each marker is a small
-      L.circleMarker (no clustering library added, per the scoping
-      decision) with a popup: real photo when the record has one
-      (media[].identifier), event date, recordedBy, a source badge
-      (eBird/iNaturalist/institutionCode fallback), and a link to the
-      original record — r.references when GBIF has one (iNaturalist
-      records do), falling back to GBIF's own occurrence page
-      (eBird records via GBIF are privacy-anonymized with no direct
-      checklist link back, confirmed live — recordedBy comes through as
-      an opaque obsrNNNNNN ID, not a real name or profile link).
-      Verified live end-to-end: zoomed a real page in via the actual
-      Leaflet zoom control (not synthetic), got 200 real markers,
-      clicked one, got a real photo + date + observer + working
-      iNaturalist link in the popup.
+[X] Individual clickable observation markers — GBIF's occurrence/
+search (same endpoint already used for auto-zoom bounds) now also
+powers a live marker layer, refetched on every map moveend
+(debounced 400ms) but ONLY once zoomed to level 8+ — below that,
+only the existing density tiles show, exactly as scoped. Capped
+at 200 results per fetch with a "showing N of TOTAL" hint when
+there's more in view than that. Each marker is a small
+L.circleMarker (no clustering library added, per the scoping
+decision) with a popup: real photo when the record has one
+(media[].identifier), event date, recordedBy, a source badge
+(eBird/iNaturalist/institutionCode fallback), and a link to the
+original record — r.references when GBIF has one (iNaturalist
+records do), falling back to GBIF's own occurrence page
+(eBird records via GBIF are privacy-anonymized with no direct
+checklist link back, confirmed live — recordedBy comes through as
+an opaque obsrNNNNNN ID, not a real name or profile link).
+Verified live end-to-end: zoomed a real page in via the actual
+Leaflet zoom control (not synthetic), got 200 real markers,
+clicked one, got a real photo + date + observer + working
+iNaturalist link in the popup.
 
-  Not built (out of scope per the scoping decision, not a limitation):
-  marker clustering for showing many points at low zoom — the zoom-
-  threshold approach was chosen specifically to avoid needing a
-  clustering dependency at all.
+Not built (out of scope per the scoping decision, not a limitation):
+marker clustering for showing many points at low zoom — the zoom-
+threshold approach was chosen specifically to avoid needing a
+clustering dependency at all.
 
--------------------------------------------------------
-FIX (2026-07-17) — search suggested-topics missing the obvious plain match
--------------------------------------------------------
+---
+
+## FIX (2026-07-17) — search suggested-topics missing the obvious plain match
 
 Reported live: searching "gold" on search.html's "Suggested topics"
 returned Colloidal gold, Gold standard (test), Gold mining, Gold
@@ -2840,9 +2826,9 @@ specific OpenAlex sub-topics. Re-checked "aspirin" (a case that already
 worked, since a real "Aspirin" OpenAlex concept exists) to confirm no
 regression — still resolves correctly without an extra prepended entry.
 
--------------------------------------------------------
-FIX (2026-07-18) — species map showing giant "503" text over the tiles
--------------------------------------------------------
+---
+
+## FIX (2026-07-18) — species map showing giant "503" text over the tiles
 
 Reported live with a screenshot: selecting the eBird or iNaturalist
 source toggle made the distribution map show huge repeated "503" text
@@ -2880,238 +2866,241 @@ has gone wrong with our web server" error page for this specific query
 that into a clean "unavailable" response rather than crashing — nothing
 to fix on our end.
 
--------------------------------------------------------
-BUILT (2026-07-19/20) — interactive 3D crystal structure viewer
--------------------------------------------------------
+---
+
+## BUILT (2026-07-19/20) — interactive 3D crystal structure viewer
 
 Requested directly, referencing Materials Project's own "Materials
 Explorer" 3D viewer. Scoped first (full interactive viewer, not a
 static image or just a link out) since this meant adding a new 3D
 rendering dependency, not a quick fix.
 
-  [X] Self-hosted three.js r128 + OrbitControls.js as vendor assets
-      (assets/vendor/three.min.js, OrbitControls.js) — same lazy-load-
-      on-demand pattern already used for Leaflet on the species map, so
-      topic pages that don't show a crystal structure don't pay for a 3D
-      engine at all. Deliberately used r128, not the current release —
-      three.js r150+ dropped the classic global/UMD build in favor of ES
-      modules only, which would've meant a different loading pattern
-      (import maps) than the rest of the site's plain <script src>
-      vendor files use; r128 still ships both a working three.min.js
-      global build and a matching non-module OrbitControls.js.
+[X] Self-hosted three.js r128 + OrbitControls.js as vendor assets
+(assets/vendor/three.min.js, OrbitControls.js) — same lazy-load-
+on-demand pattern already used for Leaflet on the species map, so
+topic pages that don't show a crystal structure don't pay for a 3D
+engine at all. Deliberately used r128, not the current release —
+three.js r150+ dropped the classic global/UMD build in favor of ES
+modules only, which would've meant a different loading pattern
+(import maps) than the rest of the site's plain <script src>
+vendor files use; r128 still ships both a working three.min.js
+global build and a matching non-module OrbitControls.js.
 
-  [X] Extended GET /api/field-data/materials (server/index.js) to also
-      request Materials Project's `structure` field and return a
-      trimmed-down version (just the lattice matrix + element/xyz per
-      site) — not the full pymatgen Structure object, which also carries
-      internal bookkeeping fields (@module, @class, per-site
-      "properties") the frontend has no use for. Verified live: Au (mp-
-      aaaaaadd, i.e. mp-81 under MP's newer material_id scheme) and NaCl
-      (mp-aaaabhvi) both return clean lattice+sites data.
+[X] Extended GET /api/field-data/materials (server/index.js) to also
+request Materials Project's `structure` field and return a
+trimmed-down version (just the lattice matrix + element/xyz per
+site) — not the full pymatgen Structure object, which also carries
+internal bookkeeping fields (@module, @class, per-site
+"properties") the frontend has no use for. Verified live: Au (mp-
+aaaaaadd, i.e. mp-81 under MP's newer material_id scheme) and NaCl
+(mp-aaaabhvi) both return clean lattice+sites data.
 
-  [X] renderCrystalStructure() (scripts/topic.js) — draws the unit cell
-      as a wireframe box from the raw lattice vectors, atoms as colored
-      spheres (an ~70-element CPK/Jmol-style color table with a neutral
-      grey fallback for anything not in it) replicated across a small
-      2×2×2 supercell (capped at 300 spheres total) for a fuller view
-      closer to Materials Project's own explorer, with OrbitControls for
-      drag-to-rotate/scroll-to-zoom. Verified live end-to-end: real
-      camera rotation confirmed by screenshotting before and after a
-      simulated mouse drag (had to scroll the element into the test
-      viewport first — Playwright's mouse events are viewport-relative,
-      and the first rotation "test" silently did nothing because the
-      element was ~26,000px below the visible test viewport, not because
-      OrbitControls was broken).
+[X] renderCrystalStructure() (scripts/topic.js) — draws the unit cell
+as a wireframe box from the raw lattice vectors, atoms as colored
+spheres (an ~70-element CPK/Jmol-style color table with a neutral
+grey fallback for anything not in it) replicated across a small
+2×2×2 supercell (capped at 300 spheres total) for a fuller view
+closer to Materials Project's own explorer, with OrbitControls for
+drag-to-rotate/scroll-to-zoom. Verified live end-to-end: real
+camera rotation confirmed by screenshotting before and after a
+simulated mouse drag (had to scroll the element into the test
+viewport first — Playwright's mouse events are viewport-relative,
+and the first rotation "test" silently did nothing because the
+element was ~26,000px below the visible test viewport, not because
+OrbitControls was broken).
 
 2026-07-20
-  [X] Fixed species topic pages showing no distribution map and almost no
-      Field Data when the page title is a common/vernacular name (e.g.
-      "Climbing galaxias", reported live by user with a screenshot + full
-      console error log: 404s across gbif/col/obis/woc/ebird/iucn/worms,
-      plus 429s on chembl/exoplanet/uniprot/materials/wikidata). Root
-      cause: both resolveSpeciesName() (scripts/topic.js) and the backend
-      GET /api/field-data/resolve-species (server/index.js) used a
-      binomial-SHAPE regex (/^[A-Z][a-z]+ [a-z]+/) as a shortcut to skip
-      verification when a topic name "looked like" a real scientific
-      name — but plenty of English common names accidentally match that
-      same shape ("Climbing galaxias" = Capitalized word + lowercase
-      word). So the wrong (common) name got sent straight to every
-      species-gated panel loader, which all 404'd, and since
-      initSpeciesMap() only ever gets called from inside loadGbifData()'s
-      success path, GBIF's 404 meant the map never rendered either. Fix:
-      resolve-species now verifies binomial-shaped input against GBIF's
-      own species/match?strict=true (a real exact-match check, not shape
-      guessing) before trusting it, falling through to the existing
-      vernacular-name search otherwise; the frontend shortcut was removed
-      entirely so it always defers to the backend. Verified live:
-      /api/field-data/resolve-species?name=Climbing%20galaxias now
-      returns "Galaxias brevipinnis" (was returning the unverified input
-      before), and a full Playwright render of the Climbing galaxias
-      topic page now shows the distribution map, WoRMS/CoL classification,
-      IUCN status, and iNaturalist stats all populated.
-  [X] Also raised the /api/field-data/ rate limiter (server/index.js)
-      from 30 to 120 req/min per IP — it predated most of the ~20
-      field-data sources that now exist, so a single species page load
-      firing most of them in parallel could trip our OWN limiter (this
-      was the source of the 429s on chembl/exoplanet/uniprot/materials/
-      wikidata in the same user report). Investigated the xeno-canto 502
-      from the same report separately — reproduced it against production
-      with both the wrong and correct species names and got a clean 404
-      both times ("no recordings", correct for a fish); concluded it was
-      a one-off transient upstream hiccup, not a real bug.
+[X] Fixed species topic pages showing no distribution map and almost no
+Field Data when the page title is a common/vernacular name (e.g.
+"Climbing galaxias", reported live by user with a screenshot + full
+console error log: 404s across gbif/col/obis/woc/ebird/iucn/worms,
+plus 429s on chembl/exoplanet/uniprot/materials/wikidata). Root
+cause: both resolveSpeciesName() (scripts/topic.js) and the backend
+GET /api/field-data/resolve-species (server/index.js) used a
+binomial-SHAPE regex (/^[A-Z][a-z]+ [a-z]+/) as a shortcut to skip
+verification when a topic name "looked like" a real scientific
+name — but plenty of English common names accidentally match that
+same shape ("Climbing galaxias" = Capitalized word + lowercase
+word). So the wrong (common) name got sent straight to every
+species-gated panel loader, which all 404'd, and since
+initSpeciesMap() only ever gets called from inside loadGbifData()'s
+success path, GBIF's 404 meant the map never rendered either. Fix:
+resolve-species now verifies binomial-shaped input against GBIF's
+own species/match?strict=true (a real exact-match check, not shape
+guessing) before trusting it, falling through to the existing
+vernacular-name search otherwise; the frontend shortcut was removed
+entirely so it always defers to the backend. Verified live:
+/api/field-data/resolve-species?name=Climbing%20galaxias now
+returns "Galaxias brevipinnis" (was returning the unverified input
+before), and a full Playwright render of the Climbing galaxias
+topic page now shows the distribution map, WoRMS/CoL classification,
+IUCN status, and iNaturalist stats all populated.
+[X] Also raised the /api/field-data/ rate limiter (server/index.js)
+from 30 to 120 req/min per IP — it predated most of the ~20
+field-data sources that now exist, so a single species page load
+firing most of them in parallel could trip our OWN limiter (this
+was the source of the 429s on chembl/exoplanet/uniprot/materials/
+wikidata in the same user report). Investigated the xeno-canto 502
+from the same report separately — reproduced it against production
+with both the wrong and correct species names and got a clean 404
+both times ("no recordings", correct for a fish); concluded it was
+a one-off transient upstream hiccup, not a real bug.
 
 2026-07-22
-  [X] Added a new Field Data source: NCBI Gene, for gene-symbol topic
-      pages (e.g. "TP53"). New GET /api/field-data/gene?symbol=X
-      (server/index.js) queries NCBI E-utils esearch db=gene with an
-      exact `[sym]` field match restricted to Homo sapiens (not a fuzzy
-      search — same precision guarantee as the other field-data sources,
-      live-tested "Climbing galaxias" and "Inflammation" both correctly
-      return zero hits), then esummary for the gene description, summary,
-      chromosome, map location, aliases, and OMIM ID. New
-      loadGeneData() panel in scripts/topic.js, wired into the Tier 3
-      (non-species-specific) loader group alongside UniProt/ChEMBL/PDB.
-      Verified live end-to-end: /api/field-data/gene?symbol=TP53 returns
-      full gene data, and a real Playwright render of the "TP53" topic
-      page (which Wikipedia canonically redirects to "P53") shows the
-      "Gene · TP53" panel with description, chromosome 17, map location
-      17p13.1, and alias badges (BCC7, BMFS5, LFS1, etc.) — confirms the
-      symbol search also correctly resolves aliases, not just primary
-      symbols, so the panel still fires even though the topic's resolved
-      display name is "P53" rather than "TP53".
-  [X] Added a second new Field Data source: ClinicalTrials.gov, for
-      disease/condition and drug/intervention topic pages (e.g.
-      "Melanoma", "Aspirin"). New GET /api/field-data/clinicaltrials?
-      name=X (server/index.js) queries both query.cond and query.intr —
-      but live-tested first and found CT.gov's own search is thesaurus-
-      expanded, not an exact match (query.cond=Sociology returns 6 "hits"
-      whose real condition strings are things like "Psychosocial
-      Problem" — none of which is literally "Sociology"). So the backend
-      re-verifies every candidate itself: only keeps studies whose own
-      listed condition/intervention string exactly equals (case-
-      insensitive) the topic name, same "don't trust the fuzzy search,
-      verify the exact string" pattern used for resolve-species against
-      GBIF vernacular names. New loadClinicalTrialsData() panel in
-      scripts/topic.js (Tier 3 group) shows up to 8 verified trials with
-      status (color-coded), phase, start date, and links to
-      ClinicalTrials.gov. Verified live: Melanoma correctly returns 8
-      exact-condition-match trials, Aspirin correctly returns 8 exact-
-      intervention-match trials, Sociology correctly 404s despite CT.gov
-      itself returning 6 fuzzy hits for it; confirmed rendering via a
-      real Playwright render of the "Melanoma" topic page.
+[X] Added a new Field Data source: NCBI Gene, for gene-symbol topic
+pages (e.g. "TP53"). New GET /api/field-data/gene?symbol=X
+(server/index.js) queries NCBI E-utils esearch db=gene with an
+exact `[sym]` field match restricted to Homo sapiens (not a fuzzy
+search — same precision guarantee as the other field-data sources,
+live-tested "Climbing galaxias" and "Inflammation" both correctly
+return zero hits), then esummary for the gene description, summary,
+chromosome, map location, aliases, and OMIM ID. New
+loadGeneData() panel in scripts/topic.js, wired into the Tier 3
+(non-species-specific) loader group alongside UniProt/ChEMBL/PDB.
+Verified live end-to-end: /api/field-data/gene?symbol=TP53 returns
+full gene data, and a real Playwright render of the "TP53" topic
+page (which Wikipedia canonically redirects to "P53") shows the
+"Gene · TP53" panel with description, chromosome 17, map location
+17p13.1, and alias badges (BCC7, BMFS5, LFS1, etc.) — confirms the
+symbol search also correctly resolves aliases, not just primary
+symbols, so the panel still fires even though the topic's resolved
+display name is "P53" rather than "TP53".
+[X] Added a second new Field Data source: ClinicalTrials.gov, for
+disease/condition and drug/intervention topic pages (e.g.
+"Melanoma", "Aspirin"). New GET /api/field-data/clinicaltrials?
+name=X (server/index.js) queries both query.cond and query.intr —
+but live-tested first and found CT.gov's own search is thesaurus-
+expanded, not an exact match (query.cond=Sociology returns 6 "hits"
+whose real condition strings are things like "Psychosocial
+Problem" — none of which is literally "Sociology"). So the backend
+re-verifies every candidate itself: only keeps studies whose own
+listed condition/intervention string exactly equals (case-
+insensitive) the topic name, same "don't trust the fuzzy search,
+verify the exact string" pattern used for resolve-species against
+GBIF vernacular names. New loadClinicalTrialsData() panel in
+scripts/topic.js (Tier 3 group) shows up to 8 verified trials with
+status (color-coded), phase, start date, and links to
+ClinicalTrials.gov. Verified live: Melanoma correctly returns 8
+exact-condition-match trials, Aspirin correctly returns 8 exact-
+intervention-match trials, Sociology correctly 404s despite CT.gov
+itself returning 6 fuzzy hits for it; confirmed rendering via a
+real Playwright render of the "Melanoma" topic page.
 
 2026-07-23
-  [X] Fixed researcher profile pages' top "topics" chips (tagsContainer,
-      built from the OpenAlex author record's x_concepts) linking to
-      broken topic pages — user reported clicking them "not bringing you
-      to any topic page." Root cause: scripts/profile.js built the topic
-      href with `c.id.split("/").pop()`, which assumed x_concepts[].id is
-      always a full URL like "https://openalex.org/C86803240". Live-
-      tested directly against /authors/A5067184382: OpenAlex now returns
-      x_concepts[].id as a bare numeric string with no "C" prefix at all
-      ("86803240"), so the built link was `topic.html?id=86803240` —
-      missing the required "C", which 404s against OpenAlex's concepts
-      API and (since it also fails the /^C\d+$/ check) gets misrouted
-      into topic.html's wiki-slug fallback path instead, resolving
-      nothing. Fix: added normalizeConceptTail() (scripts/profile.js) to
-      strip any URL prefix AND prepend "C" if what's left is bare
-      digits, used everywhere a topic href or _conceptNameMap entry is
-      built from x_concepts. Verified live: profile.html?id=A5067184382
-      (Jennifer Doudna) now emits topic.html?id=C86803240 etc.
-      (previously id=86803240), and navigating there resolves to the
-      real "Biology" topic page. Also checked scripts/journal.js's
-      similar x_concepts usage — live-tested /sources search and found
-      OpenAlex sources no longer return x_concepts AT ALL anymore
-      (replaced by topics/topic_share), so journal topic chips just
-      silently show "No topics listed" rather than a broken link — a
-      real gap but a different, lower-severity bug; not fixed here.
-      scripts/profile.nuclear.js has the identical split("/").pop() bug
-      but isn't referenced from any .html file (dead code) — left as is.
-  [X] Added folder choice at save time — user asked to be able to pick a
-      library subfolder when saving a source (from the site or the
-      extension), rather than always landing unfiled and having to open
-      the library separately to sort it later. Site: new save-folder
-      popover (scripts/components.js, openSaveFolderPopover) opens on
-      the "Add to Library"/"Save" click (data-action="save-paper",
-      shared by paper.js/search.js/topic.js/institute.js/journal.js/
-      publisher.js cards) — lists the user's existing collections (via
-      new SE_LIB.loadCollectionsOnce()/createCollection() in
-      scripts/library.js), a "Save to Library (no folder)" default, and
-      a "+ New folder…" input. savePaper() (scripts/library.js) now
-      takes an optional collectionId and POSTs to
-      /api/collections/:id/items right after the /api/library save.
-      Only shown when SE_SESSION_PROMISE resolves truthy (signed in) —
-      signed-out users get the exact original one-click save-then-
-      sign-in-prompt flow, unchanged. Extension: same idea via a native
-      <select id="saveFolderSelect"> in the popup (extension/popup/
-      popup.html), populated from new LIST_COLLECTIONS/CREATE_COLLECTION
-      messages handled by extension/background/service-worker.js
-      (listCollections/createCollection/addToCollection hitting the same
-      /api/collections endpoints), with SAVE_PAPER now accepting a
-      collectionId and filing into it after saving.
-      Verified live (Playwright against paper.html, with window.fetch
-      monkey-patched via page.addInitScript to stand in for a signed-in
-      session + fake collections — real page.route() network mocking
-      didn't reliably intercept these same-origin calls, most likely
-      because of the site's registered Service Worker; addInitScript
-      fetch patching sidesteps that entirely since it's page-JS-level,
-      not network-layer): popover shows existing folders + new-folder
-      input; picking an existing folder POSTs to /api/library then
-      /api/collections/1/items and shows `Saved to "Cancer biology"`;
-      typing+Enter in the new-folder input POSTs /api/collections then
-      the matching /api/collections/:id/items and shows the new folder's
-      name in the toast; with zero existing folders the popover still
-      offers "Save to Library (no folder)" + the new-folder input; a
-      signed-out user gets the original no-popover flow (confirmed
-      popover never renders when /api/me isn't mocked). Extension side
-      verified only via node --check + code review (loading an unpacked
-      Chrome extension under Playwright wasn't attempted) — it reuses
-      the identical, already-verified /api/collections endpoints.
+[X] Fixed researcher profile pages' top "topics" chips (tagsContainer,
+built from the OpenAlex author record's x_concepts) linking to
+broken topic pages — user reported clicking them "not bringing you
+to any topic page." Root cause: scripts/profile.js built the topic
+href with `c.id.split("/").pop()`, which assumed x_concepts[].id is
+always a full URL like "https://openalex.org/C86803240". Live-
+tested directly against /authors/A5067184382: OpenAlex now returns
+x_concepts[].id as a bare numeric string with no "C" prefix at all
+("86803240"), so the built link was `topic.html?id=86803240` —
+missing the required "C", which 404s against OpenAlex's concepts
+API and (since it also fails the /^C\d+$/ check) gets misrouted
+into topic.html's wiki-slug fallback path instead, resolving
+nothing. Fix: added normalizeConceptTail() (scripts/profile.js) to
+strip any URL prefix AND prepend "C" if what's left is bare
+digits, used everywhere a topic href or \_conceptNameMap entry is
+built from x_concepts. Verified live: profile.html?id=A5067184382
+(Jennifer Doudna) now emits topic.html?id=C86803240 etc.
+(previously id=86803240), and navigating there resolves to the
+real "Biology" topic page. Also checked scripts/journal.js's
+similar x_concepts usage — live-tested /sources search and found
+OpenAlex sources no longer return x_concepts AT ALL anymore
+(replaced by topics/topic_share), so journal topic chips just
+silently show "No topics listed" rather than a broken link — a
+real gap but a different, lower-severity bug; not fixed here.
+scripts/profile.nuclear.js has the identical split("/").pop() bug
+but isn't referenced from any .html file (dead code) — left as is.
+[X] Added folder choice at save time — user asked to be able to pick a
+library subfolder when saving a source (from the site or the
+extension), rather than always landing unfiled and having to open
+the library separately to sort it later. Site: new save-folder
+popover (scripts/components.js, openSaveFolderPopover) opens on
+the "Add to Library"/"Save" click (data-action="save-paper",
+shared by paper.js/search.js/topic.js/institute.js/journal.js/
+publisher.js cards) — lists the user's existing collections (via
+new SE_LIB.loadCollectionsOnce()/createCollection() in
+scripts/library.js), a "Save to Library (no folder)" default, and
+a "+ New folder…" input. savePaper() (scripts/library.js) now
+takes an optional collectionId and POSTs to
+/api/collections/:id/items right after the /api/library save.
+Only shown when SE_SESSION_PROMISE resolves truthy (signed in) —
+signed-out users get the exact original one-click save-then-
+sign-in-prompt flow, unchanged. Extension: same idea via a native
+<select id="saveFolderSelect"> in the popup (extension/popup/
+popup.html), populated from new LIST_COLLECTIONS/CREATE_COLLECTION
+messages handled by extension/background/service-worker.js
+(listCollections/createCollection/addToCollection hitting the same
+/api/collections endpoints), with SAVE_PAPER now accepting a
+collectionId and filing into it after saving.
+Verified live (Playwright against paper.html, with window.fetch
+monkey-patched via page.addInitScript to stand in for a signed-in
+session + fake collections — real page.route() network mocking
+didn't reliably intercept these same-origin calls, most likely
+because of the site's registered Service Worker; addInitScript
+fetch patching sidesteps that entirely since it's page-JS-level,
+not network-layer): popover shows existing folders + new-folder
+input; picking an existing folder POSTs to /api/library then
+/api/collections/1/items and shows `Saved to "Cancer biology"`;
+typing+Enter in the new-folder input POSTs /api/collections then
+the matching /api/collections/:id/items and shows the new folder's
+name in the toast; with zero existing folders the popover still
+offers "Save to Library (no folder)" + the new-folder input; a
+signed-out user gets the original no-popover flow (confirmed
+popover never renders when /api/me isn't mocked). Extension side
+verified only via node --check + code review (loading an unpacked
+Chrome extension under Playwright wasn't attempted) — it reuses
+the identical, already-verified /api/collections endpoints.
 
--------------------------------------------------------
-CLEANUP — dead file removal (2026-08-16/19)
--------------------------------------------------------
+---
+
+## CLEANUP — dead file removal (2026-08-16/19)
 
 2026-08-16
-  [X] Wired up scripts/year.js (already existed but was never
-      <script>-included anywhere) on all 22 pages, replacing the
-      hardcoded "2026" footer copyright text so it can't go stale again.
-  [X] Deleted 10 files verified to have zero live references anywhere in
-      the codebase: scripts/profile.nuclear.js, user-profile.js,
-      funders.js, tools-data.js, tools.js (superseded/orphaned client
-      scripts), routes/auth.js, library.js, profile.js, search.js
-      (pre-consolidation scaffolding using CommonJS require() under
-      "type": "module", would throw if ever imported), and
-      server/server.js (misplaced browser code, never required by
-      server/index.js). ~6,000 lines removed. Also dropped
-      tools-data.js/tools.js from the service worker's precache list.
+[X] Wired up scripts/year.js (already existed but was never
+
+<script>-included anywhere) on all 22 pages, replacing the
+hardcoded "2026" footer copyright text so it can't go stale again.
+[X] Deleted 10 files verified to have zero live references anywhere in
+the codebase: scripts/profile.nuclear.js, user-profile.js,
+funders.js, tools-data.js, tools.js (superseded/orphaned client
+scripts), routes/auth.js, library.js, profile.js, search.js
+(pre-consolidation scaffolding using CommonJS require() under
+"type": "module", would throw if ever imported), and
+server/server.js (misplaced browser code, never required by
+server/index.js). ~6,000 lines removed. Also dropped
+tools-data.js/tools.js from the service worker's precache list.
 
 2026-08-19
-  [X] Found and removed one more dead file this cleanup pass missed:
-      assets/tools.json (121KB) — nothing fetches it anymore, since
-      research-tools.html moved to build-time static generation via
-      build-research-tools.js/tools-catalog-data.js back on 2026-06-13.
-      Its only remaining reference was a service-worker.js rule
-      excluding it from caching, which serves no purpose once the file
-      is gone — removed that rule too (kept the rest of the
-      research-tools-page-never-caches rule intact). Verified no other
-      references (server/, routes/, no fetch() calls anywhere) before
-      deleting; node --check passes on the edited service-worker.js.
-      Audited the rest of the tree for further candidates: archive/
-      (10 files) is deliberately kept — self-documented in its own
-      README as MVP-descoped features that may be re-added later, not
-      dead code. All scripts/*.js with zero HTML references
-      (build-research-tools.js, check-tool-links.js, extract-tools.js,
-      generate-sitemap.js, check-library-pdfs.js, tools-catalog-data.js)
-      are legitimate Node CLI/build-time tools, not dead browser code —
-      left alone. dist/scienceecosystem-firefox-0.1.2.zip is a stale
-      build artifact (extension is now v0.1.3) — flagged but not
-      removed, low stakes either way, left for a future pass.
+[X] Found and removed one more dead file this cleanup pass missed:
+assets/tools.json (121KB) — nothing fetches it anymore, since
+research-tools.html moved to build-time static generation via
+build-research-tools.js/tools-catalog-data.js back on 2026-06-13.
+Its only remaining reference was a service-worker.js rule
+excluding it from caching, which serves no purpose once the file
+is gone — removed that rule too (kept the rest of the
+research-tools-page-never-caches rule intact). Verified no other
+references (server/, routes/, no fetch() calls anywhere) before
+deleting; node --check passes on the edited service-worker.js.
+Audited the rest of the tree for further candidates: archive/
+(10 files) is deliberately kept — self-documented in its own
+README as MVP-descoped features that may be re-added later, not
+dead code. All scripts/\*.js with zero HTML references
+(build-research-tools.js, check-tool-links.js, extract-tools.js,
+generate-sitemap.js, check-library-pdfs.js, tools-catalog-data.js)
+are legitimate Node CLI/build-time tools, not dead browser code —
+left alone. dist/scienceecosystem-firefox-0.1.2.zip is a stale
+build artifact (extension is now v0.1.3) — flagged but not
+removed, low stakes either way, left for a future pass.
 
--------------------------------------------------------
+---
+
 FIX (2026-08-19) — OpenAlex API key wired in via a server-side proxy,
 not shipped to the browser
--------------------------------------------------------
+
+---
 
 Live-tested via a full click-through of the site (headless Playwright,
 since chromium-cli wasn't available in this environment): tripped
@@ -3132,32 +3121,33 @@ tab, unlike `mailto` (public by design). Since it's tied to the
 account, a leaked key is copyable by anyone and risks the account's
 own standing/quota, not just a cosmetic issue.
 
-Fixed properly instead — new GET /api/openalex/* proxy in
+Fixed properly instead — new GET /api/openalex/\* proxy in
 server/index.js:
-  - Forwards the path+query straight to the real OpenAlex API, adding
-    api_key (server-side only) + mailto if the client didn't send them.
-  - Passes the upstream status code, body, and Retry-After header
-    through unchanged, so search.js's existing client-side retry/
-    backoff logic (checks res.status, reads Retry-After) needed zero
-    changes beyond pointing API_BASE at the new path.
-  - 5-minute in-memory cache on successful responses (OPENALEX_PROXY_
-    CACHE) — short enough to keep search/citation-count freshness, long
-    enough that concurrent visitors querying the same paper/search term
-    share one upstream call instead of each spending their own slice of
-    the rate limit. Confirmed live: repeat identical request dropped
-    from ~1.0s to ~0.02s.
-  - Own rate limiter (240 req/min/IP, deliberately generous — a single
-    search page legitimately fires several OpenAlex calls at once) so
-    this can't be used as an open, keyed proxy to OpenAlex by anyone
-    other than our own frontend. Exempted from the existing "no DB →
-    503 every /api/* route" gate (server/index.js), since this proxy
-    has no DB dependency and shouldn't go down with it.
-  - CSP needed no change — same-origin calls are already covered by
-    `'self'` in connect-src. https://api.openalex.org stays in the CSP
-    allowlist since profile.js/institute.js/journal.js/publisher.js/
-    living-paper.js still call OpenAlex directly (out of scope for this
-    fix — only the three files identified as the fragility point were
-    changed).
+
+- Forwards the path+query straight to the real OpenAlex API, adding
+  api_key (server-side only) + mailto if the client didn't send them.
+- Passes the upstream status code, body, and Retry-After header
+  through unchanged, so search.js's existing client-side retry/
+  backoff logic (checks res.status, reads Retry-After) needed zero
+  changes beyond pointing API_BASE at the new path.
+- 5-minute in-memory cache on successful responses (OPENALEX*PROXY*
+  CACHE) — short enough to keep search/citation-count freshness, long
+  enough that concurrent visitors querying the same paper/search term
+  share one upstream call instead of each spending their own slice of
+  the rate limit. Confirmed live: repeat identical request dropped
+  from ~1.0s to ~0.02s.
+- Own rate limiter (240 req/min/IP, deliberately generous — a single
+  search page legitimately fires several OpenAlex calls at once) so
+  this can't be used as an open, keyed proxy to OpenAlex by anyone
+  other than our own frontend. Exempted from the existing "no DB →
+  503 every /api/\* route" gate (server/index.js), since this proxy
+  has no DB dependency and shouldn't go down with it.
+- CSP needed no change — same-origin calls are already covered by
+  `'self'` in connect-src. https://api.openalex.org stays in the CSP
+  allowlist since profile.js/institute.js/journal.js/publisher.js/
+  living-paper.js still call OpenAlex directly (out of scope for this
+  fix — only the three files identified as the fragility point were
+  changed).
 
 scripts/search.js, paper.js, topic.js: changed their OpenAlex base
 constant from "https://api.openalex.org" to
@@ -3177,11 +3167,13 @@ console/CSP errors, and real results render (204,417 results for
 "coral reef", sidebar researchers populated) exactly as before the
 change — just with the key applied server-side.
 
--------------------------------------------------------
+---
+
 IMPROVEMENT (2026-08-19) — "taking longer than usual" hints for
 search/paper/topic, so real retries under load don't look identical to
 a broken page
--------------------------------------------------------
+
+---
 
 Follow-up to the OpenAlex proxy fix above. That fix raised the rate-
 limit ceiling but didn't change what a user sees DURING a retry — a
@@ -3192,65 +3184,68 @@ this stretching 20-30s+ across a page's several sequential OpenAlex
 calls). Added a delayed, self-clearing hint per page instead of a
 generic spinner:
 
-  - scripts/search.js: new showSkeleton(el) wraps the existing
-    skeletonBlock() — if the skeleton is still showing 5s later, appends
-    "Taking longer than usual — retrying…" via a timer stored on the
-    element (el._skelHintTimer). No manual cleanup needed on the success
-    path — renderPapers() already replaces the whole innerHTML once
-    results are in, which removes the hint along with the skeleton; the
-    timer callback itself also checks `.skel` is still present before
-    doing anything, guarding against a late-firing stale timer.
-  - scripts/paper.js: boot() — the static "Loading paper…" text in
-    paper.html never updated on its own. Added the same 5s-delayed
-    check (only fires if #paperHeaderMain's text is still exactly
-    "Loading paper…"), cleared explicitly on both the success and error
-    paths since this one isn't self-guarded by an innerHTML replace at
-    the same call site.
-  - scripts/topic.js: the ~19 Field Data panels (GBIF/IUCN/ChEMBL/
-    Wikidata/etc.) render silently while loading — #fieldDataBlock
-    starts hidden and each panel only reveals it once it has real
-    content, so there was never any loading indicator at all, not even
-    a stuck skeleton. New showFieldDataHintIfSlow(loaderPromises) fired
-    once after all 19 are kicked off (not per-panel — would've been
-    noisier than helpful): if the block is still hidden 5s later, shows
-    one muted line ("Checking external data sources... — taking longer
-    than usual…") and marks the block dataset.hintOnly; once
-    Promise.allSettled resolves for all 19, removes the hint and
-    re-hides the block if nothing real ever landed (checks
-    #fieldDataContent/#inatContent childElementCount) — same visible
-    end-state as before this change on both the "found nothing" and
-    "found data fast" paths, only the slow-path in between changed.
+- scripts/search.js: new showSkeleton(el) wraps the existing
+  skeletonBlock() — if the skeleton is still showing 5s later, appends
+  "Taking longer than usual — retrying…" via a timer stored on the
+  element (el.\_skelHintTimer). No manual cleanup needed on the success
+  path — renderPapers() already replaces the whole innerHTML once
+  results are in, which removes the hint along with the skeleton; the
+  timer callback itself also checks `.skel` is still present before
+  doing anything, guarding against a late-firing stale timer.
+- scripts/paper.js: boot() — the static "Loading paper…" text in
+  paper.html never updated on its own. Added the same 5s-delayed
+  check (only fires if #paperHeaderMain's text is still exactly
+  "Loading paper…"), cleared explicitly on both the success and error
+  paths since this one isn't self-guarded by an innerHTML replace at
+  the same call site.
+- scripts/topic.js: the ~19 Field Data panels (GBIF/IUCN/ChEMBL/
+  Wikidata/etc.) render silently while loading — #fieldDataBlock
+  starts hidden and each panel only reveals it once it has real
+  content, so there was never any loading indicator at all, not even
+  a stuck skeleton. New showFieldDataHintIfSlow(loaderPromises) fired
+  once after all 19 are kicked off (not per-panel — would've been
+  noisier than helpful): if the block is still hidden 5s later, shows
+  one muted line ("Checking external data sources... — taking longer
+  than usual…") and marks the block dataset.hintOnly; once
+  Promise.allSettled resolves for all 19, removes the hint and
+  re-hides the block if nothing real ever landed (checks
+  #fieldDataContent/#inatContent childElementCount) — same visible
+  end-state as before this change on both the "found nothing" and
+  "found data fast" paths, only the slow-path in between changed.
 
 Verified live via Playwright with artificial delay injected on the
 relevant endpoints (page.route intercepting /api/openalex/** or
 /api/field-data/** with a 7s async delay before continuing):
-  - search.html: hint appeared at t=6s, cleared by t=21s once the
-    (deliberately slowed) sequential calls finished, 119 real result
-    cards rendered.
-  - paper.html: header text included "retrying" at t=6s, showed the
-    real paper title by t=14s.
-  - topic.html (Tūī): confirmed the hint correctly does NOT appear when
-    data arrives before the 5s mark (fast-path regression check), and
-    the block ends up visible with real content and no lingering hint
-    once settled — same mechanism verified on the slow path via the
-    paper/search tests above.
-All three: node --check passes; no new console errors introduced.
+
+- search.html: hint appeared at t=6s, cleared by t=21s once the
+  (deliberately slowed) sequential calls finished, 119 real result
+  cards rendered.
+- paper.html: header text included "retrying" at t=6s, showed the
+  real paper title by t=14s.
+- topic.html (Tūī): confirmed the hint correctly does NOT appear when
+  data arrives before the 5s mark (fast-path regression check), and
+  the block ends up visible with real content and no lingering hint
+  once settled — same mechanism verified on the slow path via the
+  paper/search tests above.
+  All three: node --check passes; no new console errors introduced.
 
 Also written this session: .claude/skills/run/SKILL.md — captures the
 dev-server start command, port-polling pattern, and the node_modules-
 hang gotcha hit while setting up this click-through session (importing
-pg/@aws-sdk/* silently hung after the folder move; `rm -rf
+pg/@aws-sdk/\* silently hung after the folder move; `rm -rf
 node_modules && npm install` fixed it, root cause not fully pinned
 down). Saves re-discovering this from scratch next time.
 
--------------------------------------------------------
+---
+
 BUILT (2026-08-21) — real open peer review reports on paper.html,
 sourced from Crossref
--------------------------------------------------------
 
-Prompted directly: business_plan/main.tex §4 names "transparent peer
+---
+
+Prompted directly: business*plan/main.tex §4 names "transparent peer
 review" as a Longer-Term Development goal, and the only thing on the
-site that gestured at this was scripts/paper.js's OPEN_PEER_REVIEW_
+site that gestured at this was scripts/paper.js's OPEN_PEER_REVIEW*
 JOURNALS — a 9-journal-name allowlist that just swaps one line of
 sidebar text ("Peer reviewed (open/transparent)" vs "Peer reviewed"),
 never showing an actual reviewer, report, or process.
@@ -3265,95 +3260,93 @@ Europe, PeerJ, Royal Society, OUP, SAGE, IOP and more — this is per-
 paper ground truth, not a journal-level guess, and a strict upgrade
 over the existing allowlist.
 
-  [X] routes/paper.js: new getCrossrefPeerReviews(doi), added to the
-      existing citation-contexts endpoint's Promise.all fan-out
-      (alongside getOpenCitations/getCORECitations/getScienceOpenReviews/
-      getLensImpact) — rides the same 6h CITATION_CONTEXTS_CACHE, no new
-      route needed. Fetches the article's own Crossref record, reads
-      relation['has-review'], fetches each review DOI (capped at 10),
-      returns reviewer/affiliation/date/stage/competing-interests/
-      reportUrl/a best-effort articleStatus parsed from the review
-      title's "[version 1; peer review: 2 approved]" suffix (F1000/ORE
-      house style — omitted, not guessed, when it doesn't match).
-      New crossrefPeerReviews field in the response, kept deliberately
-      separate from the existing peerReviews field (ScienceOpen informal
-      community reviews — a different concept from a journal's own
-      formal review reports; conflating them would misrepresent both).
-  [X] BUG CAUGHT while testing: Crossref lists each has-review relation
-      TWICE (once asserted-by "subject", once asserted-by "object", same
-      DOI both times) — a 2-reviewer ORE paper came back with 4 entries
-      before adding a Set-based dedupe on the review DOI list.
-  [X] BUG CAUGHT, pre-existing, not introduced by this change: the doi
-      query param this whole endpoint receives is regularly a full
-      "https://doi.org/10.xxxx" URL, not a bare DOI — scripts/paper.js's
-      doiFromWork(p) only ever strips a "doi:" prefix, never the URL
-      one, and OpenAlex's own `doi` field is always the full-URL form.
-      Crossref/OpenCitations reject that and every helper's own try/
-      catch silently swallows the failure and returns null — so
-      getOpenCitations and getScienceOpenReviews have likely been
-      silently non-functional this whole time for exactly this reason,
-      invisible because "no data" and "broken" look identical here.
-      Semantic Scholar happens to tolerate the URL form, which is why
-      the endpoint as a whole still appeared to work. Found by chasing
-      why a paper CONFIRMED to have real Crossref review data rendered
-      nothing — traced with bracketing debug console.errors through
-      client and server until the exact param mismatch was caught red-
-      handed. Fixed once, at the route's entry point (normalize doi to
-      strip both doi: and https://doi.org/ before anything downstream
-      touches it) — benefits every source in this endpoint, not just
-      the new one.
-  [X] paper.html: new #crossrefPeerReviewsSection ("Peer review
-      reports"), placed above the existing #peerReviewsSection
-      (ScienceOpen) inside #citationContextsSection — a journal's own
-      formal reports are the more authoritative signal when both exist.
-      Includes a muted note documenting a real, known limitation:
-      versioned papers (F1000Research/ORE-style v1/v2) have has-review
-      relations per-version-DOI, and there is no version-chain concept
-      anywhere in this codebase (checked — genuinely doesn't exist), so
-      a review attached to a sibling version won't surface. Flagged
-      plainly rather than silently under-reporting; real fix would need
-      new OpenAlex/Crossref version-resolution logic, out of scope here.
-  [X] scripts/paper.js: new renderCrossrefPeerReviews(), mirrors
-      renderPeerReviews()/renderImpactData()'s existing show-section +
-      template-map-join + escapeHtml() pattern, reuses the same
-      .peer-review CSS classes (no new CSS). loadCitationContexts()'s
-      show/hide gate extended with hasCrossrefReviews. Sidebar upgrade:
-      the "Journal & Quality" panel's peer-review indicator row (was
-      plain text) gets a new id (peerReviewIndicatorLabel) purely so
-      loadCitationContexts() can turn it into a link down to the new
-      section once real data comes back — renderJournalBlockSimple()'s
-      own scoring/allowlist logic untouched, since Crossref data isn't
-      known until after that function has already run.
-  Verified live end-to-end against real DOIs (not just code review):
-    - 10.12688/openreseurope.20775.1 (ORE, "Giving voice") — 2 reviewers
-      (Matteo Nicolini, A. Arun Daves), correct dates, "2 approved"
-      status, working report links, section + sidebar link render
-      correctly in a real headless-browser load.
-    - 10.12688/openreseurope.19736.1 (ORE) — 3 reviewers, "3 approved
-      with reservations", same status string correctly shared across
-      all 3 (it's the article's aggregate status embedded in each
-      review's own title, not a per-reviewer verdict — confirmed by
-      comparing raw Crossref records directly).
-    - 10.7554/elife.52646 (eLife Reviewed Preprint) — 3 reviews, messier
-      real-world data (one entry with no parseable reviewer name, one
-      with no stage) — confirmed the "Reviewer"/blank fallbacks handle
-      this cleanly, no crash, no garbage rendered.
-    - 10.7554/elife.110392 (eLife, no has-review relation) and
-      10.1016/j.scitotenv.2020.143826 (mangrove paper, no Crossref
-      review data) — both correctly render with the new section hidden,
-      no errors.
-  Observed real latency: the endpoint's cold response time for a paper
-  with reviews varied 3-17s in testing (1 article lookup + N parallel
-  review lookups against Crossref, on top of the other 5 existing
-  sources already in this same Promise.all) — cached at 6h after the
-  first hit, same as the rest of this endpoint, but worth knowing this
-  section can legitimately take longer to appear than the citation-
-  contexts list itself on a cold cache.
+[X] routes/paper.js: new getCrossrefPeerReviews(doi), added to the
+existing citation-contexts endpoint's Promise.all fan-out
+(alongside getOpenCitations/getCORECitations/getScienceOpenReviews/
+getLensImpact) — rides the same 6h CITATION_CONTEXTS_CACHE, no new
+route needed. Fetches the article's own Crossref record, reads
+relation['has-review'], fetches each review DOI (capped at 10),
+returns reviewer/affiliation/date/stage/competing-interests/
+reportUrl/a best-effort articleStatus parsed from the review
+title's "[version 1; peer review: 2 approved]" suffix (F1000/ORE
+house style — omitted, not guessed, when it doesn't match).
+New crossrefPeerReviews field in the response, kept deliberately
+separate from the existing peerReviews field (ScienceOpen informal
+community reviews — a different concept from a journal's own
+formal review reports; conflating them would misrepresent both).
+[X] BUG CAUGHT while testing: Crossref lists each has-review relation
+TWICE (once asserted-by "subject", once asserted-by "object", same
+DOI both times) — a 2-reviewer ORE paper came back with 4 entries
+before adding a Set-based dedupe on the review DOI list.
+[X] BUG CAUGHT, pre-existing, not introduced by this change: the doi
+query param this whole endpoint receives is regularly a full
+"https://doi.org/10.xxxx" URL, not a bare DOI — scripts/paper.js's
+doiFromWork(p) only ever strips a "doi:" prefix, never the URL
+one, and OpenAlex's own `doi` field is always the full-URL form.
+Crossref/OpenCitations reject that and every helper's own try/
+catch silently swallows the failure and returns null — so
+getOpenCitations and getScienceOpenReviews have likely been
+silently non-functional this whole time for exactly this reason,
+invisible because "no data" and "broken" look identical here.
+Semantic Scholar happens to tolerate the URL form, which is why
+the endpoint as a whole still appeared to work. Found by chasing
+why a paper CONFIRMED to have real Crossref review data rendered
+nothing — traced with bracketing debug console.errors through
+client and server until the exact param mismatch was caught red-
+handed. Fixed once, at the route's entry point (normalize doi to
+strip both doi: and https://doi.org/ before anything downstream
+touches it) — benefits every source in this endpoint, not just
+the new one.
+[X] paper.html: new #crossrefPeerReviewsSection ("Peer review
+reports"), placed above the existing #peerReviewsSection
+(ScienceOpen) inside #citationContextsSection — a journal's own
+formal reports are the more authoritative signal when both exist.
+Includes a muted note documenting a real, known limitation:
+versioned papers (F1000Research/ORE-style v1/v2) have has-review
+relations per-version-DOI, and there is no version-chain concept
+anywhere in this codebase (checked — genuinely doesn't exist), so
+a review attached to a sibling version won't surface. Flagged
+plainly rather than silently under-reporting; real fix would need
+new OpenAlex/Crossref version-resolution logic, out of scope here.
+[X] scripts/paper.js: new renderCrossrefPeerReviews(), mirrors
+renderPeerReviews()/renderImpactData()'s existing show-section +
+template-map-join + escapeHtml() pattern, reuses the same
+.peer-review CSS classes (no new CSS). loadCitationContexts()'s
+show/hide gate extended with hasCrossrefReviews. Sidebar upgrade:
+the "Journal & Quality" panel's peer-review indicator row (was
+plain text) gets a new id (peerReviewIndicatorLabel) purely so
+loadCitationContexts() can turn it into a link down to the new
+section once real data comes back — renderJournalBlockSimple()'s
+own scoring/allowlist logic untouched, since Crossref data isn't
+known until after that function has already run.
+Verified live end-to-end against real DOIs (not just code review): - 10.12688/openreseurope.20775.1 (ORE, "Giving voice") — 2 reviewers
+(Matteo Nicolini, A. Arun Daves), correct dates, "2 approved"
+status, working report links, section + sidebar link render
+correctly in a real headless-browser load. - 10.12688/openreseurope.19736.1 (ORE) — 3 reviewers, "3 approved
+with reservations", same status string correctly shared across
+all 3 (it's the article's aggregate status embedded in each
+review's own title, not a per-reviewer verdict — confirmed by
+comparing raw Crossref records directly). - 10.7554/elife.52646 (eLife Reviewed Preprint) — 3 reviews, messier
+real-world data (one entry with no parseable reviewer name, one
+with no stage) — confirmed the "Reviewer"/blank fallbacks handle
+this cleanly, no crash, no garbage rendered. - 10.7554/elife.110392 (eLife, no has-review relation) and
+10.1016/j.scitotenv.2020.143826 (mangrove paper, no Crossref
+review data) — both correctly render with the new section hidden,
+no errors.
+Observed real latency: the endpoint's cold response time for a paper
+with reviews varied 3-17s in testing (1 article lookup + N parallel
+review lookups against Crossref, on top of the other 5 existing
+sources already in this same Promise.all) — cached at 6h after the
+first hit, same as the rest of this endpoint, but worth knowing this
+section can legitimately take longer to appear than the citation-
+contexts list itself on a cold cache.
 
--------------------------------------------------------
+---
+
 BUILT (2026-08-21) — real, publisher-authoritative BibTeX via DOI
 content negotiation, instead of generating it ourselves
--------------------------------------------------------
+
+---
 
 Prompted directly, referencing github.com/davidagraf/doi2bib2 as an
 example: "in the library and other places the bibtex is not always
@@ -3370,74 +3363,74 @@ our own generator can guarantee since it's built from whatever fields
 happen to be in our own DB, using our own splitName() heuristic (which
 DOES put "van" in the wrong place — confirmed side by side).
 
-  [X] routes/paper.js: new GET /api/paper/bibtex?doi=... — calls
-      Crossref's own transform endpoint (api.crossref.org/works/{doi}/
-      transform/application/x-bibtex?mailto=...), which is equivalent
-      to the doi.org content-negotiation approach but supports our
-      existing mailto polite-pool convention and returns real CORS
-      headers (confirmed live: access-control-allow-origin: *) —
-      chosen over hitting doi.org directly for that reason, though
-      proxied through our own server anyway for caching (30-day TTL —
-      published BibTeX doesn't change) and consistency with how every
-      other external source in this codebase is handled. Same doi
-      normalization (strip doi: and https://doi.org/) as the citation-
-      contexts/peer-review endpoints, added just yesterday for the same
-      root-cause reason.
-  [X] scripts/components.js: new fetchRealBibTeX(doi), exported via
-      SE.components (so scripts/library-page.js, a separate IIFE, can
-      call it too — same cross-file pattern already used for
-      renderPaperCard/enhancePaperCards). buildCitePopover() keeps
-      rendering the LOCAL fmtBibTeX() instantly (unchanged — the other
-      5 citation formats it builds have no real-data upgrade path and
-      shouldn't have to wait on one), then upgrades just the BibTeX
-      textarea in place once the real version lands — same progressive-
-      enhancement pattern as this week's "taking longer than usual"
-      retry hints, applied here to accuracy rather than latency
-      tolerance. Copy/Download buttons already read the textarea's live
-      value at click time (pre-existing behavior), so they pick up the
-      upgrade automatically with no changes needed there.
-  [X] scripts/library-page.js: new realOrLocalBibTeX(item) — tries
-      SE.components.fetchRealBibTeX(item.doi) when the item has one,
-      falls back to the existing local fmtBibTeX() otherwise or on
-      failure. Wired into all 3 existing BibTeX export call sites
-      (single-item download, bulk-selection download, whole-library/
-      collection .bib export) — the whole-library export's existing
-      key-collision-dedup logic (disambiguates repeated
-      @article{name2020,...} keys across many items) runs unchanged on
-      top of whichever source produced each entry.
-  [X] BUG CAUGHT while verifying, unrelated to BibTeX but found because
-      of it: scripts/components.js's enhancePaperCards() — the function
-      that wires up EVERY delegated click handler on a paper card
-      (Cite, Save, abstract expand/collapse, not just the new BibTeX
-      upgrade) — had `if (!globalThis.SE_SESSION) return;` sitting
-      before the click-listener setup code, intended only to skip the
-      signed-in-only library-cache preload just above it. The early
-      return instead skipped the ENTIRE rest of the function for every
-      signed-out visitor, meaning the Cite popover has never opened at
-      all (button click did nothing, no error) for anyone not logged
-      in, on every paper card sitewide — since Save already has its own
-      documented signed-out fallback flow, this was clearly a scoping
-      mistake, not an intentional gate. Caught because a fresh
-      Playwright session (always signed-out) is exactly the condition
-      that triggers it — my own new BibTeX upgrade fetch was correctly
-      wired but silently never ran because the popover itself never
-      opened. Fixed by narrowing the gate to just the loadLibraryOnce()
-      call it was meant to guard.
-  Verified live end-to-end (real headless browser, not just the API in
-  isolation): opened the Cite popover for the mangrove paper in a fresh
-  signed-out session — instant local BibTeX renders first (own key
-  format), then upgrades in place ~seconds later to the real Crossref
-  version (van_Bijsterveldt_2021 key, ISSN, volume, month — none of
-  which the local version has), confirmed via the actual /api/paper/
-  bibtex network request and the textarea's final content. Separately
-  confirmed SE.components.fetchRealBibTeX is correctly reachable and
-  returns real data from library.html's own script context (cross-file
-  wiring proven), which is what all 3 library-page.js call sites
-  depend on.
+[X] routes/paper.js: new GET /api/paper/bibtex?doi=... — calls
+Crossref's own transform endpoint (api.crossref.org/works/{doi}/
+transform/application/x-bibtex?mailto=...), which is equivalent
+to the doi.org content-negotiation approach but supports our
+existing mailto polite-pool convention and returns real CORS
+headers (confirmed live: access-control-allow-origin: \*) —
+chosen over hitting doi.org directly for that reason, though
+proxied through our own server anyway for caching (30-day TTL —
+published BibTeX doesn't change) and consistency with how every
+other external source in this codebase is handled. Same doi
+normalization (strip doi: and https://doi.org/) as the citation-
+contexts/peer-review endpoints, added just yesterday for the same
+root-cause reason.
+[X] scripts/components.js: new fetchRealBibTeX(doi), exported via
+SE.components (so scripts/library-page.js, a separate IIFE, can
+call it too — same cross-file pattern already used for
+renderPaperCard/enhancePaperCards). buildCitePopover() keeps
+rendering the LOCAL fmtBibTeX() instantly (unchanged — the other
+5 citation formats it builds have no real-data upgrade path and
+shouldn't have to wait on one), then upgrades just the BibTeX
+textarea in place once the real version lands — same progressive-
+enhancement pattern as this week's "taking longer than usual"
+retry hints, applied here to accuracy rather than latency
+tolerance. Copy/Download buttons already read the textarea's live
+value at click time (pre-existing behavior), so they pick up the
+upgrade automatically with no changes needed there.
+[X] scripts/library-page.js: new realOrLocalBibTeX(item) — tries
+SE.components.fetchRealBibTeX(item.doi) when the item has one,
+falls back to the existing local fmtBibTeX() otherwise or on
+failure. Wired into all 3 existing BibTeX export call sites
+(single-item download, bulk-selection download, whole-library/
+collection .bib export) — the whole-library export's existing
+key-collision-dedup logic (disambiguates repeated
+@article{name2020,...} keys across many items) runs unchanged on
+top of whichever source produced each entry.
+[X] BUG CAUGHT while verifying, unrelated to BibTeX but found because
+of it: scripts/components.js's enhancePaperCards() — the function
+that wires up EVERY delegated click handler on a paper card
+(Cite, Save, abstract expand/collapse, not just the new BibTeX
+upgrade) — had `if (!globalThis.SE_SESSION) return;` sitting
+before the click-listener setup code, intended only to skip the
+signed-in-only library-cache preload just above it. The early
+return instead skipped the ENTIRE rest of the function for every
+signed-out visitor, meaning the Cite popover has never opened at
+all (button click did nothing, no error) for anyone not logged
+in, on every paper card sitewide — since Save already has its own
+documented signed-out fallback flow, this was clearly a scoping
+mistake, not an intentional gate. Caught because a fresh
+Playwright session (always signed-out) is exactly the condition
+that triggers it — my own new BibTeX upgrade fetch was correctly
+wired but silently never ran because the popover itself never
+opened. Fixed by narrowing the gate to just the loadLibraryOnce()
+call it was meant to guard.
+Verified live end-to-end (real headless browser, not just the API in
+isolation): opened the Cite popover for the mangrove paper in a fresh
+signed-out session — instant local BibTeX renders first (own key
+format), then upgrades in place ~seconds later to the real Crossref
+version (van_Bijsterveldt_2021 key, ISSN, volume, month — none of
+which the local version has), confirmed via the actual /api/paper/
+bibtex network request and the textarea's final content. Separately
+confirmed SE.components.fetchRealBibTeX is correctly reachable and
+returns real data from library.html's own script context (cross-file
+wiring proven), which is what all 3 library-page.js call sites
+depend on.
 
--------------------------------------------------------
-ZOTERO-PARITY ROADMAP (2026-08-21) — full plan for the 7 real gaps found
--------------------------------------------------------
+---
+
+## ZOTERO-PARITY ROADMAP (2026-08-21) — full plan for the 7 real gaps found
 
 Prompted directly: "what features does zotero have that we dont have in
 the library" → verified against the actual codebase rather than general
@@ -3453,10 +3446,12 @@ tracking) written to a plan file and approved. First item built this
 session: journal following (below). Remaining 4 not yet started —
 revisit this plan when picking the next one up.
 
--------------------------------------------------------
+---
+
 BUILT (2026-08-21) — journal/source following ("New from journals you
 follow")
--------------------------------------------------------
+
+---
 
 First (cheapest) item from the Zotero-parity roadmap above — reuses two
 existing, already-proven patterns almost entirely rather than inventing
@@ -3465,61 +3460,63 @@ side aggregation technique already live for "New from people you
 follow" on user-profile.html (built 2026-06-13, no new backend needed
 then either).
 
-  [X] server/index.js: new followed_sources table, exact same shape as
-      followed_authors (orcid, source_id, name, created_at, PK on
-      orcid+source_id, FK cascade to users). New followedSourcesList/
-      followedSourceAdd/followedSourceDel helpers and GET/POST/DELETE
-      /api/followed-sources routes — line-for-line mirrors of the
-      existing /api/follows implementation, just source_id instead of
-      author_id.
-  [X] journal.html: new "Follow" button + status line next to the
-      journal name, same placement/markup pattern as profile.html's
-      existing followAuthorBtn.
-  [X] scripts/journal.js: new isFollowingSource()/wireFollowJournalButton(),
-      mirrors scripts/profile.js's wireFollowButton() exactly (same
-      optimistic local-state-update-then-API-call shape). Wired into
-      boot() right after renderHeader(src) — fetches /api/me +
-      /api/followed-sources up front, same sequencing as profile.js.
-  [X] user-profile.html: new "New from journals you follow" panel
-      (#journalFeedSection/#journalFollowFeed), new
-      renderJournalFollowFeed() mirroring the existing renderFollowFeed()
-      almost exactly — same shape, filter=host_venue.id:... instead of
-      author.id:..., capped at 5 followed sources / 10 results, same
-      empty-state handling. Deliberately routed through this week's new
-      /api/openalex proxy (not api.openalex.org directly) since this is
-      new code written today — the older renderFollowFeed() it's
-      modeled on predates the proxy and was left untouched, out of
-      scope for this change.
-  [X] BUG CAUGHT while verifying, inherited from the exact pattern being
-      mirrored: `await fetch("/api/me", {...})` doesn't throw on a 401 —
-      fetch() only rejects on network-level failure, never on HTTP error
-      status — so `isAuthed = true` was being set unconditionally right
-      after that line, regardless of whether the visitor was actually
-      signed in. Caught live: a fresh, signed-out browser session showed
-      an empty status line instead of "Sign in to follow.", and clicking
-      Follow silently did nothing instead of redirecting to ORCID login.
-      Checked the original this was copied from — scripts/profile.js's
-      own wireFollowButton auth check (line ~1349) has the identical
-      bug, predating this session entirely. Fixed both: check `.ok` on
-      the /api/me response before trusting it, matching the (already-
-      correct) pattern used by the OTHER /api/me call site in profile.js
-      (line ~231, which already did `.then(r => r.ok ? r.json() : null)`).
-  Verified live: unauthenticated GET /api/followed-sources → 401,
-  unauthenticated POST → 403 (CSRF gate, correct); real headless-browser
-  load of journal.html confirmed the Follow button now correctly shows
-  "Sign in to follow." at rest and redirects to the real ORCID OAuth
-  authorize URL on click, for a genuinely signed-out session (only after
-  the fetch.ok fix — before it, neither of those worked). Full signed-
-  in round-trip (follow persists, feed shows real papers from a
-  followed journal) not tested live — would need a real ORCID login,
-  not practical to simulate here; it runs through the same already-
-  proven /api/follows-shaped code path, so this is lower risk than a
-  from-scratch feature.
+[X] server/index.js: new followed_sources table, exact same shape as
+followed_authors (orcid, source_id, name, created_at, PK on
+orcid+source_id, FK cascade to users). New followedSourcesList/
+followedSourceAdd/followedSourceDel helpers and GET/POST/DELETE
+/api/followed-sources routes — line-for-line mirrors of the
+existing /api/follows implementation, just source_id instead of
+author_id.
+[X] journal.html: new "Follow" button + status line next to the
+journal name, same placement/markup pattern as profile.html's
+existing followAuthorBtn.
+[X] scripts/journal.js: new isFollowingSource()/wireFollowJournalButton(),
+mirrors scripts/profile.js's wireFollowButton() exactly (same
+optimistic local-state-update-then-API-call shape). Wired into
+boot() right after renderHeader(src) — fetches /api/me +
+/api/followed-sources up front, same sequencing as profile.js.
+[X] user-profile.html: new "New from journals you follow" panel
+(#journalFeedSection/#journalFollowFeed), new
+renderJournalFollowFeed() mirroring the existing renderFollowFeed()
+almost exactly — same shape, filter=host_venue.id:... instead of
+author.id:..., capped at 5 followed sources / 10 results, same
+empty-state handling. Deliberately routed through this week's new
+/api/openalex proxy (not api.openalex.org directly) since this is
+new code written today — the older renderFollowFeed() it's
+modeled on predates the proxy and was left untouched, out of
+scope for this change.
+[X] BUG CAUGHT while verifying, inherited from the exact pattern being
+mirrored: `await fetch("/api/me", {...})` doesn't throw on a 401 —
+fetch() only rejects on network-level failure, never on HTTP error
+status — so `isAuthed = true` was being set unconditionally right
+after that line, regardless of whether the visitor was actually
+signed in. Caught live: a fresh, signed-out browser session showed
+an empty status line instead of "Sign in to follow.", and clicking
+Follow silently did nothing instead of redirecting to ORCID login.
+Checked the original this was copied from — scripts/profile.js's
+own wireFollowButton auth check (line ~1349) has the identical
+bug, predating this session entirely. Fixed both: check `.ok` on
+the /api/me response before trusting it, matching the (already-
+correct) pattern used by the OTHER /api/me call site in profile.js
+(line ~231, which already did `.then(r => r.ok ? r.json() : null)`).
+Verified live: unauthenticated GET /api/followed-sources → 401,
+unauthenticated POST → 403 (CSRF gate, correct); real headless-browser
+load of journal.html confirmed the Follow button now correctly shows
+"Sign in to follow." at rest and redirects to the real ORCID OAuth
+authorize URL on click, for a genuinely signed-out session (only after
+the fetch.ok fix — before it, neither of those worked). Full signed-
+in round-trip (follow persists, feed shows real papers from a
+followed journal) not tested live — would need a real ORCID login,
+not practical to simulate here; it runs through the same already-
+proven /api/follows-shaped code path, so this is lower risk than a
+from-scratch feature.
 
--------------------------------------------------------
+---
+
 BUILT (2026-08-22) — full-text PDF search (second item from the
 Zotero-parity roadmap)
--------------------------------------------------------
+
+---
 
 Search now covers what's actually written inside a user's saved PDFs,
 not just title/author/venue/abstract/tags. Confirmed before building
@@ -3527,66 +3524,68 @@ that nothing in this codebase did any of this: no server-side PDF-
 parsing library existed, and no Postgres full-text search (tsvector/
 GIN) was used anywhere.
 
-  [X] Added pdf-parse (v2 — new API is `new PDFParse({data:buffer})
+[X] Added pdf-parse (v2 — new API is `new PDFParse({data:buffer})
       .getText()`, not the old v1 `pdf(buffer)` function signature;
-      confirmed against the installed version's own README before
-      writing any code, since a version mismatch would have silently
-      failed). Smoke-tested against a real downloaded PDF (bitcoin.org/
-      bitcoin.pdf) before wiring it into the server at all.
-  [X] server/index.js: library_pdfs gets full_text TEXT + a GENERATED
-      search_vector TSVECTOR column (auto-stays-in-sync with full_text,
-      nothing has to remember to update it separately) + a GIN index.
-      New extractAndStorePdfText(orcid, paperId, buffer) — fire-and-
-      forget, called right after both existing PDF-upload paths
-      (/api/library/pdf, /api/library/import-pdf) finish storing the
-      file. Never awaited by the request handler (parsing can take a
-      couple seconds; the upload response shouldn't wait on it).
-      Scanned-image PDFs with no real text layer are an expected empty
-      result, not an error — logged at most, never surfaced to the user.
-  [X] New GET /api/library/search-pdfs?q=... — auth-gated, scoped to
-      the caller's own orcid, ts_headline() returns a real snippet
-      showing WHERE the match came from (not just a yes/no hit).
-  [X] scripts/library-page.js: the existing instant, synchronous,
-      in-memory title/author/venue/abstract filter (applyFilters) is
-      untouched for that data — it's already loaded client-side. Added
-      a parallel, debounced (400ms) call to the new endpoint that unions
-      matching paper_ids in. Guarded with a pdfSearchQuery===q check so
-      a slow response for an old query can't apply itself after the
-      user has already typed something else. Matches found ONLY inside
-      the PDF (not already visible via title/author/venue/abstract) get
-      a small "PDF match" badge in the table — same transparency
-      principle already applied to citation-context sourcing (be clear
-      about *why* something matched).
-  [X] scripts/backfill-pdf-text.js — one-off script for PDFs uploaded
-      before this shipped (extraction is otherwise upload-time-only).
-      Mirrors scripts/check-library-pdfs.js's existing style/structure.
-      Fetches from R2 or local filesystem depending on storage_path's
-      prefix, same two shapes storePdfFile() already produces.
-  Verified live: real end-to-end test against the actual dev database —
-  extracted real text from the bitcoin.org PDF via pdf-parse, inserted
-  it into a temporary test row, ran the EXACT query the new endpoint
-  uses, got back a correct, real ts_headline snippet with matched terms
-  highlighted; confirmed the GIN index exists (EXPLAIN showed a Seq Scan
-  instead of using it, which is Postgres correctly choosing the cheaper
-  plan for a 1-row test table, not a problem — it'll use the index once
-  there's real volume); test row cleaned up after. Ran the backfill
-  script against the real database: 103 existing PDFs found needing
-  backfill, all failed cleanly at the fetch step (this local .env has
-  no R2 credentials configured) with clear per-row error messages and
-  ZERO writes to the DB (the UPDATE only runs after a successful
-  extraction) — confirmed safe to have run, but the actual backfill
-  still needs to happen somewhere WITH R2 credentials (Render/
-  production), not from here. Flagging this as a real follow-up action,
-  not done yet. Library page itself confirmed loading cleanly with the
-  new debounced search wiring active (typed into the search box live,
-  zero console errors) — the authenticated round-trip (upload a PDF,
-  confirm it's actually searchable) not tested live, same practical
-  constraint as other auth-gated features this session.
+confirmed against the installed version's own README before
+writing any code, since a version mismatch would have silently
+failed). Smoke-tested against a real downloaded PDF (bitcoin.org/
+bitcoin.pdf) before wiring it into the server at all.
+[X] server/index.js: library_pdfs gets full_text TEXT + a GENERATED
+search_vector TSVECTOR column (auto-stays-in-sync with full_text,
+nothing has to remember to update it separately) + a GIN index.
+New extractAndStorePdfText(orcid, paperId, buffer) — fire-and-
+forget, called right after both existing PDF-upload paths
+(/api/library/pdf, /api/library/import-pdf) finish storing the
+file. Never awaited by the request handler (parsing can take a
+couple seconds; the upload response shouldn't wait on it).
+Scanned-image PDFs with no real text layer are an expected empty
+result, not an error — logged at most, never surfaced to the user.
+[X] New GET /api/library/search-pdfs?q=... — auth-gated, scoped to
+the caller's own orcid, ts_headline() returns a real snippet
+showing WHERE the match came from (not just a yes/no hit).
+[X] scripts/library-page.js: the existing instant, synchronous,
+in-memory title/author/venue/abstract filter (applyFilters) is
+untouched for that data — it's already loaded client-side. Added
+a parallel, debounced (400ms) call to the new endpoint that unions
+matching paper_ids in. Guarded with a pdfSearchQuery===q check so
+a slow response for an old query can't apply itself after the
+user has already typed something else. Matches found ONLY inside
+the PDF (not already visible via title/author/venue/abstract) get
+a small "PDF match" badge in the table — same transparency
+principle already applied to citation-context sourcing (be clear
+about _why_ something matched).
+[X] scripts/backfill-pdf-text.js — one-off script for PDFs uploaded
+before this shipped (extraction is otherwise upload-time-only).
+Mirrors scripts/check-library-pdfs.js's existing style/structure.
+Fetches from R2 or local filesystem depending on storage_path's
+prefix, same two shapes storePdfFile() already produces.
+Verified live: real end-to-end test against the actual dev database —
+extracted real text from the bitcoin.org PDF via pdf-parse, inserted
+it into a temporary test row, ran the EXACT query the new endpoint
+uses, got back a correct, real ts_headline snippet with matched terms
+highlighted; confirmed the GIN index exists (EXPLAIN showed a Seq Scan
+instead of using it, which is Postgres correctly choosing the cheaper
+plan for a 1-row test table, not a problem — it'll use the index once
+there's real volume); test row cleaned up after. Ran the backfill
+script against the real database: 103 existing PDFs found needing
+backfill, all failed cleanly at the fetch step (this local .env has
+no R2 credentials configured) with clear per-row error messages and
+ZERO writes to the DB (the UPDATE only runs after a successful
+extraction) — confirmed safe to have run, but the actual backfill
+still needs to happen somewhere WITH R2 credentials (Render/
+production), not from here. Flagging this as a real follow-up action,
+not done yet. Library page itself confirmed loading cleanly with the
+new debounced search wiring active (typed into the search box live,
+zero console errors) — the authenticated round-trip (upload a PDF,
+confirm it's actually searchable) not tested live, same practical
+constraint as other auth-gated features this session.
 
--------------------------------------------------------
+---
+
 BUILT (2026-08-22) — standalone freeform notes (third item from the
 Zotero-parity roadmap)
--------------------------------------------------------
+
+---
 
 A note that's its own library item, not tied to a paper — distinct
 from the existing per-paper Notes tab (backed by the `notes` table,
@@ -3599,41 +3598,43 @@ shipped as a pure client change reusing infrastructure that was
 already there — search, tags, collections all work on standalone
 notes for free since they're just library_items rows.
 
-  [X] scripts/library-page.js: "note" added to ITEM_TYPES + a new SVG
-      icon in TYPE_ICON_MAP. New "New note" toolbar button (library.html)
-      → prompts for a title → POST /api/library (bare id/title, no doi)
-      → PATCH item_type:"note" → opens it in the inspector.
-  [X] New renderNoteInspector(host, item) — standalone notes get a much
-      simpler dedicated inspector (title + one big textarea + Save/
-      Delete) instead of the full paper-metadata view; returns early
-      from renderInspector() before it would otherwise try to refresh
-      the item against OpenAlex (pointless and wasteful for something
-      with no DOI).
-  [X] Notes excluded from citation export: selectedItems() (feeds the
-      bulk Copy citations/BibTeX/RIS buttons) and the whole-library
-      .bib export both filter out item_type==='note' — a note has
-      nothing to cite. Single-item export buttons don't need a guard;
-      they're part of the normal paper inspector, which notes never
-      render in the first place.
-  Verified live end-to-end against the REAL server with a REAL signed
-  session (not mocked) — fabricated a genuine sid cookie the same way
-  cookie-parser signs one (same SESSION_SECRET, cookie-signature
-  package) against a temporary test user/session row, so every request
-  went through actual auth + CSRF middleware, not a bypass. Confirmed
-  via curl: POST creates the item, PATCH sets item_type/notes_raw
-  correctly, GET /api/library lists it, DELETE removes it — full round
-  trip at the API level. Then confirmed the same flow through the real
-  browser UI (Playwright with that session cookie injected): New note
-  button → prompt → note inspector renders with correct "Note" badge,
-  editable body, table row shows the new note icon; typed real text,
-  clicked Save, confirmed "Saved." and a real PATCH request; clicked
-  Delete, confirmed the real DELETE request and "Note deleted." All
-  test data (session/user/items) cleaned up from the database after.
+[X] scripts/library-page.js: "note" added to ITEM_TYPES + a new SVG
+icon in TYPE_ICON_MAP. New "New note" toolbar button (library.html)
+→ prompts for a title → POST /api/library (bare id/title, no doi)
+→ PATCH item_type:"note" → opens it in the inspector.
+[X] New renderNoteInspector(host, item) — standalone notes get a much
+simpler dedicated inspector (title + one big textarea + Save/
+Delete) instead of the full paper-metadata view; returns early
+from renderInspector() before it would otherwise try to refresh
+the item against OpenAlex (pointless and wasteful for something
+with no DOI).
+[X] Notes excluded from citation export: selectedItems() (feeds the
+bulk Copy citations/BibTeX/RIS buttons) and the whole-library
+.bib export both filter out item_type==='note' — a note has
+nothing to cite. Single-item export buttons don't need a guard;
+they're part of the normal paper inspector, which notes never
+render in the first place.
+Verified live end-to-end against the REAL server with a REAL signed
+session (not mocked) — fabricated a genuine sid cookie the same way
+cookie-parser signs one (same SESSION_SECRET, cookie-signature
+package) against a temporary test user/session row, so every request
+went through actual auth + CSRF middleware, not a bypass. Confirmed
+via curl: POST creates the item, PATCH sets item_type/notes_raw
+correctly, GET /api/library lists it, DELETE removes it — full round
+trip at the API level. Then confirmed the same flow through the real
+browser UI (Playwright with that session cookie injected): New note
+button → prompt → note inspector renders with correct "Note" badge,
+editable body, table row shows the new note icon; typed real text,
+clicked Save, confirmed "Saved." and a real PATCH request; clicked
+Delete, confirmed the real DELETE request and "Note deleted." All
+test data (session/user/items) cleaned up from the database after.
 
--------------------------------------------------------
+---
+
 BUILT (2026-08-22) — real, citeproc-rendered citation styles (fourth
 item from the Zotero-parity roadmap)
--------------------------------------------------------
+
+---
 
 Replaces the 14 hand-written per-style template functions across
 scripts/components.js and scripts/library-page.js's Cite popover rows
@@ -3656,208 +3657,202 @@ plain text. Server-side also made the "any of 9000 styles" feature
 trivial (fetch once, cache, done) instead of needing an in-browser CSL
 style loader.
 
-  [X] Verified the whole pipeline end-to-end BEFORE writing any server
-      code: citeproc + a real downloaded APA style + a real locale file
-      + the real Crossref CSL-JSON for the mangrove paper correctly
-      rendered "van Bijsterveldt, C. E. J." — "van" kept as part of the
-      surname, the exact case our own splitName()-based generator gets
-      wrong.
-  [X] Bundled 7 styles (apa, mla, chicago-author-date, harvard-cite-
-      them-right, vancouver, ieee, nature) + the en-US locale as static
-      assets under assets/csl/ — sourced from citation-style-language/
-      styles-distribution (the same repo Zotero's own style picker
-      indexes, confirmed by each style's self-link pointing at
-      zotero.org/styles/<id>). Note: "vancouver.csl" doesn't exist as a
-      standalone file in the plain citation-style-language/styles repo
-      (only publisher-specific variants like elsevier-vancouver.csl) —
-      had to switch to styles-distribution, which merges in the
-      dependent styles too, to get the real generic Vancouver style.
-  [X] routes/paper.js: new GET /api/paper/cite?doi=...&style=apa|mla|
-      chicago|harvard|vancouver|ieee|nature|<zotero.org/styles/... or
-      raw .csl URL>. Fetches CSL-JSON via Crossref content negotiation
-      (same mechanism as the BibTeX endpoint, different Accept-
-      equivalent media type), loads the style (bundled file from disk,
-      or fetches+caches an arbitrary URL), runs citeproc, strips the
-      HTML citeproc returns down to plain text (the existing Cite
-      popover rows render every format as escaped plain text — an
-      italicized venue name would otherwise show up as literal
-      "<i>...</i>" — a deliberate simplification, not an oversight).
-      30-day cache keyed by doi+style, matching the BibTeX endpoint.
-  [X] BUG CAUGHT while testing the custom-style-URL path: fetching
-      zotero.org/styles/<id> with an explicit Accept header
-      ("application/vnd.citationstyles.style+xml, text/xml") got a 406
-      from their server every time, while curl (which sends
-      Accept: */*) succeeded instantly. Fixed by dropping the custom
-      Accept header entirely — not needed since the URL itself is
-      already style-specific, content negotiation on top of that was
-      never doing anything useful.
-  [X] scripts/components.js: new fetchCslCitation(doi, style), exported
-      via SE.components. buildCitePopover()'s APA/MLA/Chicago/Harvard/
-      Vancouver rows now carry a data-format attribute; the same
-      microtask that upgrades BibTeX (built earlier this week) now also
-      fires one fetch per style and swaps in the real citeproc text in
-      place once each lands — same progressive-enhancement pattern,
-      local hand-rolled version renders instantly, real version
-      replaces it a moment later. Copy/Copy All already read from each
-      row's data-cite-text attribute at click time, so they pick up the
-      upgrade automatically.
-  [X] New "Any other citation style" row in the popover (only shown
-      when the paper has a DOI) — paste a zotero.org/styles/<id> or raw
-      .csl URL, click Go, get a real citeproc-rendered result in that
-      exact style. Wired as a genuine .cite-row (same Copy button,
-      same data-cite-text attribute) so it participates correctly in
-      Copy All once a style has actually been applied — starts with an
-      empty data-cite-text so an unfilled custom-style row is correctly
-      excluded from Copy All until used.
-  [X] Deliberately NOT wired into scripts/library-page.js's bulk
-      bibliography panel this pass (CITE_FMT_MAP/buildBibliography) —
-      that path is synchronous today and feeds instant clipboard copy
-      for potentially many selected items at once; upgrading it needs a
-      real batching/performance decision (N parallel requests for a
-      50-item selection) that's out of scope for this change. Flagged
-      as a follow-up, not done.
-  [X] about.html's existing "Cite anywhere" Quarto/Pandoc/CSL section
-      needs no changes — it's for full-manuscript writing (a different
-      use case from copying one citation in-app) and already tells
-      users to pull styles from zotero.org/styles, which is the exact
-      same source this feature uses.
-  Verified live end-to-end against the real dev server: curled the new
-  endpoint directly across all 7 bundled styles against the real
-  mangrove-paper DOI — all correct, professional-quality output,
-  correct "et al." truncation per style's own rules (something none of
-  the hand-rolled formatters did). Verified the arbitrary-URL path
-  against two real external styles (Cell, PLOS) fetched live from
-  zotero.org and raw.githubusercontent.com. Verified cache timing
-  (repeat request ~1s → ~20ms). Full real-browser test of the Cite
-  popover: local citation renders instantly, upgrades in place to the
-  real citeproc version ~seconds later (confirmed Vancouver specifically
-  differs from the local version — real "et al." truncation, [Internet]
-  tag, numbered prefix — proving it's genuinely using citeproc's output,
-  not coincidentally identical), confirmed data-cite-text updates so
-  Copy/Copy All pick up the real version, confirmed the custom-style
-  input/Go button/result flow works end-to-end through the real UI, and
-  no console errors on any of it.
+[X] Verified the whole pipeline end-to-end BEFORE writing any server
+code: citeproc + a real downloaded APA style + a real locale file + the real Crossref CSL-JSON for the mangrove paper correctly
+rendered "van Bijsterveldt, C. E. J." — "van" kept as part of the
+surname, the exact case our own splitName()-based generator gets
+wrong.
+[X] Bundled 7 styles (apa, mla, chicago-author-date, harvard-cite-
+them-right, vancouver, ieee, nature) + the en-US locale as static
+assets under assets/csl/ — sourced from citation-style-language/
+styles-distribution (the same repo Zotero's own style picker
+indexes, confirmed by each style's self-link pointing at
+zotero.org/styles/<id>). Note: "vancouver.csl" doesn't exist as a
+standalone file in the plain citation-style-language/styles repo
+(only publisher-specific variants like elsevier-vancouver.csl) —
+had to switch to styles-distribution, which merges in the
+dependent styles too, to get the real generic Vancouver style.
+[X] routes/paper.js: new GET /api/paper/cite?doi=...&style=apa|mla|
+chicago|harvard|vancouver|ieee|nature|<zotero.org/styles/... or
+raw .csl URL>. Fetches CSL-JSON via Crossref content negotiation
+(same mechanism as the BibTeX endpoint, different Accept-
+equivalent media type), loads the style (bundled file from disk,
+or fetches+caches an arbitrary URL), runs citeproc, strips the
+HTML citeproc returns down to plain text (the existing Cite
+popover rows render every format as escaped plain text — an
+italicized venue name would otherwise show up as literal
+"<i>...</i>" — a deliberate simplification, not an oversight).
+30-day cache keyed by doi+style, matching the BibTeX endpoint.
+[X] BUG CAUGHT while testing the custom-style-URL path: fetching
+zotero.org/styles/<id> with an explicit Accept header
+("application/vnd.citationstyles.style+xml, text/xml") got a 406
+from their server every time, while curl (which sends
+Accept: _/_) succeeded instantly. Fixed by dropping the custom
+Accept header entirely — not needed since the URL itself is
+already style-specific, content negotiation on top of that was
+never doing anything useful.
+[X] scripts/components.js: new fetchCslCitation(doi, style), exported
+via SE.components. buildCitePopover()'s APA/MLA/Chicago/Harvard/
+Vancouver rows now carry a data-format attribute; the same
+microtask that upgrades BibTeX (built earlier this week) now also
+fires one fetch per style and swaps in the real citeproc text in
+place once each lands — same progressive-enhancement pattern,
+local hand-rolled version renders instantly, real version
+replaces it a moment later. Copy/Copy All already read from each
+row's data-cite-text attribute at click time, so they pick up the
+upgrade automatically.
+[X] New "Any other citation style" row in the popover (only shown
+when the paper has a DOI) — paste a zotero.org/styles/<id> or raw
+.csl URL, click Go, get a real citeproc-rendered result in that
+exact style. Wired as a genuine .cite-row (same Copy button,
+same data-cite-text attribute) so it participates correctly in
+Copy All once a style has actually been applied — starts with an
+empty data-cite-text so an unfilled custom-style row is correctly
+excluded from Copy All until used.
+[X] Deliberately NOT wired into scripts/library-page.js's bulk
+bibliography panel this pass (CITE_FMT_MAP/buildBibliography) —
+that path is synchronous today and feeds instant clipboard copy
+for potentially many selected items at once; upgrading it needs a
+real batching/performance decision (N parallel requests for a
+50-item selection) that's out of scope for this change. Flagged
+as a follow-up, not done.
+[X] about.html's existing "Cite anywhere" Quarto/Pandoc/CSL section
+needs no changes — it's for full-manuscript writing (a different
+use case from copying one citation in-app) and already tells
+users to pull styles from zotero.org/styles, which is the exact
+same source this feature uses.
+Verified live end-to-end against the real dev server: curled the new
+endpoint directly across all 7 bundled styles against the real
+mangrove-paper DOI — all correct, professional-quality output,
+correct "et al." truncation per style's own rules (something none of
+the hand-rolled formatters did). Verified the arbitrary-URL path
+against two real external styles (Cell, PLOS) fetched live from
+zotero.org and raw.githubusercontent.com. Verified cache timing
+(repeat request ~1s → ~20ms). Full real-browser test of the Cite
+popover: local citation renders instantly, upgrades in place to the
+real citeproc version ~seconds later (confirmed Vancouver specifically
+differs from the local version — real "et al." truncation, [Internet]
+tag, numbered prefix — proving it's genuinely using citeproc's output,
+not coincidentally identical), confirmed data-cite-text updates so
+Copy/Copy All pick up the real version, confirmed the custom-style
+input/Go button/result flow works end-to-end through the real UI, and
+no console errors on any of it.
 
--------------------------------------------------------
+---
+
 BUILT (2026-08-22) — real shared/group libraries (fifth and final item
 from the Zotero-parity roadmap)
--------------------------------------------------------
+
+---
 
 SCOPE FOUND BIGGER THAN PLANNED, checked with Olivier before writing
 any code: collection_items was only ever readable by joining against
 the ADDER's own library_items row (`ON ci.orcid = li.orcid` in
 /api/library/full) — so a membership/ACL table alone (the original
-plan) would have let a collaborator see a shared collection *exists*
+plan) would have let a collaborator see a shared collection _exists_
 but not the actual papers in it, since those lived only in the owner's
 private library. Confirmed real Zotero groups don't work that way — a
 shared library is a genuinely shared pool, not each member's personal
 copy. Given the choice of (a) build it properly, (b) ship a visibly-
 lesser trimmed version, or (c) defer entirely — chose (a).
 
-  [X] server/index.js schema: collection_items denormalized with its
-      own title/doi/year/venue/authors/openalex_id/added_by columns —
-      any member can now see full item details regardless of who added
-      it, no join to the adder's library_items needed. New
-      collection_members (collection_id, orcid, role, accepted_at) and
-      collection_invites (token, collection_id, role, expires_at)
-      tables. New UNIQUE(collection_id, paper_id) constraint (added via
-      an idempotent DO-block, since ALTER TABLE ADD CONSTRAINT has no
-      native IF NOT EXISTS) — safe to add since collections have only
-      ever been single-user until now, so no existing row could
-      violate it; needed so the same paper can't appear twice because
-      two different members added it independently.
-  [X] New collectionRole(orcid, collectionId) helper — 'owner' (the
-      collections.orcid row) | 'editor' | 'viewer' (accepted
-      collection_members row) | null. Every collection route now goes
-      through this instead of a bare WHERE orcid=$1 check.
-  [X] GET /api/collections extended to also return collections shared
-      with me (accepted membership only — a pending invite doesn't
-      grant visibility), each tagged with role + owner_orcid.
-  [X] POST/DELETE /api/collections/:id/items now require role owner or
-      editor (not just orcid-ownership), and DELETE is no longer
-      scoped to the caller's own orcid — an editor can remove an item
-      any member added, since it's a shared pool now. POST backfills
-      title/doi/etc. from the caller's own library_items when the
-      client didn't send them (covers "add from my library" call sites
-      with zero client changes, and also became the fix for a bug
-      caught below).
-  [X] New GET /api/collections/:id/items — the real shared-pool read,
-      independent of the caller's own library. New POST /api/
-      collections/:id/invite (owner-only, generates a signed token, 30-
-      day expiry), POST /api/collections/accept-invite (any
-      authenticated user), GET/DELETE /api/collections/:id/members
-      (owner-only).
-  [X] DELIBERATE SCOPE DECISION: renaming/deleting/moving the
-      collection itself (PATCH/DELETE /api/collections/:id) stays
-      owner-only — editors can contribute items to a shared collection
-      but shouldn't be able to restructure or delete the container
-      other members depend on. Matches how most sharing tools scope
-      "editor" to content, not container management.
-  [X] DELIBERATE SCOPE DECISION: invite links, not email. Owner
-      generates a shareable link with a signed token, shares it
-      however they want. Avoids adding an email-service dependency/
-      cost and matches the "minimal collection of personal data, no
-      tracking" principle in business_plan/technical.tex.
-  [X] scripts/library-page.js + library.html: new Share dialog (role
-      picker, generate/copy invite link, live member list with
-      Remove), new shared-items browsing dialog (denormalized item
-      list, Add-by-DOI row shown only for owner/editor, Remove per
-      item), a "shared" badge in the collections tree, and a ?join=
-      token auto-accept flow on page load. buildMenuForCollection()
-      now hides rename/move/trash/new-subcollection for anyone who
-      isn't the owner — the server already blocks these, this just
-      stops the menu offering actions that would 403/404 anyway.
-      Clicking a collection shared WITH me opens the real shared-items
-      view directly (my personal-library-filtered table would show
-      nothing useful for a collection I don't own); clicking my OWN
-      collection keeps the existing personal-library behavior
-      unchanged — "Browse shared items" in the kebab menu is how an
-      owner sees the full multi-contributor pool.
-  [X] BUG CAUGHT while verifying the real add-item flow with a real
-      duplicate DOI: /api/library/add-by-doi returns
-      {duplicate:true, existing_id} with NO item object when the DOI
-      is already in the caller's own library — a real, common response
-      shape, not an edge case. The shared-add handler's fallback used
-      the raw pasted DOI string as both id AND title, producing a
-      garbage row (title showing a literal DOI). Fixed by sending just
-      the resolved id in that case and letting the server's own
-      backfill-from-library_items logic (built for exactly this) fill
-      in the real title/authors/year/venue.
-  Verified live end-to-end with THREE real users and real sessions
-  (fabricated genuine signed sid cookies for each, same as the notes/
-  peer-review verification earlier this session) — not mocked, every
-  request went through actual auth + CSRF middleware:
-    - Owner A creates a collection, adds an item, creates an editor
-      invite link — confirmed via curl.
-    - Editor B accepts the invite, adds a second item — confirmed both
-      items visible to BOTH A and B via GET .../items (the actual
-      point of this feature: a genuinely shared pool).
-    - Outsider C with no access gets 404 on the items endpoint
-      (doesn't leak that the collection exists).
-    - Editor B correctly blocked (403) from renaming the collection;
-      correctly ALLOWED to delete an item A added (shared pool, not
-      per-adder scoping).
-    - Viewer role (C, via a separate viewer invite) can read items
-      (200) but is blocked (403, clear message) from adding one.
-    - Owner removes member B from the collection — confirmed B's
-      access is immediately revoked (404 on next request), not just
-      hidden client-side.
-    - Bogus/expired invite token correctly rejected (404).
-  Then verified the real browser UI, two separate real Playwright
-  contexts with real signed sessions (not the same page/tab): owner A
-  opens the Share dialog, picks Editor role, generates a real invite
-  link; editor B visits that exact URL, auto-joins (confirmed via the
-  "shared" badge appearing and the join token being stripped from the
-  URL after use), adds a real paper by DOI through the shared-items
-  dialog; owner A (separate browser context, kebab menu → "Browse
-  shared items") sees B's addition rendered correctly with real title/
-  authors/year/venue — confirming the cross-user round trip actually
-  works through the UI, not just the API. All test data (3 users,
-  sessions, collections, items) cleaned up from the database after.
-  KNOWN GAP, documented not fixed: no "leave a shared collection"
-  action for members yet (owner can remove a member via the Share
-  dialog; a member can't remove themselves) — small, flagged as a
-  follow-up rather than silently missing.
+[X] server/index.js schema: collection_items denormalized with its
+own title/doi/year/venue/authors/openalex_id/added_by columns —
+any member can now see full item details regardless of who added
+it, no join to the adder's library_items needed. New
+collection_members (collection_id, orcid, role, accepted_at) and
+collection_invites (token, collection_id, role, expires_at)
+tables. New UNIQUE(collection_id, paper_id) constraint (added via
+an idempotent DO-block, since ALTER TABLE ADD CONSTRAINT has no
+native IF NOT EXISTS) — safe to add since collections have only
+ever been single-user until now, so no existing row could
+violate it; needed so the same paper can't appear twice because
+two different members added it independently.
+[X] New collectionRole(orcid, collectionId) helper — 'owner' (the
+collections.orcid row) | 'editor' | 'viewer' (accepted
+collection_members row) | null. Every collection route now goes
+through this instead of a bare WHERE orcid=$1 check.
+[X] GET /api/collections extended to also return collections shared
+with me (accepted membership only — a pending invite doesn't
+grant visibility), each tagged with role + owner_orcid.
+[X] POST/DELETE /api/collections/:id/items now require role owner or
+editor (not just orcid-ownership), and DELETE is no longer
+scoped to the caller's own orcid — an editor can remove an item
+any member added, since it's a shared pool now. POST backfills
+title/doi/etc. from the caller's own library_items when the
+client didn't send them (covers "add from my library" call sites
+with zero client changes, and also became the fix for a bug
+caught below).
+[X] New GET /api/collections/:id/items — the real shared-pool read,
+independent of the caller's own library. New POST /api/
+collections/:id/invite (owner-only, generates a signed token, 30-
+day expiry), POST /api/collections/accept-invite (any
+authenticated user), GET/DELETE /api/collections/:id/members
+(owner-only).
+[X] DELIBERATE SCOPE DECISION: renaming/deleting/moving the
+collection itself (PATCH/DELETE /api/collections/:id) stays
+owner-only — editors can contribute items to a shared collection
+but shouldn't be able to restructure or delete the container
+other members depend on. Matches how most sharing tools scope
+"editor" to content, not container management.
+[X] DELIBERATE SCOPE DECISION: invite links, not email. Owner
+generates a shareable link with a signed token, shares it
+however they want. Avoids adding an email-service dependency/
+cost and matches the "minimal collection of personal data, no
+tracking" principle in business_plan/technical.tex.
+[X] scripts/library-page.js + library.html: new Share dialog (role
+picker, generate/copy invite link, live member list with
+Remove), new shared-items browsing dialog (denormalized item
+list, Add-by-DOI row shown only for owner/editor, Remove per
+item), a "shared" badge in the collections tree, and a ?join=
+token auto-accept flow on page load. buildMenuForCollection()
+now hides rename/move/trash/new-subcollection for anyone who
+isn't the owner — the server already blocks these, this just
+stops the menu offering actions that would 403/404 anyway.
+Clicking a collection shared WITH me opens the real shared-items
+view directly (my personal-library-filtered table would show
+nothing useful for a collection I don't own); clicking my OWN
+collection keeps the existing personal-library behavior
+unchanged — "Browse shared items" in the kebab menu is how an
+owner sees the full multi-contributor pool.
+[X] BUG CAUGHT while verifying the real add-item flow with a real
+duplicate DOI: /api/library/add-by-doi returns
+{duplicate:true, existing_id} with NO item object when the DOI
+is already in the caller's own library — a real, common response
+shape, not an edge case. The shared-add handler's fallback used
+the raw pasted DOI string as both id AND title, producing a
+garbage row (title showing a literal DOI). Fixed by sending just
+the resolved id in that case and letting the server's own
+backfill-from-library_items logic (built for exactly this) fill
+in the real title/authors/year/venue.
+Verified live end-to-end with THREE real users and real sessions
+(fabricated genuine signed sid cookies for each, same as the notes/
+peer-review verification earlier this session) — not mocked, every
+request went through actual auth + CSRF middleware: - Owner A creates a collection, adds an item, creates an editor
+invite link — confirmed via curl. - Editor B accepts the invite, adds a second item — confirmed both
+items visible to BOTH A and B via GET .../items (the actual
+point of this feature: a genuinely shared pool). - Outsider C with no access gets 404 on the items endpoint
+(doesn't leak that the collection exists). - Editor B correctly blocked (403) from renaming the collection;
+correctly ALLOWED to delete an item A added (shared pool, not
+per-adder scoping). - Viewer role (C, via a separate viewer invite) can read items
+(200) but is blocked (403, clear message) from adding one. - Owner removes member B from the collection — confirmed B's
+access is immediately revoked (404 on next request), not just
+hidden client-side. - Bogus/expired invite token correctly rejected (404).
+Then verified the real browser UI, two separate real Playwright
+contexts with real signed sessions (not the same page/tab): owner A
+opens the Share dialog, picks Editor role, generates a real invite
+link; editor B visits that exact URL, auto-joins (confirmed via the
+"shared" badge appearing and the join token being stripped from the
+URL after use), adds a real paper by DOI through the shared-items
+dialog; owner A (separate browser context, kebab menu → "Browse
+shared items") sees B's addition rendered correctly with real title/
+authors/year/venue — confirming the cross-user round trip actually
+works through the UI, not just the API. All test data (3 users,
+sessions, collections, items) cleaned up from the database after.
+KNOWN GAP, documented not fixed: no "leave a shared collection"
+action for members yet (owner can remove a member via the Share
+dialog; a member can't remove themselves) — small, flagged as a
+follow-up rather than silently missing.
 
 This closes the Zotero-parity roadmap opened earlier this session: all
 5 in-scope gaps (journal following, full-text PDF search, standalone
@@ -3984,8 +3979,9 @@ artifacts alone returns only this paper's Zenodo entry, never the
 GitHub repo, even when passed the same title/authors query params this
 code sends. Fixed by adding the same /api/paper/links fallback when the
 artifacts call finds no GitHub hit. Verified live via local dev server
-+ Playwright: button now appears with the correct living-paper.html
-href.
+
+- Playwright: button now appears with the correct living-paper.html
+  href.
 
 Worth flagging as tech debt, not fixed here: this is genuinely
 duplicated logic across two files (paper.js and pdf-reader.js) that
@@ -4142,6 +4138,7 @@ locking in null stats
 User pinned 3 curated journals (eLife, Cell, EMBO Journal) and every
 numeric column showed "—", with no JTI column at all. Two real bugs,
 not one:
+
 1. Never added a JTI column to the compare table to begin with.
 2. For curated (hand-picked static list) cards specifically — not live
    OpenAlex search-result cards — the real Works/h-index numbers only
@@ -4180,6 +4177,7 @@ export. User chose (via AskUserQuestion) to build around that: import
 the annual export manually rather than fake a live integration.
 
 Built:
+
 - journal_scimago_rankings table (server/index.js) — one row per ISSN
   (a journal's print/online ISSNs both point at the same ranking row).
 - scripts/import-scimago-rankings.js — one-off importer, run by hand
@@ -4299,7 +4297,7 @@ would have used, so the next request benefits regardless of which pool
 actually served it.
 
 Verified live via local dev server + Playwright: zero direct
-api.openalex.org requests, zero 429s on /api/openalex/*, zero stuck
+api.openalex.org requests, zero 429s on /api/openalex/\*, zero stuck
 "JTI…" badges after a full curated-view page load.
 
 2026-09-02 — search.html: invalid query syntax silently looked like
@@ -4335,7 +4333,7 @@ captures it (lastPaperSearchError); renderPapers() shows "⚠ Search
 couldn't run as written: <real reason>" instead of the generic empty
 state whenever that happened. Verified live with the user's exact
 original query: confirmed the real OpenAlex error text now renders
-("Wildcards (* or ?) do not work inside this quoted phrase...") instead
+("Wildcards (\* or ?) do not work inside this quoted phrase...") instead
 of the old silent "No papers found."
 
 2026-09-02 — search.html: pasting a real paper's exact title returned
@@ -4353,15 +4351,15 @@ quotes bug did.
 
 Unlike the earlier boolean-syntax case, this one isn't really a "user
 mistake" worth just explaining — pasting a paper's real title to find
-it is about as legitimate as search gets, and stripping a stray ?/* is
+it is about as legitimate as search gets, and stripping a stray ?/_ is
 an unambiguous, safe recovery (confirmed: the sanitized title returns
 the exact paper as the #1 relevance-ranked result). So this gets a
 better fix than the error-surfacing one above: fetchPapers() now
-retries once, automatically, with ? and * stripped, ONLY when OpenAlex's
+retries once, automatically, with ? and _ stripped, ONLY when OpenAlex's
 error message specifically says "wildcard" (never applied up front, so
 someone intentionally using real wildcard syntax like `model*` outside
 quotes is untouched). On a successful recovery, shows a transparent ℹ
-note ("Searched for "..." — ? and * are treated as wildcard characters
+note ("Searched for "..." — ? and \* are treated as wildcard characters
 ...") rather than silently rewriting what the user asked for. The
 secondary title-match query was also switched to use the same
 recovered search string for consistency.
@@ -4381,12 +4379,12 @@ specifically — chose the properly-built version over just keeping the
 existing strip-and-notify behavior (which already handled the "trailing
 ? in a real title" case fine, but not real wildcard matching).
 
-Approach: OpenAlex still gets the query with * and ? stripped (existing
+Approach: OpenAlex still gets the query with _ and ? stripped (existing
 fallback), for broad, stemmed candidate retrieval — its own engine
 still resolves the query's AND/OR/quote structure for everything except
 the wildcard itself. New: extractWildcardPatterns() pulls every quoted
 phrase and bare word from the ORIGINAL query that contains a wildcard,
-builds a real regex per pattern (* → any word chars, ? → one word char),
+builds a real regex per pattern (_ → any word chars, ? → one word char),
 and matchesAnyWildcardPattern() filters OpenAlex's candidate set down to
 ones whose title+abstract text (abstractTextFrom(), reconstructed from
 abstract_inverted_index) actually satisfy at least one pattern. Real
@@ -4398,11 +4396,12 @@ full corpus.
 
 Two real bugs caught by live verification before shipping, not by
 inspection:
+
 1. A trailing `?` (the exact "Meltdown?" title case from the previous
    fix) would have been treated as "one more word character required,"
    breaking the very case just fixed. Trailing ? is now dropped as
    literal punctuation rather than converted to a wildcard requirement
-   — mid-word ? and any * are still treated as real wildcards.
+   — mid-word ? and any \* are still treated as real wildcards.
 2. First shipped version required EVERY extracted wildcard pattern to
    match (AND) — wrong when patterns are OR'd together in the actual
    query, which collapsed the user's own original query (two wildcarded
@@ -4414,8 +4413,8 @@ inspection:
 
 Also fixed a small unrelated bug the same verification pass surfaced:
 the secondary title-search query's select= list still requested the
-long-deprecated host_venue field, which OpenAlex now 400s on — silently
-swallowed by that query's own catch(_) {}, meaning that whole secondary
+long-deprecated host*venue field, which OpenAlex now 400s on — silently
+swallowed by that query's own catch(*) {}, meaning that whole secondary
 lookup had probably been dead for a while. Removed it; primary_location
 (already requested) is the current field.
 
@@ -4600,10 +4599,10 @@ resolveApiToken(), the same shape as getSession() returning null for
 "no valid credential," so downstream logic doesn't need to know which
 auth path was used.
 
-7 read-only tools shipped: se_search_papers, se_get_paper, se_cite
+7 read-only tools shipped: se*search_papers, se_get_paper, se_cite
 (loops back through this server's own /api/paper/cite rather than
-duplicating the citeproc logic), se_library_list, se_library_search_
-fulltext (real PDF full-text search, not just metadata), se_collections_
+duplicating the citeproc logic), se_library_list, se_library_search*
+fulltext (real PDF full-text search, not just metadata), se*collections*
 list, se_profile_get. scope is hardcoded to 'read' at token creation —
 no write-capable token type exists yet, by design.
 
@@ -4692,7 +4691,7 @@ new capability.
 2026-09-05 — se_library_list: collection_id filter
 
 Second real-world gap from the same live usage: the connected Claude
-Code session needed to know exactly what's in the "Invasion_meltdown_
+Code session needed to know exactly what's in the "Invasion*meltdown*
 model" folder specifically, but no tool exposed per-item collection
 membership — the only option was grepping the whole library for author
 names/keywords as a proxy, explicitly flagged by that session itself as
@@ -4708,7 +4707,7 @@ agent naturally chains "look up the folder's id" → "list exactly what's
 in it" instead of reaching for a keyword-search workaround.
 
 Verified live against the real account and the actual folder in
-question: se_collections_list correctly resolved "Invasion_meltdown_
+question: se*collections_list correctly resolved "Invasion_meltdown*
 model" to id 12481, and se_library_list with that collection_id
 returned the real, exact 22 items filed there — including "Positive
 Interactions of Nonindigenous Species: Invasional Meltdown?", the same
@@ -4743,10 +4742,10 @@ offered rather than one.
    scale/integrity formula, hand-ported from scripts/components.js's
    computeJournalTrustIndex since that file is browser-only — kept
    deliberately identical, not reimplemented differently), Scimago SJR
-   + quartile from the imported dataset, and the existing predatory-
-   publisher/DOAJ integrity check (checkJournalIntegrity, already used
-   by journal.html) — combined into one structured answer instead of
-   three separate lookups.
+   - quartile from the imported dataset, and the existing predatory-
+     publisher/DOAJ integrity check (checkJournalIntegrity, already used
+     by journal.html) — combined into one structured answer instead of
+     three separate lookups.
 
 Verified live end-to-end against the real account, including the
 riskiest part (an actual write): confirmed a read-scoped token's
@@ -4809,11 +4808,11 @@ rejected it ("Enter a DOI…") and the extension said "No paper detected".
 Zotero saves any page as a generic item, so we now do too.
 
 Server (server/index.js): new POST /api/library/add-web {url, title?, authors?,
-site?, year?, description?, collectionId?}. Creates a library_items row with
+site?, year?, description?, collectionId?}. Creates a library*items row with
 item_type 'webpage', id url:<sha1 of normalized URL>, venue = site name, and
 extra_fields {url, accessed}. Client-supplied fields (the extension reads the
 live page) win; with no title the server fetches the page and reads
-citation_*/og:*/<title> meta. Duplicates (same URL sans #fragment) return
+citation*_/og:_/<title> meta. Duplicates (same URL sans #fragment) return
 {duplicate:true}. Requires auth + CSRF like every other write.
 SSRF guard: the fetch uses http/https agents with a custom DNS lookup that
 rejects loopback/private/link-local/metadata addresses, IP-literal hosts are
@@ -4899,7 +4898,7 @@ folder is open.
 
 Client (scripts/library-page.js): activeRealCollectionId() returns
 currentCollectionId only when it's a real folder id (not null/"All Items"
-or the special __duplicates__/__trash__ views), passed through by
+or the special **duplicates**/**trash** views), passed through by
 handleAddByDoi and handlePdfUpload. New items get collection_ids set
 locally so they show up in the open folder immediately, no extra
 round-trip; a duplicate-add refreshes from the server since the existing
@@ -4964,29 +4963,30 @@ backed by our own info instead of linking out to Scholar.
 
 Found dead code already shaped for exactly this: scripts/pdf-reader.js had
 an unused showReferencePopup()/closeReferencePopup() pair (centered modal
-+ backdrop, title/authors/year/DOI link only) that nothing ever called —
-citation clicks only ever scrolled/highlighted the Refs sidebar entry
-(handleReferenceClick()). Replaced it with a real anchored popup:
 
-- openCitationInfoPopup(refNum, anchorEl) — both citation click handlers
+- backdrop, title/authors/year/DOI link only) that nothing ever called —
+  citation clicks only ever scrolled/highlighted the Refs sidebar entry
+  (handleReferenceClick()). Replaced it with a real anchored popup:
+
+* openCitationInfoPopup(refNum, anchorEl) — both citation click handlers
   (the delegated .citation-highlight listener and the inline-PDF-link
   variant, wireInlineCitationLink) now open this instead of jumping
   straight to the sidebar. Positioned next to the clicked citation
   (clamped to the viewport), not centered/backdrop-blocking — you can
   keep reading around it.
-- Shows title, authors, year, abstract snippet (with "Show more"), and
+* Shows title, authors, year, abstract snippet (with "Show more"), and
   "Cited by N" immediately from whatever's already known locally
   (PDF-extracted references have title/authors/year/DOI but never an
   abstract or citation count; the OpenAlex-fallback reference list has
   those too but was never fetching abstract_inverted_index/
   cited_by_count — its existing select= list was id/title/authorships/
   publication_year/doi/open_access only).
-- _resolveCitationInfoFull() lazily fetches the missing fields (by DOI
+* \_resolveCitationInfoFull() lazily fetches the missing fields (by DOI
   first, else a title search) through the existing /api/openalex proxy,
   and fills the popup in place once it lands — cached per reference
   number for the rest of the page view so reopening the same citation
   doesn't refetch.
-- Actions: "+ Save" (POST /api/library — works for both DOI-based and
+* Actions: "+ Save" (POST /api/library — works for both DOI-based and
   OpenAlex-id-based refs, same shape the rest of the site uses; CSRF
   handled automatically by session.js's patched fetch, already loaded on
   this page), "Open paper page →" (once an OpenAlex id or DOI is known),
@@ -4994,7 +4994,7 @@ citation clicks only ever scrolled/highlighted the Refs sidebar entry
   the sidebar entry), and a close (×). Dismissed by outside click,
   Escape (already wired to closeReferencePopup() from elsewhere in the
   file), or the × button.
-- New #citationInfoPopup CSS in style.css (position:fixed, anchored
+* New #citationInfoPopup CSS in style.css (position:fixed, anchored
   card, not the old full-screen centered/backdrop style).
 
 Also fixed, found while restarting the dev server for this: the
@@ -5101,6 +5101,7 @@ from the extraction path.
 
 Fixed all three, so both DOM layers agree on what a "known citation"
 is:
+
 - buildAuthorYearMap() now builds from extractedReferences when present
   (preferred — matches the PDF's own numbering) instead of only
   openAlexRefsList, and is now called after PDF extraction succeeds
@@ -5224,7 +5225,7 @@ computes and applies a real scale, and the current page is preserved
 across the zoom change; a real text selection → Highlight produced a
 real highlight AND a real Notes-tab entry with the actual quoted text,
 clicking it jumps+flashes with no errors, Export downloads a real
-Markdown file; Download PDF triggers a real file download; the ← → 
+Markdown file; Download PDF triggers a real file download; the ← →
 keyboard shortcut advances pages. Screenshots confirm the layout — page-
 jump footer, zoom menu, Notes tab, Download button — all sit where
 intended with no overlap or crowding of the toolbar.
@@ -5235,6 +5236,7 @@ User screenshot: distribution map points visible after the earlier land-
 background/z-index fix, but small and still hard to see even zoomed in.
 
 Two separate layers, both improved:
+
 - GBIF's own density-tile heatmap (external, we don't control its pixel
   content) — switched from @2x to @4x resolution tiles and opacity 0.85
   to 1. Verified directly: GBIF genuinely returns a larger, denser image
@@ -5320,7 +5322,6 @@ annotation controls
    together ("instead of the big box... just the small arrow", "we have
    it a bit double — highlight, note, and when selecting text see it
    again", "highlight... going over the line"):
-
    - Panel toggle: was a full green `.btn.btn-secondary.btn-xs` reading
      "◀ Panel" — same visual weight as the real action buttons next to
      it. Replaced with a small (26×26) plain icon button (new
@@ -5402,7 +5403,7 @@ popup treatment. Revisit if this comes up again.
 2026-10-04 — Finished the multi-citation-group matching pass flagged
 incomplete above, and found two real bugs live-testing it
 
-The matching code itself (_citeGroupRe loop inside
+The matching code itself (\_citeGroupRe loop inside
 applyCitationHighlightsToLayer(), splitting each semicolon-separated
 parenthetical group and resolving each piece independently via
 findRefNumberInText()/looksLikeAuthorYearCitation()) was already written
@@ -5466,3 +5467,67 @@ data-cite-live-id after the guard fix (was 0 before); clicking one opens
 the anchored popup with no PDF page/scroll change; popup now correctly
 shows "Could not identify this reference" instead of a wrong paper for
 an unresolvable citation.
+
+2026-10-13 — Real per-journal APC ($) shown everywhere a journal renders,
+not just a curated subset
+
+Prompted by a shared FD.nl article on Dutch scientists "flipping" journals
+away from commercial publishers (SciPost, Futures Reframed, Dutch Journal
+of Applied Linguistics, European Journal of Digital Health) — its core
+argument is that author fees are public (publishers post them openly) but
+nobody actually looks, e.g. Cell's real $11,400 APC vs. SciPost's $0.
+Asked directly whether this could work for every journal SE shows, not
+just the handful named in the article — yes: OpenAlex's Sources API
+returns `apc_usd`/`apc_prices` for virtually any journal in its database,
+confirmed live against both a named-in-the-article case (none needed
+curating) and arbitrary journals (Cell $11,400, Hydrobiologia $2,490,
+SciPost Physics null+is_oa:true).
+
+- journal.js: new apcInfo(src) — null apc_usd + is_oa:true → "No fee to
+  publish or read" (apc-free); apc_usd present + is_oa:true → "$X to
+  publish open access" (apc-paid); apc_usd present + is_oa:false →
+  same + " (hybrid)" (apc-hybrid) — flagged distinctly since this is a
+  subscription journal charging per-article on top of the subscription,
+  arguably the worst case and not visible from an OA badge alone; null +
+  is_oa:false → "Not listed" (apc-unknown, deliberately not "free" — see
+  below). Added as a new "Author fee (APC)" row in journalMeta and folded
+  into the plain-text summary line.
+- journals.js (journal-finder): same apcInfo logic (kept separate, this
+  file has no shared-module import), applied to BOTH curated cards (the
+  44 hand-written catalog entries, which already had a rough hand-typed
+  apcBand like "Over3500" — kept as the initial placeholder, same pattern
+  as the existing "JTI…" placeholder, then upgraded in place to the real
+  $ figure once loadCuratedJti()'s OpenAlex lookup resolves) and live
+  OpenAlex search-result cards (which had no APC display at all before).
+  Also added as a new column in the compare tray, alongside SJR/JTI/
+  quartile, with the same backfill-in-place pattern already used for
+  those — a curated journal pinned to compare before its real data loads
+  gets upgraded automatically once it arrives, not stuck showing the
+  catalog's rough band forever.
+- style.css: new .apc-badge color variants, reusing the exact color pairs
+  already in the stance-badge CSS (free=green, hybrid=red — the "double
+  charge" case, paid=amber, unknown=grey) rather than inventing new ones.
+
+Real ambiguity found and handled deliberately, not glossed over: OpenAlex's
+`is_oa` flag does NOT reliably reflect "genuinely free to publish+read" —
+confirmed live that the Journal of Machine Learning Research (a real,
+well-known no-fee journal, correctly marked oaPolicy:"OA" in SE's own
+curated catalog) comes back from OpenAlex as is_oa:false, is_in_doaj:false,
+apc_usd:null. Since that exact combination (null APC + is_oa:false) is
+indistinguishable from a fully-closed subscription journal that simply
+doesn't offer any OA option at all, apcInfo deliberately does NOT guess
+"No fee" for it — shows "Not listed"/"—" instead. Claiming "free" when
+unsure would be worse than showing nothing; this is a real, known gap in
+OpenAlex's own OA metadata, not something fixable from client-side logic.
+
+Verified live end-to-end (Playwright, real dev server + real OpenAlex
+data, not mocked): journal.html?name=Cell shows "Author fee (APC): $11,400
+to publish open access (hybrid)"; journal-finder.html's curated cards
+upgrade in place from static bands ("APC: Over3500") to real figures
+($11,400 hybrid for Cell, $2,500/$7,990/$5,490/$2,638/$3,430 for eLife/
+EMBO Journal/Genome Biology/GigaScience/Journal of Biological Chemistry
+respectively — confirmed via screenshot, all distinct real numbers, not
+a repeated placeholder); the compare tray correctly shows real $ figures
+after reload (localStorage-persisted, re-backfilled via
+backfillPinnedCompareStats() on load) rather than reverting to the
+catalog's rough estimate.
