@@ -192,11 +192,31 @@ function normalizeDoi(s) {
 
 async function fetchPaperByDoi(doi, signal) {
   try {
-    const clean = normalizeDoi(doi);
+    let clean = normalizeDoi(doi);
     if (!clean) return [];
-    const url = `${API_BASE}/works?filter=doi:${encodeURIComponent(clean)}&per_page=1`;
+    // Decode any percent-encoding BEFORE building the request — a DOI
+    // extracted from a pasted doi.org URL can still carry its own %XX
+    // sequences (e.g. a bracket-style zoological DOI's %5B/%5D), and the
+    // old filter=doi:${encodeURIComponent(clean)} re-encoded those as
+    // %255B/%255D (encodeURIComponent doesn't know they're already
+    // encoded) — a real, confirmed-live bug: a genuinely real DOI with
+    // brackets in it (common in older zoology citations) silently
+    // returned zero results this way.
+    try { clean = decodeURIComponent(clean); } catch (_) { /* already raw */ }
+    // Single-entity-by-ID lookup, not filter=doi: — this is also what
+    // fixes a second, separate real case: a DOI a citation names can be a
+    // different (but valid, redirecting) version/alias of the DOI
+    // OpenAlex actually indexed for that work — confirmed live with a
+    // Zenodo deposit where the cited "concept" DOI and OpenAlex's own
+    // indexed version-specific DOI differ. filter=doi: is a literal field
+    // match and finds nothing; this ID endpoint resolves it correctly,
+    // the same way doi.org's own redirect would. The DOI's own special
+    // characters (parens, brackets, colons, semicolons) are valid in a
+    // URL path and don't need escaping here — confirmed live against this
+    // exact endpoint with a raw bracket DOI.
+    const url = `${API_BASE}/works/https://doi.org/${clean}`;
     const data = await fetchJSON(url, signal);
-    return data.results || [];
+    return data && data.id ? [data] : [];
   } catch (err) {
     if (err.name !== "AbortError") console.warn("DOI fetch failed", err.message);
     return [];
@@ -415,6 +435,30 @@ function buildFilter(){
   return parts.length ? `&filter=${encodeURIComponent(parts.join(","))}` : "";
 }
 
+// Pulls the likely TITLE out of a full citation string like "Author A,
+// Author B (2020) Title here. Journal Name 12(3): 45-67" — confirmed live
+// that a full citation string (authors + year + title + journal/volume/
+// pages, exactly what someone pastes from a reference list) measurably
+// confuses OpenAlex's own relevance ranking: a real, well-known paper's
+// full citation returned two unrelated results via search=, while the
+// title ALONE found it as the #1 hit instantly. Used as an ADDITIONAL
+// search in fetchPapers(), not a replacement, so a plain title-only query
+// (which already works fine) is unaffected.
+function extractProbableTitle(q) {
+  const str = String(q || "").trim();
+  const m = str.match(/\((?:19|20)\d{2}[a-z]?\)\.?\s*(.+)/);
+  if (!m) return null;
+  const rest = m[1].trim();
+  if (!rest) return null;
+  // The title ends at the first sentence-ending ". " — citation titles are
+  // reliably followed by a period before the journal/publisher name
+  // starts. Require a minimum length first so a stray abbreviation period
+  // right after the year isn't mistaken for the title's own end.
+  const titleMatch = rest.match(/^(.{15,}?)\.\s/);
+  const title = (titleMatch ? titleMatch[1] : rest.replace(/\.+$/, "")).trim();
+  return title.length >= 10 ? title : null;
+}
+
 function serverSortParam(){
   const dir = currentOrder === "asc" ? "asc" : "desc";
   if (currentFilter === "citations") return `&sort=cited_by_count:${dir}`;
@@ -583,11 +627,35 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
       } catch(_) {}
     }
 
+    // Tertiary: when the query looks like a full citation (authors + year
+    // + title + journal/volume/pages, the exact shape someone pastes from
+    // a reference list), also search using JUST the extracted title —
+    // confirmed live this finds papers the full-citation query misses
+    // entirely, since the journal/volume/page noise measurably hurts
+    // OpenAlex's own relevance ranking. Always attempted when it looks
+    // like a citation, not only as a last-resort empty-results fallback —
+    // the full-citation query can "succeed" with irrelevant top hits
+    // rather than obviously failing, so there's no reliable signal to
+    // gate this behind.
+    let citationTitleWorks = [];
+    const probableTitle = extractProbableTitle(query);
+    if (probableTitle && probableTitle.toLowerCase() !== effectiveSearch.trim().toLowerCase()) {
+      try {
+        const urlCT = `${API_BASE}/works?filter=display_name.search:${encodeURIComponent(probableTitle)}&per_page=10&select=id,display_name,authorships,publication_year,doi,open_access,cited_by_count,primary_location,type`;
+        const dataCT = await fetchJSON(urlCT, signal);
+        citationTitleWorks = dataCT.results || [];
+        if (citationTitleWorks.length && !lastPaperSearchNotice) {
+          lastPaperSearchNotice = `Also searched using just the title ("${probableTitle}") extracted from your citation — journal/volume/page details can confuse relevance ranking on the full citation text.`;
+        }
+      } catch (_) { /* silent — this is a bonus source, not required */ }
+    }
+
     if (page === 1) totalResults = dataG.meta?.count || generalWorks.length || 0;
 
-    // Title matches bubble to front, then general results
+    // Citation-extracted title matches bubble to the very front (most
+    // targeted match), then plain title matches, then general results.
     const seen = new Set();
-    let merged = [...titleWorks, ...works, ...generalWorks].filter(w => {
+    let merged = [...citationTitleWorks, ...titleWorks, ...works, ...generalWorks].filter(w => {
       const id = w.id || w.doi || w.display_name;
       if (seen.has(id)) return false;
       seen.add(id);
@@ -605,7 +673,7 @@ async function fetchPapers(query, authorIds = [], page = 1, signal) {
       lastPaperSearchNotice = `Showing ${merged.length} result${merged.length === 1 ? '' : 's'} that actually match your wildcard pattern, out of ${beforeCount} broader candidates OpenAlex returned for "${effectiveSearch}" — OpenAlex itself can't run wildcard search, so this checks each candidate's title/abstract text ourselves. Matches beyond what OpenAlex returned for the plain query aren't checked.`;
     }
 
-    if ((advancedActive || wildcardPatterns.length) && page === 1) totalResults = merged.length;
+    if ((advancedActive || wildcardPatterns.length || citationTitleWorks.length) && page === 1) totalResults = merged.length;
 
     if (currentFilter === "citations") {
       merged.sort((a,b)=> {

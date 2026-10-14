@@ -5531,3 +5531,77 @@ a repeated placeholder); the compare tray correctly shows real $ figures
 after reload (localStorage-persisted, re-backfilled via
 backfillPinnedCompareStats() on load) rather than reverting to the
 catalog's rough estimate.
+
+2026-10-14 — search.html: 3 real search-by-DOI/citation bugs, reported
+with 4 concrete examples via an IDE text selection on this file
+
+User pasted 4 real failing searches directly. All 4 traced to real,
+distinct bugs in scripts/search.js — none were data-availability issues
+(every cited DOI/paper genuinely exists and is indexed in OpenAlex,
+confirmed by querying OpenAlex directly before touching any code).
+
+1. Bracket-style DOIs (common in older zoological citations, e.g.
+   "10.1577/1548-8659(1965)94[1:DPITBB]2.0.CO;2") returned nothing,
+   whether pasted as a doi.org URL or embedded in a full citation.
+   fetchPaperByDoi() built `filter=doi:${encodeURIComponent(clean)}` —
+   but `clean` (from extractDoi()) still carried the ORIGINAL percent-
+   encoding from the pasted URL (%5B/%5D for the DOI's own brackets), and
+   encodeURIComponent() doesn't know those are already encoded — it
+   escaped the literal `%` too, corrupting %5B into %255B. OpenAlex
+   received a mangled DOI that matched nothing. Confirmed live via direct
+   curl against the real OpenAlex API before touching any code.
+
+2. A DOI a citation names can be a different (but real, correctly
+   redirecting) version/alias of the DOI OpenAlex actually indexed for
+   that work — confirmed live with the IPBES/Zenodo case: the cited DOI
+   (zenodo.3553579) and OpenAlex's own indexed DOI for that exact work
+   (zenodo.3553458 — a different version of the same Zenodo deposit) are
+   both real and both redirect correctly via doi.org, but filter=doi: is
+   a literal field-equality match, so it found nothing for the cited one.
+
+   Both 1 and 2 fixed the same way: rewrote fetchPaperByDoi() to use
+   OpenAlex's single-entity-by-ID lookup (`/works/https://doi.org/{doi}`,
+   a real path segment through our own /api/openalex proxy) instead of
+   `filter=doi:` — decode the DOI first (so no double-encoding), then
+   build the URL directly; confirmed live this resolves BOTH cases
+   correctly, since ID-based lookup follows doi.org-equivalent resolution
+   rather than requiring an exact indexed-field match. Confirmed the
+   DOI's own special characters (parens/brackets/colons/semicolons) don't
+   need escaping as a path segment — verified directly against our own
+   running proxy with a raw bracket DOI.
+
+3. A full citation string with no DOI at all ("Kline JL, Wood BM (1996)
+   Food habits and diet selectivity of the brown bullhead. Journal of
+   Freshwater Ecology 11(2): 145–151") returned nothing useful, but
+   searching just the title found the exact paper as the #1 result
+   instantly. Confirmed directly against OpenAlex: the full citation
+   string's journal name + volume + page numbers measurably confuse its
+   own relevance ranking (2 unrelated results) in a way the bare title
+   doesn't (413 results, correct paper first). The existing secondary
+   "title-specific" search (display_name.search:) already in fetchPapers()
+   didn't help either — it reuses the SAME full noisy string, not a
+   cleaned title.
+
+   Fixed with new extractProbableTitle(query) — pulls the text between a
+   "(YEAR)" and the next sentence-ending period, the reliable shape of
+   "Authors (Year) Title. Journal, volume, pages" citations — run as a
+   genuinely ADDITIONAL `display_name.search:` lookup in fetchPapers(),
+   not a replacement, and not gated behind the full-citation query
+   already having failed (per the user's own framing — "can it not
+   always try" — since the full-citation query can return confidently
+   wrong top hits rather than an obvious failure, there's no reliable
+   signal to gate behind). Results from this source bubble to the very
+   front of the merged list, and a transparent ℹ notice names the
+   extracted title that was actually used. Guarded against false-
+   positives on non-citation queries that merely contain "(YEAR)"
+   somewhere (e.g. "climate change impacts (2020) review") via a minimum
+   extracted-title length.
+
+Verified live end-to-end (Playwright, real dev server + real OpenAlex
+data) against all 4 of the user's exact original queries — all 4 now
+return the correct paper as the only/top result. Also re-verified 3
+cases that already worked, to confirm no regression: a plain non-
+citation title search (204,252 results, unchanged), a bare DOI with no
+special characters, and a non-citation query that happens to contain a
+parenthesized year (correctly did NOT trigger the new title-extraction
+path).
