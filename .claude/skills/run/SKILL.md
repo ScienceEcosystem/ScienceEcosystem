@@ -15,6 +15,23 @@ No `npm run dev` — `package.json`'s `start` script (`node server/index.js`) is
 what to use. Reads config from `.env` (DATABASE_URL, ORCID_CLIENT_ID/SECRET,
 R2 creds, OPENALEX_API_KEY, etc. — see `.env.example`).
 
+**Database:** local `.env` points at the Neon **dev branch** (host
+`ep-rapid-snow-...`), not production (`ep-lucky-band-...`, kept commented out
+in `.env`). Starting the server runs schema setup against whatever
+DATABASE_URL points at, so confirm the host before starting (prints host
+only, never credentials):
+
+```bash
+grep '^DATABASE_URL' .env | sed -E 's#//[^@]*@#//<hidden>@#; s#\?.*##'
+```
+
+Write-path tests and disposable fixtures belong on the dev branch only.
+
+Launch it with the Bash tool's `run_in_background: true`, not
+`nohup … &` inside a command — the latter left the process sleeping with no
+output and the port never bound (looked exactly like the node_modules hang
+below, but wasn't).
+
 Serves on `http://localhost:5173` (`PORT` env var to override). Startup can
 legitimately take 15-25s (first DB pool connection to Neon) — poll instead of
 assuming a fixed sleep is enough:

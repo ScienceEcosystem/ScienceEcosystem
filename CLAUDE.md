@@ -5659,13 +5659,39 @@ nothing before OCR and the item with a highlighted snippet after; a fresh
 browser context loaded the OCR text from the account (no banner, no
 re-OCR).
 
-NOT YET VERIFIED: the clear_pdf_ocr_on_change trigger. Restarting the
-local server to apply it was blocked by the auto-mode safety check,
-because the local server runs against the production database and would
-create the trigger on the live library_pdfs table. Note that the earlier
-server start in this session already created the pdf_ocr table and the
-library_pdfs.ocr_applied column in production (both purely additive).
-Not pushed/deployed for the same reason; waiting on the user.
+Trigger first blocked: restarting the local server to apply it was
+refused by the auto-mode safety check, because local dev ran against the
+PRODUCTION database (the earlier start this session had already created
+the pdf_ocr table + library_pdfs.ocr_applied column in production — both
+purely additive). Resolved by moving local dev onto a Neon dev branch
+(see the DEV DATABASE entry below), then verified there: OCR text
+survives unrelated row updates; a replaced file (size/path change) clears
+pdf_ocr AND the OCR-derived full_text (that second part was a bug the
+test caught — stale search text from the old file survived a replace and
+blocked the new OCR text from being indexed), and re-opening offers
+"Recognize text" again; re-OCR restores both; deleting the PDF clears
+everything. Test account removed from the dev branch afterwards.
+
+2026-10-27 — DEV DATABASE: local development now uses a Neon dev branch
+
+Local dev used to point at the production database (same DATABASE_URL as
+Render). That caused the 2026-08-25 incident (a test deleted a real paper
+from Olivier's library) and, today, schema migrations reaching production
+from a laptop. Olivier created a Neon branch "dev" (parent: production,
+full data copy, auto-delete OFF) and switched his local .env:
+DATABASE_URL now points at ep-rapid-snow-... (dev); the production URL
+(ep-lucky-band-...) is kept commented out in .env for reference only.
+Render's own DATABASE_URL (set in the Render dashboard) still points at
+production and is unchanged.
+How to work from now on:
+- Local server + all write-path testing → dev branch. Disposable test
+  fixtures refuse to run unless the host is the dev branch.
+- Schema changes reach production only when a deploy to Render starts the
+  server there — mention any such change before pushing.
+- Hand-run scripts that must hit production (e.g. the yearly Scimago
+  import) need the production URL passed explicitly, deliberately.
+- The dev branch is a snapshot as of 2026-10-27; reset it from production
+  in the Neon dashboard ("Reset from parent") when fresh data is needed.
 
 Known, not fixed here: on scanned PDFs the existing "a citation tags the
 whole text span" issue (flagged 2026-10-04) covers every OCR line that

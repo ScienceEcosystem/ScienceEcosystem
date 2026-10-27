@@ -756,6 +756,9 @@ async function pgInit() {
       END IF;
       IF OLD.storage_path IS DISTINCT FROM NEW.storage_path OR OLD.file_size IS DISTINCT FROM NEW.file_size THEN
         DELETE FROM pdf_ocr WHERE orcid = NEW.orcid AND paper_id = NEW.paper_id;
+        -- Search text that came from the OLD file's OCR must go too (native
+        -- extraction or a fresh OCR run refills it for the new file).
+        IF OLD.ocr_applied THEN NEW.full_text := NULL; END IF;
         NEW.ocr_applied := FALSE;
       END IF;
       RETURN NEW;
