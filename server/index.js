@@ -787,6 +787,26 @@ async function pgInit() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS library_attachments_item_idx ON library_attachments(orcid, paper_id)`);
 
+  // Saved-search alerts. seen_ids = papers already shown for this search
+  // (baselined when saved, so alerts start from that moment); new_items =
+  // matches not yet marked seen, with enough metadata to list them without
+  // another OpenAlex call.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS saved_searches (
+      id              BIGSERIAL PRIMARY KEY,
+      orcid           TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      query           TEXT NOT NULL,
+      baselined       BOOLEAN NOT NULL DEFAULT FALSE,
+      seen_ids        TEXT[] NOT NULL DEFAULT '{}',
+      new_items       JSONB NOT NULL DEFAULT '[]',
+      new_count       INT NOT NULL DEFAULT 0,
+      last_checked_at TIMESTAMPTZ,
+      last_error      TEXT,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (orcid, query)
+    )
+  `);
+
   // Zotero connections + sync log
   await pool.query(`
     CREATE TABLE IF NOT EXISTS zotero_connections (
@@ -2257,7 +2277,160 @@ app.get("/api/me", async (req, res) => {
   if (!sess) return res.status(401).json({ error: "Not signed in" });
   const row = await getUser(sess.orcid);
   if (!row) return res.status(404).json({ error: "User not found" });
-  res.json(row);
+  // Saved-search alerts: the nav badge reads the stored count (cheap), and
+  // any search not checked for 12h is re-checked in the background — every
+  // page loads /api/me, so alerts stay fresh without a scheduled job (which
+  // Render's free tier, asleep when idle, couldn't run reliably anyway).
+  let alerts_new = 0;
+  try {
+    const { rows } = await pool.query(`SELECT COALESCE(SUM(new_count),0)::int AS n FROM saved_searches WHERE orcid=$1`, [sess.orcid]);
+    alerts_new = rows[0]?.n || 0;
+    refreshStaleSavedSearches(sess.orcid).catch(() => {});
+  } catch (_) {}
+  res.json({ ...row, alerts_new });
+});
+
+/* ---------------------------
+   Saved-search alerts
+----------------------------*/
+const SAVED_SEARCH_MAX_PER_USER = 25;
+const SAVED_SEARCH_LOOKBACK_DAYS = 60; // catches papers indexed late, after their publication date
+const SAVED_SEARCH_STALE_HOURS = 12;
+const SAVED_SEARCH_COLS = `id, query, new_count, new_items, last_checked_at, last_error, created_at`;
+
+// OpenAlex's "added since" filter (from_created_date) is paid-plan only —
+// confirmed live ("Plan upgrade required") — so this asks for recent
+// publication dates instead and relies on seen_ids to never repeat a paper.
+async function fetchSavedSearchCandidates(query) {
+  const since = new Date(Date.now() - SAVED_SEARCH_LOOKBACK_DAYS * 86400000).toISOString().slice(0, 10);
+  const qs = new URLSearchParams({
+    search: query,
+    filter: `from_publication_date:${since}`,
+    sort: "publication_date:desc",
+    per_page: "50",
+    select: "id,display_name,publication_year,publication_date,primary_location,authorships",
+    mailto: OPENALEX_MAILTO,
+  });
+  if (OPENALEX_API_KEY) qs.set("api_key", OPENALEX_API_KEY);
+  const data = await fetchJSONTimeout(`${OPENALEX}/works?${qs.toString()}`, {}, OPENALEX_TIMEOUT_MS);
+  return (data.results || []).map(w => ({
+    id: String(w.id || "").replace(/^https?:\/\/openalex\.org\//i, ""),
+    title: w.display_name || "Untitled",
+    date: w.publication_date || null,
+    year: w.publication_year ?? null,
+    venue: w.primary_location?.source?.display_name || null,
+    authors: (w.authorships || []).slice(0, 3).map(a => a?.author?.display_name).filter(Boolean).join(", "),
+  })).filter(w => w.id);
+}
+
+async function refreshSavedSearch(row) {
+  const candidates = await fetchSavedSearchCandidates(row.query);
+  if (!row.baselined) {
+    // First successful check: everything currently matching counts as
+    // already seen, so alerts only ever show papers that appear after saving.
+    await pool.query(
+      `UPDATE saved_searches SET baselined=TRUE, seen_ids=$2, new_items='[]', new_count=0, last_checked_at=now(), last_error=NULL WHERE id=$1`,
+      [row.id, candidates.map(c => c.id)]
+    );
+    return;
+  }
+  const seen = new Set(row.seen_ids || []);
+  const pending = new Map((row.new_items || []).map(i => [i.id, i]));
+  for (const c of candidates) if (!seen.has(c.id) && !pending.has(c.id)) pending.set(c.id, c);
+  const items = [...pending.values()].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 100);
+  await pool.query(
+    `UPDATE saved_searches SET new_items=$2, new_count=$3, last_checked_at=now(), last_error=NULL WHERE id=$1`,
+    [row.id, JSON.stringify(items), items.length]
+  );
+}
+
+const _savedSearchRefreshing = new Set();
+async function refreshStaleSavedSearches(orcid, { force = false } = {}) {
+  if (_savedSearchRefreshing.has(orcid)) return; // one pass per user at a time
+  _savedSearchRefreshing.add(orcid);
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM saved_searches WHERE orcid=$1
+         AND ($2 OR last_checked_at IS NULL OR last_checked_at < now() - make_interval(hours => $3))
+       ORDER BY last_checked_at NULLS FIRST LIMIT 5`,
+      [orcid, force, SAVED_SEARCH_STALE_HOURS]
+    );
+    for (const row of rows) {
+      try { await refreshSavedSearch(row); }
+      catch (e) {
+        await pool.query(`UPDATE saved_searches SET last_checked_at=now(), last_error=$2 WHERE id=$1`,
+          [row.id, String(e?.message || e).slice(0, 300)]).catch(() => {});
+      }
+    }
+  } finally {
+    _savedSearchRefreshing.delete(orcid);
+  }
+}
+
+app.get("/api/saved-searches", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    await refreshStaleSavedSearches(sess.orcid);
+    const { rows } = await pool.query(
+      `SELECT ${SAVED_SEARCH_COLS} FROM saved_searches WHERE orcid=$1 ORDER BY new_count DESC, created_at DESC`,
+      [sess.orcid]
+    );
+    res.json({ searches: rows });
+  } catch (e) {
+    console.error("GET /api/saved-searches failed:", e);
+    res.status(500).json({ error: "Failed to load saved searches" });
+  }
+});
+
+app.post("/api/saved-searches", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const query = String(req.body?.query || "").trim().replace(/\s+/g, " ");
+  if (!query || query.length > 300) return res.status(400).json({ error: "A search query (up to 300 characters) is required" });
+  try {
+    const { rows: cnt } = await pool.query(`SELECT count(*)::int AS n FROM saved_searches WHERE orcid=$1`, [sess.orcid]);
+    const { rows } = await pool.query(
+      `INSERT INTO saved_searches (orcid, query) VALUES ($1,$2)
+       ON CONFLICT (orcid, query) DO UPDATE SET query=EXCLUDED.query
+       RETURNING *, (xmax = 0) AS inserted`,
+      [sess.orcid, query]
+    );
+    const row = rows[0];
+    if (row.inserted && cnt[0].n >= SAVED_SEARCH_MAX_PER_USER) {
+      await pool.query(`DELETE FROM saved_searches WHERE id=$1`, [row.id]);
+      return res.status(400).json({ error: `You can save up to ${SAVED_SEARCH_MAX_PER_USER} searches — remove one first` });
+    }
+    if (!row.baselined) {
+      try { await refreshSavedSearch(row); }
+      catch (e) { await pool.query(`UPDATE saved_searches SET last_error=$2 WHERE id=$1`, [row.id, String(e?.message || e).slice(0, 300)]); }
+    }
+    const { rows: out } = await pool.query(`SELECT ${SAVED_SEARCH_COLS} FROM saved_searches WHERE id=$1`, [row.id]);
+    res.json({ search: out[0], already_saved: !row.inserted });
+  } catch (e) {
+    console.error("POST /api/saved-searches failed:", e);
+    res.status(500).json({ error: "Failed to save search" });
+  }
+});
+
+app.post("/api/saved-searches/:id/seen", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { rowCount } = await pool.query(
+    `UPDATE saved_searches
+       SET seen_ids = (SELECT COALESCE(array_agg(x), '{}') FROM (
+             SELECT x FROM unnest(seen_ids || ARRAY(SELECT jsonb_array_elements(new_items)->>'id')) AS x
+             ORDER BY length(x) DESC, x DESC LIMIT 2000) s),
+           new_items='[]', new_count=0
+     WHERE id=$1 AND orcid=$2`,
+    [Number(req.params.id) || 0, sess.orcid]
+  );
+  if (!rowCount) return res.status(404).json({ error: "Saved search not found" });
+  res.json({ ok: true });
+});
+
+app.delete("/api/saved-searches/:id", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { rowCount } = await pool.query(`DELETE FROM saved_searches WHERE id=$1 AND orcid=$2`, [Number(req.params.id) || 0, sess.orcid]);
+  if (!rowCount) return res.status(404).json({ error: "Saved search not found" });
+  res.json({ ok: true });
 });
 
 /* ---------------------------

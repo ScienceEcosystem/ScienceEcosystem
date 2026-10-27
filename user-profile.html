@@ -149,6 +149,13 @@
         <p class="empty">Link your OpenAlex author profile in <a href="settings-profile.html">settings</a> to see when other papers cite your work.</p>
       </section>
 
+      <!-- Saved-search alerts -->
+      <section class="panel" style="margin-top:1rem;" id="savedSearchesSection" hidden>
+        <div class="sec-head"><h2>Saved search alerts</h2></div>
+        <p class="muted" style="font-size:.8rem;margin:0 0 .6rem;">New papers matching searches you saved, checked about twice a day. Save a search from the <a href="search.html">search page</a> with "Get alerts for this search".</p>
+        <div id="savedSearchesList"><p class="empty">Loading…</p></div>
+      </section>
+
       <!-- Follow feed -->
       <section class="panel" style="margin-top:1rem;" id="feedSection" hidden>
         <div class="sec-head"><h2>New from people you follow</h2></div>
@@ -328,7 +335,9 @@
       // directly) so this new code benefits from the server-side cache and
       // OPENALEX_API_KEY the way this week's other new call sites do —
       // the older renderFollowFeed() above predates that and is left as is.
-      fetch("/api/openalex/works?filter=host_venue.id:"+encodeURIComponent(ids)+"&sort=publication_date:desc&per_page=10&mailto=info@scienceecosystem.org")
+      // locations.source.id, not host_venue.id — OpenAlex rejects host_venue
+      // as deprecated, which left this panel permanently empty.
+      fetch("/api/openalex/works?filter=locations.source.id:"+encodeURIComponent(ids)+"&sort=publication_date:desc&per_page=10&mailto=info@scienceecosystem.org")
         .then(function(r){ return r.json(); })
         .then(function(data){
           var works = (data && data.results) || [];
@@ -350,6 +359,58 @@
 
     function workTail(id) {
       return String(id||"").replace(/^https?:\/\/openalex\.org\//i,"");
+    }
+
+    // Saved-search alerts — one block per saved search, newest matches first.
+    function renderSavedSearches(searches) {
+      var section = document.getElementById("savedSearchesSection");
+      var box = document.getElementById("savedSearchesList");
+      if (!section || !box) return;
+      if (!searches || !searches.length) { section.hidden = true; return; }
+      section.hidden = false;
+      box.innerHTML = searches.map(function(s){
+        var items = Array.isArray(s.new_items) ? s.new_items : [];
+        var head = '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.35rem;">'
+          + '<a href="search.html?q='+encodeURIComponent(s.query)+'" style="font-weight:600;" title="Run this search">'+esc(s.query)+'</a>'
+          + (s.new_count ? '<span class="badge badge-ok" style="font-size:.72rem;">'+s.new_count+' new</span>' : '<span class="muted" style="font-size:.75rem;">nothing new</span>')
+          + '<span style="flex:1"></span>'
+          + (s.new_count ? '<button class="btn btn-secondary btn-xs ss-seen" data-id="'+s.id+'">Mark as seen</button>' : '')
+          + '<button class="btn btn-secondary btn-xs ss-remove" data-id="'+s.id+'" title="Stop alerts for this search">Remove</button>'
+          + '</div>';
+        var err = s.last_error ? '<p class="muted" style="font-size:.75rem;margin:0 0 .3rem;">Last check failed — will retry. ('+esc(s.last_error.slice(0,120))+')</p>' : '';
+        var list = items.slice(0, 10).map(function(w){
+          return '<div class="paper-row">'
+            + '<div class="paper-row-title"><a href="paper.html?id='+encodeURIComponent(w.id)+'">'+esc(w.title)+'</a></div>'
+            + '<div class="paper-row-meta">'+esc([w.authors, w.venue, w.date || w.year].filter(Boolean).join(" · "))+'</div>'
+          + '</div>';
+        }).join("");
+        var more = items.length > 10 ? '<p class="muted" style="font-size:.78rem;margin:.2rem 0 0;">+ '+(items.length-10)+' more — <a href="search.html?q='+encodeURIComponent(s.query)+'&sort=year">see all</a></p>' : '';
+        return '<div class="ss-block" style="padding:.6rem 0;border-top:1px solid #eef1f6;">'+head+err+list+more+'</div>';
+      }).join("");
+
+      box.querySelectorAll(".ss-seen").forEach(function(b){
+        b.addEventListener("click", function(){
+          b.disabled = true;
+          api("/api/saved-searches/"+b.dataset.id+"/seen", { method:"POST" })
+            .then(loadSavedSearches)
+            .catch(function(){ b.disabled = false; });
+        });
+      });
+      box.querySelectorAll(".ss-remove").forEach(function(b){
+        b.addEventListener("click", function(){
+          if (!confirm("Stop alerts for this search?")) return;
+          api("/api/saved-searches/"+b.dataset.id, { method:"DELETE" }).then(loadSavedSearches).catch(function(){});
+        });
+      });
+    }
+
+    function loadSavedSearches() {
+      return api("/api/saved-searches")
+        .then(function(d){ renderSavedSearches(d && d.searches); })
+        .catch(function(){
+          var box = document.getElementById("savedSearchesList");
+          if (box) box.innerHTML = '<p class="empty">Could not load saved searches.</p>';
+        });
     }
 
     async function loadCitedFeed(me) {
@@ -452,6 +513,9 @@
           document.getElementById("kpiFollowing").textContent = "—";
           document.getElementById("followingList").innerHTML = '<p class="empty">Could not load following list.</p>';
         });
+
+      // Saved-search alerts
+      loadSavedSearches();
 
       // Followed journals
       api("/api/followed-sources")

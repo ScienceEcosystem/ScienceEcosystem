@@ -107,6 +107,17 @@ globalThis.SE_SESSION_PROMISE = (async function(){
       profileLink.href = "user-profile.html";
       profileLink.textContent = me.name ? me.name : "My Profile";
       profileLink.setAttribute("title", `Logged in as ${me.orcid}`);
+      // Saved-search alerts: small count badge, links to the dashboard panel
+      const n = Number(me.alerts_new) || 0;
+      if (n > 0) {
+        profileLink.href = "user-profile.html#savedSearchesSection";
+        profileLink.setAttribute("title", `Logged in as ${me.orcid} — ${n} new paper${n === 1 ? "" : "s"} in your saved searches`);
+        const badge = document.createElement("span");
+        badge.className = "nav-alert-badge";
+        badge.textContent = n > 99 ? "99+" : String(n);
+        badge.setAttribute("aria-label", `${n} new in saved searches`);
+        profileLink.appendChild(badge);
+      }
     }
 
     // Insert Library link once, before the logout button

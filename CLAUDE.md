@@ -5753,3 +5753,54 @@ stored file.
 
 Known, not fixed here (pre-existing): deleting a library item leaves its
 main PDF (library_pdfs row + stored file) behind.
+
+2026-10-27 — Saved-search alerts (in-app) + fixed the journal follow feed
+
+Asked for directly ("thats a good idea lets do that also"): follow a
+narrow research question, not just an author or journal, like Google
+Scholar / PubMed alerts.
+
+- Delivery is in-app, deliberately: there's no email service (avoided by
+  design since the shared-library invite-link decision), and Render's free
+  tier sleeps when idle, so a scheduled job couldn't run reliably.
+  Instead /api/me — already called on every page by session.js — returns
+  alerts_new (a stored count, cheap) and kicks off a background re-check
+  of any saved search not checked for 12h (max 5 per pass, one pass per
+  user at a time). So ordinary browsing keeps alerts fresh.
+- search.html: "Get alerts for this search" under the search box (sign-in
+  prompt when signed out; "Already saved" if it is).
+- user-profile.html: "Saved search alerts" panel — per search: "N new",
+  up to 10 papers listed (+N more → run search sorted by year), "Mark as
+  seen", "Remove". Nav: amber count badge on the profile link, linking to
+  that panel.
+- saved_searches table (max 25 per user). OpenAlex's "added since" filter
+  (from_created_date) is paid-plan only — confirmed live ("Plan upgrade
+  required") — so checks use from_publication_date with a 60-day
+  look-back (catches late-indexed papers) and seen_ids so a paper is
+  never shown twice. Saving a search baselines it: everything currently
+  matching counts as seen, so alerts only show papers that appear after
+  saving. Failed checks store last_error, shown on the dashboard, and
+  retry on the next pass.
+- Service worker cache bumped to se-v16 (session.js + style.css changed).
+
+BUG FOUND AND FIXED while building the panel next to it: "New from
+journals you follow" on the dashboard filtered OpenAlex by host_venue.id,
+which OpenAlex now rejects as deprecated — so that panel has shown "No
+recent papers found" for everyone since it was built. Switched to
+locations.source.id (the same fix se_followed_updates already uses).
+
+Verified live on the dev branch with a disposable account (removed
+afterwards): signed-out save → sign-in prompt; signed-in save → "✓
+Alerts on", baselined (50 seen, 0 new); saving again → "Already saved";
+after removing 3 ids from seen + marking the search stale, one ordinary
+page view triggered the background check and the next page showed a "3"
+nav badge; the dashboard listed the 3 real papers; "Mark as seen" →
+"nothing new" and the badge gone; "Remove" hides the panel. The journal
+feed showed real Hydrobiologia papers for a followed journal. Badge
+initially stretched into a tall pill next to a two-line name — fixed
+(align-self/height).
+
+Not built (a follow-up option if wanted): email or push delivery. Would
+need an email provider (or Web Push with VAPID keys — the site is already
+an installable PWA) plus something to wake the server on a schedule
+(e.g. a GitHub Actions cron hitting a secret endpoint).

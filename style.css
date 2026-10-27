@@ -114,6 +114,13 @@ body {
 .nav-link:hover,
 .nav-link:focus { color: #e5edff; outline: none; }
 .nav-link.active { color: #93c5fd; }
+/* Saved-search alert count next to the profile link (scripts/session.js) */
+.nav-alert-badge {
+  display: inline-block; align-self: center; flex-shrink: 0; height: 1.15rem;
+  margin-left: .35rem; min-width: 1.15rem; padding: 0 .3rem;
+  border-radius: 999px; background: #f59e0b; color: #111827;
+  font-size: .7rem; font-weight: 700; line-height: 1.15rem; text-align: center;
+}
 .nav-dropdown { position: relative; }
 .nav-dropdown-toggle {
   background: transparent;

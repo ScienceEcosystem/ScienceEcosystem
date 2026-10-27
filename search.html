@@ -61,6 +61,10 @@
         <input id="unifiedSearchInput" class="input" type="text" placeholder="Search papers, people, datasets..." />
         <button class="btn btn-primary" type="submit">Search</button>
       </form>
+      <div id="saveSearchRow" style="display:none;margin-top:.55rem;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:.85rem;">
+        <button type="button" id="saveSearchBtn" class="btn btn-secondary btn-xs" title="Save this search — new matching papers then show up on your dashboard">Get alerts for this search</button>
+        <span id="saveSearchStatus" class="muted" role="status"></span>
+      </div>
       <details style="margin-top:1rem;">
         <summary style="cursor:pointer; color:#2e7f9f; font-size:0.95rem;">Advanced filters</summary>
 

@@ -1071,6 +1071,7 @@ async function runUnifiedSearch(){
 
   readAdvancedFilters();
   currentQuery = query;
+  updateSaveSearchRow();
   currentPage = 1;
   setURLState(currentQuery, currentFilter);
 
@@ -1268,7 +1269,57 @@ function buildQueryFromGroups() {
   return groups.join(" AND ");
 }
 
+/* ---------- Saved-search alerts ---------- */
+// "Get alerts for this search": saves the current query; papers matching it
+// that appear afterwards show up on the dashboard (user-profile.html) and as
+// a count badge next to the profile link in the nav.
+let _savedSearchQuery = null;
+function updateSaveSearchRow() {
+  const row = $("saveSearchRow");
+  if (!row) return;
+  row.style.display = currentQuery ? "flex" : "none";
+  if (currentQuery !== _savedSearchQuery) {
+    const btn = $("saveSearchBtn"), status = $("saveSearchStatus");
+    if (btn) { btn.disabled = false; btn.textContent = "Get alerts for this search"; }
+    if (status) status.innerHTML = "";
+  }
+}
+
+async function saveCurrentSearch() {
+  const btn = $("saveSearchBtn"), status = $("saveSearchStatus");
+  const query = currentQuery;
+  if (!query || !btn) return;
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  try {
+    const res = await fetch("/api/saved-searches", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    if (res.status === 401) {
+      btn.disabled = false;
+      btn.textContent = "Get alerts for this search";
+      status.innerHTML = `<a href="/auth/orcid/login">Sign in with ORCID</a> to get alerts.`;
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    _savedSearchQuery = query;
+    btn.textContent = "✓ Alerts on";
+    status.innerHTML = data.already_saved
+      ? `Already saved — see <a href="user-profile.html#savedSearchesSection">your dashboard</a>.`
+      : `New papers matching this search will show up on <a href="user-profile.html#savedSearchesSection">your dashboard</a>.`;
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = "Get alerts for this search";
+    status.textContent = `Couldn't save: ${e.message}`;
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  $("saveSearchBtn")?.addEventListener("click", saveCurrentSearch);
   const params = new URLSearchParams(window.location.search);
   const input = $("unifiedSearchInput");
 
