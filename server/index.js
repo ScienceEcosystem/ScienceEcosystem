@@ -146,7 +146,9 @@ app.use((req, res, next) => {
   // CSP: lock down to known origins; 'unsafe-inline' needed for current inline scripts
   res.setHeader("Content-Security-Policy", [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://d1bxh8uas1mnw7.cloudfront.net https://embed.altmetric.com https://*.github.io https://cdn.jsdelivr.net",
+    // 'wasm-unsafe-eval' lets the OCR engine (Tesseract.js, /ocr/) compile
+    // its WebAssembly — it only permits wasm compilation, not JS eval().
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://d1bxh8uas1mnw7.cloudfront.net https://embed.altmetric.com https://*.github.io https://cdn.jsdelivr.net",
     "style-src 'self' 'unsafe-inline' https://*.github.io https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com https://*.github.io data:",
     "img-src 'self' data: blob: https:",
@@ -727,6 +729,42 @@ async function pgInit() {
       PRIMARY KEY (orcid, paper_id)
     )
   `);
+
+  // OCR results for scanned PDFs (recognized client-side in the reader).
+  // pages: { "<pageNum>": { t: "<page text>", w: [[word, x, y, w, h], ...] } }
+  // with x/y/w/h as fractions of the page size, so they survive zoom.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdf_ocr (
+      orcid      TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      paper_id   TEXT NOT NULL,
+      pages      JSONB NOT NULL DEFAULT '{}',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (orcid, paper_id)
+    )
+  `);
+  await pool.query(`ALTER TABLE library_pdfs ADD COLUMN IF NOT EXISTS ocr_applied BOOLEAN NOT NULL DEFAULT FALSE`);
+  // OCR text belongs to one specific file. If the PDF is removed or replaced
+  // (four different code paths can store one), drop it — otherwise the old
+  // file's recognized lines would be laid over a newly attached PDF's pages.
+  // Size is compared too because a replacement can reuse the same storage key.
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION clear_pdf_ocr_on_change() RETURNS trigger AS $$
+    BEGIN
+      IF TG_OP = 'DELETE' THEN
+        DELETE FROM pdf_ocr WHERE orcid = OLD.orcid AND paper_id = OLD.paper_id;
+        RETURN OLD;
+      END IF;
+      IF OLD.storage_path IS DISTINCT FROM NEW.storage_path OR OLD.file_size IS DISTINCT FROM NEW.file_size THEN
+        DELETE FROM pdf_ocr WHERE orcid = NEW.orcid AND paper_id = NEW.paper_id;
+        NEW.ocr_applied := FALSE;
+      END IF;
+      RETURN NEW;
+    END $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`DROP TRIGGER IF EXISTS library_pdfs_clear_ocr_upd ON library_pdfs`);
+  await pool.query(`CREATE TRIGGER library_pdfs_clear_ocr_upd BEFORE UPDATE ON library_pdfs FOR EACH ROW EXECUTE FUNCTION clear_pdf_ocr_on_change()`);
+  await pool.query(`DROP TRIGGER IF EXISTS library_pdfs_clear_ocr_del ON library_pdfs`);
+  await pool.query(`CREATE TRIGGER library_pdfs_clear_ocr_del AFTER DELETE ON library_pdfs FOR EACH ROW EXECUTE FUNCTION clear_pdf_ocr_on_change()`);
 
   // Zotero connections + sync log
   await pool.query(`
@@ -1873,6 +1911,16 @@ async function extractPdfSignals(buffer) {
     return { text: "", title: null, author: null };
   }
 }
+
+// OCR engine for scanned PDFs (Tesseract.js) — served straight from
+// node_modules rather than committed to the repo (~6MB of wasm + language
+// data) or loaded from a third-party CDN. Runs entirely in the reader's
+// browser (Render's free tier can't absorb OCR CPU/memory load server-
+// side). Package-versioned, so safe to cache for a week.
+const OCR_STATIC_OPTS = { maxAge: NODE_ENV === "production" ? "7d" : 0 };
+app.use("/ocr/js",   express.static(path.join(__dirname, "..", "node_modules", "tesseract.js", "dist"), OCR_STATIC_OPTS));
+app.use("/ocr/core", express.static(path.join(__dirname, "..", "node_modules", "tesseract.js-core"), OCR_STATIC_OPTS));
+app.use("/ocr/lang", express.static(path.join(__dirname, "..", "node_modules", "@tesseract.js-data", "eng", "4.0.0_best_int"), OCR_STATIC_OPTS));
 
 app.use(express.static(staticRoot, {
   extensions: ["html"],
@@ -3525,6 +3573,69 @@ app.post("/api/library/pdf-annotations", async (req, res) => {
   } catch (e) {
     console.error("POST /api/library/pdf-annotations failed:", e);
     res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/library/pdf-ocr", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const paperId = String(req.query.paper_id || "").trim();
+  if (!paperId) return res.status(400).json({ error: "paper_id required" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT pages FROM pdf_ocr WHERE orcid=$1 AND paper_id=$2`,
+      [sess.orcid, paperId]
+    );
+    res.json({ pages: rows[0]?.pages || {} });
+  } catch (e) {
+    res.json({ pages: {} });
+  }
+});
+
+// One page per request (keeps each body well under express.json's 100kb
+// default). Also makes OCR'd text searchable in the library's full-text
+// search: if the PDF's own extracted text is essentially empty (a scanned
+// PDF — the whole reason OCR ran), full_text is replaced by the combined
+// OCR text of every page recognized so far. A mostly-native PDF with a few
+// scanned pages keeps its native text untouched.
+app.post("/api/library/pdf-ocr", async (req, res) => {
+  const sess = await getSession(req);
+  if (!sess) return res.status(401).json({ error: "Not signed in" });
+  const { paper_id, page, text, words } = req.body || {};
+  const pageNum = Number(page);
+  if (!paper_id || !Number.isInteger(pageNum) || pageNum < 1 || !Array.isArray(words)) {
+    return res.status(400).json({ error: "paper_id, page and words[] required" });
+  }
+  const cleanWords = words.slice(0, 5000)
+    .filter(w => Array.isArray(w) && w.length === 5 && typeof w[0] === "string")
+    .map(w => [w[0].slice(0, 200), +w[1] || 0, +w[2] || 0, +w[3] || 0, +w[4] || 0]);
+  const pageText = String(text || "").slice(0, 100_000);
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO pdf_ocr (orcid, paper_id, pages, updated_at)
+       VALUES ($1, $2, jsonb_build_object($3::text, $4::jsonb), now())
+       ON CONFLICT (orcid, paper_id) DO UPDATE
+         SET pages = pdf_ocr.pages || jsonb_build_object($3::text, $4::jsonb),
+             updated_at = now()
+       RETURNING pages`,
+      [sess.orcid, String(paper_id), String(pageNum), JSON.stringify({ t: pageText, w: cleanWords })]
+    );
+    const pages = rows[0]?.pages || {};
+    const combined = Object.keys(pages)
+      .map(Number).sort((a, b) => a - b)
+      .map(n => pages[String(n)]?.t || "")
+      .join("\n\n")
+      .slice(0, 2_000_000);
+    await pool.query(
+      `UPDATE library_pdfs SET full_text=$1, ocr_applied=TRUE
+       WHERE orcid=$2 AND paper_id=$3
+         AND (ocr_applied OR full_text IS NULL OR length(btrim(full_text)) < 200)`,
+      [combined, sess.orcid, String(paper_id)]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /api/library/pdf-ocr failed:", e);
+    res.status(500).json({ error: "Failed to save OCR text" });
   }
 });
 

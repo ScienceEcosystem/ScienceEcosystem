@@ -5605,3 +5605,68 @@ citation title search (204,252 results, unchanged), a bare DOI with no
 special characters, and a non-citation query that happens to contain a
 parenthesized year (correctly did NOT trigger the new title-extraction
 path).
+
+2026-10-27 — OCR for scanned PDFs in the reader (Tesseract.js, in-browser)
+
+Asked for directly ("can we do this please") after flagging that scanned
+PDFs — common for older literature — have no text layer, so search,
+selection, highlighting, citation detection and library full-text search
+all silently did nothing on them.
+
+- Runs in the reader's browser, not on the server: Render's free tier
+  (512MB, shared CPU) can't take OCR load. Tesseract.js v7 + English LSTM
+  data (~6MB first download, then cached in IndexedDB) served from
+  node_modules via new /ocr/js, /ocr/core, /ocr/lang static routes — no
+  binaries committed, no third-party CDN. CSP script-src gained
+  'wasm-unsafe-eval' (allows WebAssembly compilation only, not eval()).
+- scripts/pdf-reader.js: renderTextLayer() flags pages with <15 real text
+  characters as scanned. When ≥30% of pages are scanned, a banner offers
+  "Recognize text". Each page is re-rendered at ~2000px wide (independent
+  of zoom), recognized, and turned into one absolutely-positioned,
+  scaleX-fitted span per text line — the same shape pdf.js produces for
+  real text, so selection, in-document search (matches within a span),
+  the citation scanner (joins span text) and annotations all work
+  unchanged. If no references were extracted, the text-layer reference
+  fallback re-runs on the OCR text.
+- Saved once per PDF: to the account (new pdf_ocr table, one page per
+  POST to stay under express.json's 100kb limit) when the PDF is a
+  library item or known paper, otherwise to localStorage. For library
+  PDFs whose own extracted text is essentially empty, the combined OCR
+  text replaces library_pdfs.full_text, so library full-text search finds
+  scanned PDFs too (new library_pdfs.ocr_applied flag tracks this).
+- Real pre-existing bug found and fixed: pdf.js appends a text-measuring
+  canvas (.hiddenCanvasElement) to <body> and relies on its own
+  viewer.css (never loaded here) to hide it. On normal PDFs pdf.js
+  shrinks it to 0x0 after measuring fonts, but a scanned page has no text
+  to measure, so it kept the default 300x150 canvas size, stretched to
+  ~1400x700 in the body's flex column, and covered the lower half of the
+  reader — blank/black area and no text selection on ANY scanned PDF,
+  OCR or not. Added pdf.js's own rule for it to pdf-viewer.html.
+- DB trigger (clear_pdf_ocr_on_change) drops a PDF's OCR text when the
+  PDF is deleted or replaced (four code paths store library PDFs), so an
+  old file's lines can never be laid over a new file. Found because
+  deleting a test PDF left its pdf_ocr row behind.
+
+Verified live (Playwright, real dev server) on an image-only test PDF
+(rendered paper page → sips → PDF with no fonts): banner appears, OCR of
+the page took ~2s with accurate line text, in-document search finds
+"weed beds", grouped citations are detected, drag-selection + highlight
+produce a correct annotation, reload restores the text without re-OCR.
+Signed-in path with a disposable test account (removed afterwards,
+including its uploaded file): scanned PDF with no DOI imported as a
+library item; library full-text search for "crepuscular" returned
+nothing before OCR and the item with a highlighted snippet after; a fresh
+browser context loaded the OCR text from the account (no banner, no
+re-OCR).
+
+NOT YET VERIFIED: the clear_pdf_ocr_on_change trigger. Restarting the
+local server to apply it was blocked by the auto-mode safety check,
+because the local server runs against the production database and would
+create the trigger on the live library_pdfs table. Note that the earlier
+server start in this session already created the pdf_ocr table and the
+library_pdfs.ocr_applied column in production (both purely additive).
+Not pushed/deployed for the same reason; waiting on the user.
+
+Known, not fixed here: on scanned PDFs the existing "a citation tags the
+whole text span" issue (flagged 2026-10-04) covers every OCR line that
+contains a citation, since OCR spans are whole lines.

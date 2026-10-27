@@ -464,6 +464,20 @@ async function renderTextLayer(page, viewport, layerEl, tooltipEl) {
   const textContent = await page.getTextContent();
   if (typeof pdfjsLib.TextLayer !== 'function') return;
 
+  // Scanned page (an image with no real text layer): use saved OCR text
+  // for it if there is any, otherwise remember it so the OCR banner can
+  // offer to recognize it.
+  if (isScannedTextContent(textContent)) {
+    _scannedPages.add(page.pageNumber);
+    await _ocrLoadPromise;
+    if (_ocrPages[page.pageNumber]) {
+      renderOcrTextLayer(layerEl, page.pageNumber);
+      wireCitationHover(layerEl, tooltipEl);
+      wireAnnotationSelection(layerEl);
+      return;
+    }
+  }
+
   const textLayer = new pdfjsLib.TextLayer({
     textContentSource: textContent,
     container: layerEl,
@@ -504,6 +518,218 @@ function indexTextLayer(layerEl) {
     }).filter(e => e.text);
     pageTextIndex.set(page, entries);
   } catch (_) {}
+}
+
+// ── OCR for scanned PDFs ─────────────────────────────────────────────────────
+// A scanned PDF is just page images: no text layer, so search, selection,
+// highlighting, citation detection and the library's full-text search all
+// silently do nothing. Tesseract.js recognizes the text in the browser
+// (Render's free tier can't take that CPU/memory load server-side), and the
+// result is saved per page — to the account for a known paper, otherwise to
+// this browser — so each PDF only ever needs recognizing once.
+const _libraryPaperId = (() => {
+  try {
+    const u = new URL(pdfUrl, location.origin);
+    return u.pathname === '/api/library/pdf' ? u.searchParams.get('paper_id') : null;
+  } catch (_) { return null; }
+})();
+// Library PDFs are keyed by the library item id so the server can also feed
+// the OCR text into that item's full-text search.
+const OCR_KEY = _libraryPaperId || paperId || null;
+const OCR_LOCAL_KEY = `se_pdf_ocr_v1:${pdfUrl}`;
+let _ocrPages = {};              // pageNum -> { t: pageText, w: [[lineText, x, y, w, h]] } (fractions of page size)
+const _scannedPages = new Set();
+let _ocrRunning = false;
+let _ocrLoadPromise = Promise.resolve();
+
+function isScannedTextContent(textContent) {
+  const chars = (textContent.items || [])
+    .reduce((n, it) => n + String(it.str || '').replace(/\s+/g, '').length, 0);
+  return chars < 15;
+}
+
+async function loadOcrData() {
+  if (OCR_KEY) {
+    try {
+      const res = await fetch(`/api/library/pdf-ocr?paper_id=${encodeURIComponent(OCR_KEY)}`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.pages && Object.keys(data.pages).length) { _ocrPages = data.pages; return; }
+      }
+    } catch (_) {}
+  }
+  try {
+    const raw = localStorage.getItem(OCR_LOCAL_KEY);
+    if (raw) _ocrPages = JSON.parse(raw) || {};
+  } catch (_) {}
+}
+
+let _ocrMeasureCtx = null;
+// One span per recognized line, positioned and horizontally scaled to the
+// line's box on the page image — the same approach pdf.js uses for real
+// text runs, so selection, search (which matches within a span) and the
+// citation scanner (which joins span text) all work unchanged.
+function renderOcrTextLayer(layerEl, pageNumber) {
+  const data = _ocrPages[pageNumber];
+  if (!layerEl || !data || !Array.isArray(data.w)) return;
+  layerEl.innerHTML = '';
+  const W = layerEl.clientWidth, H = layerEl.clientHeight;
+  if (!W || !H) return;
+  if (!_ocrMeasureCtx) _ocrMeasureCtx = document.createElement('canvas').getContext('2d');
+  const frag = document.createDocumentFragment();
+  for (const [text, x, y, w, h] of data.w) {
+    if (!text) continue;
+    const fontPx = Math.max(4, h * H * 0.9);
+    const span = document.createElement('span');
+    span.textContent = text + ' ';
+    span.style.left = `${x * 100}%`;
+    span.style.top = `${y * 100}%`;
+    span.style.fontSize = `${fontPx}px`;
+    span.style.fontFamily = 'sans-serif';
+    _ocrMeasureCtx.font = `${fontPx}px sans-serif`;
+    const natural = _ocrMeasureCtx.measureText(text).width;
+    if (natural > 0) span.style.transform = `scaleX(${(w * W) / natural})`;
+    frag.appendChild(span);
+  }
+  layerEl.appendChild(frag);
+  indexTextLayer(layerEl);
+  applyCitationHighlightsToLayer(layerEl);
+}
+
+function ocrMissingPages() {
+  return Array.from(_scannedPages).filter(n => !_ocrPages[n]).sort((a, b) => a - b);
+}
+
+function getOcrBanner() {
+  let bar = document.getElementById('pdfOcrBanner');
+  if (bar) return bar;
+  const scroll = document.querySelector('.pdf-scroll');
+  if (!scroll) return null;
+  bar = document.createElement('div');
+  bar.id = 'pdfOcrBanner';
+  bar.className = 'pdf-ocr-banner';
+  bar.setAttribute('role', 'status');
+  scroll.insertBefore(bar, scroll.firstChild);
+  return bar;
+}
+
+// Only offered when a meaningful share of the document is scanned — a
+// normal PDF with one blank or image-only page shouldn't nag.
+function maybeShowOcrBanner() {
+  if (!pdfDoc || _ocrRunning) return;
+  const missing = ocrMissingPages();
+  const threshold = Math.max(1, Math.ceil(pdfDoc.numPages * 0.3));
+  if (_scannedPages.size < threshold || !missing.length) {
+    document.getElementById('pdfOcrBanner')?.remove();
+    return;
+  }
+  const bar = getOcrBanner();
+  if (!bar) return;
+  const n = missing.length;
+  bar.innerHTML = `
+    <span class="pdf-ocr-msg"><strong>This PDF looks scanned.</strong> Its text can't be searched, selected or highlighted yet${n < pdfDoc.numPages ? ` (${n} page${n === 1 ? '' : 's'})` : ''}.</span>
+    <button type="button" class="pdf-ocr-btn">Recognize text</button>
+    <span class="pdf-ocr-note">Runs in your browser — nothing leaves your device except the recognized text${OCR_KEY ? ', saved to your account' : ''}.</span>`;
+  bar.querySelector('.pdf-ocr-btn').addEventListener('click', () => runOcr(missing));
+}
+
+async function loadTesseract() {
+  if (window.Tesseract) return window.Tesseract;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = '/ocr/js/tesseract.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Could not load the OCR engine'));
+    document.head.appendChild(s);
+  });
+  return window.Tesseract;
+}
+
+async function persistOcrPage(n) {
+  const entry = _ocrPages[n];
+  let savedToServer = false;
+  if (OCR_KEY) {
+    try {
+      const res = await fetch('/api/library/pdf-ocr', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paper_id: OCR_KEY, page: n, text: entry.t, words: entry.w })
+      });
+      savedToServer = res.ok;
+    } catch (_) {}
+  }
+  if (!savedToServer) {
+    try { localStorage.setItem(OCR_LOCAL_KEY, JSON.stringify(_ocrPages)); } catch (_) { /* quota — kept for this session only */ }
+  }
+}
+
+async function runOcr(pages) {
+  if (_ocrRunning || !pdfDoc || !pages.length) return;
+  _ocrRunning = true;
+  const bar = getOcrBanner();
+  const setMsg = (html) => { if (bar) bar.innerHTML = `<span class="pdf-ocr-msg">${html}</span>`; };
+  setMsg('Loading text recognition…');
+
+  let worker = null;
+  let done = 0;
+  try {
+    const T = await loadTesseract();
+    worker = await T.createWorker('eng', 1, {
+      workerPath: '/ocr/js/worker.min.js',
+      corePath: '/ocr/core',
+      langPath: '/ocr/lang',
+      workerBlobURL: false,
+    });
+    for (const n of pages) {
+      setMsg(`Recognizing text… page ${done + 1} of ${pages.length} <span class="pdf-ocr-bar"><span style="width:${Math.round((done / pages.length) * 100)}%"></span></span>`);
+      const page = await pdfDoc.getPage(n);
+      // Render at OCR-friendly resolution (~2000px wide), independent of zoom.
+      const base = page.getViewport({ scale: 1 });
+      const ocrScale = Math.min(3, 2000 / base.width);
+      const vp = page.getViewport({ scale: ocrScale });
+      const c = document.createElement('canvas');
+      c.width = Math.round(vp.width);
+      c.height = Math.round(vp.height);
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      const { data } = await worker.recognize(c, {}, { text: true, blocks: true });
+      const lines = [];
+      for (const b of data.blocks || []) {
+        for (const p of b.paragraphs || []) {
+          for (const l of p.lines || []) {
+            const words = (l.words || []).filter(w => (w.text || '').trim() && (w.confidence ?? 100) >= 20);
+            if (!words.length) continue;
+            const x0 = Math.min(...words.map(w => w.bbox.x0));
+            const y0 = Math.min(...words.map(w => w.bbox.y0));
+            const x1 = Math.max(...words.map(w => w.bbox.x1));
+            const y1 = Math.max(...words.map(w => w.bbox.y1));
+            const r = (v) => +v.toFixed(5);
+            lines.push([words.map(w => w.text.trim()).join(' '), r(x0 / c.width), r(y0 / c.height), r((x1 - x0) / c.width), r((y1 - y0) / c.height)]);
+          }
+        }
+      }
+      _ocrPages[n] = { t: data.text || lines.map(l => l[0]).join('\n'), w: lines };
+      c.width = c.height = 0; // release the bitmap
+      const layerEl = document.querySelector(`.pdf-page-wrap[data-page="${n}"] .pdf-text-layer`);
+      if (layerEl) renderOcrTextLayer(layerEl, n);
+      await persistOcrPage(n);
+      done++;
+    }
+    searchAllText = null; // rebuild the in-document search index with the new text
+    if (!extractedReferences.length) {
+      const refs = extractRefsFromTextLayer();
+      if (refs.length) { extractedReferences = refs; buildAuthorYearMap(); applyCitationHighlights(); }
+    }
+    extractFiguresTablesFromText();
+    setMsg(`✓ Text recognized on ${done} page${done === 1 ? '' : 's'} — search, selection, highlighting and citations now work on this PDF.`);
+    setTimeout(() => document.getElementById('pdfOcrBanner')?.remove(), 6000);
+  } catch (e) {
+    console.error('OCR failed:', e);
+    setMsg(`Text recognition stopped${done ? ` after ${done} page${done === 1 ? '' : 's'}` : ''}: ${escapeHtml(String(e.message || e))}`);
+  } finally {
+    try { await worker?.terminate(); } catch (_) {}
+    _ocrRunning = false;
+  }
 }
 
 function labelFromTextHits(text) {
@@ -1133,6 +1359,7 @@ async function renderAllPages() {
   renderThumbnails();
   startScrollPageTracker();
   extractFiguresTablesFromText();
+  maybeShowOcrBanner();
 }
 
 // Explicit page jumps (page-jump box, thumbnail click, keyboard shortcuts,
@@ -2260,6 +2487,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   bindSearch();
 
   annotationKey = `se_annotations_${encodeURIComponent(pdfUrl)}`;
+  _ocrLoadPromise = loadOcrData(); // awaited only by scanned pages' text layers
 
   // Try loading annotations from server first, fall back to localStorage
   const serverLoaded = await loadAnnotationsFromServer();

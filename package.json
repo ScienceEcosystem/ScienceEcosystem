@@ -11,6 +11,7 @@
     "@aws-sdk/client-s3": "^3.1050.0",
     "@aws-sdk/s3-request-presigner": "^3.1050.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "citeproc": "^2.4.63",
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.4.5",
@@ -19,7 +20,8 @@
     "js-yaml": "^5.2.3",
     "node-fetch": "^3.3.2",
     "pdf-parse": "^2.4.5",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "tesseract.js": "^7.0.0"
   },
   "engines": {
     "node": ">=18 <23"
