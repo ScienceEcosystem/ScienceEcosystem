@@ -23,10 +23,13 @@
   const _T_DISS=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><rect x=".5" y=".5" width="10" height="12" rx="1" stroke="#b45309"/><circle cx="5.5" cy="7" r="2" stroke="#b45309"/></svg>`;
   const _T_DATA=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><ellipse cx="5.5" cy="3" rx="4.5" ry="2" stroke="#6b7280"/><path d="M1 3v7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V3" stroke="#6b7280"/><path d="M1 7c0 1.1 2 2 4.5 2s4.5-.9 4.5-2" stroke="#6b7280"/></svg>`;
   const _T_NOTE=`<svg width="11" height="13" viewBox="0 0 11 13" fill="none" style="display:block;margin:auto"><path d="M.5 1.5a1 1 0 0 1 1-1h6l3 3v8a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10z" stroke="#c2861a"/><path d="M7.5.7V4h3.3" stroke="#c2861a"/></svg>`;
-  const TYPE_ICON_MAP={'journal-article':_T_DOC,'review':_T_DOC,'letter':_T_DOC,'editorial':_T_DOC,'other':_T_DOC,'book':_T_BOOK,'book-chapter':_T_BOOK,'conference-paper':_T_CONF,'preprint':_T_PRE,'dissertation':_T_DISS,'dataset':_T_DATA,'report':_T_DOC,'note':_T_NOTE,'webpage':_T_DOC};
+  // Paperclip — standalone file items' type icon, and the "has attached files" marker in the table
+  const _T_FILE=`<svg width="12" height="13" viewBox="0 0 12 13" fill="none" style="display:block;margin:auto"><path d="M10 6.2 6.1 10.1a2.6 2.6 0 0 1-3.7-3.7l4.4-4.4a1.7 1.7 0 0 1 2.5 2.5L4.9 8.9a.8.8 0 0 1-1.2-1.2L7.6 3.8" stroke="#7b8ea0" stroke-linecap="round"/></svg>`;
+  const TYPE_ICON_MAP={'journal-article':_T_DOC,'review':_T_DOC,'letter':_T_DOC,'editorial':_T_DOC,'other':_T_DOC,'book':_T_BOOK,'book-chapter':_T_BOOK,'conference-paper':_T_CONF,'preprint':_T_PRE,'dissertation':_T_DISS,'dataset':_T_DATA,'report':_T_DOC,'note':_T_NOTE,'webpage':_T_DOC,'file':_T_FILE};
   function typeIcon(t){ return TYPE_ICON_MAP[t]||_T_DOC; }
 
   // Small PDF badge SVG
+  const CLIP_BADGE=(n)=>`<span title="${n} attached file${n===1?'':'s'}" style="display:inline-flex;align-items:center;gap:1px;font-size:.62rem;color:#64748b;">${_T_FILE.replace('display:block;margin:auto','display:inline-block')}${n>1?n:''}</span>`;
   const PDF_BADGE=`<svg width="13" height="15" viewBox="0 0 13 15" fill="none" style="display:block;margin:auto"><rect width="13" height="15" rx="2" fill="#dc2626"/><text x="6.5" y="10.5" text-anchor="middle" font-size="5.5" font-family="Inter,sans-serif" font-weight="700" fill="white">PDF</text></svg>`;
 
   // ---- Toast notifications (replaces alert()) ----
@@ -141,7 +144,10 @@
     "other":           { label: "Other",            bibtex: "misc",      fields: [] },
     "note":            { label: "Note",              bibtex: "misc",      fields: [] },
     "webpage":         { label: "Web Page",          bibtex: "misc",      fields: ["url","accessed"] },
+    "file":            { label: "File",              bibtex: "misc",      fields: [] },
   };
+  // Standalone notes and files have nothing to cite — kept out of citation/bibliography exports
+  const NON_CITABLE_TYPES = new Set(["note","file"]);
   const EXTRA_LABELS = {
     volume:"Volume", issue:"Issue", pages:"Pages", issn:"ISSN",
     publisher:"Publisher", isbn:"ISBN", edition:"Edition",
@@ -1435,7 +1441,7 @@
         <td class="col-icon" title="${esc(ITEM_TYPES[getItemType(it)]?.label||'Article')}" style="position:relative;">${typeIcon(getItemType(it))}${it.read_status?`<span style="position:absolute;top:1px;right:1px;">${READ_DOT[it.read_status]||''}</span>`:""}</td>
         <td class="col-title" title="${esc(it.title||"-")}">${zoteroBadge}${pdfMatchBadge}${titleHtml(it.title||"-")}</td>
         ${optionalTds}
-        <td class="col-pdf" title="${it.local_pdf_path?'PDF stored in library':''}">${it.local_pdf_path?PDF_BADGE:''}</td>
+        <td class="col-pdf" title="${it.local_pdf_path?'PDF stored in library':''}"><span style="display:inline-flex;align-items:center;gap:2px;">${it.local_pdf_path?PDF_BADGE:''}${it.attachment_count>0?CLIP_BADGE(it.attachment_count):''}</span></td>
       </tr>`;
     }).join("");
 
@@ -1684,7 +1690,7 @@
 
     // Notes have no citation to export — excluded here since this helper's
     // only consumers are the citation-export buttons just below.
-    const selectedItems=()=>ids.map(i=>items.find(x=>String(x.id)===String(i))).filter(it=>it && getItemType(it)!=="note");
+    const selectedItems=()=>ids.map(i=>items.find(x=>String(x.id)===String(i))).filter(it=>it && !NON_CITABLE_TYPES.has(getItemType(it)));
     $("#bulkCopyCiteBtn")?.addEventListener("click", async()=>{
       const fmt=$("#bulkCiteFormatSelect")?.value||"apa";
       const text=buildBibliography(selectedItems(), fmt);
@@ -1829,7 +1835,7 @@
 
           <!-- Actions -->
           <div style="display:flex;flex-wrap:wrap;gap:.3rem;padding:.4rem 0;border-bottom:1px solid #f0f0f0;">
-            ${itemType==="webpage"?"":`<a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(openAlexId)}" style="font-size:.79rem;padding:.22rem .5rem;">Details</a>`}
+            ${(itemType==="webpage"||itemType==="file")?"":`<a class="btn btn-secondary" href="paper.html?id=${encodeURIComponent(openAlexId)}" style="font-size:.79rem;padding:.22rem .5rem;">Details</a>`}
             ${pdfViewerUrl?`<a class="btn btn-secondary" href="${esc(pdfViewerUrl)}" style="font-size:.79rem;padding:.22rem .5rem;">Read PDF</a>`:""}
             <button class="btn btn-secondary" id="addToCollectionBtn" style="font-size:.79rem;padding:.22rem .5rem;">+ Collection</button>
             ${!item.deleted_at?`<button class="btn btn-secondary" id="trashItemBtn" style="font-size:.79rem;padding:.22rem .5rem;">Trash</button>`:`<button class="btn btn-secondary" id="restoreItemBtn" style="font-size:.79rem;padding:.22rem .5rem;">Restore</button>`}
@@ -1843,6 +1849,9 @@
               :`<button class="btn btn-secondary" id="uploadPdfBtn" style="font-size:.79rem;padding:.22rem .5rem;">Attach PDF</button><input id="uploadPdfInput" type="file" accept="application/pdf" style="display:none;">`
             }
           </div>
+
+          <!-- Attached files (any type) -->
+          <div id="attachPanel" style="padding:.4rem 0;border-bottom:1px solid #f0f0f0;"></div>
 
           <!-- Annotations -->
           <div id="annotPanel" style="padding:.3rem 0;"></div>
@@ -2150,10 +2159,74 @@
       }
     });
 
+    // Attached files
+    renderAttachmentsPanel(id);
     // Related section
     await renderRelated(id);
     // Notes
     await renderNotes(id);
+  }
+
+  // ---- Attached files (any type), Zotero-style ----
+  function fmtBytes(n){
+    if(!n && n!==0) return "";
+    if(n<1024) return `${n} B`;
+    if(n<1024*1024) return `${(n/1024).toFixed(0)} KB`;
+    return `${(n/1024/1024).toFixed(1)} MB`;
+  }
+  async function renderAttachmentsPanel(itemId){
+    const panel = document.getElementById("attachPanel");
+    if(!panel) return;
+    let list = [];
+    try{ list = (await api(`/api/library/attachments?paper_id=${encodeURIComponent(itemId)}`)).attachments || []; }
+    catch{ panel.innerHTML = `<p class="muted" style="font-size:.78rem;margin:0;">Couldn't load attached files.</p>`; return; }
+    if(!panel.isConnected) return; // inspector switched to another item meanwhile
+
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:${list.length?'.3rem':'0'};">
+        <span class="insp-sub-hdr" style="margin:0;">Files${list.length?` (${list.length})`:''}</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-secondary" id="attachFileBtn" style="font-size:.77rem;padding:.18rem .45rem;" title="Attach any file to this item — data, slides, supplementary material, images…">+ Attach file</button>
+        <input id="attachFileInput" type="file" multiple style="display:none;">
+      </div>
+      ${list.length?`<ul style="list-style:none;margin:0;padding:0;">
+        ${list.map(a=>`<li style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0;font-size:.8rem;">
+          <span style="flex-shrink:0;">${_T_FILE.replace('display:block;margin:auto','display:inline-block')}</span>
+          <a href="/api/library/attachments/${a.id}/download" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Download ${esc(a.filename)}">${esc(a.filename)}</a>
+          <span class="muted" style="font-size:.72rem;flex-shrink:0;">${esc(fmtBytes(Number(a.file_size)))}</span>
+          <button class="att-remove" data-att-id="${a.id}" title="Remove this file" aria-label="Remove ${esc(a.filename)}" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:.9rem;padding:0 .2rem;">×</button>
+        </li>`).join("")}
+      </ul>`:""}`;
+
+    $("#attachFileBtn")?.addEventListener("click",()=>$("#attachFileInput")?.click());
+    $("#attachFileInput")?.addEventListener("change", async(ev)=>{
+      const files = Array.from(ev.target.files||[]);
+      const btn = $("#attachFileBtn"); if(btn){ btn.disabled=true; btn.textContent="Uploading…"; }
+      let added = 0;
+      for(const f of files){
+        const form = new FormData();
+        form.append("paper_id", itemId);
+        form.append("file", f);
+        try{ await api("/api/library/attachments",{ method:"POST", body:form }); added++; }
+        catch(e){ toast(`Could not attach ${f.name}: ${await errorMessage(e)}`,"error"); }
+      }
+      const it = items.find(x=>String(x.id)===String(itemId));
+      if(it) it.attachment_count = (Number(it.attachment_count)||0) + added;
+      renderTable();
+      if(added) toast(`Attached ${added} file${added===1?'':'s'}`,"success");
+      await renderAttachmentsPanel(itemId);
+    });
+    panel.querySelectorAll(".att-remove").forEach(btn=>btn.addEventListener("click", async()=>{
+      const a = list.find(x=>String(x.id)===btn.dataset.attId);
+      if(!a || !confirm(`Remove "${a.filename}" from this item? The file will be deleted.`)) return;
+      try{
+        await api(`/api/library/attachments/${a.id}`,{ method:"DELETE" });
+        const it = items.find(x=>String(x.id)===String(itemId));
+        if(it) it.attachment_count = Math.max(0,(Number(it.attachment_count)||0)-1);
+        renderTable();
+        await renderAttachmentsPanel(itemId);
+      }catch(e){ toast("Could not remove file: "+await errorMessage(e),"error"); }
+    }));
   }
 
   // ---- PDF annotation panel in inspector ----
@@ -2337,6 +2410,33 @@
     }
   }
 
+  // Any file: PDFs go through the PDF import (which can identify the paper
+  // from its DOI/title); anything else becomes a standalone "File" item with
+  // the file attached — same as dropping a file into Zotero.
+  const isPdfFile = (f)=>f && (f.type==="application/pdf" || /\.pdf$/i.test(f.name||""));
+  async function errorMessage(e){
+    try{ return JSON.parse(e.message).error || e.message; }catch{ return e.message || "unknown error"; }
+  }
+  async function handleFileUpload(file){
+    if(!file) return;
+    if(isPdfFile(file)) return handlePdfUpload(file);
+    const form = new FormData();
+    form.append("file", file);
+    const cid = activeRealCollectionId();
+    if(cid) form.append("collectionId", String(cid));
+    try{
+      const res = await api("/api/library/import-file",{ method:"POST", body:form });
+      const created = cid ? { ...res.item, collection_ids:[cid] } : res.item;
+      items.push(created);
+      renderTable();
+      currentSelection = created.id;
+      await renderInspector(currentSelection);
+      toast(`Added "${created.title}"`,"success");
+    }catch(e){
+      toast("Could not add file: "+await errorMessage(e),"error");
+    }
+  }
+
   async function handleAddByDoi(input){
     const identifier = (input.value || "").trim();
     if(!identifier) return;
@@ -2454,17 +2554,17 @@
     if(importBtn && importInput){
       importBtn.addEventListener("click",()=>importInput.click());
       importInput.addEventListener("change", async(ev)=>{
-        const file = ev.target.files && ev.target.files[0];
-        await handlePdfUpload(file);
+        for(const file of Array.from(ev.target.files||[])) await handleFileUpload(file);
         // Reset so selecting same file again still triggers change
         ev.target.value="";
       });
     }
 
-    // Drag-and-drop: dropping a PDF anywhere on the library page imports it
-    // the same way "Add PDF" does — Zotero-style, no need to hunt for the
-    // button. Multiple files are imported one at a time. Non-PDF drops
-    // (dragging text/links) are ignored, since only files carry `dataTransfer.files`.
+    // Drag-and-drop: dropping files anywhere on the library page imports them
+    // the same way "Add file" does — Zotero-style, no need to hunt for the
+    // button. PDFs are identified as papers; other files become File items.
+    // Multiple files are imported one at a time. Dragging text/links is
+    // ignored, since only files carry `dataTransfer.files`.
     (function wireDropzone(){
       const grid = $("#libGrid");
       if(!grid) return;
@@ -2472,7 +2572,7 @@
       function showOverlay(){
         if(overlay) return;
         overlay=document.createElement("div");
-        overlay.textContent="Drop PDF to add to your library";
+        overlay.textContent="Drop files to add to your library";
         Object.assign(overlay.style,{
           position:"fixed", inset:"0", zIndex:"9998", display:"flex",
           alignItems:"center", justifyContent:"center", fontSize:"1.1rem",
@@ -2497,15 +2597,16 @@
         if(!hasFiles(ev)) return;
         ev.preventDefault();
         hideOverlay();
-        const files = Array.from(ev.dataTransfer?.files||[]).filter(f=>f.type==="application/pdf"||/\.pdf$/i.test(f.name));
-        if(!files.length){ toast("Only PDF files can be dropped here","error"); return; }
-        for(const f of files){ await handlePdfUpload(f); }
+        // Folders show up as zero-byte, type-less entries — skip them.
+        const files = Array.from(ev.dataTransfer?.files||[]).filter(f=>f.size>0 || f.type);
+        if(!files.length){ toast("Nothing to add — drop files, not folders","error"); return; }
+        for(const f of files){ await handleFileUpload(f); }
       });
     })();
 
     // Export the currently visible items (selected collection + filters) as one .bib file
     $("#exportLibBibBtn")?.addEventListener("click", async()=>{
-      const list = applyFilters(currentViewItems()).filter(it=>getItemType(it)!=="note");
+      const list = applyFilters(currentViewItems()).filter(it=>!NON_CITABLE_TYPES.has(getItemType(it)));
       if(!list.length){ toast("Nothing to export","error"); return; }
       const usedKeys = new Set();
       const rawEntries = await Promise.all(list.map(item=>realOrLocalBibTeX(item)));

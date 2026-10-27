@@ -263,13 +263,13 @@
             <option value="asc">Asc</option>
             <option value="desc">Desc</option>
           </select>
-          <input id="importPdfInput" type="file" accept="application/pdf" style="display:none;">
+          <input id="importPdfInput" type="file" multiple style="display:none;">
 
           <div class="lib-toolbar">
             <input id="libFilter" class="input input-pill" placeholder="Filter…" style="flex:1;min-width:6rem;max-width:18rem;"/>
             <input id="addByDoiInput" class="input input-pill" placeholder="Add by DOI / URL…" title="Paste a DOI, doi.org link, or any web page address (e.g. a website or dataset page) and press Enter to add it to your library" style="flex:1;min-width:8rem;max-width:16rem;"/>
             <button id="addByDoiBtn" class="btn btn-secondary">Add</button>
-            <button id="importPdfBtn" class="btn btn-secondary">Add PDF</button>
+            <button id="importPdfBtn" class="btn btn-secondary" title="Add PDFs (identified as papers where possible) or any other file — or just drag files onto the page">Add file</button>
             <button id="newNoteBtn" class="btn btn-secondary" title="Add a freeform note, not tied to any paper">New note</button>
             <button id="exportLibBibBtn" class="btn btn-secondary" title="Export the items shown here as a .bib file">↓ .bib</button>
             <div style="position:relative;">

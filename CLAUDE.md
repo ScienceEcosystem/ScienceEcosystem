@@ -2,6 +2,8 @@ ScienceEcosystem — Development Notes
 Last updated: 2026-06-25
 =======================================================
 
+Is there a way to connect to publishers pages to see how your current publications are doing or is this kept hidden and will we not be able to connect to these things? i mean like example the https://wiley.scienceconnect.io/dashboard which is very good and also has access to autor pages login.
+
 this doi does not reveal anyghing why:https://doi.org/10.1577/1548-8659(1965)94%5B1:DPITBB%5D2.0.CO;2
 
 also not whan searching for the full citation:
@@ -5696,3 +5698,58 @@ How to work from now on:
 Known, not fixed here: on scanned PDFs the existing "a citation tags the
 whole text span" issue (flagged 2026-10-04) covers every OCR line that
 contains a citation, since OCR spans are whole lines.
+
+2026-10-27 — Library: attach any file type, Zotero-style
+
+Asked for directly ("we should do this also just like zotero"): until now
+an item could hold exactly one PDF, and only PDFs could be dropped in.
+
+- New library_attachments table: any number of files of any type per
+  item (the item's main PDF stays in library_pdfs, so the reader/OCR/
+  full-text search paths are untouched).
+- "Add PDF" is now "Add file" (multi-select), and dropping files anywhere
+  on the library page accepts every type: PDFs still go through
+  /api/library/import-pdf (DOI/title identification); anything else
+  becomes a standalone item of new type "File" (paperclip icon, titled
+  after the filename, filed into the open collection) via new
+  /api/library/import-file. Executables (.exe/.msi/.sh/.jar/…) are refused
+  with a clear message — no place in a research library, and it keeps the
+  storage unattractive for malware hosting. 50 MB per file, same as PDFs.
+- Inspector: new "Files" section on every item — list with size,
+  download, remove (with confirm), "+ Attach file". "Details" (paper page)
+  is hidden for File items, and File items are excluded from citation /
+  .bib exports like notes are (new NON_CITABLE_TYPES set).
+- Table: paperclip (+ count) next to the PDF badge; /api/library/full
+  returns attachment_count.
+- Security: files are only reachable through
+  /api/library/attachments/:id/download, which checks ownership and always
+  forces a download (Content-Disposition: attachment) — an uploaded
+  .html/.svg can never render inline on our origin. In production that
+  endpoint redirects to a 5-minute signed R2 URL (on R2's own domain);
+  the local-dev fallback stores files in .data/attachments (gitignored,
+  and express.static ignores dot-directories) instead of the publicly
+  served uploads/ folder that local PDFs use.
+- Deleting an item (or permanently emptying it from Trash, which
+  previously did a bare DELETE and now goes through libraryDel) also
+  deletes its attachment files from storage — otherwise they'd outlive
+  the item forever.
+
+BUG CAUGHT before shipping: the attachment_count subquery first used
+li.orcid, which isn't in /api/library/full's GROUP BY — Postgres rejected
+the whole query, so the library page showed "No items" for everyone. The
+first UI test missed it (items were added client-side without a reload);
+a reload exposed it. Fixed by using the $1 orcid parameter, and
+re-verified against the largest real library copy on the dev branch
+(782 items).
+
+Verified live on the dev branch with a disposable account (removed
+afterwards, files included): CSV via "Add file" → File item + paperclip;
+download returns the identical bytes as a forced download; attaching a
+PDF + an .exe → PDF attached, .exe refused with "Executable files can't
+be stored in the library"; remove works and updates the count; a
+signed-out download gets 401; a PDF via "Add file" still becomes a
+normal PDF item; deleting the item removed its attachment rows and the
+stored file.
+
+Known, not fixed here (pre-existing): deleting a library item leaves its
+main PDF (library_pdfs row + stored file) behind.

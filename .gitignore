@@ -4,3 +4,4 @@ node_modules/
 extension_v*.zip
 scimagojr*.csv
 scimagojr*.xls
+.data/

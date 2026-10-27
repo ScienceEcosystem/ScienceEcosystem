@@ -769,6 +769,24 @@ async function pgInit() {
   await pool.query(`DROP TRIGGER IF EXISTS library_pdfs_clear_ocr_del ON library_pdfs`);
   await pool.query(`CREATE TRIGGER library_pdfs_clear_ocr_del AFTER DELETE ON library_pdfs FOR EACH ROW EXECUTE FUNCTION clear_pdf_ocr_on_change()`);
 
+  // File attachments — any file type, any number per library item (the
+  // item's main PDF stays in library_pdfs; this is everything else:
+  // supplementary data, Word docs, images, slides, ...). A file dropped on
+  // its own becomes a standalone item of type "file", like Zotero.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS library_attachments (
+      id           BIGSERIAL PRIMARY KEY,
+      orcid        TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      paper_id     TEXT NOT NULL,
+      filename     TEXT NOT NULL,
+      storage_path TEXT NOT NULL,
+      file_size    BIGINT,
+      mime_type    TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS library_attachments_item_idx ON library_attachments(orcid, paper_id)`);
+
   // Zotero connections + sync log
   await pool.query(`
     CREATE TABLE IF NOT EXISTS zotero_connections (
@@ -1013,9 +1031,11 @@ async function libraryAdd(orcid, id, title) {
 }
 async function libraryDel(orcid, id) {
   await pool.query(`DELETE FROM library_items WHERE orcid = $1 AND id = $2`, [orcid, id]);
+  await deleteItemAttachments(orcid, id);
 }
 async function libraryClear(orcid) {
   await pool.query(`DELETE FROM library_items WHERE orcid = $1`, [orcid]);
+  await deleteItemAttachments(orcid, null);
 }
 
 // Claims/Merges
@@ -1868,6 +1888,51 @@ async function storePdfFile(orcid, paperId, buffer, contentType) {
   await fsp.writeFile(fullPath, buffer);
   const safePath = ensureSafePath(pdfUploadDir, fullPath);
   return { storagePath: safePath, filename: fname, urlPath: `/uploads/pdfs/${orcid}/${fname}` };
+}
+
+// ── File attachments storage ─────────────────────────────────────────────────
+// R2 in production. Local fallback lives OUTSIDE anything express.static
+// serves (a dot-directory, which express.static ignores, plus a path outside
+// staticRoot's uploads/), so a stored file is only ever reachable through
+// the signed-in download endpoint below — never as a public URL.
+const ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
+const attachmentDir = path.join(__dirname, "..", ".data", "attachments");
+// Executables have no place in a research library and would make storage
+// attractive for malware hosting; everything else is allowed, as in Zotero.
+const BLOCKED_ATTACHMENT_EXT = /\.(exe|msi|bat|cmd|com|scr|pif|ps1|vbs|vbe|jse?|wsf|jar|app|dmg|pkg|apk|sh|dll)$/i;
+
+function safeAttachmentName(name) {
+  const base = String(name || "file").split(/[\\/]/).pop().trim() || "file";
+  return base.replace(/[^\w.\- ()]/g, "_").slice(0, 150);
+}
+
+async function storeAttachmentFile(orcid, filename, buffer, contentType) {
+  const key = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}_${safeAttachmentName(filename)}`;
+  if (r2Client) {
+    const r2Key = `attachments/${orcid}/${key}`;
+    await uploadToR2(r2Key, buffer, contentType || "application/octet-stream");
+    return `r2:${r2Key}`;
+  }
+  const dir = path.join(attachmentDir, orcid.replace(/[^\w\-]/g, "_"));
+  await fsp.mkdir(dir, { recursive: true });
+  const fullPath = path.join(dir, key);
+  await fsp.writeFile(fullPath, buffer);
+  return ensureSafePath(attachmentDir, fullPath);
+}
+
+async function deleteAttachmentFile(storagePath) {
+  if (!storagePath) return;
+  if (storagePath.startsWith("r2:")) return deleteFromR2(storagePath.slice(3));
+  await fsp.unlink(storagePath).catch(e => { if (e.code !== "ENOENT") throw e; });
+}
+
+// Removes an item's attachments, files included (used when the item itself
+// is deleted — otherwise the stored files would outlive it forever).
+async function deleteItemAttachments(orcid, paperId) {
+  const { rows } = paperId == null
+    ? await pool.query(`DELETE FROM library_attachments WHERE orcid=$1 RETURNING storage_path`, [orcid])
+    : await pool.query(`DELETE FROM library_attachments WHERE orcid=$1 AND paper_id=$2 RETURNING storage_path`, [orcid, paperId]);
+  for (const r of rows) await deleteAttachmentFile(r.storage_path).catch(e => console.warn("attachment cleanup:", e?.message || e));
 }
 
 // Full-text extraction — fire-and-forget, called right after a PDF is
@@ -3642,6 +3707,137 @@ app.post("/api/library/pdf-ocr", async (req, res) => {
   }
 });
 
+/* ---------------------------
+   File attachments API (any file type)
+----------------------------*/
+const ATTACHMENT_COLS = `id, paper_id, filename, file_size, mime_type, created_at`;
+
+// Shared by "attach to an item" and "drop a file as its own item".
+async function readAttachmentUpload(req, res) {
+  const { fields, files } = await parseMultipartForm(req, ATTACHMENT_MAX_BYTES + 1024 * 1024);
+  const file = (files || []).find(f => f.field === "file") || files?.[0];
+  if (!file?.buffer?.length) { res.status(400).json({ error: "file required" }); return null; }
+  if (file.size > ATTACHMENT_MAX_BYTES) { res.status(413).json({ error: "File too large (max 50 MB)" }); return null; }
+  const filename = safeAttachmentName(file.filename);
+  if (BLOCKED_ATTACHMENT_EXT.test(filename)) { res.status(400).json({ error: "Executable files can't be stored in the library" }); return null; }
+  return { fields: fields || {}, file, filename };
+}
+
+async function insertAttachment(orcid, paperId, filename, file) {
+  const storagePath = await storeAttachmentFile(orcid, filename, file.buffer, file.contentType);
+  const { rows } = await pool.query(
+    `INSERT INTO library_attachments (orcid, paper_id, filename, storage_path, file_size, mime_type)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING ${ATTACHMENT_COLS}`,
+    [orcid, paperId, filename, storagePath, file.size || file.buffer.length, file.contentType || "application/octet-stream"]
+  );
+  return rows[0];
+}
+
+app.get("/api/library/attachments", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const paperId = String(req.query.paper_id || "").trim();
+  if (!paperId) return res.status(400).json({ error: "paper_id required" });
+  const { rows } = await pool.query(
+    `SELECT ${ATTACHMENT_COLS} FROM library_attachments WHERE orcid=$1 AND paper_id=$2 ORDER BY created_at`,
+    [sess.orcid, paperId]
+  );
+  res.json({ attachments: rows });
+});
+
+// Attach a file to an existing library item.
+app.post("/api/library/attachments", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const up = await readAttachmentUpload(req, res); if (!up) return;
+    const paperId = String(up.fields.paper_id || "").trim();
+    if (!paperId) return res.status(400).json({ error: "paper_id required" });
+    const owns = await pool.query(`SELECT 1 FROM library_items WHERE orcid=$1 AND id=$2`, [sess.orcid, paperId]);
+    if (!owns.rowCount) return res.status(404).json({ error: "Item not found in your library" });
+    res.json({ attachment: await insertAttachment(sess.orcid, paperId, up.filename, up.file) });
+  } catch (e) {
+    console.error("POST /api/library/attachments failed:", e);
+    res.status(500).json({ error: "Failed to attach file" });
+  }
+});
+
+// A non-PDF file dropped on its own becomes a standalone library item
+// (type "file", titled after the file) with the file attached — PDFs keep
+// going through /api/library/import-pdf, which can identify the paper.
+app.post("/api/library/import-file", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  try {
+    const up = await readAttachmentUpload(req, res); if (!up) return;
+    const itemId = `file:${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+    const title = up.filename.replace(/\.[^.]{1,8}$/, "") || up.filename;
+    const { rows } = await pool.query(
+      `INSERT INTO library_items (orcid, id, title, item_type, meta_fresh)
+       VALUES ($1,$2,$3,'file',TRUE)
+       RETURNING id, title, item_type, meta_fresh`,
+      [sess.orcid, itemId, title]
+    );
+    const attachment = await insertAttachment(sess.orcid, itemId, up.filename, up.file);
+    const collectionId = Number(up.fields.collectionId) || null;
+    if (collectionId) {
+      const role = await collectionRole(sess.orcid, collectionId);
+      if (role === "owner" || role === "editor") {
+        await pool.query(
+          `INSERT INTO collection_items (collection_id, paper_id, orcid, title, added_by)
+           VALUES ($1,$2,$3,$4,$3) ON CONFLICT (collection_id, paper_id) DO NOTHING`,
+          [collectionId, itemId, sess.orcid, title]
+        );
+      }
+    }
+    res.json({ item: { ...rows[0], attachment_count: 1 }, attachment });
+  } catch (e) {
+    console.error("POST /api/library/import-file failed:", e);
+    res.status(500).json({ error: "Failed to import file" });
+  }
+});
+
+// Always delivered as a download, never displayed inline — an uploaded
+// .html/.svg opened inline could otherwise run script. R2 files come from a
+// short-lived signed URL on R2's own domain (with the same forced-download
+// header); local dev files are streamed by this handler.
+app.get("/api/library/attachments/:id/download", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { rows } = await pool.query(
+    `SELECT filename, storage_path, mime_type FROM library_attachments WHERE id=$1 AND orcid=$2`,
+    [Number(req.params.id) || 0, sess.orcid]
+  );
+  if (!rows.length) return res.status(404).json({ error: "File not found" });
+  const { filename, storage_path: storagePath, mime_type: mime } = rows[0];
+  const disposition = `attachment; filename="${filename.replace(/["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  try {
+    if (storagePath.startsWith("r2:")) {
+      if (!r2Client) return res.status(503).json({ error: "File storage unavailable" });
+      const signedUrl = await getSignedUrl(
+        r2Client,
+        new GetObjectCommand({ Bucket: R2_BUCKET, Key: storagePath.slice(3), ResponseContentDisposition: disposition, ResponseContentType: mime || "application/octet-stream" }),
+        { expiresIn: 300 }
+      );
+      return res.redirect(302, signedUrl);
+    }
+    const safe = ensureSafePath(attachmentDir, storagePath);
+    res.setHeader("Content-Disposition", disposition);
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.sendFile(safe, err => { if (err && !res.headersSent) res.status(404).json({ error: "File missing from storage" }); });
+  } catch (e) {
+    console.error("attachment download failed:", e);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to download file" });
+  }
+});
+
+app.delete("/api/library/attachments/:id", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { rows } = await pool.query(
+    `DELETE FROM library_attachments WHERE id=$1 AND orcid=$2 RETURNING storage_path`,
+    [Number(req.params.id) || 0, sess.orcid]
+  );
+  if (!rows.length) return res.status(404).json({ error: "File not found" });
+  await deleteAttachmentFile(rows[0].storage_path).catch(e => console.warn("attachment delete:", e?.message || e));
+  res.json({ ok: true });
+});
+
 app.delete("/api/library/:id", async (req, res) => {
   const sess = await getSession(req);
   if (!sess) return res.status(401).json({ error: "Not signed in" });
@@ -4234,7 +4430,7 @@ app.delete("/api/trash/items", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   const id = String(req.body?.id || "");
   if (!id) return res.status(400).json({ error: "id required" });
-  await pool.query(`DELETE FROM library_items WHERE orcid = $1 AND id = $2`, [sess.orcid, id]);
+  await libraryDel(sess.orcid, id); // also removes the item's attachment files
   res.json({ ok: true });
 });
 
@@ -6445,6 +6641,7 @@ app.get("/api/library/full", async (req, res) => {
         li.extra_fields,
         li.read_status,
         COALESCE(li.meta_fresh, FALSE) AS meta_fresh,
+        (SELECT count(*)::int FROM library_attachments la WHERE la.orcid = $1 AND la.paper_id = li.id) AS attachment_count,
         COALESCE(ARRAY_AGG(ci.collection_id) FILTER (WHERE ci.collection_id IS NOT NULL), '{}') AS collection_ids
       FROM library_items li
       LEFT JOIN collection_items ci
