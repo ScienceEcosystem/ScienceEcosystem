@@ -793,6 +793,38 @@ async function pgInit() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS library_proxy_prefix TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS library_name TEXT`);
 
+  // Author-profile problem reports (wrongly attributed works, duplicate
+  // profiles, other) and the corrections approved from them, applied as a
+  // local overlay on OpenAlex's author data.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS author_reports (
+      id              BIGSERIAL PRIMARY KEY,
+      orcid           TEXT NOT NULL REFERENCES users(orcid) ON DELETE CASCADE,
+      author_id       TEXT NOT NULL,
+      report_type     TEXT NOT NULL,
+      work_ids        TEXT[] NOT NULL DEFAULT '{}',
+      other_author_id TEXT,
+      note            TEXT,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      auto_applied    BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      reviewed_at     TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS author_reports_status_idx ON author_reports(status, created_at)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS author_profile_overrides (
+      id         BIGSERIAL PRIMARY KEY,
+      author_id  TEXT NOT NULL,
+      kind       TEXT NOT NULL,          -- 'exclude_work' | 'merge_author'
+      value      TEXT NOT NULL,          -- work id (W…) or other author id (A…)
+      report_id  BIGINT REFERENCES author_reports(id) ON DELETE SET NULL,
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (author_id, kind, value)
+    )
+  `);
+
   // Saved-search alerts. seen_ids = papers already shown for this search
   // (baselined when saved, so alerts start from that moment); new_items =
   // matches not yet marked seen, with enough metadata to list them without
@@ -2345,6 +2377,131 @@ app.put("/api/settings/library-access", async (req, res) => {
   if (parsed?.error) return res.status(400).json({ error: parsed.error });
   await pool.query(`UPDATE users SET library_proxy_prefix=$2, library_name=$3 WHERE orcid=$1`, [sess.orcid, parsed.prefix, name]);
   res.json({ prefix: parsed.prefix, name });
+});
+
+/* ---------------------------
+   Author-profile problem reports
+----------------------------*/
+// OpenAlex's author disambiguation sometimes attaches someone else's works
+// to a profile or splits one person across several profiles. Signed-in
+// users can report it; the profile's own owner (matched through their
+// claimed/merged OpenAlex IDs) gets the fix applied immediately, everyone
+// else's report waits for admin review. Approved fixes are a local overlay
+// (author_profile_overrides) — OpenAlex itself has no correction API, so
+// the admin view also generates ready-to-paste text for OpenAlex support.
+const AUTHOR_REPORT_TYPES = new Set(["wrong_works", "duplicate", "other"]);
+const authorTailOf = (s) => String(s || "").trim().replace(/^https?:\/\/openalex\.org\//i, "").toUpperCase();
+const isAuthorTail = (s) => /^A\d{4,}$/.test(s);
+const isWorkTail = (s) => /^W\d{4,}$/.test(s);
+
+async function applyAuthorReport(report, appliedBy) {
+  if (report.report_type === "wrong_works") {
+    for (const w of report.work_ids || []) {
+      await pool.query(
+        `INSERT INTO author_profile_overrides (author_id, kind, value, report_id, created_by)
+         VALUES ($1,'exclude_work',$2,$3,$4) ON CONFLICT DO NOTHING`,
+        [report.author_id, w, report.id, appliedBy]
+      );
+    }
+  } else if (report.report_type === "duplicate" && report.other_author_id) {
+    // Merging is symmetric: whichever of the two profiles you open shows both.
+    for (const [a, b] of [[report.author_id, report.other_author_id], [report.other_author_id, report.author_id]]) {
+      await pool.query(
+        `INSERT INTO author_profile_overrides (author_id, kind, value, report_id, created_by)
+         VALUES ($1,'merge_author',$2,$3,$4) ON CONFLICT DO NOTHING`,
+        [a, b, report.id, appliedBy]
+      );
+    }
+  }
+}
+
+function openAlexCorrectionText(r) {
+  const base = `https://openalex.org/${r.author_id}`;
+  if (r.report_type === "wrong_works") {
+    return `Author profile ${base} includes works that are not by this author:\n`
+      + r.work_ids.map(w => `- https://openalex.org/${w}`).join("\n")
+      + (r.note ? `\n\nDetails: ${r.note}` : "")
+      + `\n\nPlease remove these works from this author profile.`;
+  }
+  if (r.report_type === "duplicate") {
+    return `These two author profiles are the same person and should be merged:\n- ${base}\n- https://openalex.org/${r.other_author_id}`
+      + (r.note ? `\n\nDetails: ${r.note}` : "");
+  }
+  return `Problem with author profile ${base}:\n${r.note || ""}`;
+}
+
+app.post("/api/author-reports", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const authorId = authorTailOf(req.body?.author_id);
+  const type = String(req.body?.report_type || "");
+  const note = String(req.body?.note || "").trim().slice(0, 2000) || null;
+  if (!isAuthorTail(authorId) || !AUTHOR_REPORT_TYPES.has(type)) return res.status(400).json({ error: "author_id and a valid report_type are required" });
+  const workIds = [...new Set((Array.isArray(req.body?.work_ids) ? req.body.work_ids : []).map(w => String(w || "").trim().replace(/^https?:\/\/openalex\.org\//i, "").toUpperCase()))].filter(isWorkTail).slice(0, 200);
+  const otherId = type === "duplicate" ? authorTailOf(req.body?.other_author_id) : null;
+  if (type === "wrong_works" && !workIds.length) return res.status(400).json({ error: "Select at least one work that isn't by this author" });
+  if (type === "duplicate" && (!isAuthorTail(otherId) || otherId === authorId)) return res.status(400).json({ error: "Enter the other profile's OpenAlex author ID (A…) or link" });
+  if (type === "other" && !note) return res.status(400).json({ error: "Describe the problem" });
+  try {
+    const { rows: pend } = await pool.query(`SELECT count(*)::int AS n FROM author_reports WHERE orcid=$1 AND status='pending'`, [sess.orcid]);
+    if (pend[0].n >= 20) return res.status(429).json({ error: "You have 20 reports waiting for review — please wait for those first" });
+    const isOwner = (await getUserAuthorIds(sess.orcid)).map(authorTailOf).includes(authorId);
+    const autoApply = isOwner && type !== "other";
+    const { rows } = await pool.query(
+      `INSERT INTO author_reports (orcid, author_id, report_type, work_ids, other_author_id, note, status, auto_applied, reviewed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, CASE WHEN $8 THEN now() END) RETURNING *`,
+      [sess.orcid, authorId, type, workIds, otherId, note, autoApply ? "approved" : "pending", autoApply]
+    );
+    if (autoApply) await applyAuthorReport(rows[0], sess.orcid);
+    res.json({ id: rows[0].id, status: rows[0].status, applied: autoApply });
+  } catch (e) {
+    console.error("POST /api/author-reports failed:", e);
+    res.status(500).json({ error: "Failed to submit report" });
+  }
+});
+
+// Public: the approved corrections for one author profile.
+app.get("/api/author-overrides/:authorId", async (req, res) => {
+  const authorId = authorTailOf(req.params.authorId);
+  if (!isAuthorTail(authorId)) return res.json({ excluded_work_ids: [], merged_author_ids: [] });
+  try {
+    const { rows } = await pool.query(`SELECT kind, value FROM author_profile_overrides WHERE author_id=$1`, [authorId]);
+    res.json({
+      excluded_work_ids: rows.filter(r => r.kind === "exclude_work").map(r => r.value),
+      merged_author_ids: rows.filter(r => r.kind === "merge_author").map(r => r.value),
+    });
+  } catch (_) {
+    res.json({ excluded_work_ids: [], merged_author_ids: [] });
+  }
+});
+
+async function requireAdmin(req, res) {
+  const sess = await getSession(req);
+  if (!sess) { res.status(401).json({ error: "Not signed in" }); return null; }
+  if (!ADMIN_ORCID || sess.orcid !== ADMIN_ORCID) { res.status(403).json({ error: "Forbidden" }); return null; }
+  return sess;
+}
+
+app.get("/api/admin/author-reports", async (req, res) => {
+  const sess = await requireAdmin(req, res); if (!sess) return;
+  const status = ["pending", "approved", "rejected"].includes(req.query.status) ? req.query.status : "pending";
+  const { rows } = await pool.query(
+    `SELECT r.*, u.name AS reporter_name FROM author_reports r LEFT JOIN users u ON u.orcid = r.orcid
+     WHERE r.status=$1 ORDER BY r.created_at DESC LIMIT 200`, [status]
+  );
+  res.json({ reports: rows.map(r => ({ ...r, openalex_text: openAlexCorrectionText(r) })) });
+});
+
+app.post("/api/admin/author-reports/:id", async (req, res) => {
+  const sess = await requireAdmin(req, res); if (!sess) return;
+  const action = String(req.body?.action || "");
+  if (!["approve", "reject"].includes(action)) return res.status(400).json({ error: "action must be approve or reject" });
+  const { rows } = await pool.query(
+    `UPDATE author_reports SET status=$2, reviewed_at=now() WHERE id=$1 AND status='pending' RETURNING *`,
+    [Number(req.params.id) || 0, action === "approve" ? "approved" : "rejected"]
+  );
+  if (!rows.length) return res.status(404).json({ error: "No pending report with that id" });
+  if (action === "approve") await applyAuthorReport(rows[0], sess.orcid);
+  res.json({ ok: true, status: rows[0].status });
 });
 
 /* ---------------------------

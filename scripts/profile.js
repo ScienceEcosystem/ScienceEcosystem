@@ -447,6 +447,9 @@
   // ---- Sidebar derived state ----
   var authorTail  = null;                // "A12345" — primary ID
   var authorTails = Object.create(null); // set of all claimed author tails
+  // Approved "not by this author" corrections (author_profile_overrides)
+  var excludedWorkTails = Object.create(null);
+  var hiddenWorksCount = 0;
   var _conceptNameMap = Object.create(null); // lowercase concept name → OpenAlex concept tail (C12345)
   var coauthors = Object.create(null);   // idTail -> { name, tail, count }
   var affYears  = Object.create(null);   // instTail -> { name, tail, min, max }
@@ -970,6 +973,7 @@
       var uniqueNew = results.filter(function(w) {
         if (!w.id) return false;
         if (seenIds[w.id]) return false;
+        if (excludedWorkTails[String(w.id).replace(/^https?:\/\/openalex\.org\//i,'')]) { hiddenWorksCount++; seenIds[w.id] = true; return false; }
         var d = w.doi ? String(w.doi).toLowerCase().replace(/^https?:\/\/doi\.org\//i,'') : null;
         if (d && seenIds['doi:'+d]) return false;
         // Title dedup — collapses Zenodo multi-version datasets with same title
@@ -981,6 +985,7 @@
         return true;
       });
       accumulatedWorks = accumulatedWorks.concat(uniqueNew);
+      updateHiddenWorksNote();
 
       // If last API page OR dedup reduced count to match what we expect, mark done
       if (isLastPage) totalWorksCount = accumulatedWorks.length;
@@ -1350,6 +1355,124 @@
   }
 
   // ---- Boot ----
+  // ── "Report a problem with this profile" ──────────────────────────────────
+  function updateHiddenWorksNote(){
+    var list = $("publicationsList");
+    if (!list) return;
+    var note = $("hiddenWorksNote");
+    if (!hiddenWorksCount) { if (note) note.remove(); return; }
+    if (!note) {
+      note = document.createElement("p");
+      note.id = "hiddenWorksNote";
+      note.className = "muted";
+      note.style.cssText = "font-size:.8rem;margin:.2rem 0 .6rem;";
+      list.parentNode.insertBefore(note, list);
+    }
+    note.textContent = hiddenWorksCount + " work" + (hiddenWorksCount === 1 ? " is" : "s are")
+      + " hidden here because " + (hiddenWorksCount === 1 ? "it was" : "they were")
+      + " reported as not by this author (corrected on ScienceEcosystem).";
+  }
+
+  function wireReportProblem(author){
+    var btn = $("reportProblemBtn");
+    if (!btn) return;
+    btn.style.display = "";
+    btn.onclick = function(){ openReportDialog(author); };
+  }
+
+  function openReportDialog(author){
+    var existing = $("reportDialog");
+    if (existing) existing.remove();
+    var name = author.display_name || "this author";
+    var wrap = document.createElement("div");
+    wrap.id = "reportDialog";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-modal", "true");
+    wrap.setAttribute("aria-label", "Report a problem with this profile");
+    wrap.style.cssText = "position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:1rem;";
+
+    if (!isAuthed) {
+      wrap.innerHTML = '<div style="background:#fff;border-radius:10px;padding:1.2rem 1.4rem;max-width:420px;">'
+        + '<h2 style="margin:0 0 .5rem;font-size:1.05rem;">Report a problem</h2>'
+        + '<p style="margin:0 0 1rem;font-size:.9rem;">Sign in to report wrongly attributed papers or duplicate profiles — this keeps reports accountable and spam-free.</p>'
+        + '<div style="display:flex;gap:.5rem;"><a class="btn btn-primary" href="/auth/orcid/login">Sign in with ORCID</a><button type="button" class="btn btn-secondary" data-close>Cancel</button></div></div>';
+    } else {
+      var works = accumulatedWorks.slice(0, 300);
+      var worksHtml = works.length ? works.map(function(w){
+        var tail = String(w.id || "").replace(/^https?:\/\/openalex\.org\//i, "");
+        return '<label style="display:flex;gap:.45rem;align-items:flex-start;padding:.25rem 0;font-size:.82rem;border-bottom:1px solid #f1f5f9;">'
+          + '<input type="checkbox" name="rpWork" value="' + escapeHtml(tail) + '" style="margin-top:.2rem;">'
+          + '<span>' + escapeHtml(w.display_name || w.title || "Untitled") + ' <span class="muted">(' + escapeHtml(String(w.publication_year || "")) + ')</span></span></label>';
+      }).join("") : '<p class="muted" style="font-size:.85rem;">No works loaded yet.</p>';
+      wrap.innerHTML = '<div style="background:#fff;border-radius:10px;padding:1.2rem 1.4rem;width:min(640px,100%);max-height:90vh;overflow:auto;">'
+        + '<h2 style="margin:0 0 .3rem;font-size:1.05rem;">Report a problem with ' + escapeHtml(name) + '\'s profile</h2>'
+        + '<p class="muted" style="margin:0 0 .8rem;font-size:.8rem;">Profiles come from OpenAlex, whose automatic author matching sometimes gets it wrong. If this is your own profile, the fix applies right away; otherwise it\'s reviewed first.</p>'
+        + '<fieldset style="border:none;padding:0;margin:0 0 .8rem;display:grid;gap:.35rem;font-size:.88rem;">'
+        +   '<label><input type="radio" name="rpType" value="wrong_works" checked> Some papers aren\'t by this person</label>'
+        +   '<label><input type="radio" name="rpType" value="duplicate"> This person has another (duplicate) profile</label>'
+        +   '<label><input type="radio" name="rpType" value="other"> Something else (name, affiliation, …)</label>'
+        + '</fieldset>'
+        + '<div data-pane="wrong_works"><input class="input" id="rpFilter" placeholder="Filter papers…" style="width:100%;margin-bottom:.4rem;"><div id="rpWorks" style="max-height:38vh;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;padding:.2rem .5rem;">' + worksHtml + '</div></div>'
+        + '<div data-pane="duplicate" hidden><label style="font-size:.85rem;">The other profile — OpenAlex link or author ID'
+        +   '<input class="input" id="rpOther" placeholder="https://openalex.org/A5000000000 or A5000000000" style="width:100%;margin-top:.25rem;"></label>'
+        +   '<p class="muted" style="font-size:.78rem;margin:.3rem 0 0;">Tip: search the person\'s name, open the other profile, and copy its address.</p></div>'
+        + '<label style="display:block;margin-top:.8rem;font-size:.85rem;">Details <span class="muted" id="rpNoteHint">(optional)</span>'
+        +   '<textarea class="input" id="rpNote" rows="3" maxlength="2000" style="width:100%;margin-top:.25rem;"></textarea></label>'
+        + '<div style="display:flex;gap:.5rem;align-items:center;margin-top:.9rem;flex-wrap:wrap;">'
+        +   '<button type="button" class="btn btn-primary" id="rpSubmit">Send report</button>'
+        +   '<button type="button" class="btn btn-secondary" data-close>Cancel</button>'
+        +   '<span id="rpMsg" style="font-size:.85rem;"></span></div></div>';
+    }
+    document.body.appendChild(wrap);
+
+    function close(){ wrap.remove(); document.removeEventListener("keydown", onKey); btnFocus(); }
+    function btnFocus(){ var b = $("reportProblemBtn"); if (b) b.focus(); }
+    function onKey(e){ if (e.key === "Escape") close(); }
+    document.addEventListener("keydown", onKey);
+    wrap.addEventListener("click", function(e){ if (e.target === wrap || e.target.hasAttribute("data-close")) close(); });
+    var firstInput = wrap.querySelector("input, a, button");
+    if (firstInput) firstInput.focus();
+    if (!isAuthed) return;
+
+    function currentType(){ var r = wrap.querySelector('input[name="rpType"]:checked'); return r ? r.value : "wrong_works"; }
+    wrap.querySelectorAll('input[name="rpType"]').forEach(function(r){
+      r.addEventListener("change", function(){
+        var t = currentType();
+        wrap.querySelectorAll("[data-pane]").forEach(function(p){ p.hidden = p.getAttribute("data-pane") !== t; });
+        $("rpNoteHint").textContent = t === "other" ? "(required)" : "(optional)";
+      });
+    });
+    var filter = $("rpFilter");
+    if (filter) filter.addEventListener("input", function(){
+      var q = filter.value.trim().toLowerCase();
+      wrap.querySelectorAll("#rpWorks label").forEach(function(l){ l.style.display = !q || l.textContent.toLowerCase().indexOf(q) !== -1 ? "" : "none"; });
+    });
+
+    $("rpSubmit").addEventListener("click", async function(){
+      var msg = $("rpMsg"), submit = $("rpSubmit");
+      var type = currentType();
+      var body = { author_id: authorTail, report_type: type, note: $("rpNote").value.trim() };
+      if (type === "wrong_works") body.work_ids = Array.prototype.map.call(wrap.querySelectorAll('input[name="rpWork"]:checked'), function(c){ return c.value; });
+      if (type === "duplicate") body.other_author_id = $("rpOther").value.trim();
+      submit.disabled = true; msg.style.color = ""; msg.textContent = "Sending…";
+      try {
+        var r = await fetch("/api/author-reports", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        var d = await r.json().catch(function(){ return {}; });
+        if (!r.ok) throw new Error(d.error || ("Error " + r.status));
+        msg.style.color = "#15803d";
+        if (d.applied) {
+          msg.textContent = "Fixed on your profile — reloading…";
+          setTimeout(function(){ location.reload(); }, 900);
+        } else {
+          msg.textContent = "Thanks — sent for review.";
+          setTimeout(close, 1800);
+        }
+      } catch (e) {
+        submit.disabled = false; msg.style.color = "#b91c1c"; msg.textContent = e.message;
+      }
+    });
+  }
+
   async function boot(authorIdParam, opts){
     opts = opts || {};
     try{
@@ -1459,8 +1582,27 @@
       // Page title
       if (author.display_name) document.title = author.display_name + " | ScienceEcosystem";
 
+      wireReportProblem(author);
+
+      // ── Approved corrections from "Report a problem" (author_profile_overrides):
+      // works reported as not by this person are hidden, and reported
+      // duplicate profiles are merged in through the same path as claimed IDs.
+      var overrides = { excluded_work_ids: [], merged_author_ids: [] };
+      try {
+        var ovRes = await fetch("/api/author-overrides/" + encodeURIComponent(authorTail));
+        if (ovRes.ok) overrides = await ovRes.json();
+      } catch(_) {}
+      excludedWorkTails = Object.create(null);
+      hiddenWorksCount = 0;
+      (overrides.excluded_work_ids || []).forEach(function(w){ excludedWorkTails[w] = true; });
+      var baseIds = (opts.allAuthorIds && opts.allAuthorIds.length) ? opts.allAuthorIds.slice() : [authorTail];
+      (overrides.merged_author_ids || []).forEach(function(a){
+        var have = baseIds.some(function(b){ return String(b).replace(/^https?:\/\/openalex\.org\//i,'').toUpperCase() === a; });
+        if (!have) baseIds.push(a);
+      });
+
       // ── Merged works: if multiple OpenAlex IDs, override the works URL ─────────
-      var allIds = (opts.allAuthorIds && opts.allAuthorIds.length > 1) ? opts.allAuthorIds : null;
+      var allIds = baseIds.length > 1 ? baseIds : null;
       if (allIds) {
         // Store all tails so processWorksForSidebar can match any claimed ID
         allIds.forEach(function(id) {

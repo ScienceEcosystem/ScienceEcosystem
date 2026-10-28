@@ -5858,3 +5858,53 @@ visitors see nothing; no page errors.
 Not built yet: the button on search-result cards, and the browser
 extension's "Reload this page via my library" (needs an extension
 release).
+
+2026-10-28 — "Report a problem with this profile" (author disambiguation fixes)
+
+Asked for directly (item 7 of the gaps list): OpenAlex's automatic
+author matching sometimes attaches someone else's works to a profile or
+splits one person across several profiles. Before this, only a profile's
+own owner could fix the split case (merging their claimed IDs); nobody
+could flag wrong papers, and nothing could be flagged on unclaimed
+profiles.
+
+- profile.html: small "Report a problem with this profile" link under
+  the Follow button → dialog with three report types: papers that aren't
+  by this person (checklist of the loaded works, with a filter), a
+  duplicate profile (paste the other OpenAlex link or A… ID), or
+  something else (free text, required). Signed-in only (signed-out
+  visitors get a sign-in prompt) to keep reports accountable.
+- Owner fast path: if the reporter owns the profile (the author ID is
+  among their primary/claimed/merged OpenAlex IDs, via
+  getUserAuthorIds), wrong-papers and duplicate reports apply instantly
+  and the page reloads. Everyone else's report waits for review.
+  Max 20 pending reports per user.
+- Corrections are a local overlay on OpenAlex (new author_profile_
+  overrides table: exclude_work / merge_author), read by anyone through
+  GET /api/author-overrides/:authorId. profile.js hides excluded works
+  (with a visible note: "N works are hidden here because they were
+  reported as not by this author (corrected on ScienceEcosystem)") and
+  folds merged profiles into the same merged-works path claimed IDs
+  already use. Merges are stored both ways, so either profile shows both.
+- admin.html: new "Profile problem reports" queue (Pending / Approved /
+  Rejected) with links to the profile and works, the reporter, and
+  "Approve & apply" / "Reject". OpenAlex has no correction API, so each
+  report also carries ready-to-paste text for OpenAlex support, so the
+  fix can also land at the source. admin.html doesn't load session.js,
+  so its POSTs add the X-CSRF-Token header themselves.
+
+Verified live on the dev branch with a disposable account plus a test
+session for the admin account (both removed afterwards, along with every
+report and correction they created): signed-out → sign-in prompt; a
+non-owner's report on a 23-work profile → "sent for review", nothing
+changes publicly; invalid reports refused with specific messages
+(duplicate of itself, "other" without text, no papers selected); the
+admin queue showed it with the OpenAlex text; after approval a signed-out
+visitor saw the hidden-works note and neither reported paper listed; an
+owner's duplicate report applied instantly (4 → 6 works) and showed from
+both profiles. No page errors.
+
+Test-setup note worth keeping: a claimed profile switches to the owner's
+SE profile, which reads users.openalex_author_id. A claimed_authors row
+alone isn't a complete claim, and the page then shows "No publications
+linked yet".
