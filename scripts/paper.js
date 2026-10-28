@@ -649,6 +649,26 @@
     return '<p class="meta-row"><strong>Funding:</strong> <span class="wrap-text">'+ items.join(" · ") +'</span></p>';
   }
 
+  // "Access via <your library>" — only for signed-in users with a library
+  // proxy set (Settings → Library access), and only when there's no
+  // open-access PDF anyway: the publisher link, routed through their
+  // university login so their institution's subscription applies.
+  function libraryAccessChipHtml(p){
+    // Not needed when the publisher's own page is free (gold/hybrid/bronze/
+    // diamond). "green" means the only free copy is in a repository and the
+    // publisher page is still paywalled — the library link helps there.
+    var oaStatus = String(get(p, "open_access.oa_status", "") || "").toLowerCase();
+    if (!globalThis.SE_libraryLink || getOpenAccessPdf(p) || ["gold","hybrid","bronze","diamond"].indexOf(oaStatus) !== -1) return null;
+    var doiRaw = p.doi || get(p,"ids.doi",null);
+    if (!doiRaw) return null;
+    var doiUrl = String(doiRaw).indexOf("http")===0 ? doiRaw : ("https://doi.org/" + String(doiRaw).replace(/^doi:/i,""));
+    var link = globalThis.SE_libraryLink(doiUrl);
+    if (!link) return null;
+    return '<a id="libraryAccessChip" class="badge" href="'+escapeHtml(link)+'" target="_blank" rel="noopener" '
+      + 'title="Opens the publisher page through your library\'s login, so your institution\'s subscription gives you the full text" '
+      + 'style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af;font-weight:600;">'+escapeHtml(globalThis.SE_libraryLabel())+' ↗</a>';
+  }
+
   function buildHeaderMain(p){
     var title = p.display_name || "Untitled";
     var year  = (p.publication_year != null ? p.publication_year : "n.d.");
@@ -673,6 +693,7 @@
     var chips = [
       badge(doiUrl,    "Publisher page"),
       badge(pdfViewer, "Read PDF", "badge-oa"),
+      libraryAccessChipHtml(p),
       badge(p.id,      "OpenAlex"),
       // Populated async by checkLivingPaperChip() once a linked repo is
       // confirmed to actually publish an evidence.json — hidden until then.
@@ -2093,6 +2114,19 @@
     }, 800);
     __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
     wireHeaderToggles();
+    // The header usually renders before the session (which carries the
+    // library-access setting) has loaded — add the chip once it has.
+    if (globalThis.SE_SESSION_PROMISE && !document.getElementById("libraryAccessChip")) {
+      globalThis.SE_SESSION_PROMISE.then(function(){
+        var chipsEl = document.querySelector("#paperHeaderMain p.chips");
+        var html = libraryAccessChipHtml(p);
+        if (!chipsEl || !html || document.getElementById("libraryAccessChip")) return;
+        var firstChip = chipsEl.firstElementChild;
+        if (firstChip) firstChip.insertAdjacentHTML("afterend", " " + html);
+        else chipsEl.insertAdjacentHTML("beforeend", html);
+        __HEADER_HTML_SNAPSHOT__ = $("paperHeaderMain").innerHTML;
+      });
+    }
     startHeaderObserver();
 
     // Retraction check + citation count enrichment — both async, non-blocking

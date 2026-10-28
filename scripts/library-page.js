@@ -1828,6 +1828,7 @@
           <!-- Links -->
           <div style="display:flex;flex-wrap:wrap;gap:.3rem;padding:.4rem 0;border-bottom:1px solid #f0f0f0;">
             ${chip(doiUrl,"Publisher")}
+            ${(doiUrl && !localPdf && globalThis.SE_libraryLink?.(doiUrl)) ? `<a class="badge" href="${esc(globalThis.SE_libraryLink(doiUrl))}" target="_blank" rel="noopener" title="Open the publisher page through your library's login" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af;">${esc(globalThis.SE_libraryLabel())} ↗</a>` : ""}
             ${chip(/^https?:\/\//i.test(String(extraFields.url||"")) ? esc(extraFields.url) : null,"Open page ↗")}
             ${chip(item.openalex_url,"OpenAlex")}
             ${zoteroLink?`<a class="badge badge-zotero" href="${zoteroLink}" target="_blank" rel="noopener">Zotero</a>`:(item.zotero_key?`<span class="badge badge-zotero">Zotero</span>`:"")}

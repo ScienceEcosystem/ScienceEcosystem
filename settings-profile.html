@@ -211,6 +211,41 @@
       </div>
     </form>
 
+    <!-- ── Library access (EZproxy / OpenAthens) ─────────────────────── -->
+    <section class="panel" style="margin-top:1.5rem;" id="libraryAccessSection">
+      <h2 style="margin:0 0 .4rem; font-size:1rem;">Library access</h2>
+      <p class="muted" style="font-size:.85rem; margin:0 0 .8rem;">
+        Get full text through your university's subscriptions when you're off campus. Paywalled papers then show an
+        "Access via your library" button that opens the publisher page through your library's own login —
+        ScienceEcosystem never sees your university password.
+      </p>
+      <div style="display:grid; gap:.6rem; max-width:620px;">
+        <label style="font-size:.85rem;">Institution name <span class="muted">(shown on the button, optional)</span>
+          <input class="input" id="libName" type="text" placeholder="e.g. My University Library" maxlength="120" style="width:100%; margin-top:.2rem;"/>
+        </label>
+        <label style="font-size:.85rem;">Library proxy link <em>or</em> your institution's domain
+          <input class="input" id="libProxy" type="text" placeholder="https://ezproxy.youruni.ac.nz/login?url=   or   youruni.ac.nz" style="width:100%; margin-top:.2rem;"/>
+        </label>
+        <details style="font-size:.8rem; color:#475569;">
+          <summary style="cursor:pointer;">Where do I find this?</summary>
+          <ul style="margin:.4rem 0 0; padding-left:1.1rem; line-height:1.5;">
+            <li><strong>EZproxy</strong> (most universities): your library website's "off-campus access" page or "bookmarklet" shows a link like
+              <code>https://login.ezproxy.uni.edu/login?url=</code>. Paste it as is — a full example link with an article after
+              <code>url=</code> works too.</li>
+            <li><strong>OpenAthens</strong>: if you sign in to journals with "Access through your institution → OpenAthens",
+              just type your institution's web domain (e.g. <code>uni.ac.uk</code>).</li>
+            <li>Other formats: paste a link with <code>{url}</code> where the article address goes.</li>
+          </ul>
+        </details>
+        <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+          <button type="button" id="libSaveBtn" class="btn btn-secondary">Save</button>
+          <button type="button" id="libTestBtn" class="btn btn-secondary" title="Opens a paywalled Nature article through your library link">Test with a paywalled article</button>
+          <button type="button" id="libClearBtn" class="btn btn-secondary">Remove</button>
+          <span id="libMsg" class="muted" style="font-size:.85rem;"></span>
+        </div>
+      </div>
+    </section>
+
     <!-- ── API access (MCP) ──────────────────────────────────────────── -->
     <section class="panel" style="margin-top:1.5rem;">
       <h2 style="margin:0 0 .4rem; font-size:1rem;">API access</h2>
@@ -508,9 +543,57 @@
       }
     }
 
+    // ── Library access ──
+    async function loadLibraryAccess() {
+      try {
+        const r = await fetch("/api/settings/library-access", { credentials: "include" });
+        if (!r.ok) return;
+        const d = await r.json();
+        // Don't overwrite anything the user already started typing.
+        const nameEl = document.getElementById("libName"), proxyEl = document.getElementById("libProxy");
+        if (!nameEl.value) nameEl.value = d.name || "";
+        if (!proxyEl.value) proxyEl.value = d.prefix || "";
+      } catch (_) {}
+    }
+    async function saveLibraryAccess(clear) {
+      const msg = document.getElementById("libMsg");
+      const body = clear ? { proxy: "", name: "" } : {
+        proxy: document.getElementById("libProxy").value.trim(),
+        name: document.getElementById("libName").value.trim(),
+      };
+      msg.style.color = ""; msg.textContent = "Saving…";
+      try {
+        const r = await fetch("/api/settings/library-access", {
+          method: "PUT", credentials: "include",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || "Could not save");
+        document.getElementById("libProxy").value = d.prefix || "";
+        document.getElementById("libName").value = d.name || "";
+        // keep the in-page session copy in sync so "Test" uses the new link
+        if (globalThis.SE_SESSION) globalThis.SE_SESSION.library_access = d.prefix ? { prefix: d.prefix, name: d.name } : null;
+        msg.style.color = "#15803d";
+        msg.textContent = d.prefix ? "Saved — paywalled papers now show an access button." : "Removed.";
+      } catch (e) {
+        msg.style.color = "#b91c1c"; msg.textContent = e.message;
+      }
+    }
+    function testLibraryAccess() {
+      const link = globalThis.SE_libraryLink && globalThis.SE_libraryLink("https://doi.org/10.1038/nature14539");
+      const msg = document.getElementById("libMsg");
+      if (!link) { msg.style.color = "#b91c1c"; msg.textContent = "Save a library link first."; return; }
+      window.open(link, "_blank", "noopener");
+      msg.style.color = ""; msg.textContent = "Opened in a new tab — after your university login it should show the full article.";
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       load();
       loadTokens();
+      loadLibraryAccess();
+      document.getElementById("libSaveBtn").addEventListener("click", () => saveLibraryAccess(false));
+      document.getElementById("libClearBtn").addEventListener("click", () => saveLibraryAccess(true));
+      document.getElementById("libTestBtn").addEventListener("click", testLibraryAccess);
       document.getElementById("createTokenBtn").addEventListener("click", createToken);
       document.getElementById("copyTokenBtn").addEventListener("click", async () => {
         try {

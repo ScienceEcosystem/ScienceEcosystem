@@ -5804,3 +5804,57 @@ Not built (a follow-up option if wanted): email or push delivery. Would
 need an email provider (or Web Push with VAPID keys — the site is already
 an installable PWA) plus something to wake the server on a schedule
 (e.g. a GitHub Actions cron hitting a secret endpoint).
+
+2026-10-28 — Institutional library access ("Access via your library")
+
+Asked for directly (item 6 of the gaps list): get full text through a
+university subscription when off campus, the way Zotero's proxy support
+does.
+
+- Settings → new "Library access" section (settings-profile.html): an
+  optional institution name (shown on the button) and either the
+  library's proxy link or just the institution's domain. The server
+  (normalizeLibraryProxy) accepts what libraries actually publish: an
+  EZproxy prefix ending in url=/qurl= (a full example link with an
+  article after url= is trimmed back to the prefix), any https link with
+  a {url} placeholder, or a bare domain, which becomes the OpenAthens
+  redirector. https only; http, javascript: and links with no url= are
+  refused with a specific message. "Test with a paywalled article" opens
+  a known paywalled Nature paper through it.
+- Stored on users (library_proxy_prefix, library_name) but deliberately
+  NOT in USER_COLS, which also feeds public profiles — only /api/me
+  returns it (as library_access), so it stays private.
+- scripts/session.js: SE_libraryLink(target) builds the proxied link
+  (EZproxy url= takes the raw link; qurl=, OpenAthens and {url} take it
+  URL-encoded) and SE_libraryLabel() the button text.
+- Where the button appears: the paper page header chip, the PDF reader's
+  "PDF unavailable" screen next to "View on publisher site", and the
+  library inspector's link row (when the item has no stored PDF).
+- When it's hidden: signed-out visitors, no proxy set, or the publisher's
+  own page is already free. That last rule uses OpenAlex's oa_status, not
+  is_oa: is_oa is true for "green" papers whose only free copy is in a
+  repository, while the publisher page is still paywalled — confirmed
+  live with Nature's "Deep learning" (green) vs a PLOS ONE paper (gold).
+  The first version used is_oa and hid the button on exactly the papers
+  it's for; a version before that only checked for a PDF link and showed
+  it on gold OA papers.
+- Never sees university credentials: the login happens on the library's
+  own page. The server never fetches paywalled PDFs on the user's behalf
+  (that would amount to sharing institutional access).
+
+BUG CAUGHT in testing: the settings form loaded the saved values
+asynchronously and could overwrite what the user had already started
+typing (stored "Test UniTest University"). It now only fills empty
+fields.
+
+Verified live on the dev branch with a disposable account (removed
+afterwards): all eight link formats normalized or refused as expected;
+saving through the UI; the paper page shows "Access via Test University"
+with https://login.ezproxy.uni.edu/login?url=https://doi.org/10.1038/
+nature14539 on the green-OA Nature paper and nothing on the gold-OA PLOS
+paper; the reader's unavailable screen shows the same link; signed-out
+visitors see nothing; no page errors.
+
+Not built yet: the button on search-result cards, and the browser
+extension's "Reload this page via my library" (needs an extension
+release).

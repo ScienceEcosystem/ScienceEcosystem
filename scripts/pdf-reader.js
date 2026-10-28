@@ -35,6 +35,17 @@ function renderDoiLink(el, doiHref, oaUrl) {
     </a>`;
   }
   el.innerHTML = html;
+  // Signed-in users with a library proxy (Settings → Library access) get the
+  // same publisher link routed through their university login.
+  globalThis.SE_SESSION_PROMISE?.then(() => {
+    const libLink = globalThis.SE_libraryLink?.(doiHref);
+    if (!libLink || !el.isConnected || el.querySelector('.lib-access-btn')) return;
+    el.insertAdjacentHTML('beforeend', `<a class="lib-access-btn" href="${escapeHtml(libLink)}" target="_blank" rel="noopener"
+      title="Opens the publisher page through your library's login, so your institution's subscription gives you the full text"
+      style="display:inline-flex;align-items:center;gap:.5rem;background:#eff6ff;color:#1e40af;padding:.65rem 1.25rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:.95rem;border:1px solid #bfdbfe;">
+      🏛 ${escapeHtml(globalThis.SE_libraryLabel())}
+    </a>`);
+  });
 }
 
 function escapeHtml(s) {

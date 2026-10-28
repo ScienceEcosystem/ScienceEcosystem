@@ -787,6 +787,12 @@ async function pgInit() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS library_attachments_item_idx ON library_attachments(orcid, paper_id)`);
 
+  // Institutional library access (EZproxy / OpenAthens): the user's own
+  // proxy link prefix, used client-side to build "Access via your library"
+  // links. Private — returned only by /api/me, never on public profiles.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS library_proxy_prefix TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS library_name TEXT`);
+
   // Saved-search alerts. seen_ids = papers already shown for this search
   // (baselined when saved, so alerts start from that moment); new_items =
   // matches not yet marked seen, with enough metadata to list them without
@@ -2287,7 +2293,58 @@ app.get("/api/me", async (req, res) => {
     alerts_new = rows[0]?.n || 0;
     refreshStaleSavedSearches(sess.orcid).catch(() => {});
   } catch (_) {}
-  res.json({ ...row, alerts_new });
+  let library_access = null;
+  try {
+    const { rows } = await pool.query(`SELECT library_proxy_prefix, library_name FROM users WHERE orcid=$1`, [sess.orcid]);
+    if (rows[0]?.library_proxy_prefix) library_access = { prefix: rows[0].library_proxy_prefix, name: rows[0].library_name || null };
+  } catch (_) {}
+  res.json({ ...row, alerts_new, library_access });
+});
+
+/* ---------------------------
+   Institutional library access (EZproxy / OpenAthens)
+----------------------------*/
+// Accepts what libraries actually publish: an EZproxy-style prefix ending
+// in "url=" or "qurl=" (the article link is appended), any https link with
+// a "{url}" placeholder, or just an institution domain, which becomes the
+// OpenAthens redirector. https only — this string ends up as a link target.
+function normalizeLibraryProxy(input) {
+  let s = String(input || "").trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) {
+    const domain = s.toLowerCase().replace(/^www\./, "");
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return { error: "Paste your library's proxy link (https://…url=) or your institution's web domain (e.g. uni.ac.nz)" };
+    return { prefix: `https://go.openathens.net/redirector/${domain}?url=` };
+  }
+  let u;
+  try { u = new URL(s.replace("{url}", "PLACEHOLDER")); } catch { return { error: "That doesn't look like a valid link" }; }
+  if (u.protocol !== "https:") return { error: "The library link must start with https://" };
+  if (s.includes("{url}")) return { prefix: s };
+  // People often paste a full example link (…url=https://doi.org/…): keep
+  // everything up to and including "url=".
+  const m = s.match(/^(.*?[?&]q?url=)/i);
+  if (!m) return { error: 'The link should end in "url=" (EZproxy) or contain {url} where the article link goes' };
+  return { prefix: m[1] };
+}
+
+app.get("/api/settings/library-access", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const { rows } = await pool.query(`SELECT library_proxy_prefix, library_name FROM users WHERE orcid=$1`, [sess.orcid]);
+  res.json({ prefix: rows[0]?.library_proxy_prefix || null, name: rows[0]?.library_name || null });
+});
+
+app.put("/api/settings/library-access", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const name = String(req.body?.name || "").trim().slice(0, 120) || null;
+  const raw = String(req.body?.proxy || "").trim();
+  if (!raw) {
+    await pool.query(`UPDATE users SET library_proxy_prefix=NULL, library_name=NULL WHERE orcid=$1`, [sess.orcid]);
+    return res.json({ prefix: null, name: null });
+  }
+  const parsed = normalizeLibraryProxy(raw);
+  if (parsed?.error) return res.status(400).json({ error: parsed.error });
+  await pool.query(`UPDATE users SET library_proxy_prefix=$2, library_name=$3 WHERE orcid=$1`, [sess.orcid, parsed.prefix, name]);
+  res.json({ prefix: parsed.prefix, name });
 });
 
 /* ---------------------------

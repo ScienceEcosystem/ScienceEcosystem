@@ -90,6 +90,24 @@ globalThis.SE_SESSION_PROMISE = (async function(){
   return globalThis.SE_SESSION;
 })();
 
+// Institutional library access: turns an article link (ideally its doi.org
+// URL) into the same link routed through the signed-in user's library proxy
+// (set in Settings → Library access). Returns null when no proxy is set or
+// the session isn't loaded yet. EZproxy "url=" takes the raw link; "qurl=",
+// OpenAthens and "{url}" templates take it URL-encoded.
+globalThis.SE_libraryLink = function (target) {
+  const access = globalThis.SE_SESSION && globalThis.SE_SESSION.library_access;
+  if (!access || !access.prefix || !target || !/^https:\/\//i.test(access.prefix)) return null;
+  const p = access.prefix;
+  if (p.includes("{url}")) return p.replace("{url}", encodeURIComponent(target));
+  if (/[?&]qurl=$/i.test(p) || /openathens\.net/i.test(p)) return p + encodeURIComponent(target);
+  return p + target;
+};
+globalThis.SE_libraryLabel = function () {
+  const access = globalThis.SE_SESSION && globalThis.SE_SESSION.library_access;
+  return access && access.name ? `Access via ${access.name}` : "Access via your library";
+};
+
 (async function () {
   // Finds elements if present on the page
   const loginBtn  = document.getElementById("orcidLoginBtn");
