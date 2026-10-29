@@ -2025,8 +2025,14 @@ async function extractAndStorePdfText(orcid, paperId, buffer, precomputedText) {
 // already has a raw-byte fallback for that case.
 async function extractPdfSignals(buffer) {
   try {
+    // Sequential on purpose: running getText() and getInfo() in parallel on
+    // one parser throws "DataCloneError: Cannot transfer object of
+    // unsupported type" (pdfjs-dist 5.x) for EVERY PDF — confirmed live. It
+    // was caught below and silently returned no text, so imported PDFs were
+    // never identified from their page text and stored empty full-text.
     const parser = new PDFParse({ data: buffer });
-    const [textResult, info] = await Promise.all([parser.getText(), parser.getInfo()]);
+    const textResult = await parser.getText();
+    const info = await parser.getInfo();
     return {
       text: textResult?.text || "",
       title: info?.info?.Title?.trim() || null,
@@ -2036,6 +2042,161 @@ async function extractPdfSignals(buffer) {
     console.warn("PDF signal extraction failed:", e?.message || e);
     return { text: "", title: null, author: null };
   }
+}
+
+// ── Identify which paper a PDF is (Zotero's "Retrieve Metadata for PDF") ────
+// 1. DOI from the page text — the paper's OWN DOI, not the first one seen:
+//    publishers repeat it in running headers/footers, while each cited
+//    paper's DOI in the reference list appears once, so the most frequent DOI
+//    on the first pages wins (ties go to the earliest).
+// 2. arXiv ID.
+// 3. No identifier: search OpenAlex by title — the PDF's embedded title,
+//    then line runs from the top of page 1 — and accept a result ONLY when
+//    its title is a near-exact match. A wrong paper's details attached
+//    silently would be worse than just the filename.
+const PDF_DOI_RE = /\b(10\.\d{4,9}\/[^\s"<>\][()|\\]+)/g;
+const cleanPdfDoi = (s) => normalizeDoi(String(s).replace(/[.,;:)>\]]+$/, "")).toLowerCase();
+
+// Letters of every script count (not just a–z): stripping non-Latin text
+// once let a Japanese article titled "…(Japanese)…: Bitcoin: A Peer-to-Peer
+// Electronic Cash System" pass as the Bitcoin paper itself — caught in testing.
+function titleTokens(s) {
+  return String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(t => t.length > 1);
+}
+function titleSimilarity(a, b) {
+  const ta = titleTokens(a), tb = titleTokens(b);
+  const A = new Set(ta), B = new Set(tb);
+  if (A.size < 4 || B.size < 4) return 0;
+  const la = ta.join(" ").length, lb = tb.join(" ").length;
+  if (Math.min(la, lb) / Math.max(la, lb) < 0.85) return 0; // one title just contains the other
+  let inter = 0;
+  for (const t of A) if (B.has(t)) inter++;
+  return inter / (A.size + B.size - inter);
+}
+const titlesMatch = (a, b) => titleSimilarity(a, b) >= 0.9;
+function pdfTitleCandidates(infoTitle, text) {
+  const out = [];
+  const t = String(infoTitle || "").replace(/^﻿/, "").trim();
+  if (t.length >= 15 && t.length <= 400 && !/^(microsoft (word|powerpoint)|untitled|document\d*\b|slide \d|presentation\b)|\.(docx?|pdf|tex|indd|rtf)$/i.test(t)) out.push(t);
+  const lines = String(text || "").slice(0, 3000).split(/\n+/).map(l => l.trim()).filter(Boolean).slice(0, 40);
+  for (let i = 0; i < lines.length; i++) {
+    for (const n of [2, 1, 3]) {
+      const c = lines.slice(i, i + n).join(" ").replace(/\s+/g, " ");
+      const words = c.split(" ").length;
+      if (words >= 5 && words <= 40 && c.length <= 300 && !/\b(doi|https?|copyright|license|received|accepted|©)\b/i.test(c)) out.push(c);
+    }
+  }
+  return [...new Set(out)];
+}
+async function findOpenAlexWorkByTitle(candidates, maxQueries = 8) {
+  let queries = 0;
+  for (const cand of candidates) {
+    if (queries >= maxQueries) break;
+    const q = cand.normalize("NFKC").replace(/[^\p{L}\p{N}\s-]/gu, " ").replace(/\s+/g, " ").trim();
+    if (q.split(" ").length < 4) continue;
+    queries++;
+    try {
+      const qs = new URLSearchParams({ filter: `title.search:${q}`, per_page: "5", mailto: OPENALEX_MAILTO });
+      if (OPENALEX_API_KEY) qs.set("api_key", OPENALEX_API_KEY);
+      const data = await fetchJSONTimeout(`${OPENALEX}/works?${qs.toString()}`, {}, 8000);
+      let best = null, bestScore = 0;
+      for (const w of data.results || []) {
+        const score = titleSimilarity(w.display_name || w.title, cand);
+        if (score > bestScore) { best = w; bestScore = score; }
+      }
+      if (best && bestScore >= 0.9) return best;
+    } catch (_) { /* try the next candidate */ }
+  }
+  return null;
+}
+
+// fallbackText: already-known text for this PDF (e.g. OCR output for a
+// scanned PDF, which has no text layer of its own to extract).
+async function identifyPdf(buffer, fallbackText) {
+  const signals = await extractPdfSignals(buffer);
+  const text = (signals.text || "").trim() ? signals.text : String(fallbackText || "");
+  let doi = "";
+  if (text.trim()) {
+    // Only DOIs that occur before the reference list count — otherwise a
+    // paper that doesn't print its own DOI would be filed as the first paper
+    // it cites. Most frequent wins (own DOI repeats in headers/footers).
+    const refHeading = /(^|\n)\s*(references|literature cited|bibliography|works cited|reference list)\b/i.exec(text);
+    const refStart = refHeading ? refHeading.index : Infinity;
+    const counts = new Map();
+    for (const m of text.slice(0, 60000).matchAll(PDF_DOI_RE)) {
+      if (m.index >= refStart) break;
+      const d = cleanPdfDoi(m[1]);
+      if (d) counts.set(d, (counts.get(d) || 0) + 1);
+    }
+    doi = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+  } else {
+    // No text layer (scanned) or extraction failed: fall back to the
+    // uncompressed bytes, where XMP metadata (prism:doi etc.) can sit.
+    const raw = buffer.slice(0, 65536).toString("latin1") + "\n" + buffer.slice(Math.max(0, buffer.length - 32768)).toString("latin1");
+    const m = raw.match(PDF_DOI_RE);
+    doi = m ? cleanPdfDoi(m[0]) : "";
+  }
+  let arxivId = "";
+  if (!doi) {
+    const am = text.slice(0, 20000).match(/arxiv[:\s\/]*(\d{4}\.\d{4,5}(?:v\d+)?)/i);
+    if (am) arxivId = am[1];
+  }
+  let work = null;
+  let matchedBy = null;
+  const tryGet = async (path) => { try { return await fetchJSONTimeout(`${OPENALEX}/works/${path}`, {}, 10000); } catch (_) { return null; } };
+  // A looked-up paper must actually be THIS PDF: its title has to appear near
+  // the start of the text. Guards against picking up some other DOI that
+  // happens to be printed early (a cited paper, a dataset, a related article).
+  const head = titleTokens(text.slice(0, 6000));
+  const titleOnFirstPages = (w) => {
+    if (!text.trim()) return true; // no text to check against (raw-bytes DOI)
+    const t = titleTokens(w?.display_name || w?.title);
+    if (t.length < 3) return true;
+    const hs = new Set(head);
+    return t.filter(x => hs.has(x)).length / t.length >= 0.8;
+  };
+  if (doi) {
+    work = await tryGet(`doi:${encodeURIComponent(doi)}`);
+    if (work && !titleOnFirstPages(work)) { work = null; doi = ""; }
+    if (work) matchedBy = "doi";
+  }
+  if (!work && arxivId) {
+    work = await tryGet(`arxiv:${encodeURIComponent(arxivId)}`);
+    if (work && !titleOnFirstPages(work)) work = null;
+    if (work) matchedBy = "arxiv";
+  }
+  if (!work && !doi) {
+    work = await findOpenAlexWorkByTitle(pdfTitleCandidates(signals.title, text));
+    if (work) matchedBy = "title";
+  }
+  return { doi: doi || null, arxivId: arxivId || null, work, matchedBy, text, infoTitle: signals.title };
+}
+
+async function readStoredPdf(storagePath) {
+  if (String(storagePath).startsWith("r2:")) {
+    if (!r2Client) throw new Error("File storage unavailable");
+    const obj = await r2Client.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: storagePath.slice(3) }));
+    return Buffer.from(await obj.Body.transformToByteArray());
+  }
+  return fsp.readFile(ensureSafePath(pdfUploadDir, storagePath));
+}
+
+// Item fields from an OpenAlex work (what both PDF import and "Retrieve
+// metadata" write).
+function libraryFieldsFromWork(work, fallbackDoi) {
+  return {
+    title: work.display_name || work.title || null,
+    openalex_id: normalizeOpenAlexId(work.id || ""),
+    openalex_url: work.id || null,
+    doi: work.doi ? normalizeDoi(work.doi) : (fallbackDoi || null),
+    year: work.publication_year ?? null,
+    venue: work?.primary_location?.source?.display_name || null,
+    authors: (work.authorships || []).map(a => a?.author?.display_name).filter(Boolean).join(", ") || null,
+    cited_by: work.cited_by_count ?? 0,
+    abstract: work.abstract_inverted_index ? invertAbstract(work.abstract_inverted_index) : null,
+    item_type: oaItemType(work),
+  };
 }
 
 // OCR engine for scanned PDFs (Tesseract.js) — served straight from
@@ -4480,6 +4641,42 @@ app.delete("/api/library/pdf/:paperId", async (req, res) => {
 /* ---------------------------
    PDF import -> new library item
 ----------------------------*/
+// "Retrieve metadata from PDF" for an item already in the library — re-runs
+// the same identification as import on its stored PDF and fills in the
+// details, keeping the item's id (so its folders, notes and annotations stay
+// attached). Also restores the PDF's searchable text when it's missing.
+app.post("/api/library/:id/retrieve-metadata", async (req, res) => {
+  const sess = await requireAuth(req, res); if (!sess) return;
+  const itemId = String(req.params.id || "");
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.storage_path, p.full_text, p.ocr_applied FROM library_pdfs p
+       JOIN library_items i ON i.orcid = p.orcid AND i.id = p.paper_id
+       WHERE p.orcid=$1 AND p.paper_id=$2`, [sess.orcid, itemId]
+    );
+    if (!rows.length) return res.status(404).json({ error: "This item has no stored PDF to read" });
+    const buffer = await readStoredPdf(rows[0].storage_path);
+    const ident = await identifyPdf(buffer, rows[0].full_text);
+    if (ident.text.trim() && !rows[0].ocr_applied && !String(rows[0].full_text || "").trim()) {
+      await pool.query(`UPDATE library_pdfs SET full_text=$1 WHERE orcid=$2 AND paper_id=$3`, [ident.text.slice(0, 2_000_000), sess.orcid, itemId]);
+    }
+    if (!ident.work) {
+      return res.json({ found: false, doi: ident.doi, no_text: !ident.text.trim() });
+    }
+    const f = libraryFieldsFromWork(ident.work, ident.doi);
+    const { rows: upd } = await pool.query(
+      `UPDATE library_items SET title=COALESCE($3,title), openalex_id=$4, openalex_url=$5, doi=$6, year=$7, venue=$8,
+         authors=$9, cited_by=$10, abstract=COALESCE($11,abstract), item_type=COALESCE($12,item_type), meta_fresh=TRUE
+       WHERE orcid=$1 AND id=$2 RETURNING id, title, doi, year, venue, authors, openalex_id`,
+      [sess.orcid, itemId, f.title, f.openalex_id, f.openalex_url, f.doi, f.year, f.venue, f.authors, f.cited_by, f.abstract, f.item_type]
+    );
+    res.json({ found: true, matched_by: ident.matchedBy, item: upd[0] });
+  } catch (e) {
+    console.error("POST /api/library/:id/retrieve-metadata failed:", e);
+    res.status(500).json({ error: "Could not read the PDF" });
+  }
+});
+
 app.post("/api/library/import-pdf", async (req, res) => {
   const sess = await requireAuth(req, res); if (!sess) return;
   try {
@@ -4495,38 +4692,19 @@ app.post("/api/library/import-pdf", async (req, res) => {
     if (file.size > 50 * 1024 * 1024) return res.status(400).json({ error: "File too large" });
     if (!isValidPdfBuffer(file.buffer)) return res.status(400).json({ error: "File is not a valid PDF" });
 
-    // Search both the head and tail of the PDF — DOIs appear at various offsets
-    // and PDF cross-reference tables (which often contain metadata) are at the end.
-    const headStr = file.buffer.slice(0, 65536).toString("latin1");
-    const tailStr = file.buffer.slice(Math.max(0, file.buffer.length - 32768)).toString("latin1");
-    const rawBytesText = headStr + "\n" + tailStr;
-
-    // Real decompressed page text + embedded Info dict — catches DOIs/titles
-    // in modern FlateDecode-compressed PDFs, which the raw-byte scan above
-    // can't see (it only reaches uncompressed sections like XMP metadata).
-    const pdfSignals = await extractPdfSignals(file.buffer);
-    const pdfText = rawBytesText + "\n" + pdfSignals.text.slice(0, 65536);
-
-    // Collect all DOI candidates, pick the first that survives normalization
-    const doiCandidates = [...pdfText.matchAll(/\b(10\.\d{4,9}\/[^\s"<>\][()|\\]+)/g)]
-      .map(m => normalizeDoi(m[1].replace(/[.,;:)>\]]+$/, "")))
-      .filter(Boolean);
-    const doi = doiCandidates[0] || "";
-
-    // ArXiv fallback if no DOI found
-    let arxivId = "";
-    if (!doi) {
-      const arxivMatch = pdfText.match(/arxiv[:\s\/]*(\d{4}\.\d{4,5}(?:v\d+)?)/i);
-      if (arxivMatch) arxivId = arxivMatch[1];
-    }
-
+    // Identify the paper: own DOI → arXiv ID → verified title match (see identifyPdf).
+    const ident = await identifyPdf(file.buffer);
+    const pdfSignals = { text: ident.text, title: ident.infoTitle };
+    const doi = ident.doi || "";
+    const arxivId = ident.arxivId || "";
     const itemId = doi ? `doi:${doi}` : arxivId ? `arxiv:${arxivId}` : `upload:${Date.now()}`;
 
     const { storagePath, filename: storedName, urlPath } = await storePdfFile(sess.orcid, itemId, file.buffer, file.contentType);
 
     let item = {
       id: itemId,
-      title: pdfSignals.title || filename.replace(/\.pdf$/i, "") || "Imported PDF",
+      // embedded title only when it's a real title (not "Microsoft Word - x.docx")
+      title: pdfTitleCandidates(ident.infoTitle, "")[0] || filename.replace(/\.pdf$/i, "") || "Imported PDF",
       openalex_id: null,
       openalex_url: null,
       doi: doi || null,
@@ -4538,66 +4716,16 @@ app.post("/api/library/import-pdf", async (req, res) => {
       pdf_url: null,
       meta_fresh: false
     };
-
-    // Helper: hydrate item from an OpenAlex work object
-    const hydrateFromWork = (work, baseId) => {
-      const authors = (work.authorships || []).map(a => a?.author?.display_name).filter(Boolean).join(", ");
-      const venue = work?.host_venue?.display_name || work?.primary_location?.source?.display_name || null;
-      return {
-        ...item,
-        id: baseId,
-        title: work.display_name || work.title || item.title,
-        openalex_id: normalizeOpenAlexId(work.id || ""),
-        openalex_url: work.id || null,
-        doi: work.doi ? normalizeDoi(work.doi) : (doi || null),
-        year: work.publication_year ?? null,
-        venue,
-        authors: authors || null,
-        cited_by: work.cited_by_count ?? 0,
-        abstract: work.abstract_inverted_index ? invertAbstract(work.abstract_inverted_index) : null,
-        meta_fresh: true
-      };
-    };
-
-    if (doi) {
-      try {
-        const work = await fetchJSONTimeout(`${OPENALEX}/works/doi:${encodeURIComponent(doi)}`, {}, 10000);
-        item = hydrateFromWork(work, `doi:${doi}`);
-      } catch (e) { /* keep fallback */ }
-    } else if (arxivId) {
-      try {
-        const work = await fetchJSONTimeout(`${OPENALEX}/works/arxiv:${encodeURIComponent(arxivId)}`, {}, 10000);
-        item = hydrateFromWork(work, `arxiv:${arxivId}`);
-      } catch (e) {
-        // Try CrossRef as a secondary source for arXiv papers
-        try {
-          const cr = await fetchJSONTimeout(
-            `https://api.crossref.org/works?query=${encodeURIComponent(filename.replace(/\.pdf$/i,""))}&rows=1`,
-            {headers:{"User-Agent":"ScienceEcosystem/1.0 mailto:info@scienceecosystem.org"}}, 8000
-          );
-          const hit = cr?.message?.items?.[0];
-          if (hit?.title?.[0]) {
-            const crDoi = hit.DOI ? normalizeDoi(hit.DOI) : null;
-            item = {
-              ...item,
-              id: crDoi ? `doi:${crDoi}` : itemId,
-              title: hit.title[0],
-              doi: crDoi,
-              year: hit.published?.["date-parts"]?.[0]?.[0] ?? null,
-              authors: (hit.author||[]).map(a=>[a.given,a.family].filter(Boolean).join(" ")).join(", ") || null,
-              venue: hit["container-title"]?.[0] ?? null,
-              meta_fresh: false
-            };
-          }
-        } catch (e2) { /* keep fallback */ }
-      }
+    if (ident.work) {
+      const f = libraryFieldsFromWork(ident.work, doi);
+      item = { ...item, ...f, title: f.title || item.title, meta_fresh: true };
     }
 
     await pool.query(
       `INSERT INTO library_items (
-        orcid, id, title, openalex_id, openalex_url, doi, year, venue, authors, cited_by, abstract, pdf_url, meta_fresh
+        orcid, id, title, openalex_id, openalex_url, doi, year, venue, authors, cited_by, abstract, pdf_url, meta_fresh, item_type
       )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        ON CONFLICT (orcid, id) DO UPDATE SET
          title=EXCLUDED.title,
          openalex_id=EXCLUDED.openalex_id,
@@ -4608,10 +4736,11 @@ app.post("/api/library/import-pdf", async (req, res) => {
          authors=EXCLUDED.authors,
          cited_by=EXCLUDED.cited_by,
          abstract=EXCLUDED.abstract,
-         meta_fresh=EXCLUDED.meta_fresh`,
+         meta_fresh=EXCLUDED.meta_fresh,
+         item_type=COALESCE(EXCLUDED.item_type, library_items.item_type)`,
       [
         sess.orcid, item.id, item.title, item.openalex_id, item.openalex_url, item.doi,
-        item.year, item.venue, item.authors, item.cited_by, item.abstract, item.pdf_url, item.meta_fresh
+        item.year, item.venue, item.authors, item.cited_by, item.abstract, item.pdf_url, item.meta_fresh, item.item_type || null
       ]
     );
 

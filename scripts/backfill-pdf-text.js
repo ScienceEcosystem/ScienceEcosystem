@@ -2,7 +2,9 @@
 // library_pdfs.full_text for rows uploaded before that feature existed
 // (extraction only happens automatically on new uploads, in
 // server/index.js's extractAndStorePdfText()). Safe to re-run — only
-// touches rows where full_text IS NULL.
+// touches rows with no stored text (NULL, or empty — imports between
+// 2026-08-22 and 2026-10-29 stored '' because of a pdf-parse crash).
+// Rows whose text came from OCR are left alone.
 //
 // Usage:
 //   node scripts/backfill-pdf-text.js
@@ -49,7 +51,7 @@ async function fetchPdfBuffer(storagePath) {
 
 async function run() {
   const { rows } = await pool.query(
-    `SELECT id, orcid, paper_id, storage_path FROM library_pdfs WHERE full_text IS NULL ORDER BY id`
+    `SELECT id, orcid, paper_id, storage_path FROM library_pdfs WHERE (full_text IS NULL OR full_text = '') AND NOT COALESCE(ocr_applied, FALSE) ORDER BY id`
   );
   console.log(`${rows.length} PDF(s) need backfilling.`);
 

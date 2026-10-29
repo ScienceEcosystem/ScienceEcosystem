@@ -5908,3 +5908,68 @@ Test-setup note worth keeping: a claimed profile switches to the owner's
 SE profile, which reads users.openalex_author_id. A claimed_authors row
 alone isn't a complete claim, and the page then shows "No publications
 linked yet".
+
+2026-10-29 — PDF import: identify the paper like Zotero (and fix the crash
+that stopped it)
+
+Reported: dragging in a normal published paper (Bushuiev et al. 2023,
+Aquatic Invasions, DOI printed on every page) gave a library item titled
+just after the filename. Asked how Zotero fills everything in.
+
+ROOT CAUSE (real bug, not a missing feature): extractPdfSignals() ran
+pdf-parse's getText() and getInfo() in parallel on one parser. With the
+current pdfjs-dist (5.4) that throws "DataCloneError: Cannot transfer object
+of unsupported type" for EVERY PDF — confirmed live on the reported paper,
+a PLOS ONE paper and the scanned test PDF (it worked when built on
+2026-08-22, so a dependency moved under it). The error was caught and
+returned empty text, so since then every "Add file"/drag-and-drop PDF:
+(1) was only identified if its DOI happened to sit in the PDF's
+uncompressed bytes (rare for modern publisher PDFs), and (2) stored EMPTY
+full_text, so it was invisible to library full-text search. Fixed by
+running the two calls sequentially (45,917 chars of text + embedded title
+from the reported paper).
+
+New identifyPdf() (shared by import and the new "Retrieve metadata"):
+1. The paper's OWN DOI: the most frequent DOI before the reference list
+   (own DOI repeats in running headers/footers; the old code took the first
+   DOI seen, which could be a cited paper). The looked-up paper's title
+   must also appear in the first pages, or it's rejected.
+2. arXiv ID (same title check).
+3. No identifier: OpenAlex title search using the PDF's embedded title
+   (unless it's junk like "Microsoft Word - x.docx") and line runs from the
+   top of page 1, accepting only a near-exact title match (token Jaccard
+   ≥ 0.9 AND similar overall length, best-scoring result wins). Replaces an
+   old arXiv fallback that took Crossref's top hit for the FILENAME
+   unverified.
+
+BUG CAUGHT in testing: the first title matcher stripped non-Latin letters,
+so the Bitcoin whitepaper matched a Japanese article whose title contains
+"Satoshi Nakamoto: Bitcoin: A Peer-to-Peer Electronic Cash System". Tokens
+now keep every script and the overall lengths must be similar.
+
+"Retrieve metadata from PDF" button (library inspector, on items with a
+stored PDF that aren't linked to a paper yet): POST
+/api/library/:id/retrieve-metadata reads the stored PDF (R2 or local),
+runs identifyPdf, fills title/authors/year/journal/DOI/abstract/type while
+KEEPING the item id (folders, notes, annotations stay attached), and
+restores empty search text. For a scanned PDF it uses the stored OCR text.
+scripts/backfill-pdf-text.js now also re-extracts rows with '' text (not
+just NULL), skipping OCR rows.
+
+Scale (dev snapshot from 2026-10-27, so before the reported upload): 2
+PDFs with empty text and 1 unidentified import, all one user — the
+per-item button is enough; no bulk job needed.
+
+Verified live on the dev branch with a disposable account (removed
+afterwards): the reported Aquatic Invasions PDF → full metadata via its
+DOI; PLOS ONE → its own DOI chosen over its table/figure DOIs; Bitcoin
+whitepaper (no DOI) → correct title match; a synthetic text PDF whose only
+DOI is a cited reference → correctly left unidentified; an item reset to
+the reported state (filename title, empty text) → "Retrieve metadata"
+filled everything in and restored 45,917 chars of search text; the
+synthetic PDF → honest "couldn't identify" message.
+
+Also this session: confirmed Waikato's off-campus access. EZproxy is being
+retired there; Waikato uses OpenAthens
+(go.openathens.net/redirector/waikato.ac.nz?url=<encoded>), which is exactly
+what Settings → Library access builds from the domain "waikato.ac.nz".

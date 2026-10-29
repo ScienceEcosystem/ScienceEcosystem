@@ -1846,7 +1846,7 @@
           <!-- PDF -->
           <div style="display:flex;flex-wrap:wrap;gap:.3rem;padding:.4rem 0;border-bottom:1px solid #f0f0f0;">
             ${localPdf
-              ?`<button class="btn btn-secondary" id="deletePdfBtn" style="font-size:.79rem;padding:.22rem .5rem;">Remove PDF</button>`
+              ?`<button class="btn btn-secondary" id="deletePdfBtn" style="font-size:.79rem;padding:.22rem .5rem;">Remove PDF</button>${!item.openalex_id ? ` <button class="btn btn-secondary" id="retrieveMetaBtn" style="font-size:.79rem;padding:.22rem .5rem;" title="Read the PDF and fill in title, authors, journal and year — like Zotero's Retrieve Metadata">Retrieve metadata from PDF</button>` : ""}`
               :`<button class="btn btn-secondary" id="uploadPdfBtn" style="font-size:.79rem;padding:.22rem .5rem;">Attach PDF</button><input id="uploadPdfInput" type="file" accept="application/pdf" style="display:none;">`
             }
           </div>
@@ -2142,6 +2142,25 @@
         toast("PDF attached","success");
       }catch(e){ toast("Failed to upload PDF: "+e.message,"error"); }
       finally{ ev.target.value=""; }
+    });
+    $("#retrieveMetaBtn")?.addEventListener("click", async()=>{
+      const btn=$("#retrieveMetaBtn"); if(!btn) return;
+      btn.disabled=true; btn.textContent="Reading PDF…";
+      try{
+        const r = await api(`/api/library/${encodeURIComponent(id)}/retrieve-metadata`,{ method:"POST" });
+        if(r.found){
+          await safeRefreshItems(); renderTable(); await renderInspector(id);
+          toast(`Identified: ${r.item?.title||"paper"}`,"success",4500);
+        }else{
+          btn.disabled=false; btn.textContent="Retrieve metadata from PDF";
+          toast(r.no_text
+            ? "This PDF has no text layer (scanned) — open it in the reader and use “Recognize text”, then try again."
+            : "Couldn't identify this paper from the PDF — you can fill in the details with Edit.","error",6000);
+        }
+      }catch(e){
+        btn.disabled=false; btn.textContent="Retrieve metadata from PDF";
+        toast("Could not read the PDF: "+await errorMessage(e),"error");
+      }
     });
     $("#deletePdfBtn")?.addEventListener("click", async()=>{
       const btn=$("#deletePdfBtn"); if(!btn) return;
